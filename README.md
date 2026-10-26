@@ -31,7 +31,7 @@ Get the app: `owlbot-setup-<version>-x64.exe` for Windows 10 and 11, `owlbot-<ve
 
 Claude Code and Codex: if one is already installed on the computer, Owlbot uses it. If not, pressing **Sign in** on its card installs it for Owlbot (a one-time download of a few hundred MB), then the sign-in starts.
 
-Your data stays in `%LOCALAPPDATA%\Owlbot` (Windows) or `~/Library/Application Support/Owlbot` (macOS); upgrading keeps it. To upgrade on macOS, drag the new Owlbot to Applications and replace the old one. To uninstall, use **Settings → Apps** on Windows (it asks before deleting your data) or move Owlbot from Applications to the Trash on macOS (the data stays; delete `~/Library/Application Support/Owlbot` to remove it too). The hub is reachable from this computer only; for your phone, see [Remote access](#remote-access).
+Your data stays in `%LOCALAPPDATA%\Owlbot` (Windows) or `~/Library/Application Support/Owlbot` (macOS); upgrading keeps it. To upgrade on macOS, drag the new Owlbot to Applications and replace the old one. To uninstall, use **Settings → Apps** on Windows (it asks before deleting your data) or move Owlbot from Applications to the Trash on macOS (the data stays; delete `~/Library/Application Support/Owlbot` to remove it too). The hub listens on `http://localhost:18780` (console `:18781`), away from the 8080 that servers and dev tools tend to hold; another port goes into `desktop.json` in the data folder as `{"port": 19000}`. It is reachable from this computer only; for your phone, see [Remote access](#remote-access).
 
 The desktop version runs the hub, plugins and CLI brains as your own user: the Docker image's separate Unix users and its kernel-level network block are not there. For the strongest isolation, run Owlbot in Docker.
 

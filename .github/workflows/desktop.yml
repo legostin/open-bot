@@ -43,7 +43,7 @@ jobs:
           Start-Process "$app\Owlbot.exe" -ArgumentList "--mode", "hub", "--background"
           $state = $null
           for ($i = 0; $i -lt 120 -and -not $state; $i++) {
-            try { $state = Invoke-RestMethod http://127.0.0.1:8080/api/auth/state } catch { Start-Sleep 1 }
+            try { $state = Invoke-RestMethod http://127.0.0.1:18780/api/auth/state } catch { Start-Sleep 1 }
           }
           if (-not $state) { Get-Content "$app\logs\*.log" -ErrorAction SilentlyContinue; throw "the hub did not answer" }
           if ($state.hasPassword) { throw "a fresh hub has a password" }
@@ -53,7 +53,7 @@ jobs:
           Start-Process "$app\Owlbot.exe" -ArgumentList "--quit" -Wait
           $down = $false
           for ($i = 0; $i -lt 30 -and -not $down; $i++) {
-            try { Invoke-RestMethod http://127.0.0.1:8080/api/auth/state | Out-Null; Start-Sleep 1 } catch { $down = $true }
+            try { Invoke-RestMethod http://127.0.0.1:18780/api/auth/state | Out-Null; Start-Sleep 1 } catch { $down = $true }
           }
           if (-not $down) { throw "the hub still answers after --quit" }
 
@@ -94,7 +94,7 @@ jobs:
         run: |
           set -eu
           data="$HOME/Library/Application Support/Owlbot"
-          up() { curl -fsS http://127.0.0.1:8080/api/auth/state >state.json 2>/dev/null; }
+          up() { curl -fsS http://127.0.0.1:18780/api/auth/state >state.json 2>/dev/null; }
           down() { ! up; }
           wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 120 ]; then echo "timed out: $*"; cat "$data/logs/"*.log || true; exit 1; fi; sleep 1; done; }
 
@@ -110,7 +110,7 @@ jobs:
           /Applications/Owlbot.app/Contents/MacOS/Owlbot --mode hub --background &
           wait_for up
           grep -q '"hasPassword":false' state.json
-          node /Applications/Owlbot.app/Contents/Resources/app/packaging/desktop/launch.mjs url | grep -Eq '^http://localhost:8080/#setup=[A-Za-z0-9_-]+$'
+          node /Applications/Owlbot.app/Contents/Resources/app/packaging/desktop/launch.mjs url | grep -Eq '^http://localhost:18780/#setup=[A-Za-z0-9_-]+$'
           grep -q "/Applications/Owlbot.app/Contents/MacOS/Owlbot" "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
 
           /Applications/Owlbot.app/Contents/MacOS/Owlbot --quit
@@ -123,7 +123,7 @@ jobs:
         run: |
           set -eu
           data="$HOME/Library/Application Support/Owlbot"
-          up() { curl -fsS http://127.0.0.1:8080/api/auth/state >state.json 2>/dev/null; }
+          up() { curl -fsS http://127.0.0.1:18780/api/auth/state >state.json 2>/dev/null; }
           down() { ! up; }
           wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 120 ]; then echo "timed out: $*"; cat "$data/logs/"*.log || true; exit 1; fi; sleep 1; done; }
 
