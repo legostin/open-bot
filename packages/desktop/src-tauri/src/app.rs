@@ -11,6 +11,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::deeplink::{self, PairLink};
+use crate::flavor::Flavor;
 use crate::i18n::texts;
 use crate::settings::{self, Mode, Settings};
 use crate::supervisor::{self, Spec, Status, Supervisor};
@@ -42,6 +43,8 @@ impl Args {
 }
 
 pub struct Paths {
+  /// The app or its test build (flavor.rs).
+  pub flavor: Flavor,
   pub config_dir: PathBuf,
   /// The staged app tree: the app's resource "app" (OWLBOT_APP_ROOT in a dev run).
   pub app_root: PathBuf,
@@ -57,17 +60,20 @@ pub struct Paths {
 impl Paths {
   fn resolve(app: &AppHandle) -> tauri::Result<Paths> {
     let p = app.path();
+    let flavor = Flavor::of(&app.config().identifier, &app.package_info().name);
     // Windows gives the resource dir as \\?\C:\..., which Node cannot load a main script from: plain C:\... instead.
     let app_root = dunce::simplified(&std::env::var_os("OWLBOT_APP_ROOT").map(PathBuf::from).unwrap_or(p.resource_dir()?.join("app"))).to_path_buf();
     let data_override = std::env::var_os("OWLBOT_DATA_DIR").map(PathBuf::from);
-    let hub_data = data_override.clone().unwrap_or(p.local_data_dir()?.join("Owlbot"));
-    let node_home = std::env::var_os("OWLBOT_NODE_HOME").map(PathBuf::from).unwrap_or(p.home_dir()?.join(".owlbot-node"));
+    // "Owlbot", as launch.mjs has it; the test build's own "Owlbot Test".
+    let hub_data = data_override.clone().unwrap_or(p.local_data_dir()?.join(&flavor.name));
+    let node_home = std::env::var_os("OWLBOT_NODE_HOME").map(PathBuf::from).unwrap_or(p.home_dir()?.join(flavor.node_home_dir()));
     // A dev or test run keeps the app's own settings and logs in its data dir too, away from an installed app's.
     let (config_dir, node_log) = match &data_override {
       Some(data) => (data.join("app"), data.join("logs").join("node.log")),
       None => (p.app_config_dir()?, p.app_log_dir()?.join("node.log")),
     };
     Ok(Paths {
+      flavor,
       config_dir,
       node: supervisor::node_binary(&app_root),
       hub_log: hub_data.join("logs").join("hub.log"),
@@ -79,9 +85,9 @@ impl Paths {
     })
   }
 
-  /// The hub's ports (web UI, console, egress proxy) from <data>/desktop.json.
+  /// The hub's ports (web UI, console, egress proxy) from <data>/desktop.json, else the flavor's.
   pub fn hub_ports(&self) -> Vec<u16> {
-    hub_ports(std::fs::read_to_string(self.hub_data.join("desktop.json")).ok().as_deref())
+    hub_ports(std::fs::read_to_string(self.hub_data.join("desktop.json")).ok().as_deref(), self.flavor.port)
   }
 
   fn launch(&self) -> PathBuf {
@@ -93,11 +99,12 @@ impl Paths {
   }
 }
 
-/// The ports launch.mjs gives the hub: `port` (DESKTOP_PORT there), `consolePort` (port+1), `egressPort` (port+9).
-pub fn hub_ports(desktop_json: Option<&str>) -> Vec<u16> {
+/// The ports launch.mjs gives the hub: `port` (else `default`: OWLBOT_DESKTOP_PORT there), `consolePort` (port+1),
+/// `egressPort` (port+9).
+pub fn hub_ports(desktop_json: Option<&str>, default: u16) -> Vec<u16> {
   let v: serde_json::Value = desktop_json.and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
   let get = |k: &str| v.get(k).and_then(|p| p.as_u64()).and_then(|p| u16::try_from(p).ok()).filter(|p| *p > 0);
-  let port = get("port").unwrap_or(41780);
+  let port = get("port").unwrap_or(default);
   vec![port, get("consolePort").unwrap_or(port.wrapping_add(1)), get("egressPort").unwrap_or(port.wrapping_add(9))]
 }
 
@@ -155,12 +162,14 @@ pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error:
     path_env,
   });
   let state = handle.state::<AppState>();
-  *state.tray.lock().unwrap() = Some(tray::build(&handle, settings.autostart)?);
+  *state.tray.lock().unwrap() = Some(tray::build(&handle, &state.paths.flavor, settings.autostart)?);
   if !state.paths.dev {
     #[cfg(target_os = "macos")]
-    crate::migration::remove_old_hub_agent();
+    if !state.paths.flavor.test {
+      crate::migration::remove_old_hub_agent();
+    }
     if settings.mode.is_some() {
-      apply_autostart(settings.autostart);
+      apply_autostart(&state.paths.flavor, settings.autostart);
     }
   }
   let h = handle.clone();
@@ -190,9 +199,9 @@ pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error:
   Ok(())
 }
 
-fn apply_autostart(on: bool) {
+fn apply_autostart(flavor: &Flavor, on: bool) {
   if let Ok(exe) = std::env::current_exe() {
-    if let Err(e) = autostart::set(&exe, on) {
+    if let Err(e) = autostart::set(flavor, &exe, on) {
       eprintln!("owlbot: start at login: {e}");
     }
   }
@@ -200,7 +209,7 @@ fn apply_autostart(on: bool) {
 
 fn spec(st: &AppState, mode: Mode) -> Spec {
   let p = &st.paths;
-  let mut env = vec![("OWLBOT_DESKTOP".to_string(), "1".to_string())];
+  let mut env = vec![("OWLBOT_DESKTOP".to_string(), "1".to_string()), ("OWLBOT_DESKTOP_PORT".to_string(), p.flavor.port.to_string())];
   let delay = Duration::from_secs(2);
   match mode {
     Mode::Hub => {
@@ -250,7 +259,13 @@ fn on_status(app: &AppHandle, status: Status) {
 /// password is set), else the hub with a fresh one-time sign-in ticket.
 fn hub_window_url(st: &AppState) -> Option<Url> {
   let p = &st.paths;
-  let out = supervisor::command(&p.node).arg(p.launch()).arg("url").env("OWLBOT_DATA_DIR", &p.hub_data).output().ok()?;
+  let out = supervisor::command(&p.node)
+    .arg(p.launch())
+    .arg("url")
+    .env("OWLBOT_DATA_DIR", &p.hub_data)
+    .env("OWLBOT_DESKTOP_PORT", p.flavor.port.to_string())
+    .output()
+    .ok()?;
   if !out.status.success() {
     return None;
   }
@@ -314,7 +329,7 @@ pub fn choose(app: &AppHandle, mode: Mode) -> Result<(), String> {
   *st.link.lock().unwrap() = None;
   *st.error.lock().unwrap() = None;
   if previous.is_none() && !st.paths.dev {
-    apply_autostart(autostart);
+    apply_autostart(&st.paths.flavor, autostart);
   }
   let running = matches!(*st.status.lock().unwrap(), Status::Starting | Status::Running | Status::Restarting);
   if previous != Some(mode) || !running {
@@ -409,7 +424,7 @@ pub fn on_menu(app: &AppHandle, id: &str) {
         s.autostart
       };
       if !st.paths.dev {
-        apply_autostart(on);
+        apply_autostart(&st.paths.flavor, on);
       }
       let item = st.tray.lock().unwrap().as_ref().map(|t| t.autostart.clone());
       if let Some(item) = item {
@@ -474,10 +489,11 @@ mod tests {
 
   #[test]
   fn reads_the_hub_ports_like_launch_mjs() {
-    assert_eq!(hub_ports(None), vec![41780, 41781, 41789]);
-    assert_eq!(hub_ports(Some(r#"{"port":18080}"#)), vec![18080, 18081, 18089]);
-    assert_eq!(hub_ports(Some(r#"{"port":18080,"egressPort":19999}"#)), vec![18080, 18081, 19999]);
-    assert_eq!(hub_ports(Some("{nope")), vec![41780, 41781, 41789]);
+    assert_eq!(hub_ports(None, 41780), vec![41780, 41781, 41789]);
+    assert_eq!(hub_ports(None, 41790), vec![41790, 41791, 41799]);
+    assert_eq!(hub_ports(Some(r#"{"port":18080}"#), 41790), vec![18080, 18081, 18089]);
+    assert_eq!(hub_ports(Some(r#"{"port":18080,"egressPort":19999}"#), 41780), vec![18080, 18081, 19999]);
+    assert_eq!(hub_ports(Some("{nope"), 41780), vec![41780, 41781, 41789]);
   }
 
   #[test]

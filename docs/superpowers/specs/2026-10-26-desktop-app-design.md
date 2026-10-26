@@ -199,6 +199,15 @@ the target-specific paths through `--config`). `@tauri-apps/cli` is a dev depend
   starts the app in the background unless `/NOSTART` is given. On uninstall a hook asks (default No) before deleting
   `%LOCALAPPDATA%\Owlbot`; a silent uninstall or an update keeps it.
 
+## Test build
+
+`npm run package:desktop -- --test` builds **Owlbot Test** (identifier `ai.owlbot.test`, links `owlbot-test://`,
+`owlbot-test-<version>.dmg` or `owlbot-test-setup-<version>-x64.exe`, no `.pkg`). The app sees the flavor in its
+identifier (`flavor.rs`): data in `Owlbot Test`, node pairing in `~/.owlbot-node-test`, its own LaunchAgent / Run value,
+ports right after the app's (41790, 41791, 41799: `OWLBOT_DESKTOP_PORT` for `launch.mjs`), and no 0.1.0 migration. So it
+runs next to an installed Owlbot. Window titles and the tray tooltip read "Owlbot Test", the tray menu starts with
+"Test build · port 41790" and the setup screens show a strip saying it is a test build.
+
 ## Checks
 
 - `cargo test` in `packages/desktop/src-tauri`: settings, deep links, texts, tickets, the supervisor (with `node` as a

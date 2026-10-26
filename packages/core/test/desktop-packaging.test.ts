@@ -40,6 +40,9 @@ describe("desktop launcher", () => {
     expect(desktopPorts(data)).toEqual({ port: 41780, consolePort: 41781, egressPort: 41789 });
     writeFileSync(join(data, "desktop.json"), JSON.stringify({ port: 18080 }));
     expect(desktopPorts(data)).toEqual({ port: 18080, consolePort: 18081, egressPort: 18089 });
+    // The test build's ports (OWLBOT_DESKTOP_PORT from the app) come only when desktop.json has none.
+    expect(desktopPorts(data, { OWLBOT_DESKTOP_PORT: "41790" }).port).toBe(18080);
+    expect(desktopPorts(tmp(), { OWLBOT_DESKTOP_PORT: "41790" })).toEqual({ port: 41790, consolePort: 41791, egressPort: 41799 });
     const code = setupCode(data);
     expect(code).toMatch(/^[\w-]{12,64}$/);
     expect(setupCode(data)).toBe(code);
@@ -107,6 +110,9 @@ describe("installer text", () => {
     expect(hooks).toContain("Удалить и ваши данные Owlbot");
     expect(hooks).toContain('Exec \'"$INSTDIR\\Owlbot.exe" --background\'');
     expect(hooks).not.toContain("{dir}");
+    const test: string = nsisHooks(catalogs, "Owlbot Test");
+    expect(test).toContain('Exec \'"$INSTDIR\\Owlbot Test.exe" --background\'');
+    expect(test).toContain('RMDir /r "$LOCALAPPDATA\\Owlbot Test"');
   });
 
   it("builds the Installer pages and distribution", () => {

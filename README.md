@@ -186,6 +186,8 @@ The app lives in `packages/desktop` (Tauri 2: Rust in `src-tauri`, its setup scr
 
 Silent installs: `owlbot-setup-<version>-x64.exe /S` (add `/NOSTART` to leave it stopped) on Windows; `sudo installer -pkg owlbot-<version>.pkg -target /` on macOS (over SSH or MDM), and `sudo /Applications/Owlbot.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]` removes it again. `Owlbot --mode hub --background` makes the first-run choice without a window, `Owlbot --quit` stops the running app. `.github/workflows/desktop.yml` builds both on clean runners and checks that they install, start the hub, quit and uninstall.
 
+To try a build next to an installed Owlbot, add `-- --test`: it makes **Owlbot Test** (`owlbot-test-<version>.dmg`, `owlbot-test-setup-<version>-x64.exe`) with its own data, machine pairing, start-at-login entry and ports right after the app's (41790, console 41791, egress proxy 41799). Its window titles, tray menu and setup screens say it is a test build.
+
 To run the app from source without touching an installed Owlbot: stage once (`node packaging/desktop/stage.mjs --skip-build`), then `OWLBOT_APP_ROOT=$PWD/dist/desktop/stage-darwin/app OWLBOT_DATA_DIR=/tmp/owl-data npm run tauri -w @owlbot/desktop -- dev` with `{"port":18080}` in `/tmp/owl-data/desktop.json`. With `OWLBOT_DATA_DIR` set the app writes no start-at-login entries.
 
 ## License

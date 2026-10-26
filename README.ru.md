@@ -186,6 +186,8 @@ npm run package:desktop   # в Windows: dist/desktop/owlbot-setup-<version>-x64.
 
 Тихая установка: `owlbot-setup-<version>-x64.exe /S` (с `/NOSTART` приложение не запустится) в Windows; `sudo installer -pkg owlbot-<version>.pkg -target /` в macOS (по SSH или через MDM), а `sudo /Applications/Owlbot.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]` удаляет его. `Owlbot --mode hub --background` делает выбор первого запуска без окна, `Owlbot --quit` останавливает работающее приложение. `.github/workflows/desktop.yml` собирает обе версии на чистых машинах и проверяет, что они ставятся, запускают хаб, выходят и удаляются.
 
+Чтобы попробовать сборку рядом с установленным Owlbot, добавьте `-- --test`: получится **Owlbot Test** (`owlbot-test-<version>.dmg`, `owlbot-test-setup-<version>-x64.exe`) со своими данными, подключением машины, автозапуском и портами сразу за основными (41790, пульт — 41791, egress-прокси — 41799). В заголовке окна, меню в трее и на экранах настройки видно, что это тестовая сборка.
+
 Чтобы запустить приложение из исходников, не трогая установленный Owlbot: один раз подготовьте сборку (`node packaging/desktop/stage.mjs --skip-build`), затем `OWLBOT_APP_ROOT=$PWD/dist/desktop/stage-darwin/app OWLBOT_DATA_DIR=/tmp/owl-data npm run tauri -w @owlbot/desktop -- dev`, а в `/tmp/owl-data/desktop.json` положите `{"port":18080}`. С заданным `OWLBOT_DATA_DIR` приложение не прописывает себя в автозапуск.
 
 ## Лицензия

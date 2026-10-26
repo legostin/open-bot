@@ -37,7 +37,7 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
   let browser = app.clone();
   let popups = app.clone();
   WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
-    .title("Owlbot")
+    .title(&app.package_info().name)
     .inner_size(1200.0, 820.0)
     .min_inner_size(420.0, 520.0)
     .on_navigation(move |u| {
@@ -64,7 +64,7 @@ pub fn open_setup(app: &AppHandle) -> tauri::Result<()> {
     w.set_focus()?;
   } else {
     WebviewWindowBuilder::new(app, SETUP, WebviewUrl::App("index.html".into()))
-      .title("Owlbot")
+      .title(&app.package_info().name)
       .inner_size(560.0, 660.0)
       .resizable(false)
       .center()

@@ -1,8 +1,11 @@
 // Builds the Owlbot desktop app (packages/desktop, Tauri) and its installers on this OS:
-//   npm run package:desktop [-- --skip-build] [-- --skip-stage]
+//   npm run package:desktop [-- --skip-build] [-- --skip-stage] [-- --test]
 // macOS:   dist/desktop/owlbot-<version>.dmg (drag to Applications) and owlbot-<version>.pkg (silent installs).
 //          Universal: needs the aarch64-apple-darwin and x86_64-apple-darwin Rust targets.
 // Windows: dist/desktop/owlbot-setup-<version>-x64.exe (NSIS, per user; /S silent, /NOSTART).
+// --test builds "Owlbot Test" (ai.owlbot.test, owlbot-test://) instead: it installs next to the app with its own data,
+// node pairing, start-at-login entry and ports (41790...), and says so in its windows and tray. Disk image or Windows
+// installer only (owlbot-test-<version>.dmg, owlbot-test-setup-<version>-x64.exe), no .pkg.
 // The staged hub (stage.mjs) is the app's resource "app".
 
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -19,7 +22,10 @@ const OUT = join(ROOT, "dist", "desktop");
 const TAURI = join(ROOT, "packages", "desktop", "src-tauri");
 const target = mac ? "darwin" : "win-x64";
 
-const { values } = parseArgs({ options: { "skip-build": { type: "boolean" }, "skip-stage": { type: "boolean" } } });
+const { values } = parseArgs({ options: { "skip-build": { type: "boolean" }, "skip-stage": { type: "boolean" }, test: { type: "boolean" } } });
+const test = !!values.test;
+const product = test ? "Owlbot Test" : "Owlbot";
+const file = test ? "owlbot-test" : "owlbot";
 const app = values["skip-stage"] ? join(OUT, `stage-${target}`, "app") : await stage({ target, skipBuild: !!values["skip-build"] });
 if (!existsSync(join(app, "packaging", "desktop", "launch.mjs"))) throw new Error(`no staged app in ${app}`);
 npm(["run", "build:ui", "-w", "@owlbot/desktop"], { cwd: ROOT });
@@ -30,11 +36,15 @@ mkdirSync(build, { recursive: true });
 // A mapped folder keeps its layout under the target (tauri-utils walks it).
 const resources = { [app]: "app" };
 const config = { bundle: { resources } };
+if (test) {
+  Object.assign(config, { productName: product, mainBinaryName: product, identifier: "ai.owlbot.test", plugins: { "deep-link": { desktop: { schemes: ["owlbot-test"] } } } });
+}
 if (mac) {
-  resources[join(ROOT, "packaging", "macos", "uninstall.sh")] = "uninstall.sh";
+  // For package installs; the test build has none.
+  if (!test) resources[join(ROOT, "packaging", "macos", "uninstall.sh")] = "uninstall.sh";
 } else {
   const hooks = join(build, "nsis-hooks.nsh");
-  writeFileSync(hooks, nsisHooks(loadCatalogs()));
+  writeFileSync(hooks, nsisHooks(loadCatalogs(), product));
   config.bundle.windows = { nsis: { installerHooks: hooks } };
 }
 const configFile = join(build, "tauri.build.json");
@@ -45,12 +55,12 @@ npm(["run", "tauri", "-w", "@owlbot/desktop", "--", "build", "--config", configF
 
 const bundle = join(TAURI, "target", ...(triple ? [triple] : []), "release", "bundle");
 if (mac) {
-  const dmg = join(OUT, `owlbot-${VERSION}.dmg`);
-  copyFileSync(join(bundle, "dmg", `Owlbot_${VERSION}_universal.dmg`), dmg);
-  const pkg = buildPkg({ appBundle: join(bundle, "macos", "Owlbot.app"), build, out: join(OUT, `owlbot-${VERSION}.pkg`) });
-  console.log(`disk image: ${dmg}\npackage:    ${pkg}`);
+  const dmg = join(OUT, `${file}-${VERSION}.dmg`);
+  copyFileSync(join(bundle, "dmg", `${product}_${VERSION}_universal.dmg`), dmg);
+  console.log(`disk image: ${dmg}`);
+  if (!test) console.log(`package:    ${buildPkg({ appBundle: join(bundle, "macos", "Owlbot.app"), build, out: join(OUT, `owlbot-${VERSION}.pkg`) })}`);
 } else {
-  const setup = join(OUT, `owlbot-setup-${VERSION}-x64.exe`);
-  copyFileSync(join(bundle, "nsis", `Owlbot_${VERSION}_x64-setup.exe`), setup);
+  const setup = join(OUT, `${file}-setup-${VERSION}-x64.exe`);
+  copyFileSync(join(bundle, "nsis", `${product}_${VERSION}_x64-setup.exe`), setup);
   console.log(`installer: ${setup}`);
 }

@@ -8,6 +8,8 @@ import ru from "../../../../packaging/desktop/locales/ru.json";
 type Mode = "hub" | "node";
 interface UiState {
   lang: "en" | "ru";
+  /** The test build ("Owlbot Test"): a strip on top says so. */
+  test: boolean;
   mode: Mode | null;
   starting: boolean;
   existing: { hub: string; name: string } | null;
@@ -18,6 +20,7 @@ interface UiState {
 
 const catalogs: Record<string, Record<string, string>> = { en, ru };
 let lang = "en";
+let test = false;
 
 /** A catalog text in the app's language, English when it has none; `{name}` placeholders from `params`. */
 function t(key: string, params: Record<string, string | number> = {}): string {
@@ -35,7 +38,8 @@ function h(tag: string, attrs: Record<string, string> = {}, ...children: Child[]
 }
 
 function show(...children: Child[]): void {
-  document.getElementById("root")!.replaceChildren(h("main", {}, ...children));
+  const strip = test && h("p", { class: "test-build" }, t("app.testBuild"));
+  document.getElementById("root")!.replaceChildren(h("main", {}, strip, ...children));
 }
 
 function button(text: string, onClick: () => void, kind = "secondary"): HTMLButtonElement {
@@ -129,6 +133,7 @@ function errorScreen(state: UiState, error: NonNullable<UiState["error"]>): void
 async function render(): Promise<void> {
   const state = await invoke<UiState>("get_state");
   lang = state.lang;
+  test = state.test;
   document.documentElement.lang = lang;
   if (state.error) errorScreen(state, state.error);
   else if (state.link) pairForm(state, state.link);

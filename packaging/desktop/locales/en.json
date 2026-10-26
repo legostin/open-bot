@@ -18,6 +18,8 @@
   "tray.status.stopped": "Stopped",
   "tray.status.node": "Machine of {hub}",
   "tray.setupAgain": "Set up again…",
+  "tray.testBuild": "Test build · port {port}",
+  "app.testBuild": "Test build: its own data and ports, next to the app.",
   "app.welcome.title": "How will you use this computer?",
   "app.welcome.hub.title": "A new Owlbot on this computer",
   "app.welcome.hub.body": "Your agent runs here. Chats, agents and the vault stay on this computer.",

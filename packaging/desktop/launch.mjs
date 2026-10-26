@@ -21,15 +21,18 @@ export function defaultDataDir(env = process.env, platform = process.platform, h
 /** The desktop hub's port: away from 8080 (servers, dev tools) and 18789 (OpenClaw's gateway), with +1 and +9 free too. */
 export const DESKTOP_PORT = 41780;
 
-/** `<data>/desktop.json`: `{ "port": 41780 }` (console port+1, egress proxy port+9 unless given). */
-export function desktopPorts(dataDir) {
+/**
+ * `<data>/desktop.json`: `{ "port": 41780 }` (console port+1, egress proxy port+9 unless given). Without one the port is
+ * OWLBOT_DESKTOP_PORT (the test build's 41790, set by the app) or DESKTOP_PORT.
+ */
+export function desktopPorts(dataDir, env = process.env) {
   let s = {};
   try {
     s = JSON.parse(readFileSync(join(dataDir, "desktop.json"), "utf8"));
   } catch {
     /* defaults */
   }
-  const port = Number(s.port) || DESKTOP_PORT;
+  const port = Number(s.port) || Number(env.OWLBOT_DESKTOP_PORT) || DESKTOP_PORT;
   return { port, consolePort: Number(s.consolePort) || port + 1, egressPort: Number(s.egressPort) || port + 9 };
 }
 
@@ -52,7 +55,7 @@ export const RESOLVE_HOOK = pathToFileURL(join(dirname(fileURLToPath(import.meta
 
 /** The environment the hub runs with; what the caller already set wins. */
 export function hubEnv(env, dataDir) {
-  const { port, consolePort, egressPort } = desktopPorts(dataDir);
+  const { port, consolePort, egressPort } = desktopPorts(dataDir, env);
   const nodeOptions = env.NODE_OPTIONS ?? "";
   return {
     OWLBOT_APP_ROOT: APP_ROOT,

@@ -12,6 +12,8 @@ use crate::settings::{self, Existing, Mode};
 #[serde(rename_all = "camelCase")]
 pub struct UiState {
   lang: &'static str,
+  /// The test build: the screens say so.
+  test: bool,
   mode: Option<Mode>,
   starting: bool,
   existing: Option<Existing>,
@@ -25,6 +27,7 @@ pub fn get_state(app: AppHandle) -> UiState {
   let st = app.state::<AppState>();
   let state = UiState {
     lang: texts().lang(),
+    test: st.paths.flavor.test,
     mode: st.settings.lock().unwrap().mode,
     starting: *st.starting.lock().unwrap(),
     existing: settings::existing_node(&st.paths.node_home),

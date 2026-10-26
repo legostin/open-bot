@@ -34,3 +34,4 @@ button.primary { border: 0; background: var(--accent); color: var(--accent-text)
 button.secondary { border: 1px solid var(--border); background: var(--surface); color: inherit; }
 button.link { border: 0; background: none; color: var(--accent); padding: 4px 0; text-align: left; }
 button:disabled, input:disabled { opacity: 0.6; cursor: default; }
+.test-build { margin: -28px -28px 6px; padding: 8px 28px; background: #f6d365; color: #3d2c00; font-weight: 600; }

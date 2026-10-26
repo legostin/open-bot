@@ -4,6 +4,7 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Wry};
 
+use crate::flavor::Flavor;
 use crate::i18n::{texts, Texts};
 use crate::settings::Mode;
 use crate::supervisor::Status;
@@ -13,14 +14,18 @@ pub struct Tray {
   pub autostart: CheckMenuItem<Wry>,
 }
 
-pub fn build(app: &AppHandle, autostart: bool) -> tauri::Result<Tray> {
+pub fn build(app: &AppHandle, flavor: &Flavor, autostart: bool) -> tauri::Result<Tray> {
   let t = texts();
   let status = MenuItem::with_id(app, "status", t.t("tray.status.stopped"), false, None::<&str>)?;
   let autostart = CheckMenuItem::with_id(app, "autostart", t.t("tray.autostart"), true, autostart, None::<&str>)?;
-  let menu = Menu::with_items(
-    app,
+  let menu = Menu::with_items(app, &[&status])?;
+  // The test build says so first: its own data and ports, next to the app.
+  if flavor.test {
+    let port = flavor.port.to_string();
+    menu.prepend(&MenuItem::with_id(app, "test", t.f("tray.testBuild", &[("port", &port)]), false, None::<&str>)?)?;
+  }
+  menu.append_items(
     &[
-      &status,
       &PredefinedMenuItem::separator(app)?,
       &MenuItem::with_id(app, "open", t.t("tray.open"), true, None::<&str>)?,
       &autostart,
@@ -32,7 +37,7 @@ pub fn build(app: &AppHandle, autostart: bool) -> tauri::Result<Tray> {
     ],
   )?;
   let mut builder = TrayIconBuilder::with_id("main")
-    .tooltip("Owlbot")
+    .tooltip(&flavor.name)
     .menu(&menu)
     .show_menu_on_left_click(cfg!(target_os = "macos"))
     .on_menu_event(|app, e| crate::app::on_menu(app, e.id().as_ref()))
