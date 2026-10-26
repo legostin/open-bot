@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { join } from "node:path";
-import { startPlugin, type PluginHarness } from "@openbot/testkit";
+import { startPlugin, type PluginHarness } from "@owlbot/testkit";
 import { startMockTelegram, type MockTelegram } from "./mock-telegram.ts";
 
 const TOKEN = "123456:TEST-token";
@@ -80,7 +80,7 @@ describe("telegram plugin", () => {
     });
     expect(st.connected).toBe(false);
     expect(st.pairingCode).toMatch(/^\d{6}$/);
-    expect(st.deepLink).toBe(`https://t.me/openbot_test_bot?start=${st.pairingCode}`);
+    expect(st.deepLink).toBe(`https://t.me/owlbot_test_bot?start=${st.pairingCode}`);
     const wrong = st.pairingCode === "000000" ? "111111" : "000000";
 
     let from = tg.calls.length;
@@ -98,7 +98,7 @@ describe("telegram plugin", () => {
     expect(after.connected).toBe(true);
     expect(after.chat.id).toBe(OWNER);
     expect(after.pairingCode).toBeNull();
-    expect(after.detail).toBe("@openbot_test_bot is linked to the chat “Аня”");
+    expect(after.detail).toBe("@owlbot_test_bot is linked to the chat “Аня”");
     expect(h.coreCalls.some((c) => c.method === "ui.emit" && c.params.channel === "status")).toBe(true);
     expect((await h.peer.request<any>("channel.status", { channelId: "telegram" })).connected).toBe(true);
   });
@@ -352,7 +352,7 @@ describe("telegram plugin with Telegram's long polls", () => {
         const s = (await h.http({ path: "/status" })).body as any;
         return s.state === "polling" ? s : undefined;
       }, 1500);
-      expect(st.deepLink).toMatch(/^https:\/\/t\.me\/openbot_test_bot\?start=\d{6}$/);
+      expect(st.deepLink).toMatch(/^https:\/\/t\.me\/owlbot_test_bot\?start=\d{6}$/);
     } finally {
       await h.stop();
       await tg.close();
@@ -376,12 +376,12 @@ describe("telegram plugin in Russian", () => {
         const r = (await h.http({ path: "/status" })).body as any;
         return r.state === "polling" ? r : undefined;
       });
-      expect(st.detail).toBe(`@openbot_test_bot ждёт привязки: отправьте ему /start ${st.pairingCode}`);
+      expect(st.detail).toBe(`@owlbot_test_bot ждёт привязки: отправьте ему /start ${st.pairingCode}`);
 
       let from = tg.calls.length;
       tg.push(privateMsg(OWNER, `/start ${st.pairingCode === "000000" ? "111111" : "000000"}`));
       const bad = await tg.waitFor("sendMessage", (p) => p.chat_id === OWNER, { from });
-      expect(bad.params.text).toBe("Код не подошёл. Проверьте код в настройках open-bot и попробуйте ещё раз.");
+      expect(bad.params.text).toBe("Код не подошёл. Проверьте код в настройках Owlbot и попробуйте ещё раз.");
 
       // Switching the hub language re-registers the command menu.
       from = tg.calls.length;

@@ -87,7 +87,7 @@ export function childEnv(base: NodeJS.ProcessEnv, extra: Record<string, string |
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(base)) {
     if (v === undefined) continue;
-    if (k.startsWith("OPENBOT_")) continue;
+    if (k.startsWith("OWLBOT_")) continue;
     out[k] = v;
   }
   for (const [k, v] of Object.entries(extra)) if (v !== undefined) out[k] = v;

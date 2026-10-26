@@ -2,7 +2,7 @@
 // and reloads the page.
 
 import { Languages } from "lucide-react";
-import { LOCALE_NAMES } from "@openbot/shared/i18n";
+import { LOCALE_NAMES } from "@owlbot/shared/i18n";
 import { explicitLocale, locale, LOCALES, setLocale, t, type Locale } from "../i18n";
 import { cx, Select } from "./ui";
 

@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainLoginUpdate } from "@openbot/shared";
-import type { BrainProviderImpl } from "@openbot/plugin-sdk";
+import type { BrainLoginUpdate } from "@owlbot/shared";
+import type { BrainProviderImpl } from "@owlbot/plugin-sdk";
 import { createClaudeCodeProvider, createCodexProvider, parseClaudeBrowserLogin, parseCodexDeviceLogin } from "../src/index.ts";
 
 const fakeCodex = join(import.meta.dirname, "fixtures", "fake-codex.mjs");
@@ -54,10 +54,10 @@ describe("reading the sign-in page from CLI output", () => {
 
 describe("Codex device sign-in (fake codex)", () => {
   const codex = (home: string, extra: Partial<Parameters<typeof createCodexProvider>[0]> = {}) =>
-    createCodexProvider({ command: () => fakeCodex, stateDir: tmp("ob-cx-state-"), authEnv: async () => ({ HOME: home }), ...extra });
+    createCodexProvider({ command: () => fakeCodex, stateDir: tmp("owl-cx-state-"), authEnv: async () => ({ HOME: home }), ...extra });
 
   it("shows the page and the code, then signs in as the same HOME the sessions use", async () => {
-    const home = tmp("ob-cx-home-");
+    const home = tmp("owl-cx-home-");
     const provider = codex(home);
     expect((await provider.probe()).authenticated).toBe(false);
 
@@ -73,19 +73,19 @@ describe("Codex device sign-in (fake codex)", () => {
   });
 
   it("reports the CLI's own reason when the sign-in fails", async () => {
-    const home = tmp("ob-cx-home-");
+    const home = tmp("owl-cx-home-");
     const { login } = await signIn(codex(home), { HOME: home, FAKE_CODEX_LOGIN: "fail" });
     expect(await login.done).toMatchObject({ status: "failed", error: expect.stringMatching(/^Sign-in failed: .*device code was declined/) });
   });
 
   it("stops the CLI when the code runs out", async () => {
-    const home = tmp("ob-cx-home-");
+    const home = tmp("owl-cx-home-");
     const { login } = await signIn(codex(home, { loginTimeoutMs: 700 }), { HOME: home, FAKE_CODEX_LOGIN: "hang" });
     expect(await login.done).toMatchObject({ status: "expired", error: "The code expired before the sign-in was finished", userCode: "ABCD-EFGHI" });
   });
 
   it("cancels", async () => {
-    const home = tmp("ob-cx-home-");
+    const home = tmp("owl-cx-home-");
     const { login, waiting } = await signIn(codex(home), { HOME: home, FAKE_CODEX_LOGIN: "hang" });
     await waiting();
     expect(() => login.submitCode?.("ABCD")).toThrow(/not waiting for a code/);
@@ -95,23 +95,23 @@ describe("Codex device sign-in (fake codex)", () => {
   });
 
   it("says when Codex is not installed", async () => {
-    const provider = createCodexProvider({ command: () => join(tmp("ob-cx-none-"), "no-such-codex"), stateDir: tmp("ob-cx-state-") });
+    const provider = createCodexProvider({ command: () => join(tmp("owl-cx-none-"), "no-such-codex"), stateDir: tmp("owl-cx-state-") });
     const { login } = await signIn(provider, {});
     expect(await login.done).toMatchObject({ status: "failed", error: "Codex CLI is not installed" });
   });
 
   it("speaks the hub language", async () => {
-    const home = tmp("ob-cx-home-");
+    const home = tmp("owl-cx-home-");
     const { login } = await signIn(codex(home, { locale: () => "ru", loginTimeoutMs: 500 }), { HOME: home, FAKE_CODEX_LOGIN: "hang" });
     expect((await login.done).error).toBe("Код истёк раньше, чем вход был завершён");
   });
 });
 
 describe("Claude Code browser sign-in (fake claude)", () => {
-  const claude = (home: string) => createClaudeCodeProvider({ command: () => fakeClaude, stateDir: tmp("ob-cc-state-"), authEnv: async () => ({ HOME: home }) });
+  const claude = (home: string) => createClaudeCodeProvider({ command: () => fakeClaude, stateDir: tmp("owl-cc-state-"), authEnv: async () => ({ HOME: home }) });
 
   it("shows the page, takes the code the page gave and signs in", async () => {
-    const home = tmp("ob-cc-home-");
+    const home = tmp("owl-cc-home-");
     const provider = claude(home);
     expect((await provider.probe()).authenticated).toBe(false);
     const { login, updates, waiting } = await signIn(provider, { HOME: home });
@@ -124,7 +124,7 @@ describe("Claude Code browser sign-in (fake claude)", () => {
   });
 
   it("fails on a code the server refuses", async () => {
-    const home = tmp("ob-cc-home-");
+    const home = tmp("owl-cc-home-");
     const { login, waiting } = await signIn(claude(home), { HOME: home });
     await waiting();
     await login.submitCode!("stale-code#xyz");

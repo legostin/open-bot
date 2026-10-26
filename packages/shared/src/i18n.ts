@@ -44,9 +44,9 @@ export function localeFromAcceptLanguage(header: string | undefined): Locale | u
   return undefined;
 }
 
-/** Locale of a Unix-style environment (OPENBOT_LANG, LC_ALL, LC_MESSAGES, LANG). */
+/** Locale of a Unix-style environment (OWLBOT_LANG, LC_ALL, LC_MESSAGES, LANG). */
 export function localeFromEnv(env: Record<string, string | undefined>): Locale | undefined {
-  for (const k of ["OPENBOT_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]) {
+  for (const k of ["OWLBOT_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]) {
     const l = normalizeLocale(env[k]);
     if (l) return l;
   }

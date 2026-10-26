@@ -59,7 +59,7 @@ export function renderPrompt(t: Trigger, c: FireContext): string {
     userPrompt.trim(),
     "",
     "---",
-    "Trigger context (added by open-bot):",
+    "Trigger context (added by Owlbot):",
     `- Trigger: "${t.name}" (kind: ${t.kind}, id: ${t.id})`,
     `- Fired at: ${when}, timezone ${c.tz}`,
     `- Reason: ${REASONS[c.reason]}`,

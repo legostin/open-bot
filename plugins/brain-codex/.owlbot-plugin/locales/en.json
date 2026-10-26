@@ -1,6 +1,6 @@
 {
   "name": "Codex",
-  "description": "Brain on a ChatGPT subscription: runs the Codex CLI (codex exec) with open-bot tools.",
+  "description": "Brain on a ChatGPT subscription: runs the Codex CLI (codex exec) with Owlbot tools.",
   "settings.command.title": "CLI command",
   "settings.apiKeyRef.title": "OpenAI key (vault reference, optional)",
   "settings.apiKeyRef.description": "If empty, the ChatGPT subscription is used: sign in from the chat.",

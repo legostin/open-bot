@@ -1,11 +1,11 @@
 // Builds the macOS installer: stages the app with both Node builds (Apple silicon and Intel), compiles the two
 // AppleScript apps and wraps it all into a product archive. pkgbuild, productbuild and osacompile ship with macOS.
 //   npm run package:mac [-- --skip-build] [-- --skip-stage]
-// Output: dist/desktop/open-bot-<version>.pkg (unsigned). It installs
-//   /Applications/open-bot/open-bot.app             opens open-bot in the browser, starting the hub if needed
-//   /Applications/open-bot/Uninstall open-bot.app
-//   /Library/Application Support/open-bot/app       the hub (packaging/desktop/stage.mjs)
-//   /Library/Application Support/open-bot/bin       scripts: the user's LaunchAgent, the hub runner, the uninstaller
+// Output: dist/desktop/owlbot-<version>.pkg (unsigned). It installs
+//   /Applications/Owlbot/Owlbot.app             opens Owlbot in the browser, starting the hub if needed
+//   /Applications/Owlbot/Uninstall Owlbot.app
+//   /Library/Application Support/Owlbot/app       the hub (packaging/desktop/stage.mjs)
+//   /Library/Application Support/Owlbot/bin       scripts: the user's LaunchAgent, the hub runner, the uninstaller
 
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -18,7 +18,7 @@ import { MIN_MACOS, PKG_ID, distributionXml, installerPage, launcherScript, unin
 const HERE = import.meta.dirname;
 const OUT = join(ROOT, "dist", "desktop");
 const BUILD = join(OUT, "build-mac");
-const ICON = join(ROOT, "packaging", "assets", "open-bot.icns");
+const ICON = join(ROOT, "packaging", "assets", "owlbot.icns");
 
 if (process.platform !== "darwin") throw new Error("package:mac runs on macOS: it needs pkgbuild, productbuild and osacompile");
 
@@ -64,13 +64,13 @@ const catalogs = loadCatalogs();
 
 // Payload.
 const root = join(BUILD, "root");
-const support = join(root, "Library", "Application Support", "open-bot");
+const support = join(root, "Library", "Application Support", "Owlbot");
 cpSync(app, join(support, "app"), { recursive: true, verbatimSymlinks: true });
 copyScripts(join(HERE, "bin"), join(support, "bin"), 0o644);
-const apps = join(root, "Applications", "open-bot");
+const apps = join(root, "Applications", "Owlbot");
 mkdirSync(apps, { recursive: true });
-applet(join(apps, "open-bot.app"), launcherScript(catalogs), "ai.openbot.app");
-applet(join(apps, "Uninstall open-bot.app"), uninstallerScript(catalogs), "ai.openbot.uninstall");
+applet(join(apps, "Owlbot.app"), launcherScript(catalogs), "ai.owlbot.app");
+applet(join(apps, "Uninstall Owlbot.app"), uninstallerScript(catalogs), "ai.owlbot.uninstall");
 
 // Component package. Its apps stay where they are installed: a relocatable bundle would be "upgraded" wherever the
 // user moved a copy of it.
@@ -82,7 +82,7 @@ writeFileSync(comp + ".json", JSON.stringify(bundles));
 run("plutil", ["-convert", "xml1", "-o", comp, comp + ".json"]);
 const scripts = join(BUILD, "scripts");
 copyScripts(join(HERE, "scripts"), scripts, 0o755);
-const componentPkg = "open-bot-app.pkg";
+const componentPkg = "owlbot-app.pkg";
 run("pkgbuild", ["--root", root, "--install-location", "/", "--identifier", PKG_ID, "--version", VERSION, "--scripts", scripts, "--component-plist", comp, join(BUILD, componentPkg)]);
 
 // Product archive with the English and Russian Installer pages.
@@ -94,6 +94,6 @@ for (const locale of LOCALES) {
 }
 const distribution = join(BUILD, "distribution.xml");
 writeFileSync(distribution, distributionXml({ version: VERSION, componentPkg }));
-const out = join(OUT, `open-bot-${VERSION}.pkg`);
+const out = join(OUT, `owlbot-${VERSION}.pkg`);
 run("productbuild", ["--distribution", distribution, "--resources", resources, "--package-path", BUILD, out]);
 console.log(`installer: ${out}`);

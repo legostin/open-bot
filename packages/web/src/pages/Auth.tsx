@@ -14,7 +14,7 @@ function Logo() {
     <div className="mb-6 flex flex-col items-center gap-3">
       <img src="/favicon.svg" alt="" className="size-14" />
       <div className="text-center">
-        <div className="text-2xl font-semibold tracking-tight">open-bot</div>
+        <div className="text-2xl font-semibold tracking-tight">Owlbot</div>
         <div className="text-sm text-muted">{t("auth.tagline")}</div>
       </div>
     </div>
@@ -81,7 +81,7 @@ function SetupForm() {
         <>
           <div className="flex gap-2.5 rounded-xl bg-surface-2 p-3 text-xs leading-relaxed text-muted">
             <Terminal className="mt-0.5 size-4 shrink-0" />
-            <span>{tRich("auth.setup.codeHint", { command: <code className="font-mono">docker logs openbot</code> })}</span>
+            <span>{tRich("auth.setup.codeHint", { command: <code className="font-mono">docker logs owlbot</code> })}</span>
           </div>
           <Field label={t("auth.setup.code")}>
             <Input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="one-time-code" autoFocus required spellCheck={false} className="font-mono" />
@@ -156,7 +156,7 @@ function LoginForm({ auth }: { auth: AuthState }) {
         </>
       )}
       <p className="text-center text-xs leading-relaxed text-muted">
-        {tRich("auth.login.forgot", { command: <code className="font-mono">{`openbot reset-password <${t("auth.login.newPassword")}>`}</code> })}
+        {tRich("auth.login.forgot", { command: <code className="font-mono">{`owlbot reset-password <${t("auth.login.newPassword")}>`}</code> })}
       </p>
     </form>
   );

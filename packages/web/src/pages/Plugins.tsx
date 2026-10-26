@@ -405,7 +405,7 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
               autoFocus
               value={source}
               onChange={(e) => setSource(e.target.value)}
-              placeholder="https://github.com/user/openbot-plugin.git"
+              placeholder="https://github.com/user/owlbot-plugin.git"
               className="font-mono"
               onKeyDown={(e) => {
                 if (e.key === "Enter") void prepare();

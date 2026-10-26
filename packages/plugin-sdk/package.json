@@ -1,5 +1,5 @@
 {
-  "name": "@openbot/plugin-sdk",
+  "name": "@owlbot/plugin-sdk",
   "version": "0.1.0",
   "private": true,
   "type": "module",

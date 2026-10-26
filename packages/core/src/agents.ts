@@ -4,8 +4,8 @@
 import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { stringify as toYaml } from "yaml";
-import type { AgentDef, Locale } from "@openbot/shared";
-import { normalizeLocale, parseAvatar, parseFrontmatter } from "@openbot/shared";
+import type { AgentDef, Locale } from "@owlbot/shared";
+import { normalizeLocale, parseAvatar, parseFrontmatter } from "@owlbot/shared";
 
 export const DEFAULT_BRAINS = ["claude-code@local", "codex@local", "api:anthropic", "api:openai"];
 

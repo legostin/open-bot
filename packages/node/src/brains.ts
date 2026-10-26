@@ -4,9 +4,9 @@
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, ProbeResult } from "@openbot/shared";
-import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
-import { createClaudeCodeProvider, createCodexProvider } from "@openbot/brains-cli";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, ProbeResult } from "@owlbot/shared";
+import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
+import { createClaudeCodeProvider, createCodexProvider } from "@owlbot/brains-cli";
 import type { PolicyStore } from "./policy.ts";
 import { resolveWorkspace } from "./guard.ts";
 import { hubLocale, tHub } from "./messages.ts";
@@ -63,7 +63,7 @@ export function shimTarget(cmdFile: string): string | undefined {
 export function defaultBridgeCommand(): string[] {
   let entry: string | undefined;
   try {
-    entry = fileURLToPath(import.meta.resolve("@openbot/mcp-bridge"));
+    entry = fileURLToPath(import.meta.resolve("@owlbot/mcp-bridge"));
   } catch {
     entry = fileURLToPath(new URL("../../mcp-bridge/src/index.ts", import.meta.url));
   }

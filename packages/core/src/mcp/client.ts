@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { ToolResult } from "@openbot/shared";
+import type { ToolResult } from "@owlbot/shared";
 import type { Config } from "../config.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
 import { sanitizeToolName } from "../tools/registry.ts";
@@ -136,7 +136,7 @@ export class McpClientManager {
     this.conns.set(name, conn);
     if (config.disabled) return;
     try {
-      const client = new Client({ name: "openbot-hub", version: this.config.version });
+      const client = new Client({ name: "owlbot-hub", version: this.config.version });
       const type = config.type ?? (config.url ? "http" : "stdio");
       if (type === "stdio") {
         if (!config.command) throw new Error("command is required");
@@ -241,7 +241,7 @@ function normalizeResult(r: any): ToolResult {
 }
 
 function expandPluginRoot(cfg: McpServerConfig, dir: string): McpServerConfig {
-  const sub = (s: string) => s.replaceAll("${CLAUDE_PLUGIN_ROOT}", dir).replaceAll("${PLUGIN_ROOT}", dir).replaceAll("${OPENBOT_PLUGIN_ROOT}", dir);
+  const sub = (s: string) => s.replaceAll("${CLAUDE_PLUGIN_ROOT}", dir).replaceAll("${PLUGIN_ROOT}", dir).replaceAll("${OWLBOT_PLUGIN_ROOT}", dir);
   return {
     ...cfg,
     command: cfg.command ? sub(cfg.command) : undefined,

@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, sep } from "node:path";
-import type { PluginLogger } from "@openbot/plugin-sdk";
+import type { PluginLogger } from "@owlbot/plugin-sdk";
 import { cut, ToolError } from "./util.ts";
 
 /** How long a browser call waits for a running install before it gives up (the install itself goes on). */

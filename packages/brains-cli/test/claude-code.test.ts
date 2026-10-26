@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions } from "@openbot/shared";
+import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 import { ClaudeStreamParser, createClaudeCodeProvider, CodexStreamParser, parseCodexReset } from "../src/index.ts";
 
 const fake = join(import.meta.dirname, "fixtures", "fake-claude.mjs");
@@ -11,7 +11,7 @@ function opts(over: Partial<BrainSessionOptions> = {}): BrainSessionOptions {
   return {
     sessionId: "s_" + Math.random().toString(36).slice(2),
     agent: {} as any,
-    workspace: mkdtempSync(join(tmpdir(), "ob-cc-ws-")),
+    workspace: mkdtempSync(join(tmpdir(), "owl-cc-ws-")),
     mcp: { url: "http://127.0.0.1:1/mcp", token: "tok-secret", bridgeCommand: ["node", "bridge.ts"] },
     systemPrompt: "SYSTEM",
     env: {},
@@ -31,7 +31,7 @@ describe("ClaudeStreamParser", () => {
     const p = new ClaudeStreamParser();
     const ev = [
       ...p.push({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "hi" } }, parent_tool_use_id: null, api_message_id: "m1" }),
-      ...p.push({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "hi" }, { type: "tool_use", id: "t", name: "mcp__openbot__memory_search", input: { q: 1 } }] }, parent_tool_use_id: null }),
+      ...p.push({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "hi" }, { type: "tool_use", id: "t", name: "mcp__owlbot__memory_search", input: { q: 1 } }] }, parent_tool_use_id: null }),
       ...p.push({ type: "assistant", message: { id: "m9", content: [{ type: "text", text: "inner" }] }, parent_tool_use_id: "t" }),
     ];
     expect(ev).toEqual([
@@ -48,7 +48,7 @@ describe("ClaudeStreamParser", () => {
 });
 
 describe("Claude Code provider (fake CLI)", () => {
-  const stateDir = mkdtempSync(join(tmpdir(), "ob-cc-state-"));
+  const stateDir = mkdtempSync(join(tmpdir(), "owl-cc-state-"));
   const provider = createClaudeCodeProvider({ command: () => fake, stateDir });
 
   it("probes version and login", async () => {
@@ -106,7 +106,7 @@ describe("CodexStreamParser", () => {
     const p = new CodexStreamParser();
     const ev = [
       ...p.push({ type: "thread.started", thread_id: "th1" }),
-      ...p.push({ type: "item.started", item: { id: "i1", type: "mcp_tool_call", server: "openbot", tool: "notify", arguments: { title: "x" } } }),
+      ...p.push({ type: "item.started", item: { id: "i1", type: "mcp_tool_call", server: "owlbot", tool: "notify", arguments: { title: "x" } } }),
       ...p.push({ type: "item.completed", item: { id: "i1", type: "mcp_tool_call", status: "completed", result: { content: [{ type: "text", text: "ok" }] } } }),
       ...p.push({ type: "item.completed", item: { id: "i2", type: "agent_message", text: "Готово" } }),
       ...p.push({ type: "turn.completed", usage: { input_tokens: 5, cached_input_tokens: 1, output_tokens: 2 } }),

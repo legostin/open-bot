@@ -2,6 +2,8 @@
 
 Approved 2026-10-26. Docker stays the server install; desktop users get a normal installer.
 
+> **Renamed:** the project is now **Owlbot**. This spec predates the rename and keeps the old names: open-bot.app / open-bot.exe → Owlbot.app / Owlbot.exe, the data folder `open-bot` → `Owlbot` (`owlbot` on Linux), `openbot.db` → `owlbot.db`, `ai.openbot.*` → `ai.owlbot.*`, `OPENBOT_*` → `OWLBOT_*`.
+
 ## Goal
 
 Double-click, done: the hub runs in the background, starts at login and the browser opens the web UI for first-run

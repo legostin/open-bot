@@ -7,6 +7,6 @@ export default defineConfig({
     testTimeout: 20000,
     pool: "forks",
     // Messages are asserted in English; a developer's own LANG must not change them.
-    env: { OPENBOT_LANG: "en" },
+    env: { OWLBOT_LANG: "en" },
   },
 });

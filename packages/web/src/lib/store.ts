@@ -44,7 +44,7 @@ export class Emitter<E> {
       try {
         cb(e);
       } catch (err) {
-        console.error("[openbot] event handler failed", err);
+        console.error("[owlbot] event handler failed", err);
       }
     }
   }

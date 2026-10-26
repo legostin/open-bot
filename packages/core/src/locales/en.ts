@@ -114,7 +114,7 @@ export default {
 
   // machines
   "machines.execApproval": "Run on {machine}: {command}",
-  "machines.revokeApproval": "Disconnect the computer {machine} from open-bot",
+  "machines.revokeApproval": "Disconnect the computer {machine} from Owlbot",
   "machines.writeApproval": "Write a file on {machine}: {path}",
   "machine.badPairingCode": "The pairing code is wrong or has expired",
   "machine.badPublicKey": "Invalid public key",
@@ -164,9 +164,9 @@ export default {
   "rule.notFound": "Rule not found",
 
   // admin CLI and logs
-  "cli.firstRun": "open-bot: first run. Open {url}\n  and enter the setup code: {code}",
+  "cli.firstRun": "Owlbot: first run. Open {url}\n  and enter the setup code: {code}",
   "cli.passwordChanged": "Password changed; all sessions were signed out.",
-  "cli.pairingCode": "Pairing code (valid 10 minutes): {code}\nOn the machine: node openbot-node.mjs pair {url} {code}",
+  "cli.pairingCode": "Pairing code (valid 10 minutes): {code}\nOn the machine: node owlbot-node.mjs pair {url} {code}",
   "cli.backupDone": "Backup: {path} (the vault stays encrypted)",
   "cli.auditOk": "Audit log intact: {count, plural, one {# entry} other {# entries}}",
   "cli.auditBroken": "The chain is broken at entry {seq}",

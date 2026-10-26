@@ -1,7 +1,7 @@
 // In-process engine tests with a fake plugin context (persistence across "restarts", catch-up, limits, feedback).
 
 import { describe, expect, it } from "vitest";
-import type { PluginContext } from "@openbot/plugin-sdk";
+import type { PluginContext } from "@owlbot/plugin-sdk";
 import { TriggerEngine } from "../server/engine.ts";
 import type { Trigger } from "../server/types.ts";
 

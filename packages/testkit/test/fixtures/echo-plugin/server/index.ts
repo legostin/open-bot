@@ -1,4 +1,4 @@
-import type { PluginContext } from "@openbot/plugin-sdk";
+import type { PluginContext } from "@owlbot/plugin-sdk";
 
 export default {
   async activate(ctx: PluginContext) {

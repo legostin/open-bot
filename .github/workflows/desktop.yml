@@ -29,40 +29,40 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $setup = (Get-ChildItem dist/desktop/open-bot-setup-*-x64.exe | Select-Object -First 1).FullName
+          $setup = (Get-ChildItem dist/desktop/owlbot-setup-*-x64.exe | Select-Object -First 1).FullName
           $p = Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NOSTART", "/LOG=$PWD\install.log" -PassThru
           $p.WaitForExit(600000) | Out-Null
           if ($p.ExitCode -ne 0) { throw "setup exited with $($p.ExitCode)" }
-          $app = "$env:LOCALAPPDATA\Programs\open-bot"
-          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."open-bot"
-          if ($run -ne "`"$app\open-bot.exe`" --background") { throw "Run value: $run" }
+          $app = "$env:LOCALAPPDATA\Programs\Owlbot"
+          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."Owlbot"
+          if ($run -ne "`"$app\Owlbot.exe`" --background") { throw "Run value: $run" }
           if (-not (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8C2E1A55-6F0B-4B7E-9C1D-0B7A1E5F2D31}_is1")) { throw "not in Apps & Features" }
 
           # What sign-in runs.
-          Start-Process "$app\open-bot.exe" -ArgumentList "--background"
+          Start-Process "$app\Owlbot.exe" -ArgumentList "--background"
           $state = $null
           for ($i = 0; $i -lt 120 -and -not $state; $i++) {
             try { $state = Invoke-RestMethod http://127.0.0.1:8080/api/auth/state -TimeoutSec 3 } catch { Start-Sleep 1 }
           }
-          if (-not $state) { Get-Content "$env:LOCALAPPDATA\open-bot\logs\hub.log" -ErrorAction SilentlyContinue; throw "the hub did not answer" }
+          if (-not $state) { Get-Content "$env:LOCALAPPDATA\Owlbot\logs\hub.log" -ErrorAction SilentlyContinue; throw "the hub did not answer" }
           if ($state.hasPassword) { throw "a fresh install already has a password" }
           $url = & "$app\runtime\node.exe" "$app\packaging\desktop\launch.mjs" url
           if ($url -notmatch "^http://localhost:8080/#setup=[\w-]+$") { throw "open url: $url" }
 
           $u = Start-Process "$app\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -PassThru
           $u.WaitForExit(120000) | Out-Null
-          for ($i = 0; $i -lt 60 -and (Test-Path "$app\open-bot.exe"); $i++) { Start-Sleep 1 }
+          for ($i = 0; $i -lt 60 -and (Test-Path "$app\Owlbot.exe"); $i++) { Start-Sleep 1 }
           if (Test-Path $app) { throw "the app folder is still there" }
-          if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."open-bot") { throw "the Run value is still there" }
-          if (Get-Process open-bot -ErrorAction SilentlyContinue) { throw "the tray app is still running" }
-          if (-not (Test-Path "$env:LOCALAPPDATA\open-bot\openbot.db")) { throw "a silent uninstall must keep the data" }
+          if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."Owlbot") { throw "the Run value is still there" }
+          if (Get-Process Owlbot -ErrorAction SilentlyContinue) { throw "the tray app is still running" }
+          if (-not (Test-Path "$env:LOCALAPPDATA\Owlbot\owlbot.db")) { throw "a silent uninstall must keep the data" }
           "ok"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-installer
           path: |
-            dist/desktop/open-bot-setup-*.exe
+            dist/desktop/owlbot-setup-*.exe
             install.log
           if-no-files-found: ignore
 
@@ -80,10 +80,10 @@ jobs:
       - name: Install, check, uninstall
         run: |
           set -eu
-          pkg=$(ls dist/desktop/open-bot-*.pkg | head -n 1)
-          pkgutil --payload-files "$pkg" | grep -q "Applications/open-bot/open-bot.app/Contents/Info.plist"
-          codesign --verify "dist/desktop/build-mac/root/Applications/open-bot/open-bot.app"
-          codesign --verify "dist/desktop/build-mac/root/Applications/open-bot/Uninstall open-bot.app"
+          pkg=$(ls dist/desktop/owlbot-*.pkg | head -n 1)
+          pkgutil --payload-files "$pkg" | grep -q "Applications/Owlbot/Owlbot.app/Contents/Info.plist"
+          codesign --verify "dist/desktop/build-mac/root/Applications/Owlbot/Owlbot.app"
+          codesign --verify "dist/desktop/build-mac/root/Applications/Owlbot/Uninstall Owlbot.app"
           sudo installer -pkg "$pkg" -target /
 
           # The postinstall starts the hub for the user at the console (the runner's auto-login session).
@@ -94,29 +94,29 @@ jobs:
           done
           if [ -z "$ok" ]; then
             echo "console user: $(stat -f %Su /dev/console)"
-            cat "$HOME/Library/Application Support/open-bot/logs/"*.log || true
+            cat "$HOME/Library/Application Support/Owlbot/logs/"*.log || true
             exit 1
           fi
           grep -q '"hasPassword":false' state.json
-          launchctl print "gui/$(id -u)/ai.openbot.hub" | grep -q "state = running"
-          url=$(/bin/sh "/Library/Application Support/open-bot/bin/open.sh")
+          launchctl print "gui/$(id -u)/ai.owlbot.hub" | grep -q "state = running"
+          url=$(/bin/sh "/Library/Application Support/Owlbot/bin/open.sh")
           echo "$url" | grep -Eq '^http://localhost:8080/#setup=[A-Za-z0-9_-]+$'
 
-          # What Uninstall open-bot.app runs after its questions ("Keep data").
-          sudo /bin/sh "/Library/Application Support/open-bot/bin/uninstall.sh" "$(id -u)" "$HOME"
+          # What Uninstall Owlbot.app runs after its questions ("Keep data").
+          sudo /bin/sh "/Library/Application Support/Owlbot/bin/uninstall.sh" "$(id -u)" "$HOME"
           sleep 2
-          test ! -e /Applications/open-bot
-          test ! -e "/Library/Application Support/open-bot"
-          test ! -e "$HOME/Library/LaunchAgents/ai.openbot.hub.plist"
+          test ! -e /Applications/Owlbot
+          test ! -e "/Library/Application Support/Owlbot"
+          test ! -e "$HOME/Library/LaunchAgents/ai.owlbot.hub.plist"
           # (`! cmd` would not stop the script under set -e.)
-          if launchctl print "gui/$(id -u)/ai.openbot.hub" >/dev/null 2>&1; then echo "the agent is still loaded"; exit 1; fi
+          if launchctl print "gui/$(id -u)/ai.owlbot.hub" >/dev/null 2>&1; then echo "the agent is still loaded"; exit 1; fi
           if curl -fsS http://127.0.0.1:8080/api/auth/state >/dev/null 2>&1; then echo "the hub still answers"; exit 1; fi
-          if pkgutil --pkg-info ai.openbot.pkg >/dev/null 2>&1; then echo "the package receipt is still there"; exit 1; fi
-          test -f "$HOME/Library/Application Support/open-bot/openbot.db"
+          if pkgutil --pkg-info ai.owlbot.pkg >/dev/null 2>&1; then echo "the package receipt is still there"; exit 1; fi
+          test -f "$HOME/Library/Application Support/Owlbot/owlbot.db"
           echo ok
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: macos-installer
-          path: dist/desktop/open-bot-*.pkg
+          path: dist/desktop/owlbot-*.pkg
           if-no-files-found: ignore

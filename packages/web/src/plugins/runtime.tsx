@@ -1,8 +1,8 @@
-// The value behind "@openbot/ui" for UI plugins (window.__OPENBOT_SHARED__.ui).
+// The value behind "@owlbot/ui" for UI plugins (window.__OWLBOT_SHARED__.ui).
 
 import { useEffect, useRef } from "react";
-import type { OpenBotUIRuntime } from "@openbot/ui";
-import type { UiEvent } from "@openbot/shared";
+import type { OwlbotUIRuntime } from "@owlbot/ui";
+import type { UiEvent } from "@owlbot/shared";
 import { Badge, Button, Card, EmptyState, Spinner } from "../components/ui";
 import { Markdown } from "../components/markdown";
 import { api } from "../lib/api";
@@ -24,7 +24,7 @@ function useHubEvent(cb: (e: UiEvent) => void, deps: unknown[] = []) {
   useEffect(() => hubEvents.on((e) => ref.current(e)), deps);
 }
 
-export const uiRuntime: OpenBotUIRuntime = {
+export const uiRuntime: OwlbotUIRuntime = {
   definePluginUI: (activate) => ({ activate }),
   Button,
   Card,
@@ -35,7 +35,7 @@ export const uiRuntime: OpenBotUIRuntime = {
   useTasks,
   useHubEvent,
   api,
-  // A getter: the shim (/shared/openbot-ui.js) reads it when the first plugin is imported, after the hub
+  // A getter: the shim (/shared/owlbot-ui.js) reads it when the first plugin is imported, after the hub
   // language has been adopted, while this object is built before that.
   get locale() {
     return locale;

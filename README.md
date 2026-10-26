@@ -1,8 +1,8 @@
-# open-bot
+# Owlbot
 
 [Русский](README.ru.md)
 
-A friendly, proactive personal agent that lives on your own hardware. open-bot is an open-source alternative to Grok, Meta Muse and OpenAI Dots: an installer for your computer or one Docker image for a server, the subscriptions you already pay for, your own computers, and security from day one. It speaks English and Russian.
+A friendly, proactive personal agent that lives on your own hardware. Owlbot is an open-source alternative to Grok, Meta Muse and OpenAI Dots: an installer for your computer or one Docker image for a server, the subscriptions you already pay for, your own computers, and security from day one. It speaks English and Russian.
 
 ## Features
 
@@ -21,37 +21,37 @@ A friendly, proactive personal agent that lives on your own hardware. open-bot i
 
 ### On your computer (Windows, macOS)
 
-Use the installer: `open-bot-setup-<version>-x64.exe` for Windows 10 and 11, `open-bot-<version>.pkg` for macOS 13.5 or later (Apple silicon and Intel). It brings everything it needs: no Node.js, Docker or WSL. To build one yourself, see [Desktop installers](#desktop-installers).
+Use the installer: `owlbot-setup-<version>-x64.exe` for Windows 10 and 11, `owlbot-<version>.pkg` for macOS 13.5 or later (Apple silicon and Intel). It brings everything it needs: no Node.js, Docker or WSL. To build one yourself, see [Desktop installers](#desktop-installers).
 
 1. Run the installer. On Windows it installs for your user only and needs no administrator rights; on macOS it asks for your password, like any package.
-2. open-bot starts in the background and opens in your browser. Choose a password and you are in (no setup code to copy).
-3. From then on it starts when you sign in to your computer. On Windows it lives in the tray (Open, Start at login, Show log, Restart, Quit); on macOS open it from **Applications → open-bot**.
+2. Owlbot starts in the background and opens in your browser. Choose a password and you are in (no setup code to copy).
+3. From then on it starts when you sign in to your computer. On Windows it lives in the tray (Open, Start at login, Show log, Restart, Quit); on macOS open it from **Applications → Owlbot**.
 
-Claude Code and Codex: if one is already installed on the computer, open-bot uses it. If not, pressing **Sign in** on its card installs it for open-bot (a one-time download of a few hundred MB), then the sign-in starts.
+Claude Code and Codex: if one is already installed on the computer, Owlbot uses it. If not, pressing **Sign in** on its card installs it for Owlbot (a one-time download of a few hundred MB), then the sign-in starts.
 
-Your data stays in `%LOCALAPPDATA%\open-bot` (Windows) or `~/Library/Application Support/open-bot` (macOS); upgrading keeps it. To uninstall, use **Settings → Apps** on Windows or **Applications → open-bot → Uninstall open-bot** on macOS: both ask before deleting your data. The hub is reachable from this computer only; for your phone, see [Remote access](#remote-access).
+Your data stays in `%LOCALAPPDATA%\Owlbot` (Windows) or `~/Library/Application Support/Owlbot` (macOS); upgrading keeps it. To uninstall, use **Settings → Apps** on Windows or **Applications → Owlbot → Uninstall Owlbot** on macOS: both ask before deleting your data. The hub is reachable from this computer only; for your phone, see [Remote access](#remote-access).
 
-The desktop version runs the hub, plugins and CLI brains as your own user: the Docker image's separate Unix users and its kernel-level network block are not there. For the strongest isolation, run open-bot in Docker.
+The desktop version runs the hub, plugins and CLI brains as your own user: the Docker image's separate Unix users and its kernel-level network block are not there. For the strongest isolation, run Owlbot in Docker.
 
 The installers are not signed yet. Windows SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**. If macOS blocks the package, Control-click it and choose **Open**, or allow it in **System Settings → Privacy & Security**.
 
 ### On a server (Docker)
 
 ```bash
-git clone <repo> open-bot && cd open-bot
+git clone <repo> owlbot && cd owlbot
 docker compose up -d --build
-docker compose logs openbot | grep -A1 "open-bot:"
+docker compose logs owlbot | grep -A1 "Owlbot:"
 ```
 
 1. Open http://localhost:8080, enter the **setup code** from the logs and choose a password. Your browser's language becomes the hub language (see [Languages](#languages)).
 2. The chat opens with a short checklist: connect a brain (see below), create the vault (a passphrase of your own; tick "unlock automatically" so it opens after restarts) and connect Telegram. Everything happens right there in the chat.
 3. Say hello to the assistant. When something needs a key or a token, the assistant shows a secure field in the chat: the value goes straight into the encrypted vault and the model only ever sees `vault://id`. You can also just paste a token into a message: the hub recognises known formats, takes it out of the message and stores it.
 
-Everything is stored in the `openbot-data` volume (`/data`): the database, the vault, workspaces, CLI logins and plugins.
+Everything is stored in the `owlbot-data` volume (`/data`): the database, the vault, workspaces, CLI logins and plugins.
 
 ## Languages
 
-- The **hub language** is taken from the first user's browser during setup. You can pin it with `OPENBOT_LANG=en` or `OPENBOT_LANG=ru`, and change it later in **Settings**. It is used for notifications, Telegram, approval cards, and as the default language of the web UI.
+- The **hub language** is taken from the first user's browser during setup. You can pin it with `OWLBOT_LANG=en` or `OWLBOT_LANG=ru`, and change it later in **Settings**. It is used for notifications, Telegram, approval cards, and as the default language of the web UI.
 - Each browser can switch the interface language on its own; this does not change the hub language.
 - Agents reply in the language you write to them.
 
@@ -93,11 +93,11 @@ Telegram receives replies, notifications, the digest, and approval cards with bu
 1. On the **Machines** page, connect a new machine to get a one-time code (valid for 10 minutes).
 2. On the other computer (it only needs Node.js 24.5+), download the daemon from the hub and pair the machine:
    ```bash
-   curl -fsSLo openbot-node.mjs https://your-hub-url/download/openbot-node.mjs
-   node openbot-node.mjs pair https://your-hub-url <code> --name laptop
-   node openbot-node.mjs run
+   curl -fsSLo owlbot-node.mjs https://your-hub-url/download/owlbot-node.mjs
+   node owlbot-node.mjs pair https://your-hub-url <code> --name laptop
+   node owlbot-node.mjs run
    ```
-3. The node appears in the list. Its local Claude Code and Codex become the brains `claude-code@<machine>` and `codex@<machine>`. What the agent may do on the machine (folders, commands, brains) is decided by the machine's owner in `~/.openbot-node/policy.json`; commands are off by default. Running the daemon as a service with systemd, launchd or Task Scheduler is covered in [packages/node/README.md](packages/node/README.md).
+3. The node appears in the list. Its local Claude Code and Codex become the brains `claude-code@<machine>` and `codex@<machine>`. What the agent may do on the machine (folders, commands, brains) is decided by the machine's owner in `~/.owlbot-node/policy.json`; commands are off by default. Running the daemon as a service with systemd, launchd or Task Scheduler is covered in [packages/node/README.md](packages/node/README.md).
 
 ## Remote access
 
@@ -112,8 +112,8 @@ Then tell the hub its addresses:
 
 ```yaml
 environment:
-  OPENBOT_PUBLIC_URL: https://my-box.tailnet.ts.net:8080
-  OPENBOT_CONSOLE_URL: https://my-box.tailnet.ts.net:8081
+  OWLBOT_PUBLIC_URL: https://my-box.tailnet.ts.net:8080
+  OWLBOT_CONSOLE_URL: https://my-box.tailnet.ts.net:8081
 ```
 
 Passkeys (passwordless sign-in) need HTTPS or `localhost`; `tailscale serve` takes care of the certificate.
@@ -121,19 +121,19 @@ Passkeys (passwordless sign-in) need HTTPS or `localhost`; `tailscale serve` tak
 ## Security model
 
 - **Two origins.** The chat and plugins live on `:8080`. Approvals, the vault, rules and the audit log live on `:8081`, with their own cookie, a strict CSP and `frame-ancestors 'none'`. Plugin code on the main page cannot read or click anything in the console.
-- **Vault.** Secrets are encrypted with XChaCha20-Poly1305 under a data key, which in turn is wrapped by a key derived with Argon2id. Models only ever see `vault://id`. A plugin gets an item only if the item is declared in its permissions **and** the item's scope allows that plugin, domain or agent. Secret values are stripped from everything that goes to models, channels and logs. After a restart the vault is sealed, unless you ticked "unlock automatically" (the passphrase is then kept in `/data/vault.passphrase`, readable by the hub only) or pass a passphrase file through `OPENBOT_VAULT_PASSPHRASE_FILE` (a Docker secret).
+- **Vault.** Secrets are encrypted with XChaCha20-Poly1305 under a data key, which in turn is wrapped by a key derived with Argon2id. Models only ever see `vault://id`. A plugin gets an item only if the item is declared in its permissions **and** the item's scope allows that plugin, domain or agent. Secret values are stripped from everything that goes to models, channels and logs. After a restart the vault is sealed, unless you ticked "unlock automatically" (the passphrase is then kept in `/data/vault.passphrase`, readable by the hub only) or pass a passphrase file through `OWLBOT_VAULT_PASSPHRASE_FILE` (a Docker secret).
 - **Tool policy.** Every tool has an effect: `read`, `local-write` or `external`. External actions need approval by default. "Always allow" creates a narrow rule (one recipient, one domain). Once a session has read untrusted content (web, mail), new recipients need approval again. Background tasks of agents with an initiative below 2 can only read and notify.
-- **Sandbox.** The hub runs as the `openbot` user, CLI brains as `agent`, other plugins and MCP servers as `plugin`. Their traffic goes through an egress proxy with allowlists. With `cap_add: [NET_ADMIN]` and `OPENBOT_EGRESS_ENFORCED=iptables`, the kernel blocks direct network access for `agent` and `plugin`.
+- **Sandbox.** The hub runs as the `owlbot` user, CLI brains as `agent`, other plugins and MCP servers as `plugin`. Their traffic goes through an egress proxy with allowlists. With `cap_add: [NET_ADMIN]` and `OWLBOT_EGRESS_ENFORCED=iptables`, the kernel blocks direct network access for `agent` and `plugin`.
 - **Nodes.** Nodes authenticate with an Ed25519 key created during one-time pairing. Every action on a machine has to pass both the hub policy and the node's local policy.
-- **Audit.** Every tool call, policy decision, vault access and sign-in is recorded in a hash-chained log. Check its integrity with `docker exec openbot openbot-entrypoint audit-verify` or in the console.
+- **Audit.** Every tool call, policy decision, vault access and sign-in is recorded in a hash-chained log. Check its integrity with `docker exec owlbot owlbot-entrypoint audit-verify` or in the console.
 
 ## Container commands
 
 ```bash
-docker exec openbot openbot-entrypoint reset-password 'new-password'
-docker exec openbot openbot-entrypoint pairing-code laptop
-docker exec openbot openbot-entrypoint backup /data/backups
-docker exec openbot openbot-entrypoint audit-verify
+docker exec owlbot owlbot-entrypoint reset-password 'new-password'
+docker exec owlbot owlbot-entrypoint pairing-code laptop
+docker exec owlbot owlbot-entrypoint backup /data/backups
+docker exec owlbot owlbot-entrypoint audit-verify
 ```
 
 - `reset-password` sets a new password (at least 8 characters) and signs out every session.
@@ -145,18 +145,18 @@ docker exec openbot openbot-entrypoint audit-verify
 
 | Variable | Default | |
 |---|---|---|
-| `OPENBOT_PUBLIC_URL` | `http://localhost:8080` | address of the chat UI, used for links and the Origin check |
-| `OPENBOT_CONSOLE_URL` | same host, port 8081 | address of the security console |
-| `OPENBOT_ALLOWED_HOSTS` | — | extra host names, comma-separated |
-| `OPENBOT_LANG` | — | pins the hub language: `en` or `ru` |
-| `OPENBOT_VAULT_PASSPHRASE_FILE` | — | unlocks the vault automatically |
-| `OPENBOT_EGRESS_ENFORCED` | `proxy` | `iptables` blocks direct network access outright (needs `NET_ADMIN`) |
-| `OPENBOT_SETUP_TOKEN` | random | sets the setup code in advance |
-| `OPENBOT_TRUST_PROXY` | — | `1` trusts `X-Forwarded-*` from a reverse proxy |
-| `OPENBOT_HOST` | `127.0.0.1` (`0.0.0.0` in the image) | listen address |
-| `OPENBOT_PORT`, `OPENBOT_CONSOLE_PORT`, `OPENBOT_EGRESS_PORT` | `8080`, `8081`, `8089` | ports of the chat UI, the console and the egress proxy |
-| `OPENBOT_DATA_DIR` | `.data/` (`/data` in the image) | data directory |
-| `OPENBOT_INSTALL_CLIS` | — (`1` in the desktop installers) | `1` lets **Sign in** install a missing Claude Code or Codex into `<data>/tools` |
+| `OWLBOT_PUBLIC_URL` | `http://localhost:8080` | address of the chat UI, used for links and the Origin check |
+| `OWLBOT_CONSOLE_URL` | same host, port 8081 | address of the security console |
+| `OWLBOT_ALLOWED_HOSTS` | — | extra host names, comma-separated |
+| `OWLBOT_LANG` | — | pins the hub language: `en` or `ru` |
+| `OWLBOT_VAULT_PASSPHRASE_FILE` | — | unlocks the vault automatically |
+| `OWLBOT_EGRESS_ENFORCED` | `proxy` | `iptables` blocks direct network access outright (needs `NET_ADMIN`) |
+| `OWLBOT_SETUP_TOKEN` | random | sets the setup code in advance |
+| `OWLBOT_TRUST_PROXY` | — | `1` trusts `X-Forwarded-*` from a reverse proxy |
+| `OWLBOT_HOST` | `127.0.0.1` (`0.0.0.0` in the image) | listen address |
+| `OWLBOT_PORT`, `OWLBOT_CONSOLE_PORT`, `OWLBOT_EGRESS_PORT` | `8080`, `8081`, `8089` | ports of the chat UI, the console and the egress proxy |
+| `OWLBOT_DATA_DIR` | `.data/` (`/data` in the image) | data directory |
+| `OWLBOT_INSTALL_CLIS` | — (`1` in the desktop installers) | `1` lets **Sign in** install a missing Claude Code or Codex into `<data>/tools` |
 | `TZ` | system time zone (`UTC` in the image) | default time zone for reminders, quiet hours and the digest |
 
 Most behaviour is configured in **Settings** in the web UI: language, time zone, quiet hours, digest times, `channelApprovalDetails` (full action details in Telegram) and `brainEgressAllow` (extra hosts brains may reach). One hub setting has no field on that page yet: `egressPrivateAllow`, the local-network hosts plugins and brains may reach (for example `searxng` or `nas.local`); set it through `PATCH /api/settings`.
@@ -171,13 +171,13 @@ npm test             # unit and integration tests
 npm run typecheck
 ```
 
-You need Node.js 24.5+ (TypeScript runs without a build step). Outside Docker the browser plugin downloads Playwright's Chromium by itself the first time it starts without one (a one-time download into Playwright's cache, or `PLAYWRIGHT_BROWSERS_PATH`); browser calls made meanwhile wait for it. Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` to turn that off and install it yourself with `npx playwright install chromium`. The project layout and conventions are described in [CLAUDE.md](CLAUDE.md), the design in [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md) (in Russian). Core messages live in `packages/core/src/locales/{en,ru}.ts`, plugin messages in `.openbot-plugin/locales/{en,ru}.json`; `npm test` checks that every translation matches English.
+You need Node.js 24.5+ (TypeScript runs without a build step). Outside Docker the browser plugin downloads Playwright's Chromium by itself the first time it starts without one (a one-time download into Playwright's cache, or `PLAYWRIGHT_BROWSERS_PATH`); browser calls made meanwhile wait for it. Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` to turn that off and install it yourself with `npx playwright install chromium`. The project layout and conventions are described in [CLAUDE.md](CLAUDE.md), the design in [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md) (in Russian). Core messages live in `packages/core/src/locales/{en,ru}.ts`, plugin messages in `.owlbot-plugin/locales/{en,ru}.json`; `npm test` checks that every translation matches English.
 
 ### Desktop installers
 
 ```bash
-npm run package:win   # on Windows: dist/desktop/open-bot-setup-<version>-x64.exe
-npm run package:mac   # on macOS:   dist/desktop/open-bot-<version>.pkg
+npm run package:win   # on Windows: dist/desktop/owlbot-setup-<version>-x64.exe
+npm run package:mac   # on macOS:   dist/desktop/owlbot-<version>.pkg
 ```
 
 Both build the UIs, then stage the hub with its production `node_modules` and the official Node 24 build, checked against the release's SHA-256 (`packaging/desktop/stage.mjs`; `NODE_VERSION` picks another release). The Windows build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`) and compiles the tray app with the C# compiler that ships with Windows; the macOS build uses `pkgbuild`, `productbuild` and `osacompile` from macOS. Installer text lives in `packaging/desktop/locales/{en,ru}.json`.

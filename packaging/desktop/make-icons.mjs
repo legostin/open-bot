@@ -1,5 +1,5 @@
-// Renders the web UI's favicon into the installers' icons: packaging/assets/open-bot.ico (Windows, PNG entries) and
-// open-bot.icns (macOS). Run by hand when the logo changes; the outputs are committed so builds need no browser.
+// Renders the web UI's favicon into the installers' icons: packaging/assets/owlbot.ico (Windows, PNG entries) and
+// owlbot.icns (macOS). Run by hand when the logo changes; the outputs are committed so builds need no browser.
 //   node packaging/desktop/make-icons.mjs
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -38,7 +38,7 @@ icoSizes.forEach((s, i) => {
   header.writeUInt32LE(offset, e + 12);
   offset += png[s].length;
 });
-writeFileSync(join(out, "open-bot.ico"), Buffer.concat([header, ...icoSizes.map((s) => png[s])]));
+writeFileSync(join(out, "owlbot.ico"), Buffer.concat([header, ...icoSizes.map((s) => png[s])]));
 
 // ICNS: "icns" + length, then typed PNG chunks (16…512 and their @2x variants).
 const icnsTypes = [["icp4", 16], ["icp5", 32], ["icp6", 64], ["ic07", 128], ["ic08", 256], ["ic09", 512], ["ic10", 1024], ["ic11", 32], ["ic12", 64], ["ic13", 256], ["ic14", 512]];
@@ -51,5 +51,5 @@ const chunks = icnsTypes.map(([type, s]) => {
 const icnsHead = Buffer.alloc(8);
 icnsHead.write("icns", 0, "ascii");
 icnsHead.writeUInt32BE(8 + chunks.reduce((n, c) => n + c.length, 0), 4);
-writeFileSync(join(out, "open-bot.icns"), Buffer.concat([icnsHead, ...chunks]));
+writeFileSync(join(out, "owlbot.icns"), Buffer.concat([icnsHead, ...chunks]));
 console.log(`icons written to ${out}`);

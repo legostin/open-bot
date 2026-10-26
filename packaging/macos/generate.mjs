@@ -4,8 +4,8 @@
 import { LOCALES, text } from "../desktop/locales.mjs";
 
 /** Where the package puts the hub and its scripts (outside the app bundles, which then stay small and signable). */
-export const SUPPORT_DIR = "/Library/Application Support/open-bot";
-export const PKG_ID = "ai.openbot.pkg";
+export const SUPPORT_DIR = "/Library/Application Support/Owlbot";
+export const PKG_ID = "ai.owlbot.pkg";
 /** Node 24's own minimum. */
 export const MIN_MACOS = "13.5";
 
@@ -58,19 +58,19 @@ end uiLanguage
 
 const call = (key, ...args) => `my ${handlerName(key)}(${args.join(", ")})`;
 
-/** open-bot.app: starts the hub if needed and opens it in the browser. */
+/** Owlbot.app: starts the hub if needed and opens it in the browser. */
 export function launcherScript(catalogs) {
   return `${PRELUDE}
 on run
 \tset ui to uiLanguage()
-\tset logFile to (POSIX path of (path to home folder)) & "Library/Application Support/open-bot/logs/hub.log"
+\tset logFile to (POSIX path of (path to home folder)) & "Library/Application Support/Owlbot/logs/hub.log"
 \ttry
 \t\twith timeout of 300 seconds
 \t\t\tset u to do shell script "/bin/sh " & quoted form of "${SUPPORT_DIR}/bin/open.sh"
 \t\tend timeout
 \t\topen location u
 \ton error
-\t\tdisplay dialog ${call("mac.notStarted", "logFile")} buttons {${call("mac.ok")}} default button 1 with icon stop with title "open-bot"
+\t\tdisplay dialog ${call("mac.notStarted", "logFile")} buttons {${call("mac.ok")}} default button 1 with icon stop with title "Owlbot"
 \tend try
 end run
 
@@ -78,18 +78,18 @@ ${appleScriptMessages(catalogs, ["mac.notStarted", "mac.ok"])}
 `;
 }
 
-/** Uninstall open-bot.app: asks, then removes everything in one administrator step (cancelling it changes nothing). */
+/** Uninstall Owlbot.app: asks, then removes everything in one administrator step (cancelling it changes nothing). */
 export function uninstallerScript(catalogs) {
   return `${PRELUDE}
 on run
 \tset ui to uiLanguage()
 \tset homeDir to POSIX path of (path to home folder)
-\tset dataDir to homeDir & "Library/Application Support/open-bot"
-\tdisplay dialog ${call("mac.uninstall.confirm")} buttons {${call("mac.uninstall.cancel")}, ${call("mac.uninstall.ok")}} default button 2 cancel button 1 with icon caution with title "open-bot"
+\tset dataDir to homeDir & "Library/Application Support/Owlbot"
+\tdisplay dialog ${call("mac.uninstall.confirm")} buttons {${call("mac.uninstall.cancel")}, ${call("mac.uninstall.ok")}} default button 2 cancel button 1 with icon caution with title "Owlbot"
 \tset flag to ""
 \tif (do shell script "if [ -d " & quoted form of dataDir & " ]; then echo yes; fi") is "yes" then
 \t\tset deleteButton to ${call("mac.uninstall.deleteDataButton")}
-\t\tset answer to display dialog ${call("mac.uninstall.deleteData", "dataDir")} buttons {deleteButton, ${call("mac.uninstall.keepData")}} default button 2 with icon caution with title "open-bot"
+\t\tset answer to display dialog ${call("mac.uninstall.deleteData", "dataDir")} buttons {deleteButton, ${call("mac.uninstall.keepData")}} default button 2 with icon caution with title "Owlbot"
 \t\tif button returned of answer is deleteButton then set flag to " --delete-data"
 \tend if
 \tset uid to do shell script "id -u"
@@ -97,10 +97,10 @@ on run
 \t\tdo shell script "/bin/sh " & quoted form of "${SUPPORT_DIR}/bin/uninstall.sh" & " " & uid & " " & quoted form of homeDir & flag with administrator privileges
 \ton error errText number errNum
 \t\tif errNum is -128 then return
-\t\tdisplay dialog ${call("mac.uninstall.failed", "errText")} buttons {${call("mac.ok")}} default button 1 with icon stop with title "open-bot"
+\t\tdisplay dialog ${call("mac.uninstall.failed", "errText")} buttons {${call("mac.ok")}} default button 1 with icon stop with title "Owlbot"
 \t\treturn
 \tend try
-\tdisplay dialog ${call("mac.uninstall.done")} buttons {${call("mac.ok")}} default button 1 with title "open-bot"
+\tdisplay dialog ${call("mac.uninstall.done")} buttons {${call("mac.ok")}} default button 1 with title "Owlbot"
 end run
 
 ${appleScriptMessages(catalogs, ["mac.uninstall.confirm", "mac.uninstall.cancel", "mac.uninstall.ok", "mac.uninstall.deleteDataButton", "mac.uninstall.keepData", "mac.uninstall.deleteData", "mac.uninstall.failed", "mac.uninstall.done", "mac.ok"])}
@@ -134,7 +134,7 @@ ${body}
 export function distributionXml({ version, componentPkg }) {
   return `<?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-  <title>open-bot</title>
+  <title>Owlbot</title>
   <welcome file="welcome.html" mime-type="text/html"/>
   <conclusion file="conclusion.html" mime-type="text/html"/>
   <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>

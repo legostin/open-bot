@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, Ban, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
-import type { Task } from "@openbot/shared";
+import type { Task } from "@owlbot/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { ACTIVE_STATUSES, formatDateTime, relativeTime, taskStatus } from "../lib/format";

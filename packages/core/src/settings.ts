@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, localeFromEnv, type Locale } from "@openbot/shared";
+import { DEFAULT_LOCALE, localeFromEnv, type Locale } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
 
 export interface CoreSettings {

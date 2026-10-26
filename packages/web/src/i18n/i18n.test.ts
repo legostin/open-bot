@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { catalogProblems, format, translator } from "@openbot/shared/i18n";
+import { catalogProblems, format, translator } from "@owlbot/shared/i18n";
 import en from "./en";
 import ru from "./ru";
 

@@ -1,5 +1,5 @@
 {
-  "name": "open-bot",
+  "name": "owlbot",
   "version": "0.1.0",
   "private": true,
   "description": "Friendly, proactive, self-hosted personal agent. Your subscriptions, your machines, secure by default.",
@@ -15,7 +15,7 @@
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
     "start": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
-    "build": "npm run build:ui-plugins && npm run build:node && npm run build -w @openbot/web && npm run build -w @openbot/console",
+    "build": "npm run build:ui-plugins && npm run build:node && npm run build -w @owlbot/web && npm run build -w @owlbot/console",
     "build:ui-plugins": "node scripts/build-ui-plugins.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

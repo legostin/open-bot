@@ -3,8 +3,8 @@
 # so an upgrade never mixes old and new files. The data dir is in the user's home and stays.
 USER_NAME="$(stat -f %Su /dev/console)"
 if [ -n "$USER_NAME" ] && [ "$USER_NAME" != root ]; then
-  launchctl bootout "gui/$(id -u "$USER_NAME")/ai.openbot.hub" 2>/dev/null
+  launchctl bootout "gui/$(id -u "$USER_NAME")/ai.owlbot.hub" 2>/dev/null
 fi
-rm -rf "/Library/Application Support/open-bot/app" "/Library/Application Support/open-bot/bin" \
-  "/Applications/open-bot/open-bot.app" "/Applications/open-bot/Uninstall open-bot.app"
+rm -rf "/Library/Application Support/Owlbot/app" "/Library/Application Support/Owlbot/bin" \
+  "/Applications/Owlbot/Owlbot.app" "/Applications/Owlbot/Uninstall Owlbot.app"
 exit 0

@@ -1,7 +1,7 @@
 // The single path every tool call takes: agent allowlist → hooks → policy → approval → invoke → redact → taint → audit.
 
-import type { AgentDef, Approval, ToolCallContext, ToolDescriptor, ToolResult } from "@openbot/shared";
-import { matchesAny, newId, parseBrainRef, renderTemplate, truncate } from "@openbot/shared";
+import type { AgentDef, Approval, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import { matchesAny, newId, parseBrainRef, renderTemplate, truncate } from "@owlbot/shared";
 import type { Store, SessionRow } from "../store.ts";
 import type { ToolRegistry } from "./registry.ts";
 import type { HookRegistry } from "../hooks.ts";

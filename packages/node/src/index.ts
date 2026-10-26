@@ -1,4 +1,4 @@
-// openbot-node: connects this computer to an open-bot hub (brains on local subscriptions, files, commands).
+// owlbot-node: connects this computer to an Owlbot hub (brains on local subscriptions, files, commands).
 
 export { nodeHome, loadConfig, loadKey, savePaired, normalizeHubUrl, nodeWsUrl, NotPairedError, type NodeConfig, type NodeKey } from "./home.ts";
 export { generateKey, signChallenge, publicKeyOf, NODE_AUTH_PREFIX } from "./keys.ts";

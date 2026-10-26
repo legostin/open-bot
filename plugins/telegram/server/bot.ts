@@ -2,8 +2,8 @@
 // approval and feedback buttons. Everything the bot writes is in the hub language (ctx.i18n).
 
 import { randomInt } from "node:crypto";
-import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@openbot/plugin-sdk";
-import type { OutboundMessage, Params, Task, TaskStatus } from "@openbot/shared";
+import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@owlbot/plugin-sdk";
+import type { OutboundMessage, Params, Task, TaskStatus } from "@owlbot/shared";
 import { TelegramApi, TelegramError, type InlineButton, type TgCallbackQuery, type TgChat, type TgMessage, type TgUpdate, type TgUser } from "./api.ts";
 import { TELEGRAM_LIMIT, entitiesToHtml, escapeHtml, htmlToPlain, isPublicHttpUrl, markdownToHtml, splitMarkdown } from "./format.ts";
 

@@ -3,8 +3,8 @@
 // vault://<id>. Plugin manifests describe the secrets they need (contributes.setup.secrets), which lets the hub
 // recognise a pasted token, point the plugin's setting at it and wake the plugin.
 
-import type { Locale, PluginSetupView, SecretRequest, SecretRequestStatus, SetupSecret } from "@openbot/shared";
-import { newId, nowIso } from "@openbot/shared";
+import type { Locale, PluginSetupView, SecretRequest, SecretRequestStatus, SetupSecret } from "@owlbot/shared";
+import { newId, nowIso } from "@owlbot/shared";
 import type { Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";

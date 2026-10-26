@@ -2,8 +2,8 @@
 // Talks JSON-RPC (NDJSON) with the core over stdin/stdout; console output goes to stderr.
 
 import { pathToFileURL } from "node:url";
-import { createRpcPeer, ndjsonTransport, DEFAULT_LOCALE, isLocale, translator } from "@openbot/shared";
-import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage, Catalog, Locale, Translate } from "@openbot/shared";
+import { createRpcPeer, ndjsonTransport, DEFAULT_LOCALE, isLocale, translator } from "@owlbot/shared";
+import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage, Catalog, Locale, Translate } from "@owlbot/shared";
 import type {
   BrainLoginImpl,
   BrainProviderImpl,

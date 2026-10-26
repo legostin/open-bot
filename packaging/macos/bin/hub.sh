@@ -1,5 +1,5 @@
 #!/bin/sh
-# What the LaunchAgent (ai.openbot.hub) runs: the hub, logging to <data>/logs/hub.log (one previous log is kept).
+# What the LaunchAgent (ai.owlbot.hub) runs: the hub, logging to <data>/logs/hub.log (one previous log is kept).
 . "$(dirname "$0")/env.sh"
 mkdir -p "$DATA/logs"
 LOG="$DATA/logs/hub.log"

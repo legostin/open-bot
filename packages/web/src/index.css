@@ -222,7 +222,7 @@
     margin: 1em 0;
   }
 
-  @keyframes ob-blink {
+  @keyframes owl-blink {
     0%,
     80%,
     100% {
@@ -233,7 +233,7 @@
     }
   }
   .typing-dot {
-    animation: ob-blink 1.2s infinite ease-in-out;
+    animation: owl-blink 1.2s infinite ease-in-out;
   }
   .typing-dot:nth-child(2) {
     animation-delay: 0.15s;
@@ -242,7 +242,7 @@
     animation-delay: 0.3s;
   }
 
-  @keyframes ob-caret {
+  @keyframes owl-caret {
     50% {
       opacity: 0;
     }
@@ -251,10 +251,10 @@
     content: "▍";
     margin-left: 1px;
     color: var(--accent);
-    animation: ob-caret 1s steps(1) infinite;
+    animation: owl-caret 1s steps(1) infinite;
   }
 
-  @keyframes ob-in {
+  @keyframes owl-in {
     from {
       opacity: 0;
       transform: translateY(6px);
@@ -265,6 +265,6 @@
     }
   }
   .animate-in {
-    animation: ob-in 0.18s ease-out;
+    animation: owl-in 0.18s ease-out;
   }
 }

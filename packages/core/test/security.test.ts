@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Rule, ToolDescriptor } from "@openbot/shared";
+import type { Rule, ToolDescriptor } from "@owlbot/shared";
 import { decide, extractTargets, suggestRule, type PolicyInput } from "../src/policy/engine.ts";
 import { Redactor } from "../src/vault/redact.ts";
 import { VaultService, VaultError } from "../src/vault/service.ts";
@@ -90,7 +90,7 @@ describe("redactor", () => {
 });
 
 describe("vault", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ob-vault-"));
+  const dir = mkdtempSync(join(tmpdir(), "owl-vault-"));
 
   it("encrypts, seals, unlocks and enforces scopes", () => {
     const v = new VaultService(join(dir, "v.db"));

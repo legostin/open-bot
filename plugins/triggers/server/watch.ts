@@ -178,7 +178,7 @@ export async function fetchPage(url: string, opts: { allowPrivate: boolean; time
       res = await fetch(current, {
         redirect: "manual",
         signal: AbortSignal.timeout(opts.timeoutMs),
-        headers: { "user-agent": "open-bot-triggers/0.1 (+watch)", accept: "text/html,application/json;q=0.9,*/*;q=0.8" },
+        headers: { "user-agent": "owlbot-triggers/0.1 (+watch)", accept: "text/html,application/json;q=0.9,*/*;q=0.8" },
       });
     } catch (e: any) {
       if (e?.name === "TimeoutError") throw new WatchError("fetchTimeout", `Could not load ${current}: timeout`, { url: current });

@@ -1,7 +1,7 @@
 // Builds the Windows installer: stages the app, compiles the tray app with the .NET Framework C# compiler that ships
 // with Windows, turns the installer catalogs into C# and Inno Setup messages and runs Inno Setup 6.
 //   npm run package:win [-- --skip-build] [-- --skip-stage]
-// Output: dist/desktop/open-bot-setup-<version>-x64.exe. Needs Inno Setup 6 (winget install JRSoftware.InnoSetup).
+// Output: dist/desktop/owlbot-setup-<version>-x64.exe. Needs Inno Setup 6 (winget install JRSoftware.InnoSetup).
 
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -34,7 +34,7 @@ function trayStrings(catalogs) {
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace OpenBot
+namespace Owlbot
 {
     static class L
     {
@@ -87,7 +87,7 @@ mkdirSync(BUILD, { recursive: true });
 const catalogs = loadCatalogs();
 
 // Tray app.
-const icon = join(ROOT, "packaging", "assets", "open-bot.ico");
+const icon = join(ROOT, "packaging", "assets", "owlbot.ico");
 const strings = join(BUILD, "Strings.g.cs");
 writeFileSync(strings, trayStrings(catalogs));
 const windir = process.env.SystemRoot || "C:\\Windows";
@@ -98,14 +98,14 @@ run(csc, [
   "/optimize+",
   "/platform:anycpu",
   `/win32icon:${icon}`,
-  `/win32manifest:${join(HERE, "tray", "open-bot.manifest")}`,
-  `/out:${join(app, "open-bot.exe")}`,
+  `/win32manifest:${join(HERE, "tray", "owlbot.manifest")}`,
+  `/out:${join(app, "Owlbot.exe")}`,
   "/r:System.Windows.Forms.dll",
   "/r:System.Drawing.dll",
-  join(HERE, "tray", "OpenBotTray.cs"),
+  join(HERE, "tray", "OwlbotTray.cs"),
   strings,
 ]);
-copyFileSync(icon, join(app, "open-bot.ico"));
+copyFileSync(icon, join(app, "owlbot.ico"));
 
 // Installer. No links may reach it: ISCC would copy their targets into node_modules.
 removeLinks(app);
@@ -120,5 +120,5 @@ const iscc = findTool(
   ],
   "Inno Setup 6 (winget install JRSoftware.InnoSetup)",
 );
-run(iscc, ["/Q", `/DAppVersion=${VERSION}`, `/DStageDir=${app}`, `/DOutputDir=${OUT}`, `/DMessagesFile=${messages}`, `/DIconFile=${icon}`, join(HERE, "open-bot.iss")]);
-console.log(`installer: ${join(OUT, `open-bot-setup-${VERSION}-x64.exe`)}`);
+run(iscc, ["/Q", `/DAppVersion=${VERSION}`, `/DStageDir=${app}`, `/DOutputDir=${OUT}`, `/DMessagesFile=${messages}`, `/DIconFile=${icon}`, join(HERE, "owlbot.iss")]);
+console.log(`installer: ${join(OUT, `owlbot-setup-${VERSION}-x64.exe`)}`);

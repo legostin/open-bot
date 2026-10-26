@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Message } from "@openbot/shared";
+import type { Message } from "@owlbot/shared";
 import { appendDelta, applyDelta, isStreaming, mergeFetched, prependOlder, upsertMessage } from "./messages";
 
 const msg = (id: string, createdAt: string, parts: Message["parts"] = [], status: Message["status"] = "complete"): Message => ({

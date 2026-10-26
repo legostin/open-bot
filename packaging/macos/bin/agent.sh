@@ -1,6 +1,6 @@
 #!/bin/sh
 # The hub's LaunchAgent for the user running this (starts at login, restarted after a crash).
-#   agent.sh install   write ~/Library/LaunchAgents/ai.openbot.hub.plist and (re)start the hub
+#   agent.sh install   write ~/Library/LaunchAgents/ai.owlbot.hub.plist and (re)start the hub
 #   agent.sh ensure    the same unless it is already running
 #   agent.sh remove    stop the hub and delete the plist
 . "$(dirname "$0")/env.sh"
@@ -22,7 +22,7 @@ write_plist() {
   <array><string>/bin/sh</string><string>$(xml "$BIN/hub.sh")</string></array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>OPENBOT_DATA_DIR</key><string>$(xml "$DATA")</string>
+    <key>OWLBOT_DATA_DIR</key><string>$(xml "$DATA")</string>
     <key>PATH</key><string>$(xml "$HOME/.local/bin"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>RunAtLoad</key><true/>

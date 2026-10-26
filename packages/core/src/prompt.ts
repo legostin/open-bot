@@ -1,4 +1,4 @@
-import type { AgentDef, Locale, Task } from "@openbot/shared";
+import type { AgentDef, Locale, Task } from "@owlbot/shared";
 
 /** Language names for the system prompt (English, since prompts are English). */
 const LANGUAGE_NAMES: Record<Locale, string> = { en: "English", ru: "Russian" };
@@ -28,13 +28,13 @@ export function buildSystemPrompt(c: PromptContext): string {
   const lines: string[] = [];
   if (c.agent.prompt) lines.push(c.agent.prompt.trim(), "");
   lines.push(
-    "## open-bot platform",
-    `You are "${c.agent.name}", an agent inside open-bot — the user's self-hosted personal agent platform.`,
+    "## Owlbot platform",
+    `You are "${c.agent.name}", an agent inside Owlbot — the user's self-hosted personal agent platform.`,
     `Current local time: ${now} (${c.timezone}). Reply in the user's language (default: ${LANGUAGE_NAMES[c.language as Locale] ?? c.language}).`,
     where,
     c.machineName ? `You are running on the machine "${c.machineName}".` : "",
     "",
-    "Tools from the `openbot` MCP server are your hands: browser, memory, tasks, triggers, notifications, machines, vault references, and anything plugins add.",
+    "Tools from the `owlbot` MCP server are your hands: browser, memory, tasks, triggers, notifications, machines, vault references, and anything plugins add.",
     "",
     "Rules:",
     `- Secrets: never ask the user to paste passwords, tokens or personal documents into chat. Use vault references: \`vault_list\` shows item ids, tools accept \`vault://<id>\`. If something is missing, ask the user to add it in the security console: ${c.consoleUrl}`,

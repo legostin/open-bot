@@ -1,7 +1,7 @@
 // Global client state: auth/bootstrap, realtime connection, the team (agents and their dialogs), conversations, messages, tasks.
 
 import { useSyncExternalStore } from "react";
-import type { AgentDef, Catalog, Conversation, Locale, Message, Task, TeamMember, UiEvent, VaultState } from "@openbot/shared";
+import type { AgentDef, Catalog, Conversation, Locale, Message, Task, TeamMember, UiEvent, VaultState } from "@owlbot/shared";
 import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
 import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";

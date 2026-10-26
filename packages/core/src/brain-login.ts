@@ -4,8 +4,8 @@
 // brains again so the card, the Brains page and the first-run checklist turn green. On a hub without user isolation
 // (desktop installers, `npm start`) a CLI that is not installed is installed first from its official npm package.
 
-import type { BrainLoginState, BrainLoginUpdate, BrainLoginView, RpcPeer } from "@openbot/shared";
-import { formatBrainRef, newId, nowIso, parseBrainRef } from "@openbot/shared";
+import type { BrainLoginState, BrainLoginUpdate, BrainLoginView, RpcPeer } from "@owlbot/shared";
+import { formatBrainRef, newId, nowIso, parseBrainRef } from "@owlbot/shared";
 import type { BrainRegistry } from "./brains.ts";
 import type { EventBus } from "./bus.ts";
 import type { EgressProxy } from "./egress.ts";

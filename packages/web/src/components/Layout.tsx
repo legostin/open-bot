@@ -29,7 +29,7 @@ function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5 px-4 py-3.5">
       <img src="/favicon.svg" alt="" className="size-7" />
-      <span className="text-[15px] font-semibold tracking-tight">open-bot</span>
+      <span className="text-[15px] font-semibold tracking-tight">Owlbot</span>
       {s?.version && <span className="text-[11px] text-muted">{s.version}</span>}
     </Link>
   );

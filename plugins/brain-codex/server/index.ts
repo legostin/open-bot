@@ -1,7 +1,7 @@
 // Registers the "codex" brain (OpenAI Codex CLI on the user's ChatGPT subscription or an API key).
 
-import type { PluginContext, PluginModule } from "@openbot/plugin-sdk";
-import { createCodexProvider } from "@openbot/brains-cli";
+import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
+import { createCodexProvider } from "@owlbot/brains-cli";
 
 const plugin: PluginModule = {
   activate(ctx: PluginContext) {

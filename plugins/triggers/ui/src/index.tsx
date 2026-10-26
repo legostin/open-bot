@@ -1,8 +1,8 @@
 // "Triggers" page: list, enable toggle, create/edit per kind, run now, run history.
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, EmptyState, Spinner, definePluginUI } from "@openbot/ui";
-import type { OpenBotUI } from "@openbot/ui";
+import { Badge, Button, Card, EmptyState, Spinner, definePluginUI } from "@owlbot/ui";
+import type { OwlbotUI } from "@owlbot/ui";
 
 type Kind = "schedule" | "once" | "watch" | "event" | "heartbeat";
 type ErrorParams = Record<string, string | number>;
@@ -57,7 +57,7 @@ interface ListResponse {
 }
 
 // Set in definePluginUI; the page reloads when the language changes.
-let i18n: OpenBotUI["i18n"];
+let i18n: OwlbotUI["i18n"];
 const tr = (key: string, params?: ErrorParams) => i18n.t(key, params);
 
 const KINDS: Kind[] = ["schedule", "once", "watch", "event", "heartbeat"];
@@ -142,7 +142,7 @@ function statusBadge(t: Trigger) {
 // ---------- form ----------
 
 interface FormProps {
-  ui: OpenBotUI;
+  ui: OwlbotUI;
   initial: Trigger | null;
   agents: ListResponse["agents"];
   tz: string;
@@ -302,7 +302,7 @@ function TriggerForm({ ui, initial, agents, tz, onDone }: FormProps) {
 
 // ---------- history ----------
 
-function History({ ui, trigger, tz, onClose }: { ui: OpenBotUI; trigger: Trigger; tz: string; onClose: () => void }) {
+function History({ ui, trigger, tz, onClose }: { ui: OwlbotUI; trigger: Trigger; tz: string; onClose: () => void }) {
   const [runs, setRuns] = useState<Run[] | null>(null);
   const load = useCallback(() => {
     ui.plugin
@@ -373,7 +373,7 @@ function History({ ui, trigger, tz, onClose }: { ui: OpenBotUI; trigger: Trigger
 
 // ---------- list ----------
 
-function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OpenBotUI; t: Trigger; tz: string; onEdit: () => void; onHistory: () => void }) {
+function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OwlbotUI; t: Trigger; tz: string; onEdit: () => void; onHistory: () => void }) {
   const [busy, setBusy] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
 
@@ -508,7 +508,7 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OpenBotUI; t: Trigg
   );
 }
 
-function TriggersPage({ ui }: { ui: OpenBotUI }) {
+function TriggersPage({ ui }: { ui: OwlbotUI }) {
   const [data, setData] = useState<ListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Trigger | "new" | null>(null);

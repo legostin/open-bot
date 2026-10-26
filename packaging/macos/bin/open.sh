@@ -1,5 +1,5 @@
 #!/bin/sh
-# What open-bot.app runs: starts the hub's LaunchAgent if it is not running, waits for the hub and prints the address
+# What Owlbot.app runs: starts the hub's LaunchAgent if it is not running, waits for the hub and prints the address
 # to open (with the setup code until the first run is done). Exits non-zero when the hub did not come up.
 . "$(dirname "$0")/env.sh"
 mkdir -p "$DATA/logs"

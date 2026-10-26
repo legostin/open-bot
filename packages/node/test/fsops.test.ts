@@ -67,7 +67,7 @@ describe("fs outside allowed dirs", () => {
   });
 
   it("never touches the daemon's own home", () => {
-    const home = join(allowed, ".openbot-node");
+    const home = join(allowed, ".owlbot-node");
     mkdirSync(home, { recursive: true });
     writeFileSync(join(home, "policy.json"), "{}");
     expect(() => fsWrite({ path: join(home, "policy.json"), content: "{}" }, p, { deny: [home] })).toThrow(/state folder/);

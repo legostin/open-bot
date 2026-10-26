@@ -2,8 +2,8 @@
 // secret fields are encrypted with a random data key wrapped by an Argon2id-derived key.
 
 import { readFileSync } from "node:fs";
-import type { Params, VaultItem, VaultItemMeta, VaultItemType, VaultScope, VaultState } from "@openbot/shared";
-import { hostMatches, newId, nowIso } from "@openbot/shared";
+import type { Params, VaultItem, VaultItemMeta, VaultItemType, VaultScope, VaultState } from "@owlbot/shared";
+import { hostMatches, newId, nowIso } from "@owlbot/shared";
 import { openDb, json, type Db } from "../db.ts";
 import { DEFAULT_KDF, deriveKey, newDataKey, newSalt, open, openJson, seal, sealJson, type KdfParams, type Sealed } from "./crypto.ts";
 import { Redactor } from "./redact.ts";
@@ -26,6 +26,10 @@ export interface AccessRequest {
   tool?: string;
   domain?: string;
 }
+
+/** Associated data of the wrapped data key. It predates the Owlbot name and stays: another label would make
+ * every existing vault reject its own passphrase. */
+const DEK_LABEL = "openbot-vault-dek";
 
 const DEFAULT_SCOPE: VaultScope = { domains: [], plugins: [], agents: [], tools: [], mode: "auto", revealToModel: false };
 
@@ -66,7 +70,7 @@ export class VaultService {
     const kek = deriveKey(passphrase, kdf);
     const dek = newDataKey();
     this.setMeta("kdf", JSON.stringify(kdf));
-    this.setMeta("wrapped_key", JSON.stringify(seal(kek, dek, "openbot-vault-dek")));
+    this.setMeta("wrapped_key", JSON.stringify(seal(kek, dek, DEK_LABEL)));
     this.key = dek;
     this.refreshRedactor();
     this.onState("unlocked");
@@ -77,7 +81,7 @@ export class VaultService {
     if (!wrapped) throw new VaultError("uninitialized", "vault.uninitialized");
     const kdf = json<KdfParams>(this.meta("kdf"), { ...DEFAULT_KDF, salt: "" });
     try {
-      this.key = open(deriveKey(passphrase, kdf), JSON.parse(wrapped) as Sealed, "openbot-vault-dek");
+      this.key = open(deriveKey(passphrase, kdf), JSON.parse(wrapped) as Sealed, DEK_LABEL);
     } catch {
       throw new VaultError("bad_passphrase", "vault.badPassphrase");
     }
@@ -101,7 +105,7 @@ export class VaultService {
     this.unlock(oldPass);
     const kdf: KdfParams = { ...DEFAULT_KDF, salt: newSalt() };
     this.setMeta("kdf", JSON.stringify(kdf));
-    this.setMeta("wrapped_key", JSON.stringify(seal(deriveKey(newPass, kdf), this.key!, "openbot-vault-dek")));
+    this.setMeta("wrapped_key", JSON.stringify(seal(deriveKey(newPass, kdf), this.key!, DEK_LABEL)));
   }
 
   seal(): void {

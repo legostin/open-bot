@@ -1,4 +1,4 @@
-import type { ToolCallContext, ToolDescriptor, ToolResult } from "@openbot/shared";
+import type { ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
 
 export type ToolInvoker = (input: any, ctx: ToolCallContext) => Promise<ToolResult>;
 

@@ -3,7 +3,7 @@
 
 import { memo } from "react";
 import { Bell, CircleAlert, ExternalLink, FileText, Lock, ShieldAlert } from "lucide-react";
-import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@openbot/shared";
+import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
 import { formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";

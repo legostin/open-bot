@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // stdio ↔ HTTP bridge: lets harness CLIs (Claude Code, Codex) that speak MCP over stdio reach the hub's /mcp endpoint.
-// Env: OPENBOT_URL (e.g. http://127.0.0.1:8080/mcp) and the per-session bearer token in OPENBOT_TOKEN_FILE
-// (preferred: a 0600 file, so the token never shows up in process listings) or OPENBOT_TOKEN.
+// Env: OWLBOT_URL (e.g. http://127.0.0.1:8080/mcp) and the per-session bearer token in OWLBOT_TOKEN_FILE
+// (preferred: a 0600 file, so the token never shows up in process listings) or OWLBOT_TOKEN.
 
 import http from "node:http";
 import https from "node:https";
 import { readFileSync } from "node:fs";
 
-const url = new URL(process.env.OPENBOT_URL ?? "http://127.0.0.1:8080/mcp");
-const token = process.env.OPENBOT_TOKEN_FILE ? readFileSync(process.env.OPENBOT_TOKEN_FILE, "utf8").trim() : (process.env.OPENBOT_TOKEN ?? "");
+const url = new URL(process.env.OWLBOT_URL ?? "http://127.0.0.1:8080/mcp");
+const token = process.env.OWLBOT_TOKEN_FILE ? readFileSync(process.env.OWLBOT_TOKEN_FILE, "utf8").trim() : (process.env.OWLBOT_TOKEN ?? "");
 const client = url.protocol === "https:" ? https : http;
 
 function post(body: string): Promise<{ status: number; text: string }> {
@@ -58,7 +58,7 @@ async function forward(line: string): Promise<void> {
     const out = JSON.parse(r.text);
     for (const m of Array.isArray(out) ? out : [out]) write(m);
   } catch (e: any) {
-    if (id !== null) write({ jsonrpc: "2.0", id, error: { code: -32603, message: `openbot hub unreachable: ${e?.message ?? e}` } });
+    if (id !== null) write({ jsonrpc: "2.0", id, error: { code: -32603, message: `owlbot hub unreachable: ${e?.message ?? e}` } });
   }
 }
 
