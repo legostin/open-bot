@@ -57,7 +57,8 @@ pub struct Paths {
 impl Paths {
   fn resolve(app: &AppHandle) -> tauri::Result<Paths> {
     let p = app.path();
-    let app_root = std::env::var_os("OWLBOT_APP_ROOT").map(PathBuf::from).unwrap_or(p.resource_dir()?.join("app"));
+    // Windows gives the resource dir as \\?\C:\..., which Node cannot load a main script from: plain C:\... instead.
+    let app_root = dunce::simplified(&std::env::var_os("OWLBOT_APP_ROOT").map(PathBuf::from).unwrap_or(p.resource_dir()?.join("app"))).to_path_buf();
     let data_override = std::env::var_os("OWLBOT_DATA_DIR").map(PathBuf::from);
     let hub_data = data_override.clone().unwrap_or(p.local_data_dir()?.join("Owlbot"));
     let node_home = std::env::var_os("OWLBOT_NODE_HOME").map(PathBuf::from).unwrap_or(p.home_dir()?.join(".owlbot-node"));
