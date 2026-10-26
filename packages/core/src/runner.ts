@@ -70,6 +70,7 @@ export class SessionRunner {
   private runningTasks = new Set<string>();
   private brainLoad = new Map<string, number>();
   private timer?: NodeJS.Timeout;
+  private kickoff?: NodeJS.Timeout;
   private streamingMessage = new Map<string, string>(); // conversationId -> messageId
 
   constructor(deps: RunnerDeps) {
@@ -96,11 +97,13 @@ export class SessionRunner {
       }
     }, 15_000);
     this.timer.unref();
-    setTimeout(() => this.scheduleTasks(), 1000).unref();
+    this.kickoff = setTimeout(() => this.scheduleTasks(), 1000).unref();
   }
 
   async stop(): Promise<void> {
-    if (this.timer) clearInterval(this.timer);
+    // Both timers go before the hub closes the database: a hub stopped within a second of starting would otherwise query a closed db.
+    clearInterval(this.timer);
+    clearTimeout(this.kickoff);
     await Promise.all([...this.live.keys()].map((id) => this.closeLive(id)));
   }
 
