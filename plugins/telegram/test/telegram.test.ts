@@ -306,6 +306,59 @@ describe("telegram plugin", () => {
     expect(plain.params.text).not.toContain("<");
   });
 
+  it("sends pictures as photos and albums, uploads workspace files and pins maps", async () => {
+    let from = tg.calls.length;
+    await h.channelSend("telegram", { kind: "reply", text: "Вот он", media: [{ kind: "image", url: "https://img.example.com/a.jpg", caption: "Собор" }] });
+    const photo = await tg.waitFor("sendPhoto", () => true, { from });
+    expect(photo.params).toMatchObject({ chat_id: OWNER, photo: "https://img.example.com/a.jpg", caption: "Собор" });
+    // The text first, then the picture.
+    const order = tg.calls.slice(from).map((c) => c.method);
+    expect(order.indexOf("sendMessage")).toBeLessThan(order.indexOf("sendPhoto"));
+
+    from = tg.calls.length;
+    const png = Buffer.from("\x89PNG fake").toString("base64");
+    await h.channelSend("telegram", {
+      kind: "reply",
+      text: "",
+      media: [
+        { kind: "image", url: "https://img.example.com/b.jpg", caption: "Мост" },
+        { kind: "image", data: png, mimeType: "image/png", name: "chart.png", caption: "График" },
+        { kind: "image", data: Buffer.from("<svg/>").toString("base64"), mimeType: "image/svg+xml", name: "logo.svg" },
+        { kind: "map", lat: 55.75, lon: 37.62, title: "Красная площадь" },
+      ],
+    });
+    const album = await tg.waitFor("sendMediaGroup", () => true, { from });
+    expect(album.params.chat_id).toBe(String(OWNER));
+    expect(album.params.media).toEqual([
+      { type: "photo", media: "https://img.example.com/b.jpg", caption: "1. Мост\n2. График" },
+      { type: "photo", media: "attach://f1" },
+    ]);
+    expect(album.params.f1).toMatchObject({ file: true, name: "chart.png", type: "image/png", size: Buffer.from(png, "base64").length });
+    // SVG is no photo for Telegram: it goes as a document.
+    const doc = await tg.waitFor("sendDocument", () => true, { from });
+    expect(doc.params.document).toMatchObject({ file: true, name: "logo.svg", type: "image/svg+xml" });
+    const pin = await tg.waitFor("sendLocation", () => true, { from });
+    expect(pin.params).toMatchObject({ chat_id: OWNER, latitude: 55.75, longitude: 37.62 });
+    const title = await tg.waitFor("sendMessage", (p) => p.text.includes("Красная площадь"), { from });
+    expect(title.params.text).toBe("<b>Красная площадь</b>");
+    // No empty "…" message before pictures without words.
+    expect(tg.calls.slice(from).filter((c) => c.method === "sendMessage").map((c) => c.params.text)).toEqual(["<b>Красная площадь</b>"]);
+  });
+
+  it("sends links instead when Telegram refuses a picture or a pin", async () => {
+    let from = tg.calls.length;
+    tg.failNext("sendPhoto", 400, "Bad Request: wrong file identifier/HTTP URL specified");
+    await h.channelSend("telegram", { kind: "reply", text: "", media: [{ kind: "image", url: "https://img.example.com/x.jpg?a=1&b=2", caption: "Кот" }] });
+    const links = await tg.waitFor("sendMessage", (p) => p.text.includes("Couldn't send the pictures"), { from });
+    expect(links.params.text).toContain('• <a href="https://img.example.com/x.jpg?a=1&amp;b=2">Кот</a>');
+
+    from = tg.calls.length;
+    tg.failNext("sendLocation", 400, "Bad Request: wrong latitude");
+    await h.channelSend("telegram", { kind: "reply", text: "", media: [{ kind: "map", lat: 48.8584, lon: 2.2945 }] });
+    const osm = await tg.waitFor("sendMessage", (p) => p.text.includes("openstreetmap.org"), { from });
+    expect(osm.params.text).toBe("<b>Location</b>\nhttps://www.openstreetmap.org/?mlat=48.8584&amp;mlon=2.2945#map=16/48.8584/2.2945");
+  });
+
   it("unbinds and issues a new pairing code", async () => {
     const r = (await h.http({ method: "POST", path: "/unbind" })).body as any;
     expect(r.chat).toBeNull();
