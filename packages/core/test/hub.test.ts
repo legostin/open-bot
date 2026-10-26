@@ -160,6 +160,13 @@ describe("hub (integration)", () => {
       const out = await until(() => sent.find((s) => /fake heard: web question/.test(s.message.text)), "the mirrored reply");
       expect(out).toMatchObject({ channelId: "mirror", message: { kind: "reply", quote: "web question", conversationId: conv } });
 
+      // Only the answer leaves the web: no tool calls, their results or the narration around them.
+      await web.req("POST", `/api/conversations/${conv}/messages`, { text: "THINK about it" });
+      const full = await lastReply(conv, /fake found it/);
+      expect(full.parts.map((p: any) => p.type)).toEqual(["text", "tool_call", "tool_result", "text"]);
+      const answer = await until(() => sent.find((s) => /fake found it/.test(s.message.text)), "the mirrored answer");
+      expect(answer.message.text).toBe("fake found it");
+
       // Written in the channel: the answer goes back there once, without quoting the user to themselves.
       await createCoreCall(hub)("mirror-test", "channels.inbound", { channel: "mirror", text: "phone question" });
       await lastReply(conv, /fake heard: phone question/);

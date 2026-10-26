@@ -66,6 +66,8 @@ interface Live {
 
 export interface TurnResult {
   text: string;
+  /** Just the final answer, without the narration around tool calls: what the channels get. */
+  answer?: string;
   error?: string;
   limited?: { resetAt?: string };
   awaitingApproval: boolean;
@@ -657,7 +659,7 @@ export class SessionRunner {
           void this.closeLive(row!.id);
           continue;
         }
-        await this.deliver(conv, r.text, opts);
+        await this.deliver(conv, r.answer ?? r.text, opts);
         return r;
       } finally {
         this.brainLoad.set(key, Math.max(0, (this.brainLoad.get(key) ?? 1) - 1));
@@ -779,7 +781,7 @@ export class SessionRunner {
     if (error) parts.push({ type: "error", message: error });
     parts = mergeAttached(parts, current());
     this.d.store.updateMessage(msg.id, { parts, status: error && !produced ? "error" : "complete" });
-    return { text: fullText.trim(), error, limited, awaitingApproval };
+    return { text: fullText.trim(), answer: finalAnswer(parts), error, limited, awaitingApproval };
   }
 }
 
@@ -804,6 +806,18 @@ function mergeAttached(local: MessagePart[], stored: MessagePart[]): MessagePart
   });
   for (const [k, p] of cards) if (!out.some((q) => attachedKey(q) === k)) out.push(p);
   return out;
+}
+
+/**
+ * The reply as the channels get it: the text after the brain's last tool call. Its narration around the tools
+ * ("let me look…") stays in the web UI with the tool calls.
+ */
+function finalAnswer(parts: MessagePart[]): string {
+  const texts = (from: number) => parts.slice(from).flatMap((p) => (p.type === "text" ? [p.text] : []));
+  const lastTool = parts.findLastIndex((p) => p.type === "tool_call" || p.type === "tool_result");
+  const tail = texts(lastTool + 1).join("").trim();
+  // Answered, then called a tool and said nothing more: the answer is the last thing it said.
+  return tail || (texts(0).findLast((s) => s.trim()) ?? "").trim();
 }
 
 function resultText(r: ToolResult): string {

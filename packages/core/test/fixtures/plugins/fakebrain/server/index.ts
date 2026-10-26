@@ -37,6 +37,16 @@ export default {
               yield { type: "done" };
               return;
             }
+            // Only the turn's own last line: a fresh session's prompt carries the dialog so far.
+            if (/^THINK\b/.test(turn.text.trim().split("\n").at(-1) ?? "")) {
+              // Narration, a native tool, then the answer: how a real brain replies after using tools.
+              yield { type: "text", delta: "Let me look." };
+              yield { type: "tool_call", id: "t1", name: "Read", input: { path: "notes.md" } };
+              yield { type: "tool_result", id: "t1", output: "the notes" };
+              yield { type: "text", delta: `${id} found it` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
             const m = /CALL (\S+) (\{.*\})/.exec(turn.text);
             if (m && !turn.text.includes("[System]")) {
               yield { type: "tool_call", id: "c1", name: m[1], input: JSON.parse(m[2]) };
