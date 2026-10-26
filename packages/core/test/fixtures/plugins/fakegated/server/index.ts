@@ -25,7 +25,8 @@ export default {
       label: "Gated",
       probe: async () => ({ available: true, authenticated: signedIn(), detail: signedIn() ? "signed in" : "not signed in" }),
       createSession: async (o: BrainSessionOptions) => ({
-        async *send(turn): AsyncGenerator<BrainEvent> {
+        async *send(raw): AsyncGenerator<BrainEvent> {
+          const turn = { ...raw, text: raw.text.replace(/^\[Now: [^\]]*\]\n/, "") };
           const last = turn.text.trim().split("\n").at(-1) ?? "";
           const m = /^CALL (\S+) (\{.*\})$/.exec(last);
           if (m) yield { type: "text", delta: `tool said: ${await mcpCall(o, m[1], JSON.parse(m[2]))}` };

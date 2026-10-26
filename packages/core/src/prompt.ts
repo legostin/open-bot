@@ -39,7 +39,7 @@ function groupWhere(c: PromptContext & { group: NonNullable<PromptContext["group
 }
 
 export function buildSystemPrompt(c: PromptContext): string {
-  const now = new Intl.DateTimeFormat("ru-RU", { timeZone: c.timezone, dateStyle: "full", timeStyle: "short" }).format(new Date());
+  const now = new Intl.DateTimeFormat("en-GB", { timeZone: c.timezone, dateStyle: "full", timeStyle: "short" }).format(new Date());
   const where = c.task
     ? `You are working on a ${c.background ? "background " : ""}task "${c.task.title}" (id ${c.task.id}, created by ${c.task.createdBy}${c.task.triggerId ? `, trigger ${c.task.triggerId}` : ""}).`
     : c.group
@@ -50,7 +50,7 @@ export function buildSystemPrompt(c: PromptContext): string {
   lines.push(
     "## Owlbot platform",
     `You are "${c.agent.name}", an agent inside Owlbot — the user's self-hosted personal agent platform.`,
-    `Current local time: ${now} (${c.timezone}). Reply in the user's language (default: ${LANGUAGE_NAMES[c.language as Locale] ?? c.language}).`,
+    `Local time when this session started: ${now} (${c.timezone}); the latest \`[Now: …]\` line before a message is the current time. Reply in the user's language (default: ${LANGUAGE_NAMES[c.language as Locale] ?? c.language}).`,
     where,
     c.machineName ? `You are running on the machine "${c.machineName}".` : "",
     "",

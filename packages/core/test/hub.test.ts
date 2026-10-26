@@ -136,6 +136,14 @@ describe("hub (integration)", () => {
     expect(m.brainRef).toBe("fake@local");
   });
 
+  it("tells a brain session the current time on its first turn, not on every turn", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "time" });
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { text: "TIME?" });
+    await lastReply(c.id, /^fake time: \[Now: \w+day, \d{1,2} \w+ \d{4}, \d\d:\d\d \([^)]+\)\]$/);
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { text: "TIME?" });
+    await lastReply(c.id, /^fake time: none$/);
+  });
+
   it("routes channel messages to the default agent's dialog and shows it in the team", async () => {
     const seen: any[] = [];
     const off = hub.bus.on("team.updated", (m) => seen.push(m));

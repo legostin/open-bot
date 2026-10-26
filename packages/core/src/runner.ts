@@ -26,6 +26,7 @@ import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
 import { MAX_IMAGE_BYTES, readWorkspaceImage } from "./media.ts";
+import { TurnClock } from "./clock.ts";
 import { firstSpeakers, groupTurn, groupTurnText, handOff, MAX_HANDOFFS, USER_LABEL } from "./group-chat.ts";
 
 export interface RunnerDeps {
@@ -101,6 +102,8 @@ export class SessionRunner {
   private activeTurns = new Map<string, { sessionId: string; handle: BrainHandle }>();
   private runningTasks = new Set<string>();
   private brainLoad = new Map<string, number>();
+  /** When each live session last got the current time (clock.ts). */
+  private clock = new TurnClock();
   private timer?: NodeJS.Timeout;
   private kickoff?: NodeJS.Timeout;
   private streamingMessage = new Map<string, string>(); // conversationId -> messageId
@@ -152,6 +155,7 @@ export class SessionRunner {
     const l = this.live.get(id);
     this.live.delete(id);
     this.d.egress.revokeOwner(`brain:${id}`);
+    this.clock.forget(id);
     await l?.handle.close().catch(() => {});
   }
 
@@ -863,6 +867,9 @@ export class SessionRunner {
         text = `[System] This conversation continues on a different brain. Recent history:\n${this.handoffSummary(conv.id)}\n\n---\n${prompt}`;
         handoff = false;
       }
+
+      const now = this.clock.line(row!.id, this.d.settings.get().timezone);
+      if (now) text = `${now}\n${text}`;
 
       this.brainLoad.set(key, (this.brainLoad.get(key) ?? 0) + 1);
       try {
