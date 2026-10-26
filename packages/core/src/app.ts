@@ -3,6 +3,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { CoreMethod } from "@openbot/shared";
+import { DEFAULT_LOCALE, catalogLookup, localizeValue, normalizeLocale } from "@openbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
 import { EventBus } from "./bus.ts";
@@ -15,7 +16,7 @@ import { ApprovalService } from "./approvals.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { HookRegistry } from "./hooks.ts";
 import { ToolGateway } from "./tools/gateway.ts";
-import { AgentRegistry } from "./agents.ts";
+import { AgentRegistry, agentName } from "./agents.ts";
 import { SkillIndex } from "./skills.ts";
 import { PluginHost } from "./plugins/host.ts";
 import { EgressProxy } from "./egress.ts";
@@ -29,6 +30,7 @@ import { McpClientManager } from "./mcp/client.ts";
 import { AuthService } from "./auth.ts";
 import { MachineHub } from "./machines.ts";
 import { createCoreCall } from "./core-call.ts";
+import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, t } from "./i18n.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -68,6 +70,7 @@ export class Hub {
     this.db = openDb(join(config.dataDir, "openbot.db"));
     this.store = new Store(this.db, this.bus);
     this.settings = new Settings(this.db, config.timezone);
+    configureHubLocale(() => normalizeLocale(this.settings.get().language) ?? DEFAULT_LOCALE);
     this.vault = new VaultService(join(config.dataDir, "vault.db"), {
       onState: (state) => this.bus.emit("vault.state", { state }),
       onAccess: (e) => this.audit.append(e.actor, e.allowed ? "vault.access" : "vault.denied", e.itemId, e.reason ? { reason: e.reason } : undefined),
@@ -101,6 +104,9 @@ export class Hub {
       settings: this.settings,
       agents: this.agents,
       workspaceFor: (s) => this.runner.workspacePath(s),
+      // "%key%" approval summaries resolve against the owner's messages in the hub language.
+      localize: (owner, text) =>
+        owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),
     });
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit });
     this.runner = new SessionRunner({
@@ -183,9 +189,10 @@ export class Hub {
     this.bus.on("approval.created", (a) => {
       const s = this.settings.get();
       const agent = this.agents.get(a.agentId);
+      const name = agent ? agentName(agent, hubLocale()) : a.agentId;
       const text = s.channelApprovalDetails
-        ? `🔐 ${agent?.name ?? a.agentId} просит подтвердить:\n${a.summary}${a.tainted ? "\n\n⚠️ Сессия читала внешний контент" : ""}`
-        : `🔐 ${agent?.name ?? a.agentId} просит подтвердить действие (${a.tool}).${a.tainted ? "\n⚠️ Сессия читала внешний контент" : ""}`;
+        ? `${t("approval.channelAsk", { agent: name, summary: a.summary })}${a.tainted ? `\n\n${t("approval.taintedNote")}` : ""}`
+        : `${t("approval.channelAskTool", { agent: name, tool: a.tool })}${a.tainted ? `\n${t("approval.taintedNote")}` : ""}`;
       void this.channels.broadcast({
         kind: "approval",
         text,
@@ -221,13 +228,13 @@ export class Hub {
     this.mcpClients.onChange = () => this.bus.emit("plugins.updated", {});
     this.runner.start();
     this.notifier.startDigestTimer();
-    const t = setInterval(() => this.auth.sweep(), 3600_000);
-    t.unref();
-    this.timers.push(t);
+    const sweep = setInterval(() => this.auth.sweep(), 3600_000);
+    sweep.unref();
+    this.timers.push(sweep);
 
     if (this.auth.setupToken) {
       const line = "═".repeat(64);
-      console.log(`\n${line}\n  open-bot: первый запуск. Откройте ${cfg.publicUrl}\n  и введите код установки: ${this.auth.setupToken}\n${line}\n`);
+      console.log(`\n${line}\n  ${t("cli.firstRun", { url: cfg.publicUrl, code: this.auth.setupToken })}\n${line}\n`);
     } else {
       console.log(`[openbot] ready: ${cfg.publicUrl} (console: ${cfg.consoleUrl})`);
     }

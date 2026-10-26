@@ -2,16 +2,17 @@
 // secret fields are encrypted with a random data key wrapped by an Argon2id-derived key.
 
 import { readFileSync } from "node:fs";
-import type { VaultItem, VaultItemMeta, VaultItemType, VaultScope, VaultState } from "@openbot/shared";
+import type { Params, VaultItem, VaultItemMeta, VaultItemType, VaultScope, VaultState } from "@openbot/shared";
 import { hostMatches, newId, nowIso } from "@openbot/shared";
 import { openDb, json, type Db } from "../db.ts";
 import { DEFAULT_KDF, deriveKey, newDataKey, newSalt, open, openJson, seal, sealJson, type KdfParams, type Sealed } from "./crypto.ts";
 import { Redactor } from "./redact.ts";
+import { LocalizedError, tFor } from "../i18n.ts";
 
-export class VaultError extends Error {
+export class VaultError extends LocalizedError {
   code: "sealed" | "uninitialized" | "not_found" | "forbidden" | "bad_passphrase" | "exists";
-  constructor(code: VaultError["code"], message: string) {
-    super(message);
+  constructor(code: VaultError["code"], key: string, params?: Params) {
+    super(key, params);
     this.code = code;
   }
 }
@@ -58,8 +59,8 @@ export class VaultService {
   }
 
   init(passphrase: string): void {
-    if (this.meta("wrapped_key")) throw new VaultError("exists", "Vault уже инициализирован");
-    if (passphrase.length < 8) throw new VaultError("bad_passphrase", "Пароль vault — минимум 8 символов");
+    if (this.meta("wrapped_key")) throw new VaultError("exists", "vault.exists");
+    if (passphrase.length < 8) throw new VaultError("bad_passphrase", "vault.passphraseTooShort");
     const kdf: KdfParams = { ...DEFAULT_KDF, salt: newSalt() };
     const kek = deriveKey(passphrase, kdf);
     const dek = newDataKey();
@@ -72,12 +73,12 @@ export class VaultService {
 
   unlock(passphrase: string): void {
     const wrapped = this.meta("wrapped_key");
-    if (!wrapped) throw new VaultError("uninitialized", "Vault ещё не создан");
+    if (!wrapped) throw new VaultError("uninitialized", "vault.uninitialized");
     const kdf = json<KdfParams>(this.meta("kdf"), { ...DEFAULT_KDF, salt: "" });
     try {
       this.key = open(deriveKey(passphrase, kdf), JSON.parse(wrapped) as Sealed, "openbot-vault-dek");
     } catch {
-      throw new VaultError("bad_passphrase", "Неверный пароль vault");
+      throw new VaultError("bad_passphrase", "vault.badPassphrase");
     }
     this.refreshRedactor();
     this.onState("unlocked");
@@ -109,7 +110,7 @@ export class VaultService {
   }
 
   private requireKey(): Uint8Array {
-    if (!this.key) throw new VaultError(this.state() === "uninitialized" ? "uninitialized" : "sealed", "Vault запечатан — разблокируйте его в пульте безопасности");
+    if (!this.key) throw new VaultError(this.state() === "uninitialized" ? "uninitialized" : "sealed", "vault.sealed");
     return this.key;
   }
 
@@ -138,7 +139,7 @@ export class VaultService {
   read(id: string): VaultItem {
     const key = this.requireKey();
     const r: any = this.db.prepare("select * from vault_items where id = ?").get(id);
-    if (!r) throw new VaultError("not_found", `Нет записи vault://${id}`);
+    if (!r) throw new VaultError("not_found", "vault.notFound", { id });
     const fields = openJson<Record<string, string>>(key, JSON.parse(r.secret) as Sealed, `item:${id}`);
     return { ...this.metaFrom(r), fields };
   }
@@ -167,7 +168,7 @@ export class VaultService {
 
   updateScope(id: string, scope: Partial<VaultScope>): VaultItemMeta {
     const m = this.getMeta(id);
-    if (!m) throw new VaultError("not_found", `Нет записи vault://${id}`);
+    if (!m) throw new VaultError("not_found", "vault.notFound", { id });
     this.db.prepare("update vault_items set scope = ?, updated_at = ? where id = ?").run(JSON.stringify({ ...m.scope, ...scope }), nowIso(), id);
     this.refreshRedactor();
     return this.getMeta(id)!;
@@ -187,21 +188,21 @@ export class VaultService {
     const meta = this.getMeta(id);
     if (!meta) {
       this.onAccess({ actor: req.actor, itemId: id, allowed: false, reason: "not_found" });
-      throw new VaultError("not_found", `Нет записи vault://${id}`);
+      throw new VaultError("not_found", "vault.notFound", { id });
     }
-    const deny = (reason: string): never => {
-      this.onAccess({ actor: req.actor, itemId: id, allowed: false, reason });
-      throw new VaultError("forbidden", `Доступ к vault://${id} запрещён: ${reason}`);
+    const deny = (key: string, params: Params): never => {
+      this.onAccess({ actor: req.actor, itemId: id, allowed: false, reason: tFor("en")(key, { id, ...params }) });
+      throw new VaultError("forbidden", key, { id, ...params });
     };
     const s = meta.scope;
-    if (req.pluginId && s.plugins.length > 0 && !s.plugins.includes(req.pluginId) && !s.plugins.includes("*")) deny(`плагин ${req.pluginId} не в области записи`);
-    if (req.pluginId && s.plugins.length === 0 && meta.type === "login") deny(`плагин ${req.pluginId} не в области записи`);
-    if (req.agentId && s.agents.length > 0 && !s.agents.includes(req.agentId)) deny(`агент ${req.agentId} не в области записи`);
-    if (req.tool && s.tools.length > 0 && !s.tools.includes(req.tool)) deny(`инструмент ${req.tool} не в области записи`);
+    if (req.pluginId && s.plugins.length > 0 && !s.plugins.includes(req.pluginId) && !s.plugins.includes("*")) deny("vault.scope.plugin", { plugin: req.pluginId });
+    if (req.pluginId && s.plugins.length === 0 && meta.type === "login") deny("vault.scope.plugin", { plugin: req.pluginId });
+    if (req.agentId && s.agents.length > 0 && !s.agents.includes(req.agentId)) deny("vault.scope.agent", { agent: req.agentId });
+    if (req.tool && s.tools.length > 0 && !s.tools.includes(req.tool)) deny("vault.scope.tool", { tool: req.tool });
     if (meta.type === "login" && req.domain !== undefined) {
       const allowedDomains = s.domains.length ? s.domains : meta.hints.url ? [new URL(meta.hints.url).hostname] : [];
       if (allowedDomains.length && !allowedDomains.some((d) => hostMatches(req.domain!, d) || hostMatches(req.domain!, "*." + d.replace(/^\*\./, "")))) {
-        deny(`домен ${req.domain} не разрешён для этой записи`);
+        deny("vault.scope.domain", { domain: req.domain });
       }
     }
     const item = this.read(id);

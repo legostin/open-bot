@@ -8,11 +8,12 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
 import type { AgentDef, TaskStatus } from "@openbot/shared";
-import { formatBrainRef, parseBrainRef } from "@openbot/shared";
+import { formatBrainRef, LOCALES, localeFromEnv, normalizeLocale, parseBrainRef, type Locale } from "@openbot/shared";
+import { errorText, hubLocale, localizePluginValue, LocalizedError, requestLocale, tFor } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { toUiEvent } from "../bus.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
-import { agentFromMarkdown } from "../agents.ts";
+import { agentFromMarkdown, localizedAgent } from "../agents.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, safeFile, securityHeaders, sendFile } from "./http.ts";
 
 const COOKIE = "ob_session";
@@ -47,7 +48,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
   app.setErrorHandler((err: any, _req, reply) => {
     const status = err instanceof AuthError || err instanceof HttpError ? err.status : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
     if (status >= 500) console.error("[http]", err);
-    reply.code(status).send({ error: hub.vault.redactor.text(err.message ?? "error") });
+    reply.code(status).send({ error: hub.vault.redactor.text(errorText(err, requestLocale(_req))) });
   });
 
   const setCookie = (reply: FastifyReply, token: string) =>
@@ -55,7 +56,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
 
   const authed = (req: FastifyRequest): AuthSession => {
     const s = hub.auth.session(req.cookies[COOKIE], "main");
-    if (!s) throw new HttpError(401, "Требуется вход");
+    if (!s) throw new HttpError(401, "auth.required");
     return s;
   };
 
@@ -76,12 +77,16 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     authenticated: !!hub.auth.session(req.cookies[COOKIE], "main"),
     passkeys: hub.auth.listPasskeys().length,
     version: cfg.version,
+    language: hubLocale(),
+    locales: LOCALES,
   }));
 
   app.post("/api/auth/setup", async (req, reply) => {
     if (!originAllowed(req, origins)) throw new HttpError(403, "Origin not allowed");
     const b = req.body as { token?: string; password?: string };
     hub.auth.setup(String(b?.token ?? ""), String(b?.password ?? ""), clientIp(req));
+    // The first user's browser language becomes the hub language unless OPENBOT_LANG pins it.
+    if (!localeFromEnv({ OPENBOT_LANG: process.env.OPENBOT_LANG })) hub.settings.update({ language: requestLocale(req) });
     const { token } = hub.auth.createSession("main");
     setCookie(reply, token);
     return { ok: true };
@@ -137,7 +142,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     const ip = clientIp(req);
     const now = Date.now();
     const recent = (pairFailures.get(ip) ?? []).filter((t) => now - t < 15 * 60_000);
-    if (recent.length >= 10) throw new HttpError(429, "Слишком много попыток");
+    if (recent.length >= 10) throw new HttpError(429, "auth.tooManyAttempts");
     try {
       const b = req.body as any;
       const m = hub.machines.pair({ code: String(b?.code ?? ""), publicKey: String(b?.publicKey ?? ""), name: b?.name, info: b?.info });
@@ -145,7 +150,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     } catch (e: any) {
       recent.push(now);
       pairFailures.set(ip, recent);
-      throw new HttpError(400, e.message);
+      throw e instanceof LocalizedError ? new HttpError(400, e.key, e.params) : new HttpError(400, e.message);
     }
   });
 
@@ -156,7 +161,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
   // Single-file machine daemon (public code, no secrets): `node openbot-node.mjs pair <hub> <code>`.
   app.get("/download/openbot-node.mjs", async (_req, reply) => {
     const file = join(cfg.appRoot, "packages", "node", "dist", "openbot-node.mjs");
-    if (!existsSync(file)) throw new HttpError(404, "Сборка демона не найдена: выполните npm run build");
+    if (!existsSync(file)) throw new HttpError(404, "build.daemonMissing");
     return sendFile(reply, file, { download: true });
   });
 
@@ -195,9 +200,10 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
         defaultAgent: s.defaultAgent,
         timezone: s.timezone,
         language: s.language,
+        locales: LOCALES,
         vaultState: hub.vault.state(),
         pendingApprovals: hub.approvals.pendingCount(),
-        uiPlugins: hub.plugins.uiPlugins(),
+        uiPlugins: hub.plugins.uiPlugins(requestLocale(req)),
         channels: hub.channels.list(),
       };
     });
@@ -207,13 +213,13 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.post("/api/conversations", async (req) => {
       const b = (req.body ?? {}) as { title?: string; agentId?: string };
       const agentId = b.agentId && hub.agents.get(b.agentId) ? b.agentId : hub.settings.get().defaultAgent;
-      return hub.store.createConversation({ kind: "chat", title: String(b.title || "Новый чат"), agentId });
+      return hub.store.createConversation({ kind: "chat", title: String(b.title || tFor(requestLocale(req))("conversation.newTitle")), agentId });
     });
     api.patch("/api/conversations/:id", async (req) => {
       const b = (req.body ?? {}) as { title?: string; agentId?: string };
-      if (b.agentId && !hub.agents.get(b.agentId)) throw new HttpError(400, "Нет такого агента");
+      if (b.agentId && !hub.agents.get(b.agentId)) throw new HttpError(400, "agent.notFound");
       const c = hub.store.updateConversation((req.params as any).id, b);
-      if (!c) throw new HttpError(404, "Переписка не найдена");
+      if (!c) throw new HttpError(404, "conversation.notFound");
       return c;
     });
     api.get("/api/conversations/:id/messages", async (req) => {
@@ -223,7 +229,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.post("/api/conversations/:id/messages", async (req) => {
       const b = (req.body ?? {}) as { text?: string };
       const text = String(b.text ?? "").trim();
-      if (!text) throw new HttpError(400, "Пустое сообщение");
+      if (!text) throw new HttpError(400, "message.empty");
       return hub.runner.userMessage((req.params as any).id, text, { channel: "web" });
     });
     api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
@@ -236,20 +242,23 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.post("/api/tasks", async (req) => {
       const b = (req.body ?? {}) as { goal?: string; title?: string; agentId?: string; background?: boolean };
       const goal = String(b.goal ?? "").trim();
-      if (!goal) throw new HttpError(400, "Опишите задачу");
+      if (!goal) throw new HttpError(400, "task.goalRequired");
       const agentId = b.agentId && hub.agents.get(b.agentId) ? b.agentId : hub.settings.get().defaultAgent;
       return hub.runner.createTask({ agentId, goal, title: String(b.title || goal.slice(0, 60)), background: b.background ?? false, createdBy: "user" });
     });
     api.get("/api/tasks/:id", async (req) => {
       const t = hub.store.getTask((req.params as any).id);
-      if (!t) throw new HttpError(404, "Задача не найдена");
+      if (!t) throw new HttpError(404, "task.notFound");
       return t;
     });
     api.post("/api/tasks/:id/cancel", async (req) => hub.runner.cancelTask((req.params as any).id) ?? { error: "not found" });
     api.post("/api/tasks/:id/retry", async (req) => hub.runner.retryTask((req.params as any).id) ?? { error: "not found" });
 
     // ----- agents -----
-    api.get("/api/agents", async () => hub.agents.list());
+    api.get("/api/agents", async (req) => {
+      const locale = requestLocale(req);
+      return hub.agents.list().map((a) => localizedAgent(a, locale));
+    });
     api.put("/api/agents/:id", async (req) => {
       const id = (req.params as any).id as string;
       const b = (req.body ?? {}) as Partial<AgentDef> & { markdown?: string };
@@ -259,7 +268,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     });
     api.delete("/api/agents/:id", async (req) => {
       const id = (req.params as any).id as string;
-      if (id === "assistant" && hub.agents.get(id)?.source !== "user") throw new HttpError(400, "Встроенного ассистента нельзя удалить");
+      if (id === "assistant" && hub.agents.get(id)?.source !== "user") throw new HttpError(400, "agent.builtinCannotDelete");
       hub.agents.remove(id);
       hub.audit.append("user", "agent.remove", id);
       return { ok: true };
@@ -297,30 +306,30 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     });
 
     // ----- plugins -----
-    const pluginView = (r: ReturnType<typeof hub.plugins.list>[number]) => ({
+    const pluginView = (r: ReturnType<typeof hub.plugins.list>[number], locale: Locale) => ({
       id: r.id,
-      name: r.layout?.manifest.name ?? r.id,
+      name: localizePluginValue(r.layout, r.layout?.manifest.name ?? r.id, locale),
       version: r.layout?.manifest.version,
-      description: r.layout?.manifest.description,
+      description: localizePluginValue(r.layout, r.layout?.manifest.description, locale),
       source: r.source,
       enabled: r.enabled,
       status: r.status,
       lastError: r.lastError,
       formats: r.layout?.formats ?? [],
       permissions: r.granted,
-      contributes: r.layout?.manifest.contributes,
+      contributes: localizePluginValue(r.layout, r.layout?.manifest.contributes, locale),
       settings: r.settings,
       hasUi: !!r.layout?.uiEntry,
       hasServer: !!r.layout?.serverEntry,
       commitHash: r.commitHash,
     });
-    api.get("/api/plugins", async () => hub.plugins.list().map(pluginView));
+    api.get("/api/plugins", async (req) => hub.plugins.list().map((r) => pluginView(r, requestLocale(req))));
     api.get("/api/plugins/:id/logs", async (req) => hub.plugins.get((req.params as any).id)?.logs ?? []);
-    api.post("/api/plugins/install", async (req) => hub.plugins.prepareInstall(String((req.body as any)?.source ?? "")));
-    api.post("/api/plugins/install/confirm", async (req) => pluginView(await hub.plugins.confirmInstall(String((req.body as any)?.stagingId ?? ""))));
+    api.post("/api/plugins/install", async (req) => hub.plugins.prepareInstall(String((req.body as any)?.source ?? ""), requestLocale(req)));
+    api.post("/api/plugins/install/confirm", async (req) => pluginView(await hub.plugins.confirmInstall(String((req.body as any)?.stagingId ?? "")), requestLocale(req)));
     api.post("/api/plugins/:id/enabled", async (req) => {
       await hub.plugins.setEnabled((req.params as any).id, !!(req.body as any)?.enabled);
-      return pluginView(hub.plugins.get((req.params as any).id)!);
+      return pluginView(hub.plugins.get((req.params as any).id)!, requestLocale(req));
     });
     api.put("/api/plugins/:id/settings", async (req) => {
       hub.plugins.setSettings((req.params as any).id, (req.body ?? {}) as Record<string, unknown>);
@@ -328,7 +337,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     });
     api.post("/api/plugins/:id/restart", async (req) => {
       await hub.plugins.restart((req.params as any).id);
-      return pluginView(hub.plugins.get((req.params as any).id)!);
+      return pluginView(hub.plugins.get((req.params as any).id)!, requestLocale(req));
     });
     api.delete("/api/plugins/:id", async (req) => {
       await hub.plugins.uninstall((req.params as any).id);
@@ -375,7 +384,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       for (const [name, s] of Object.entries(servers)) {
         for (const [k, v] of Object.entries({ ...(s.env ?? {}), ...(s.headers ?? {}) })) {
           if (/key|token|secret|password/i.test(k) && typeof v === "string" && !v.startsWith("vault://") && v !== "•••") {
-            throw new HttpError(400, `${name}.${k}: храните секреты в vault и указывайте ссылку vault://<id>`);
+            throw new HttpError(400, "settings.secretInPlainText", { field: `${name}.${k}` });
           }
         }
       }
@@ -401,8 +410,16 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.get("/api/settings", async () => hub.settings.get());
     api.patch("/api/settings", async (req) => {
       const patch = (req.body ?? {}) as Record<string, unknown>;
+      const before = hub.settings.get().language;
+      if ("language" in patch) {
+        const l = normalizeLocale(patch.language);
+        if (!l) throw new HttpError(400, "settings.badLanguage", { value: String(patch.language) });
+        patch.language = l;
+      }
       hub.audit.append("user", "settings.update", undefined, { keys: Object.keys(patch) });
-      return hub.settings.update(patch as any);
+      const next = hub.settings.update(patch as any);
+      if (next.language !== before) hub.plugins.broadcastLocale(next.language);
+      return next;
     });
 
     // ----- notifications, approvals (count only; resolving happens in the console) -----
@@ -415,7 +432,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.get("/api/files", async (req, reply) => {
       const p = String((req.query as any).path ?? "");
       const file = safeFile(join(cfg.dataDir, "workspaces"), p);
-      if (!file) throw new HttpError(404, "Файл не найден");
+      if (!file) throw new HttpError(404, "file.notFound");
       return sendFile(reply, file, { download: (req.query as any).download === "1" });
     });
 
@@ -496,7 +513,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     if (!existsSync(indexFile)) {
       return reply
         .type("text/html; charset=utf-8")
-        .send(`<!doctype html><meta charset="utf-8"><title>open-bot</title><body style="font-family:sans-serif;padding:2rem">Веб-интерфейс не собран. Выполните <code>npm run build</code>.</body>`);
+        .send(`<!doctype html><meta charset="utf-8"><title>open-bot</title><body style="font-family:sans-serif;padding:2rem">${tFor(requestLocale(req))("build.webMissing")}</body>`);
     }
     const html = readFileSync(indexFile, "utf8").replace("<head>", `<head>\n<script type="importmap" nonce="${nonce}">${importMap}</script>`);
     return reply.type("text/html; charset=utf-8").header("cache-control", "no-cache").send(html);

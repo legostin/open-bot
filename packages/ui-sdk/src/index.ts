@@ -8,7 +8,7 @@
 // (the host's implementation of everything exported below as values).
 
 import type { ComponentType, ReactNode } from "react";
-import type { Message, MessagePart, Task, UiEvent } from "@openbot/shared";
+import type { Locale, Message, MessagePart, Params, Task, UiEvent } from "@openbot/shared";
 
 // ---------- slots ----------
 
@@ -96,6 +96,18 @@ export interface OpenBotUI {
   plugin: PluginChannel;
   /** All realtime hub events (messages, tasks, notifications...). Returns unsubscribe. */
   events: { on(cb: (e: UiEvent) => void): () => void };
+  /**
+   * Interface language and this plugin's translations (.openbot-plugin/locales/<locale>.json, delivered by the hub).
+   * The page reloads when the user switches language, so `locale` is fixed for the plugin's lifetime.
+   */
+  i18n: {
+    locale: Locale;
+    /** Translate a key from this plugin's messages; falls back to English, then to the key. */
+    t(key: string, params?: Params): string;
+    /** Dates and numbers in the interface language. */
+    formatDate(d: Date | string | number, opts?: Intl.DateTimeFormatOptions): string;
+    formatNumber(n: number, opts?: Intl.NumberFormatOptions): string;
+  };
 }
 
 export type UiPluginModule = { activate(ui: OpenBotUI): void | (() => void) };
@@ -153,6 +165,8 @@ export interface OpenBotUIRuntime {
   /** Subscribe to hub events inside a component. */
   useHubEvent(cb: (e: UiEvent) => void, deps?: unknown[]): void;
   api: HubApi;
+  /** Interface language (same as ui.i18n.locale). */
+  locale: Locale;
 }
 
 // Value exports: declared here for type-checking only. At runtime the import map points "@openbot/ui"
@@ -167,4 +181,5 @@ export declare const Markdown: OpenBotUIRuntime["Markdown"];
 export declare const useTasks: OpenBotUIRuntime["useTasks"];
 export declare const useHubEvent: OpenBotUIRuntime["useHubEvent"];
 export declare const api: OpenBotUIRuntime["api"];
-export type { Message, MessagePart, Task, UiEvent };
+export declare const locale: OpenBotUIRuntime["locale"];
+export type { Locale, Message, MessagePart, Params, Task, UiEvent };

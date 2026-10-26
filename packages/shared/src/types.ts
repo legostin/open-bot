@@ -1,6 +1,8 @@
 // Domain types shared by core, plugins, web and the node daemon.
 // This file is the contract: change it deliberately.
 
+import type { Locale } from "./i18n.ts";
+
 export type ISODate = string;
 
 // ---------- Tools ----------
@@ -196,6 +198,8 @@ export interface AgentDef {
   budget: { backgroundRunsPerDay: number; tokensPerDay?: number };
   prompt: string;
   source: "builtin" | "user" | string;
+  /** Translated name / description shown in the UI ("i18n: { ru: { name: … } }" in the frontmatter). */
+  i18n?: Partial<Record<Locale, { name?: string; description?: string }>>;
 }
 
 // ---------- Brains ----------

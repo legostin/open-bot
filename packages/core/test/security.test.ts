@@ -96,16 +96,22 @@ describe("vault", () => {
     expect(v.redactor.text("x secret-value-1 pw-123456")).not.toMatch(/secret-value-1|pw-123456/);
 
     expect(v.access("vault://api", { actor: "plugin:web", pluginId: "web" })).toEqual({ value: "secret-value-1" });
-    expect(() => v.access("vault://api", { actor: "plugin:x", pluginId: "x" })).toThrow(/запрещён/);
+    expect(() => v.access("vault://api", { actor: "plugin:x", pluginId: "x" })).toThrow(/denied/);
     expect(v.access("site", { actor: "plugin:browser", pluginId: "browser", domain: "shop.example.com" }).password).toBe("pw-123456");
-    expect(() => v.access("site", { actor: "plugin:browser", pluginId: "browser", domain: "evil.test" })).toThrow(/домен/);
-    expect(() => v.access("site", { actor: "plugin:web", pluginId: "web" })).toThrow(/не в области/);
+    expect(() => v.access("site", { actor: "plugin:browser", pluginId: "browser", domain: "evil.test" })).toThrow(/domain evil\.test/);
+    expect(() => v.access("site", { actor: "plugin:web", pluginId: "web" })).toThrow(/outside the item's scope/);
+    // The same error reads in Russian for a Russian reader.
+    try {
+      v.access("site", { actor: "plugin:web", pluginId: "web" });
+    } catch (e) {
+      expect((e as VaultError).localized("ru")).toBe("Доступ к vault://site запрещён: плагин web не в области записи");
+    }
 
     v.seal();
     expect(v.state()).toBe("sealed");
-    expect(() => v.read("api")).toThrow(/запечатан/);
+    expect(() => v.read("api")).toThrow(/sealed/);
     expect(v.list().map((m) => m.id).sort()).toEqual(["api", "site"]);
-    expect(() => v.unlock("wrong passphrase")).toThrow(/Неверный/);
+    expect(() => v.unlock("wrong passphrase")).toThrow(/Wrong vault passphrase/);
     v.unlock("correct horse battery");
     expect(v.read("api").fields.value).toBe("secret-value-1");
 

@@ -3,6 +3,8 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import type { Params } from "@openbot/shared";
+import { LocalizedError } from "../i18n.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -91,10 +93,11 @@ export function securityHeaders(reply: FastifyReply, csp: string): void {
   reply.header("permissions-policy", "camera=(), microphone=(), geolocation=()");
 }
 
-export class HttpError extends Error {
+/** HTTP error with a core message key (locales/en.ts); text that is not a key is shown as is. */
+export class HttpError extends LocalizedError {
   status: number;
-  constructor(status: number, message: string) {
-    super(message);
+  constructor(status: number, key: string, params?: Params) {
+    super(key, params);
     this.status = status;
   }
 }

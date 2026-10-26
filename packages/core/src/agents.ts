@@ -4,8 +4,8 @@
 import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { stringify as toYaml } from "yaml";
-import type { AgentDef } from "@openbot/shared";
-import { parseFrontmatter } from "@openbot/shared";
+import type { AgentDef, Locale } from "@openbot/shared";
+import { normalizeLocale, parseFrontmatter } from "@openbot/shared";
 
 export const DEFAULT_BRAINS = ["claude-code@local", "codex@local", "api:anthropic", "api:openai"];
 
@@ -30,7 +30,29 @@ export function agentFromMarkdown(id: string, text: string, source: string): Age
     },
     prompt: body.trim(),
     source,
+    i18n: parseAgentI18n(data.i18n),
   };
+}
+
+function parseAgentI18n(v: unknown): AgentDef["i18n"] {
+  if (!v || typeof v !== "object") return undefined;
+  const out: NonNullable<AgentDef["i18n"]> = {};
+  for (const [k, x] of Object.entries(v as Record<string, any>)) {
+    const l = normalizeLocale(k);
+    if (!l || !x || typeof x !== "object") continue;
+    out[l] = { ...(x.name ? { name: String(x.name) } : {}), ...(x.description ? { description: String(x.description) } : {}) };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** The agent with its name and description in `locale` (when the definition has a translation). */
+export function localizedAgent(a: AgentDef, locale: Locale): AgentDef {
+  const tr = a.i18n?.[locale];
+  return tr ? { ...a, name: tr.name ?? a.name, description: tr.description ?? a.description } : a;
+}
+
+export function agentName(a: AgentDef, locale: Locale): string {
+  return a.i18n?.[locale]?.name ?? a.name;
 }
 
 export function agentToMarkdown(a: AgentDef): string {
@@ -44,6 +66,7 @@ export function agentToMarkdown(a: AgentDef): string {
     skills: a.skills,
     policyProfile: a.policyProfile,
     budget: a.budget,
+    ...(a.i18n ? { i18n: a.i18n } : {}),
   };
   return `---\n${toYaml(fm).trim()}\n---\n${a.prompt.trim()}\n`;
 }
@@ -84,7 +107,11 @@ export class AgentRegistry {
     if (!this.agents.has("assistant")) {
       this.agents.set(
         "assistant",
-        agentFromMarkdown("assistant", "---\nname: Ассистент\ndescription: Главный ассистент\n---\nТы — дружелюбный и проактивный персональный ассистент.", "builtin"),
+        agentFromMarkdown(
+          "assistant",
+          "---\nname: Assistant\ndescription: Main assistant\ni18n:\n  ru:\n    name: Ассистент\n    description: Главный ассистент\n---\nYou are a friendly and proactive personal assistant.",
+          "builtin",
+        ),
       );
     }
   }

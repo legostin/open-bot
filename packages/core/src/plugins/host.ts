@@ -4,9 +4,10 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, cpSync, rmSync, renameSync, statSync, readFileSync } from "node:fs";
 import { join, dirname, basename, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { CoreMethod, OpenbotManifest, PluginLayout, PluginPermissions, ToolDescriptor, ToolSpec } from "@openbot/shared";
+import type { Catalog, CoreMethod, Locale, OpenbotManifest, PluginLayout, PluginPermissions, ToolDescriptor, ToolSpec } from "@openbot/shared";
 import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, type RpcPeer } from "@openbot/shared";
 import { json, type Db } from "../db.ts";
+import { hubLocale, localizePluginValue, LocalizedError, tFor } from "../i18n.ts";
 import type { Config } from "../config.ts";
 import type { EventBus, BusEventName } from "../bus.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
@@ -265,7 +266,16 @@ export class PluginHost {
     try {
       await peer.request(
         "plugin.activate",
-        { pluginId: id, dataDir, pluginDir: rec.dir, hubUrl: cfg.internalUrl, appRoot: cfg.appRoot, settings: rec.settings },
+        {
+          pluginId: id,
+          dataDir,
+          pluginDir: rec.dir,
+          hubUrl: cfg.internalUrl,
+          appRoot: cfg.appRoot,
+          settings: rec.settings,
+          locale: hubLocale(),
+          messages: rec.layout?.messages ?? {},
+        },
         { timeoutMs: 60_000 },
       );
       await ready;
@@ -341,7 +351,7 @@ export class PluginHost {
     this.crashes.set(id, list);
     if (list.length >= 5) {
       rec.status = "crashed";
-      rec.lastError = "Плагин падал 5 раз за 10 минут и был остановлен";
+      rec.lastError = tFor(hubLocale())("plugin.crashLoop");
       this.d.audit.append("core", "plugin.crash-disabled", id);
       this.d.bus.emit("plugins.updated", {});
       return;
@@ -475,10 +485,21 @@ export class PluginHost {
     if (r && !r.peer.closed) r.peer.notify("ui.message", { payload });
   }
 
-  uiPlugins(): Array<{ id: string; name: string; url: string }> {
+  /** UI modules for the web app, with each plugin's messages in `locale` (and English for fallback). */
+  uiPlugins(locale: Locale = hubLocale()): Array<{ id: string; name: string; url: string; messages: Catalog }> {
     return this.list()
       .filter((r) => r.enabled && r.layout?.uiEntry && existsSync(r.layout.uiEntry))
-      .map((r) => ({ id: r.id, name: r.layout!.manifest.name, url: `/plugins-ui/${r.id}/${basename(r.layout!.uiEntry!)}` }));
+      .map((r) => ({
+        id: r.id,
+        name: localizePluginValue(r.layout, r.layout!.manifest.name, locale),
+        url: `/plugins-ui/${r.id}/${basename(r.layout!.uiEntry!)}`,
+        messages: { en: r.layout!.messages.en, [locale]: r.layout!.messages[locale] },
+      }));
+  }
+
+  /** Tell running plugins that the hub language changed (ctx.i18n.onChange). */
+  broadcastLocale(locale: Locale): void {
+    for (const r of this.running.values()) if (!r.peer.closed) r.peer.notify("locale.changed", { locale });
   }
 
   uiDir(id: string): string | undefined {
@@ -529,7 +550,7 @@ export class PluginHost {
 
   // ---------- install ----------
 
-  async prepareInstall(source: string): Promise<InstallPreview> {
+  async prepareInstall(source: string, locale: Locale = hubLocale()): Promise<InstallPreview> {
     const stagingRoot = join(this.installedDir, ".staging");
     mkdirSync(stagingRoot, { recursive: true });
     const stagingId = randomBytes(6).toString("hex");
@@ -540,20 +561,21 @@ export class PluginHost {
       commitHash = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
     } else {
       const src = resolve(source);
-      if (!existsSync(src)) throw new Error(`Папка не найдена: ${src}`);
+      if (!existsSync(src)) throw new LocalizedError("plugin.dirNotFound", { path: src });
       cpSync(src, dir, { recursive: true, filter: (p) => !p.includes(`${"node_modules"}`) });
     }
     const layout = readPluginLayout(dir);
-    if (this.records.get(layout.manifest.id)?.source === "builtin") throw new Error(`Плагин ${layout.manifest.id} встроенный и не может быть заменён`);
+    if (this.records.get(layout.manifest.id)?.source === "builtin") throw new LocalizedError("plugin.builtinCannotReplace", { id: layout.manifest.id });
     this.staging.set(stagingId, { dir, commitHash, layout, source });
     const perms = layout.manifest.permissions;
+    const t = tFor(locale);
     const warnings: string[] = [];
-    if (layout.uiEntry) warnings.push("UI-плагин получает полный доступ к интерфейсу (но не к пульту безопасности).");
-    if (perms.network.includes("*")) warnings.push("Плагин может обращаться к любым сайтам.");
-    if (perms.vault.length) warnings.push(`Доступ к vault: ${perms.vault.join(", ")}`);
-    if (perms.core.includes("approvals.resolve")) warnings.push("Плагин может отвечать на подтверждения от вашего имени.");
-    if (layout.formats.includes("claude") || layout.formats.includes("codex")) warnings.push("Скиллы, команды и MCP-серверы плагина станут доступны агентам.");
-    if (layout.mcpFile) warnings.push("Плагин добавляет MCP-серверы, они будут запущены как процессы.");
+    if (layout.uiEntry) warnings.push(t("plugin.warn.ui"));
+    if (perms.network.includes("*")) warnings.push(t("plugin.warn.network"));
+    if (perms.vault.length) warnings.push(t("plugin.warn.vault", { items: perms.vault.join(", ") }));
+    if (perms.core.includes("approvals.resolve")) warnings.push(t("plugin.warn.approvals"));
+    if (layout.formats.includes("claude") || layout.formats.includes("codex")) warnings.push(t("plugin.warn.skills"));
+    if (layout.mcpFile) warnings.push(t("plugin.warn.mcp"));
     return {
       stagingId,
       manifest: layout.manifest,
@@ -568,7 +590,7 @@ export class PluginHost {
 
   async confirmInstall(stagingId: string): Promise<PluginRecord> {
     const st = this.staging.get(stagingId);
-    if (!st) throw new Error("Установка не найдена или устарела");
+    if (!st) throw new LocalizedError("plugin.installExpired");
     this.staging.delete(stagingId);
     const id = st.layout.manifest.id;
     const target = join(this.installedDir, id);
@@ -603,7 +625,7 @@ export class PluginHost {
   async uninstall(id: string): Promise<void> {
     const rec = this.records.get(id);
     if (!rec) throw new Error(`unknown plugin ${id}`);
-    if (rec.source === "builtin") throw new Error("Встроенный плагин нельзя удалить, только отключить");
+    if (rec.source === "builtin") throw new LocalizedError("plugin.builtinCannotRemove");
     await this.stop(id);
     rmSync(rec.dir, { recursive: true, force: true });
     this.d.db.prepare("delete from plugins where id = ?").run(id);

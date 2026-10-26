@@ -6,8 +6,10 @@ import type {
   BrainSessionOptions,
   BrainTurn,
   CoreMethod,
+  Locale,
   NotifyLevel,
   OutboundMessage,
+  Params,
   ProbeResult,
   ToolCallContext,
   ToolResult,
@@ -108,6 +110,17 @@ export interface PluginContext {
   appRoot: string;
   settings: Record<string, any>;
   onSettingsChange(cb: (settings: Record<string, any>) => void): void;
+  /**
+   * Translations from the plugin's .openbot-plugin/locales/<locale>.json. Use them for text people read
+   * (channel messages, notifications, approval summaries); text for the model stays in English.
+   */
+  i18n: {
+    /** The hub language (Settings → language). */
+    locale(): Locale;
+    /** Translate a key into `locale` (default: the hub language); falls back to English, then to the key. */
+    t(key: string, params?: Params, locale?: Locale): string;
+    onChange(cb: (locale: Locale) => void): void;
+  };
   log: PluginLogger;
   tools: { register(tool: ToolRegistration): void };
   brains: { register(provider: BrainProviderImpl): void };

@@ -27,6 +27,8 @@ export interface GatewayDeps {
   settings: Settings;
   agents: AgentLookup;
   workspaceFor: (s: SessionRow) => string;
+  /** Resolve "%key%" in user-facing tool texts (approval summaries) against the tool owner's messages. */
+  localize?: (owner: string, text: string) => string;
 }
 
 function textOf(r: ToolResult): string {
@@ -193,7 +195,10 @@ export class ToolGateway {
 
   summarize(tool: ToolDescriptor, input: unknown): string {
     const safe = this.d.redactor.value(input);
-    if (tool.approvalSummary) return truncate(renderTemplate(tool.approvalSummary, safe), 300);
+    if (tool.approvalSummary) {
+      const template = this.d.localize ? this.d.localize(tool.owner, tool.approvalSummary) : tool.approvalSummary;
+      return truncate(renderTemplate(template, safe), 300);
+    }
     return truncate(`${tool.name} ${JSON.stringify(safe)}`, 300);
   }
 }

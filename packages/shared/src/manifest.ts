@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve, relative, isAbsolute } from "node:path";
+import { LOCALES, type Catalog } from "./i18n.ts";
 
 const relPath = z
   .string()
@@ -84,6 +85,21 @@ export interface PluginLayout {
   agentsDir?: string;
   hooksFile?: string;
   mcpFile?: string;
+  /** Translations from .openbot-plugin/locales/<locale>.json: "%key%" strings in the manifest, ctx.i18n, ui.i18n. */
+  messages: Catalog;
+}
+
+/** Flat key → string maps from .openbot-plugin/locales/<locale>.json; malformed files are rejected. */
+export function readPluginMessages(dir: string): Catalog {
+  const out: Catalog = {};
+  for (const locale of LOCALES) {
+    const file = join(dir, ".openbot-plugin", "locales", `${locale}.json`);
+    if (!existsSync(file)) continue;
+    const parsed = z.record(z.string(), z.string()).safeParse(readJson(file));
+    if (!parsed.success) throw new Error(`invalid .openbot-plugin/locales/${locale}.json: expected a flat object of strings`);
+    out[locale] = parsed.data;
+  }
+  return out;
 }
 
 function readJson(file: string): any {
@@ -158,6 +174,7 @@ export function readPluginLayout(dir: string): PluginLayout {
     agentsDir: pick("agents"),
     hooksFile: pick(join("hooks", "hooks.json")),
     mcpFile: foreignMcp && existsSync(foreignMcp) ? foreignMcp : pick(".mcp.json"),
+    messages: readPluginMessages(dir),
   };
 }
 

@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE, localeFromEnv, type Locale } from "@openbot/shared";
 import { json, type Db } from "./db.ts";
 
 export interface CoreSettings {
@@ -17,7 +18,8 @@ export interface CoreSettings {
   brainConcurrency: number;
   approvalInlineWaitSec: number;
   approvalExpireHours: number;
-  language: string;
+  /** Hub language: notifications, channels, approval cards and the default for the UI. */
+  language: Locale;
 }
 
 export const DEFAULT_BRAIN_EGRESS = [
@@ -44,7 +46,7 @@ export const DEFAULT_BRAIN_EGRESS = [
   "*.statsig.com",
 ];
 
-export function defaultSettings(timezone: string): CoreSettings {
+export function defaultSettings(timezone: string, language: Locale = localeFromEnv(process.env) ?? DEFAULT_LOCALE): CoreSettings {
   return {
     timezone,
     defaultAgent: "assistant",
@@ -57,7 +59,7 @@ export function defaultSettings(timezone: string): CoreSettings {
     brainConcurrency: 2,
     approvalInlineWaitSec: 45,
     approvalExpireHours: 24,
-    language: "ru",
+    language,
   };
 }
 

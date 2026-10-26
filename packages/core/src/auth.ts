@@ -15,6 +15,7 @@ import type { Db } from "./db.ts";
 import { hashToken } from "./store.ts";
 import { hashPassword, verifyPassword } from "./vault/crypto.ts";
 import type { AuditLog } from "./audit.ts";
+import { LocalizedError } from "./i18n.ts";
 
 export type SessionKind = "main" | "console";
 
@@ -29,10 +30,10 @@ const TTL: Record<SessionKind, number> = { main: 30 * 24 * 3600_000, console: 30
 const MAX_FAILURES = 10;
 const FAILURE_WINDOW = 15 * 60_000;
 
-export class AuthError extends Error {
+export class AuthError extends LocalizedError {
   status: number;
-  constructor(status: number, message: string) {
-    super(message);
+  constructor(status: number, key: string) {
+    super(key);
     this.status = status;
   }
 }
@@ -73,7 +74,7 @@ export class AuthService {
     const now = Date.now();
     const list = (this.failures.get(ip) ?? []).filter((t) => now - t < FAILURE_WINDOW);
     this.failures.set(ip, list);
-    if (list.length >= MAX_FAILURES) throw new AuthError(429, "Слишком много неудачных попыток. Подождите 15 минут.");
+    if (list.length >= MAX_FAILURES) throw new AuthError(429, "auth.tooManyFailures");
   }
 
   private fail(ip: string, what: string): never {
@@ -81,16 +82,16 @@ export class AuthService {
     list.push(Date.now());
     this.failures.set(ip, list);
     this.audit.append("user", "auth.failure", what, { ip });
-    throw new AuthError(401, "Неверный пароль");
+    throw new AuthError(401, what === "setup" ? "auth.badSetupToken" : "auth.badPassword");
   }
 
   // ---------- password ----------
 
   setup(token: string, password: string, ip: string): void {
     this.checkRate(ip);
-    if (this.hasPassword()) throw new AuthError(409, "Пароль уже установлен");
+    if (this.hasPassword()) throw new AuthError(409, "auth.passwordExists");
     if (!this.setupToken || token.trim() !== this.setupToken) this.fail(ip, "setup");
-    if (password.length < 8) throw new AuthError(400, "Пароль — минимум 8 символов");
+    if (password.length < 8) throw new AuthError(400, "auth.passwordTooShort");
     this.set("password", hashPassword(password));
     this.setupToken = undefined;
     this.audit.append("user", "auth.setup");
@@ -99,14 +100,14 @@ export class AuthService {
   verifyPassword(password: string, ip: string): void {
     this.checkRate(ip);
     const h = this.get("password");
-    if (!h) throw new AuthError(409, "Пароль ещё не установлен");
+    if (!h) throw new AuthError(409, "auth.noPassword");
     if (!verifyPassword(password, h)) this.fail(ip, "password");
     this.failures.delete(ip);
   }
 
   changePassword(oldPass: string, newPass: string, ip: string): void {
     this.verifyPassword(oldPass, ip);
-    if (newPass.length < 8) throw new AuthError(400, "Пароль — минимум 8 символов");
+    if (newPass.length < 8) throw new AuthError(400, "auth.passwordTooShort");
     this.set("password", hashPassword(newPass));
     this.db.prepare("delete from auth_sessions").run();
     this.audit.append("user", "auth.password-change");
@@ -176,7 +177,7 @@ export class AuthService {
   private take(key: string): string {
     const c = this.challenges.get(key);
     this.challenges.delete(key);
-    if (!c || c.expires < Date.now()) throw new AuthError(400, "Запрос passkey устарел, попробуйте ещё раз");
+    if (!c || c.expires < Date.now()) throw new AuthError(400, "auth.passkeyExpired");
     return c.challenge;
   }
 
@@ -198,7 +199,7 @@ export class AuthService {
   async passkeyRegister(response: RegistrationResponseJSON, name: string): Promise<void> {
     const challenge = this.take("register");
     const v = await verifyRegistrationResponse({ response, expectedChallenge: challenge, expectedOrigin: this.origins, expectedRPID: this.rpId, requireUserVerification: false });
-    if (!v.verified) throw new AuthError(400, "Passkey не подтверждён");
+    if (!v.verified) throw new AuthError(400, "auth.passkeyNotVerified");
     const c = v.registrationInfo.credential;
     this.db
       .prepare("insert into passkeys(id, public_key, counter, transports, name, created_at) values (?,?,?,?,?,?)")
@@ -208,7 +209,7 @@ export class AuthService {
 
   async passkeyLoginOptions(): Promise<unknown> {
     const keys = this.db.prepare("select id, transports from passkeys").all() as Array<{ id: string; transports: string | null }>;
-    if (!keys.length) throw new AuthError(404, "Passkey не зарегистрированы");
+    if (!keys.length) throw new AuthError(404, "auth.noPasskeys");
     const opts = await generateAuthenticationOptions({
       rpID: this.rpId,
       allowCredentials: keys.map((k) => ({ id: k.id, transports: k.transports ? JSON.parse(k.transports) : undefined })),

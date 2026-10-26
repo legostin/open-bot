@@ -2,8 +2,8 @@
 // Talks JSON-RPC (NDJSON) with the core over stdin/stdout; console output goes to stderr.
 
 import { pathToFileURL } from "node:url";
-import { createRpcPeer, ndjsonTransport } from "@openbot/shared";
-import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage } from "@openbot/shared";
+import { createRpcPeer, ndjsonTransport, DEFAULT_LOCALE, isLocale, translator } from "@openbot/shared";
+import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage, Catalog, Locale, Translate } from "@openbot/shared";
 import type {
   BrainProviderImpl,
   BrainSessionImpl,
@@ -48,10 +48,22 @@ const hookHandlers = new Map<string, (p: any) => any>();
 const eventHandlers = new Map<string, Array<(p: any) => void>>();
 const settingsCbs: Array<(s: Record<string, any>) => void> = [];
 const uiMessageCbs: Array<(p: any) => void> = [];
+const localeCbs: Array<(l: Locale) => void> = [];
+let hubLocale: Locale = DEFAULT_LOCALE;
+let messages: Catalog = {};
+const translators = new Map<Locale, Translate>();
+const translate = (locale: Locale): Translate => {
+  let t = translators.get(locale);
+  if (!t) translators.set(locale, (t = translator(messages, locale)));
+  return t;
+};
 let httpHandler: ((req: PluginHttpRequest) => Promise<PluginHttpResponse> | PluginHttpResponse) | undefined;
 let mod: PluginModule | undefined;
 
-peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pluginDir: string; hubUrl: string; appRoot: string; settings: any }) => {
+peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pluginDir: string; hubUrl: string; appRoot: string; settings: any; locale?: string; messages?: Catalog }) => {
+  hubLocale = isLocale(p.locale) ? p.locale : DEFAULT_LOCALE;
+  messages = p.messages ?? {};
+  translators.clear();
   const imported = await import(pathToFileURL(entry).href);
   mod = (imported.default ?? imported) as PluginModule;
   if (typeof mod.activate !== "function") throw new Error("plugin module must export activate(ctx)");
@@ -64,6 +76,11 @@ peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pl
     appRoot: p.appRoot,
     settings: p.settings ?? {},
     onSettingsChange: (cb) => settingsCbs.push(cb),
+    i18n: {
+      locale: () => hubLocale,
+      t: (key, params, locale) => translate(locale && isLocale(locale) ? locale : hubLocale)(key, params),
+      onChange: (cb) => localeCbs.push(cb),
+    },
     log: { debug: log("debug"), info: log("info"), warn: log("warn"), error: log("error") },
     tools: {
       register(tool) {
@@ -147,6 +164,12 @@ peer.handle("plugin.deactivate", async () => {
 
 peer.onNotification("settings.changed", (p: { settings: Record<string, any> }) => {
   for (const cb of settingsCbs) cb(p.settings);
+});
+
+peer.onNotification("locale.changed", (p: { locale: Locale }) => {
+  if (!isLocale(p.locale)) return;
+  hubLocale = p.locale;
+  for (const cb of localeCbs) cb(p.locale);
 });
 
 peer.onNotification("event", (p: { name: string; payload: unknown }) => {

@@ -10,6 +10,7 @@ import type { ApprovalStatus, Rule, VaultScope } from "@openbot/shared";
 import type { Hub } from "../app.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
 import { VaultError } from "../vault/service.ts";
+import { errorText, localizePluginValue, LocalizedError, requestLocale, tFor } from "../i18n.ts";
 import { suggestRule } from "../policy/engine.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, safeFile, securityHeaders, sendFile } from "./http.ts";
 
@@ -47,11 +48,11 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
     reply.header("cache-control", "no-store");
   });
 
-  app.setErrorHandler((err: any, _req, reply) => {
+  app.setErrorHandler((err: any, req, reply) => {
     let status = err instanceof AuthError || err instanceof HttpError ? err.status : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
     if (err instanceof VaultError) status = err.code === "not_found" ? 404 : err.code === "bad_passphrase" ? 400 : err.code === "forbidden" ? 403 : 409;
     if (status >= 500) console.error("[console]", err);
-    reply.code(status).send({ error: err.message ?? "error", code: err.code });
+    reply.code(status).send({ error: errorText(err, requestLocale(req)), code: err.code });
   });
 
   /** Every console API call: same origin; state-changing calls also need JSON content type. */
@@ -65,7 +66,7 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
   const guard = async (req: FastifyRequest) => {
     sameOrigin(req);
     const s = hub.auth.session(req.cookies[COOKIE], "console");
-    if (!s) throw new HttpError(401, "Требуется вход в пульт");
+    if (!s) throw new HttpError(401, "auth.consoleRequired");
     if (req.headers["x-csrf"] !== s.csrf) throw new HttpError(403, "CSRF token mismatch");
     (req as any).consoleSession = s as AuthSession;
   };
@@ -126,7 +127,7 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
     });
     api.post("/console-api/vault/passphrase", async (req) => {
       const b = req.body as any;
-      if (String(b?.newPassphrase ?? "").length < 8) throw new HttpError(400, "Минимум 8 символов");
+      if (String(b?.newPassphrase ?? "").length < 8) throw new HttpError(400, "vault.minLength");
       hub.vault.changePassphrase(String(b?.oldPassphrase ?? ""), String(b.newPassphrase));
       hub.audit.append("user", "vault.passphrase-change");
       return { ok: true };
@@ -138,7 +139,7 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
     });
     api.put("/console-api/vault/items", async (req) => {
       const b = req.body as any;
-      if (!b?.name || !b?.type || typeof b.fields !== "object") throw new HttpError(400, "name, type и fields обязательны");
+      if (!b?.name || !b?.type || typeof b.fields !== "object") throw new HttpError(400, "vault.itemFieldsRequired");
       const fields = Object.fromEntries(Object.entries(b.fields as Record<string, unknown>).map(([k, v]) => [k, String(v ?? "")]));
       // Editing without re-entering secrets: keep previous values for empty fields.
       if (b.id) {
@@ -182,14 +183,14 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
     api.get("/console-api/rules", async () => hub.rules.list());
     api.post("/console-api/rules", async (req) => {
       const b = req.body as any;
-      if (!b?.tool || !["allow", "deny"].includes(b?.decision)) throw new HttpError(400, "tool и decision обязательны");
+      if (!b?.tool || !["allow", "deny"].includes(b?.decision)) throw new HttpError(400, "rule.fieldsRequired");
       const r = hub.rules.create({ tool: String(b.tool), agentId: b.agentId || undefined, conditions: b.conditions ?? [], decision: b.decision, note: b.note, createdVia: "console" });
       hub.audit.append("user", "rule.create", r.id, r);
       return r;
     });
     api.patch("/console-api/rules/:id", async (req) => {
       const r = hub.rules.update((req.params as any).id, (req.body ?? {}) as any);
-      if (!r) throw new HttpError(404, "Правило не найдено");
+      if (!r) throw new HttpError(404, "rule.notFound");
       hub.audit.append("user", "rule.update", r.id, r);
       return r;
     });
@@ -224,18 +225,18 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
       hub.auth.changePassword(String(b?.oldPassword ?? ""), String(b?.newPassword ?? ""), clientIp(req));
       return { ok: true };
     });
-    api.get("/console-api/plugins", async () =>
-      hub.plugins.list().map((r) => ({ id: r.id, name: r.layout?.manifest.name ?? r.id, source: r.source, enabled: r.enabled, permissions: r.granted, extraVault: r.extraVault, hasUi: !!r.layout?.uiEntry })),
+    api.get("/console-api/plugins", async (req) =>
+      hub.plugins.list().map((r) => ({ id: r.id, name: localizePluginValue(r.layout, r.layout?.manifest.name ?? r.id, requestLocale(req)), source: r.source, enabled: r.enabled, permissions: r.granted, extraVault: r.extraVault, hasUi: !!r.layout?.uiEntry })),
     );
     api.put("/console-api/plugins/:id/vault", async (req) => {
       const id = (req.params as any).id as string;
       const items = (req.body as any)?.items;
-      if (!Array.isArray(items)) throw new HttpError(400, "items: ожидается массив id записей vault");
-      if (!hub.plugins.get(id)) throw new HttpError(404, "Плагин не найден");
+      if (!Array.isArray(items)) throw new HttpError(400, "plugin.vaultItemsArray");
+      if (!hub.plugins.get(id)) throw new HttpError(404, "plugin.notFound");
       try {
         hub.plugins.setExtraVault(id, items);
       } catch (e: any) {
-        throw new HttpError(400, e.message);
+        throw e instanceof LocalizedError ? new HttpError(400, e.key, e.params) : new HttpError(400, e.message);
       }
       return { ok: true, extraVault: hub.plugins.get(id)!.extraVault };
     });
@@ -265,7 +266,7 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
     const file = rel ? safeFile(cfg.consoleDist, rel) : undefined;
     if (file) return sendFile(reply, file, { cache: rel.startsWith("assets/") });
     const index = join(cfg.consoleDist, "index.html");
-    if (!existsSync(index)) return reply.type("text/html; charset=utf-8").send("<!doctype html><meta charset=utf-8><title>open-bot console</title>Пульт не собран. Выполните npm run build.");
+    if (!existsSync(index)) return reply.type("text/html; charset=utf-8").send(`<!doctype html><meta charset=utf-8><title>open-bot console</title>${tFor(requestLocale(req))("build.consoleMissing")}`);
     return sendFile(reply, index);
   });
 

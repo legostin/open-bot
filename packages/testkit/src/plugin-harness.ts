@@ -6,7 +6,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@openbot/shared";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@openbot/shared";
 import { createRpcPeer, ndjsonTransport, readPluginLayout, type RpcPeer } from "@openbot/shared";
 
 const APP_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..", "..", "..");
@@ -22,6 +22,8 @@ export interface HarnessOptions {
   dataDir?: string;
   hubUrl?: string;
   env?: Record<string, string>;
+  /** Hub language the plugin starts with (default "en"). */
+  locale?: Locale;
 }
 
 export interface PluginHarness {
@@ -43,6 +45,8 @@ export interface PluginHarness {
   emit(event: string, payload: unknown): void;
   uiMessage(payload: unknown): void;
   setSettings(settings: Record<string, unknown>): void;
+  /** Change the hub language (ctx.i18n.onChange fires in the plugin). */
+  setLocale(locale: Locale): void;
   channelSend(id: string, message: OutboundMessage): Promise<unknown>;
   brainProbe(id: string, variant?: string): Promise<ProbeResult>;
   brainCreate(id: string, opts: BrainSessionOptions): Promise<void>;
@@ -144,7 +148,16 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
 
   await peer.request(
     "plugin.activate",
-    { pluginId: layout.manifest.id, dataDir, pluginDir: layout.dir, hubUrl: o.hubUrl ?? "http://127.0.0.1:1", appRoot: APP_ROOT, settings: o.settings ?? {} },
+    {
+      pluginId: layout.manifest.id,
+      dataDir,
+      pluginDir: layout.dir,
+      hubUrl: o.hubUrl ?? "http://127.0.0.1:1",
+      appRoot: APP_ROOT,
+      settings: o.settings ?? {},
+      locale: o.locale ?? "en",
+      messages: layout.messages,
+    },
     { timeoutMs: 60_000 },
   ).catch((e) => {
     throw new Error(`${e.message}\n--- plugin stderr ---\n${logs.join("\n")}`);
@@ -172,6 +185,7 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
     emit: (event, payload) => peer.notify("event", { name: event, payload }),
     uiMessage: (payload) => peer.notify("ui.message", { payload }),
     setSettings: (settings) => peer.notify("settings.changed", { settings }),
+    setLocale: (locale) => peer.notify("locale.changed", { locale }),
     channelSend: (id, message) => peer.request("channel.send", { channelId: id, message }),
     brainProbe: (id, variant) => peer.request("brain.probe", { brainId: id, variant }, { timeoutMs: 30_000 }),
     brainCreate: async (id, opts) => {

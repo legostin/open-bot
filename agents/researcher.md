@@ -1,6 +1,10 @@
 ---
-name: Исследователь
-description: Ищет, сравнивает и сводит информацию из нескольких источников, следит за темами.
+name: Researcher
+description: Searches, compares and summarizes information from several sources and keeps track of topics.
+i18n:
+  ru:
+    name: Исследователь
+    description: Ищет, сравнивает и сводит информацию из нескольких источников, следит за темами.
 brains: [claude-code@local, codex@local, "api:anthropic", "api:openai"]
 initiative: 1
 tools: ["web_*", "browser_*", "memory_*", "notify", "task_*", "skill_load", "trigger_*"]

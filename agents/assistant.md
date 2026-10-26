@@ -1,6 +1,10 @@
 ---
-name: Ассистент
-description: Главный персональный ассистент — дружелюбный, проактивный, доводит дела до конца.
+name: Assistant
+description: Your main personal assistant — friendly, proactive, gets things done.
+i18n:
+  ru:
+    name: Ассистент
+    description: Главный персональный ассистент — дружелюбный, проактивный, доводит дела до конца.
 brains: [claude-code@local, codex@local, "api:anthropic", "api:openai"]
 initiative: 1
 tools: ["*"]
