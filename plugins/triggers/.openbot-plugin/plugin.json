@@ -1,0 +1,38 @@
+{
+  "id": "triggers",
+  "name": "Триггеры",
+  "version": "0.1.0",
+  "description": "Проактивность: расписания, напоминания, слежение за страницами, вебхуки и регулярные обзоры, которые запускают фоновые задачи агентов",
+  "builtin": true,
+  "server": "./server/index.ts",
+  "ui": "./ui/dist/index.js",
+  "toolPrefix": "trigger",
+  "contributes": {
+    "tools": true,
+    "http": true,
+    "triggers": ["schedule", "once", "watch", "event", "heartbeat"],
+    "settings": {
+      "type": "object",
+      "properties": {
+        "allowPrivateUrls": {
+          "type": "boolean",
+          "title": "Разрешить слежение за адресами локальной сети",
+          "description": "По умолчанию триггеры watch не обращаются к localhost и внутренним адресам (защита от SSRF)",
+          "default": false
+        },
+        "watchTimeoutSec": {
+          "type": "integer",
+          "title": "Таймаут загрузки страницы, с",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 120
+        }
+      }
+    }
+  },
+  "permissions": {
+    "network": ["*"],
+    "core": ["tasks.create", "tasks.list", "agents.list", "settings.get", "ui.emit"],
+    "ui": ["route"]
+  }
+}
