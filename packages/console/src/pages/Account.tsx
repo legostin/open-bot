@@ -10,6 +10,8 @@ import { passkeyUnavailableReason, registerPasskey } from "../webauthn.ts";
 import { Badge, Button, Callout, Card, ChipsInput, cx, ErrorText, Field, IconButton, Input, PageHeader, PasswordInput, Spinner, Switch } from "../ui/kit.tsx";
 import { ConfirmDialog, useToast } from "../ui/overlay.tsx";
 import { ThemeSwitch } from "../ui/theme.tsx";
+import { LocaleSwitch } from "../ui/locale.tsx";
+import { t, type MessageKey } from "../i18n/index.ts";
 import { notificationPermission } from "../alerts.ts";
 
 export function AccountPage() {
@@ -17,11 +19,11 @@ export function AccountPage() {
   return (
     <div>
       <PageHeader
-        title="Аккаунт"
-        description="Способы входа, пароль и права установленных плагинов."
+        title={t("account.title")}
+        description={t("account.description")}
         actions={
           <Button icon={<LogOut className="size-4" />} onClick={() => void logout()}>
-            Выйти из пульта
+            {t("shell.logout")}
           </Button>
         }
       />
@@ -69,7 +71,7 @@ function Passkeys() {
       const next = await registerPasskey(name.trim() || defaultPasskeyName());
       list.setData(() => next);
       setName("");
-      toast("Passkey добавлен");
+      toast(t("passkeys.added"));
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -78,11 +80,11 @@ function Passkeys() {
   };
 
   return (
-    <Section title="Passkey" icon={<Fingerprint className="size-5" />} description="Вход без пароля: отпечаток, лицо, PIN устройства или аппаратный ключ. Работает и для пульта, и для основного приложения.">
+    <Section title={t("passkeys.title")} icon={<Fingerprint className="size-5" />} description={t("passkeys.description")}>
       {!list.data ? (
         list.error ? <ErrorText>{list.error}</ErrorText> : <Spinner />
       ) : list.data.length === 0 ? (
-        <p className="text-sm text-muted">Passkey ещё не добавлены.</p>
+        <p className="text-sm text-muted">{t("passkeys.empty")}</p>
       ) : (
         <ul className="divide-y divide-line rounded-lg border border-line">
           {list.data.map((p) => (
@@ -90,9 +92,9 @@ function Passkeys() {
               <KeyRound className="size-4 shrink-0 text-muted" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-fg">{p.name}</div>
-                <div className="text-xs text-muted">добавлен {formatDate(p.createdAt)}</div>
+                <div className="text-xs text-muted">{t("passkeys.addedOn", { date: formatDate(p.createdAt) })}</div>
               </div>
-              <IconButton label={`Удалить passkey ${p.name}`} onClick={() => setRemoving(p)} className="hover:text-danger">
+              <IconButton label={t("passkeys.removeLabel", { name: p.name })} onClick={() => setRemoving(p)} className="hover:text-danger">
                 <Trash2 className="size-4" />
               </IconButton>
             </li>
@@ -102,9 +104,9 @@ function Passkeys() {
 
       {!unavailable ? (
         <form onSubmit={add} className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={`Название, напр. «${defaultPasskeyName()}»`} aria-label="Название passkey" maxLength={60} className="sm:max-w-xs" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("passkeys.namePlaceholder", { example: defaultPasskeyName() })} aria-label={t("passkeys.nameLabel")} maxLength={60} className="sm:max-w-xs" />
           <Button type="submit" variant="primary" loading={adding} icon={<Plus className="size-4" />}>
-            Добавить passkey
+            {t("passkeys.add")}
           </Button>
         </form>
       ) : (
@@ -117,18 +119,18 @@ function Passkeys() {
       <ConfirmDialog
         open={!!removing}
         onClose={() => setRemoving(undefined)}
-        title="Удалить passkey?"
-        confirmLabel="Удалить"
+        title={t("passkeys.remove.title")}
+        confirmLabel={t("common.delete")}
         onConfirm={async () => {
           if (!removing) return;
           const next = await api.passkeyRemove(removing.id);
           list.setData(() => next);
-          toast("Passkey удалён");
+          toast(t("passkeys.removed"));
         }}
       >
         {removing && (
           <p>
-            Войти с passkey <span className="font-medium text-fg">«{removing.name}»</span> больше не получится. Удалите его и из менеджера паролей устройства.
+            {t("passkeys.remove.body", { name: removing.name })}
           </p>
         )}
       </ConfirmDialog>
@@ -142,7 +144,7 @@ function defaultPasskeyName(): string {
   if (/Android/.test(ua)) return "Android";
   if (/Mac OS X/.test(ua)) return "Mac";
   if (/Windows/.test(ua)) return "Windows";
-  return "Мой ключ";
+  return t("passkeys.defaultName");
 }
 
 // ---------- password ----------
@@ -164,7 +166,7 @@ function ChangePassword() {
     setError(undefined);
     try {
       await api.changePassword(oldP, newP);
-      toast("Пароль изменён. Все сессии завершены — войдите с новым паролем.");
+      toast(t("password.changed"));
       // The server dropped every session, including this one.
       await logout();
     } catch (err) {
@@ -174,21 +176,21 @@ function ChangePassword() {
   };
 
   return (
-    <Section title="Пароль" icon={<KeyRound className="size-5" />} description="Один пароль для основного приложения и пульта. После смены все открытые сессии завершатся.">
+    <Section title={t("password.title")} icon={<KeyRound className="size-5" />} description={t("password.description")}>
       <form onSubmit={submit} className="max-w-md space-y-4" autoComplete="on">
         <input type="text" name="username" autoComplete="username" value="owner" readOnly hidden />
-        <Field label="Текущий пароль" htmlFor="pw-old">
+        <Field label={t("password.current")} htmlFor="pw-old">
           <PasswordInput id="pw-old" autoComplete="current-password" value={oldP} onChange={(e) => setOld(e.target.value)} />
         </Field>
-        <Field label="Новый пароль" htmlFor="pw-new" hint="Минимум 8 символов" error={newP && newP === oldP ? "Новый пароль совпадает с текущим" : undefined}>
+        <Field label={t("password.new")} htmlFor="pw-new" hint={t("password.minLength")} error={newP && newP === oldP ? t("password.sameAsOld") : undefined}>
           <PasswordInput id="pw-new" autoComplete="new-password" value={newP} onChange={(e) => setNew(e.target.value)} />
         </Field>
-        <Field label="Повторите новый пароль" htmlFor="pw-confirm" error={confirm && confirm !== newP ? "Пароли не совпадают" : undefined}>
+        <Field label={t("password.repeat")} htmlFor="pw-confirm" error={confirm && confirm !== newP ? t("password.mismatch") : undefined}>
           <PasswordInput id="pw-confirm" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </Field>
         <ErrorText>{error}</ErrorText>
         <Button type="submit" variant="primary" loading={busy} disabled={!valid}>
-          Сменить пароль
+          {t("password.submit")}
         </Button>
       </form>
     </Section>
@@ -197,13 +199,7 @@ function ChangePassword() {
 
 // ---------- plugins ----------
 
-const PERM_LABELS: Array<{ key: "network" | "vault" | "core" | "ui" | "fs"; label: string; hint: string }> = [
-  { key: "network", label: "Сеть", hint: "куда плагин может ходить в интернет" },
-  { key: "vault", label: "Vault", hint: "какие записи может получить" },
-  { key: "core", label: "Ядро", hint: "методы API ядра" },
-  { key: "ui", label: "Интерфейс", hint: "возможности в основном приложении" },
-  { key: "fs", label: "Файлы", hint: "дополнительные пути" },
-];
+const PERMS = ["network", "vault", "core", "ui", "fs"] as const;
 
 function Plugins() {
   const list = useAsync<PluginInfo[]>(() => api.plugins(), []);
@@ -211,11 +207,11 @@ function Plugins() {
   const vault = useAsync(() => api.vault(), []);
   const vaultIds = useMemo(() => (vault.data?.items ?? []).map((i) => i.id), [vault.data]);
   return (
-    <Section title="Плагины и их права" icon={<Puzzle className="size-5" />} description="Что разрешено каждому установленному плагину. Права из манифеста выдаются при установке в основном приложении.">
+    <Section title={t("plugins.title")} icon={<Puzzle className="size-5" />} description={t("plugins.description")}>
       {!list.data ? (
         list.error ? <ErrorText>{list.error}</ErrorText> : <Spinner />
       ) : list.data.length === 0 ? (
-        <p className="text-sm text-muted">Плагины не установлены.</p>
+        <p className="text-sm text-muted">{t("plugins.empty")}</p>
       ) : (
         <div className="space-y-3">
           {list.data.map((p) => (
@@ -235,7 +231,7 @@ function Plugins() {
 const stripRef = (s: string) => s.replace(/^vault:\/\//, "");
 
 function PermChips({ values, known }: { values: string[]; known?: string[] }) {
-  if (values.length === 0) return <span className="text-xs text-faint">нет</span>;
+  if (values.length === 0) return <span className="text-xs text-faint">{t("common.none")}</span>;
   return (
     <>
       {values.map((v) => {
@@ -244,11 +240,11 @@ function PermChips({ values, known }: { values: string[]; known?: string[] }) {
         return (
           <span
             key={v}
-            title={missing ? "Такой записи в vault пока нет" : undefined}
+            title={missing ? t("plugins.notInVault") : undefined}
             className={cx("rounded bg-inset px-1.5 py-0.5 font-mono text-xs ring-1 ring-line", v === "*" ? "text-danger" : missing ? "text-warn" : "text-fg")}
           >
-            {v === "*" ? "* (всё)" : v}
-            {missing && " · нет в vault"}
+            {v === "*" ? t("plugins.wildcardAll") : v}
+            {missing && t("plugins.notInVaultSuffix")}
           </span>
         );
       })}
@@ -272,7 +268,7 @@ function PluginCard({ p, vaultIds, onSaved }: { p: PluginInfo; vaultIds: string[
       const r = await api.pluginVault(p.id, draft.map(stripRef));
       onSaved(r.extraVault);
       setEditing(false);
-      toast(r.extraVault.length ? `Доступ плагина ${p.id} к хранилищу обновлён` : `Дополнительный доступ плагина ${p.id} отозван`);
+      toast(r.extraVault.length ? t("plugins.vaultUpdated", { id: p.id }) : t("plugins.vaultRevoked", { id: p.id }));
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -285,27 +281,27 @@ function PluginCard({ p, vaultIds, onSaved }: { p: PluginInfo; vaultIds: string[
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-fg">{p.name}</span>
         <span className="font-mono text-xs text-muted">{p.id}</span>
-        <Badge tone={p.enabled ? "ok" : "neutral"}>{p.enabled ? "включён" : "выключен"}</Badge>
-        {p.hasUi && <Badge tone="brand">есть интерфейс</Badge>}
+        <Badge tone={p.enabled ? "ok" : "neutral"}>{p.enabled ? t("plugins.enabled") : t("plugins.disabled")}</Badge>
+        {p.hasUi && <Badge tone="brand">{t("plugins.hasUi")}</Badge>}
         <span className="ml-auto truncate text-xs text-faint" title={p.source}>
           {p.source}
         </span>
       </div>
       <dl className="mt-2.5 grid gap-x-4 gap-y-2 sm:grid-cols-[7rem_1fr]">
-        {PERM_LABELS.map((perm) => (
-          <div key={perm.key} className="contents">
-            <dt className="text-xs text-muted" title={perm.hint}>
-              {perm.label}
+        {PERMS.map((perm) => (
+          <div key={perm} className="contents">
+            <dt className="text-xs text-muted" title={t(`perm.${perm}.hint` as MessageKey)}>
+              {t(`perm.${perm}` as MessageKey)}
             </dt>
             <dd className="-mt-1.5 flex flex-wrap gap-1 sm:mt-0">
-              <PermChips values={p.permissions?.[perm.key] ?? []} />
+              <PermChips values={p.permissions?.[perm] ?? []} />
             </dd>
           </div>
         ))}
         {supported && (
           <div className="contents">
-            <dt className="text-xs text-muted" title="Записи vault, выданные вами сверх манифеста">
-              Доп. vault
+            <dt className="text-xs text-muted" title={t("plugins.extraVault.hint")}>
+              {t("plugins.extraVault.label")}
             </dt>
             <dd className="-mt-1.5 flex flex-wrap items-center gap-1 sm:mt-0">
               {!editing && (
@@ -314,14 +310,14 @@ function PluginCard({ p, vaultIds, onSaved }: { p: PluginInfo; vaultIds: string[
                   <button
                     type="button"
                     className="ml-1 inline-flex items-center gap-1 text-xs font-medium text-brand-fg hover:underline"
-                    aria-label={`Изменить дополнительный доступ плагина ${p.id} к хранилищу`}
+                    aria-label={t("plugins.extraVault.editLabel", { id: p.id })}
                     onClick={() => {
                       setDraft(extra);
                       setError(undefined);
                       setEditing(true);
                     }}
                   >
-                    <Pencil className="size-3" /> изменить
+                    <Pencil className="size-3" /> {t("plugins.extraVault.edit")}
                   </button>
                 </>
               )}
@@ -333,25 +329,24 @@ function PluginCard({ p, vaultIds, onSaved }: { p: PluginInfo; vaultIds: string[
       {editing && (
         <div className="mt-3 space-y-3 rounded-lg border border-brand-line bg-brand-soft/40 p-3">
           <div>
-            <div className="text-sm font-medium text-fg">Дополнительный доступ к хранилищу</div>
+            <div className="text-sm font-medium text-fg">{t("plugins.extraVault.title")}</div>
             <p className="mt-0.5 text-xs leading-relaxed text-muted">
-              Записи vault, которые плагин <span className="font-mono text-fg">{p.id}</span> может получить сверх своего манифеста — например, ключ, на который указывает его настройка (customKeyRef,
-              tokenRef). Область доступа самой записи по-прежнему действует.
+              {t("plugins.extraVault.body", { id: p.id })}
             </p>
           </div>
-          <ChipsInput value={draft} onChange={setDraft} placeholder="id записи, напр. openai_api_key" suggestions={vaultIds} />
+          <ChipsInput value={draft} onChange={setDraft} placeholder={t("plugins.extraVault.placeholder")} suggestions={vaultIds} />
           {draft.some((d) => stripRef(d) === "*") && (
-            <Callout tone="danger" title="«*» откроет плагину весь vault">
-              Плагин сможет запросить любую запись (в пределах её области). Выдавайте конкретные id.
+            <Callout tone="danger" title={t("plugins.extraVault.wildcard.title")}>
+              {t("plugins.extraVault.wildcard.body")}
             </Callout>
           )}
           <ErrorText>{error}</ErrorText>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="primary" loading={busy} onClick={() => void save()}>
-              Сохранить
+              {t("common.save")}
             </Button>
             <Button size="sm" disabled={busy} onClick={() => setEditing(false)}>
-              Отмена
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -366,28 +361,33 @@ function DevicePrefs() {
   const prefs = usePrefs();
   const perm = notificationPermission();
   return (
-    <Section title="Это устройство" description="Настройки хранятся только в этом браузере.">
+    <Section title={t("device.title")} description={t("device.description")}>
       <div className="space-y-4">
         <div>
-          <div className="mb-1.5 text-sm font-medium text-fg">Тема</div>
+          <div className="mb-1.5 text-sm font-medium text-fg">{t("device.theme")}</div>
           <div className="max-w-56">
             <ThemeSwitch />
           </div>
         </div>
-        <Switch checked={prefs.sound} onChange={(sound) => setPrefs({ sound })} label="Звук при новом запросе" description="Короткий сигнал, когда агент просит подтверждение." />
+        <div>
+          <div className="mb-1.5 text-sm font-medium text-fg">{t("device.language")}</div>
+          <LocaleSwitch className="w-fit" />
+          <p className="mt-1 text-xs text-muted">{t("device.language.hint")}</p>
+        </div>
+        <Switch checked={prefs.sound} onChange={(sound) => setPrefs({ sound })} label={t("device.sound")} description={t("device.sound.hint")} />
         <Switch
           checked={prefs.notify && perm === "granted"}
           disabled={perm !== "granted"}
           onChange={(notify) => setPrefs({ notify })}
-          label="Системные уведомления"
+          label={t("device.notify")}
           description={
             perm === "unsupported"
-              ? "Недоступны на этом адресе (нужен HTTPS или localhost)."
+              ? t("device.notify.unsupported")
               : perm === "denied"
-                ? "Заблокированы в настройках браузера для этого сайта."
+                ? t("device.notify.denied")
                 : perm === "default"
-                  ? "Включите кнопкой «Включить уведомления» на странице подтверждений."
-                  : "Без подробностей запроса — они могут показываться на экране блокировки."
+                  ? t("device.notify.default")
+                  : t("device.notify.granted")
           }
         />
       </div>

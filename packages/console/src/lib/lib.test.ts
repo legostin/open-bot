@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { parseRoute, routeHref } from "./route.ts";
 import { conditionMatches, fieldPaths, ruleMatchesInput } from "./match.ts";
-import { flattenInput, plural, relativeTime, splitUrls, actorLabel } from "./format.ts";
+import { flattenInput, relativeTime, splitUrls, actorLabel } from "./format.ts";
+import { normalizeLocale, setLocaleForTests, t, tn } from "../i18n/index.ts";
+import { en } from "../i18n/en.ts";
+import { ru } from "../i18n/ru.ts";
 import { buildPayload, emptyDraft, parseList, passphraseStrength, slugify, validateId } from "./vault.ts";
 
 describe("parseRoute", () => {
@@ -52,17 +55,48 @@ describe("conditionMatches", () => {
   });
 });
 
-describe("format", () => {
-  it("plural", () => {
-    expect(plural(1, ["минута", "минуты", "минут"])).toBe("минута");
-    expect(plural(3, ["минута", "минуты", "минут"])).toBe("минуты");
-    expect(plural(11, ["минута", "минуты", "минут"])).toBe("минут");
-    expect(plural(21, ["минута", "минуты", "минут"])).toBe("минута");
+describe("i18n", () => {
+  const placeholders = (s: string) => [...new Set([...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort().join(",");
+  it("ru and en use the same placeholders", () => {
+    for (const k of Object.keys(en) as Array<keyof typeof en>) {
+      expect(placeholders(ru[k]), k).toBe(placeholders(en[k]));
+    }
   });
+  it("plural messages have the right number of forms", () => {
+    for (const k of Object.keys(en) as Array<keyof typeof en>) {
+      if (!en[k].includes("|")) continue;
+      expect(en[k].split("|").length, k).toBe(2);
+      expect(ru[k].split("|").length, k).toBe(3);
+    }
+  });
+  it("t / tn", () => {
+    setLocaleForTests("ru");
+    expect(tn("time.minutesAgo", 1)).toBe("1 минуту назад");
+    expect(tn("time.minutesAgo", 3)).toBe("3 минуты назад");
+    expect(tn("time.minutesAgo", 11)).toBe("11 минут назад");
+    expect(tn("time.minutesAgo", 21)).toBe("21 минуту назад");
+    expect(t("vault.deleted", { id: "x" })).toBe("Запись vault://x удалена");
+    setLocaleForTests("en");
+    expect(tn("time.minutesAgo", 1)).toBe("1 minute ago");
+    expect(tn("time.minutesAgo", 5)).toBe("5 minutes ago");
+    expect(t("vault.deleted", { id: "x" })).toBe("Item vault://x deleted");
+  });
+  it("normalizeLocale", () => {
+    expect(normalizeLocale("ru-RU")).toBe("ru");
+    expect(normalizeLocale("EN")).toBe("en");
+    expect(normalizeLocale("de")).toBeUndefined();
+    expect(normalizeLocale(undefined)).toBeUndefined();
+  });
+});
+
+describe("format", () => {
+  beforeEach(() => setLocaleForTests("ru"));
   it("relativeTime", () => {
     const now = Date.parse("2026-10-26T12:00:00Z");
     expect(relativeTime("2026-10-26T11:59:50Z", now)).toBe("только что");
     expect(relativeTime("2026-10-26T11:55:00Z", now)).toBe("5 минут назад");
+    setLocaleForTests("en");
+    expect(relativeTime("2026-10-26T11:55:00Z", now)).toBe("5 minutes ago");
   });
   it("flattenInput", () => {
     const rows = flattenInput({ to: "a@b.c", count: 2, ok: true, cc: ["x", "y"], opts: { mode: "fast" }, empty: "", list: [{ a: 1 }] });
@@ -86,6 +120,8 @@ describe("format", () => {
   it("actorLabel", () => {
     expect(actorLabel("user")).toBe("вы");
     expect(actorLabel("agent:main")).toBe("агент main");
+    setLocaleForTests("en");
+    expect(actorLabel("agent:main")).toBe("agent main");
   });
 });
 

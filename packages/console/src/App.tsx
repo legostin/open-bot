@@ -9,6 +9,8 @@ import { AccentStrip, Logo } from "./ui/brand.tsx";
 import { Button, cx, IconButton, Spinner } from "./ui/kit.tsx";
 import { ToastProvider } from "./ui/overlay.tsx";
 import { ThemeSwitch } from "./ui/theme.tsx";
+import { LocaleSwitch } from "./ui/locale.tsx";
+import { applyServerLanguage, t, useLocale, type MessageKey } from "./i18n/index.ts";
 import { Login } from "./pages/Login.tsx";
 import { ApprovalsPage } from "./pages/Approvals.tsx";
 import { VaultPage } from "./pages/Vault.tsx";
@@ -17,6 +19,8 @@ import { AuditPage } from "./pages/Audit.tsx";
 import { AccountPage } from "./pages/Account.tsx";
 
 export function App() {
+  // Subscribing here re-renders the whole tree (state kept) when the language changes.
+  useLocale();
   return (
     <ToastProvider>
       <AuthGate />
@@ -27,12 +31,14 @@ export function App() {
 function AuthGate() {
   const [auth, setAuth] = useState<AuthState>();
   const [loadError, setLoadError] = useState<string>();
-  const [reason, setReason] = useState<string>();
+  // Kept as a key so the message follows a language switch on the login screen.
+  const [reason, setReason] = useState<MessageKey>();
 
   const load = useCallback(async () => {
     setLoadError(undefined);
     try {
       const s = await api.state();
+      applyServerLanguage(s.language);
       setCsrf(s.authenticated ? s.csrf : undefined);
       setAuth(s);
     } catch (e) {
@@ -42,15 +48,15 @@ function AuthGate() {
 
   useEffect(() => {
     onSessionLost(() => {
-      setReason("Сессия пульта истекла — войдите снова. Вы вернётесь на ту же страницу.");
+      setReason("shell.sessionExpired");
       setAuth((a) => (a ? { ...a, authenticated: false, csrf: undefined } : a));
     });
     void load();
   }, [load]);
 
-  const lost = useCallback((why?: string) => {
+  const lost = useCallback((why?: MessageKey) => {
     setCsrf(undefined);
-    setReason(why ?? "Сессия пульта истекла — войдите снова. Вы вернётесь на ту же страницу.");
+    setReason(why ?? "shell.sessionExpired");
     setAuth((a) => (a ? { ...a, authenticated: false, csrf: undefined } : a));
   }, []);
 
@@ -68,7 +74,7 @@ function AuthGate() {
           <div className="max-w-sm text-center">
             <p className="text-sm text-danger">{loadError}</p>
             <Button className="mt-4" onClick={() => void load()}>
-              Повторить
+              {t("common.retry")}
             </Button>
           </div>
         ) : (
@@ -82,7 +88,7 @@ function AuthGate() {
     return (
       <Login
         state={auth}
-        reason={reason}
+        reason={reason && t(reason)}
         onRecheck={load}
         onLoggedIn={(csrf) => {
           setCsrf(csrf);
@@ -100,13 +106,15 @@ function AuthGate() {
   );
 }
 
-const NAV: Array<{ page: Page; label: string; short: string; icon: ReactNode }> = [
-  { page: "approvals", label: "Подтверждения", short: "Запросы", icon: <Inbox className="size-5" /> },
-  { page: "vault", label: "Vault", short: "Vault", icon: <KeyRound className="size-5" /> },
-  { page: "rules", label: "Правила", short: "Правила", icon: <ListChecks className="size-5" /> },
-  { page: "audit", label: "Аудит", short: "Аудит", icon: <ScrollText className="size-5" /> },
-  { page: "account", label: "Аккаунт", short: "Аккаунт", icon: <UserRound className="size-5" /> },
+const NAV: Array<{ page: Page; icon: ReactNode }> = [
+  { page: "approvals", icon: <Inbox className="size-5" /> },
+  { page: "vault", icon: <KeyRound className="size-5" /> },
+  { page: "rules", icon: <ListChecks className="size-5" /> },
+  { page: "audit", icon: <ScrollText className="size-5" /> },
+  { page: "account", icon: <UserRound className="size-5" /> },
 ];
+const navLabel = (page: Page) => t(`nav.${page}` as MessageKey);
+const navShort = (page: Page) => t(`nav.${page}.short` as MessageKey);
 
 function useVaultState(): VaultState | undefined {
   const [state, setState] = useState<VaultState>();
@@ -141,7 +149,7 @@ function Shell() {
       );
     }
     if (page === "vault" && vaultState && vaultState !== "unlocked") {
-      return <span className={cx("size-2 rounded-full bg-amber-500", compact && "absolute top-0 left-1/2 ml-2.5")} title={vaultState === "sealed" ? "Vault запечатан" : "Vault не создан"} />;
+      return <span className={cx("size-2 rounded-full bg-amber-500", compact && "absolute top-0 left-1/2 ml-2.5")} title={vaultState === "sealed" ? t("shell.vaultSealed") : t("shell.vaultMissing")} />;
     }
     return null;
   };
@@ -155,11 +163,11 @@ function Shell() {
         <div className="flex items-center gap-2.5 px-4 py-4">
           <Logo />
           <div className="min-w-0 leading-tight">
-            <div className="text-[15px] font-semibold text-fg">Пульт безопасности</div>
+            <div className="text-[15px] font-semibold text-fg">{t("app.name")}</div>
             <div className="text-xs text-muted">open-bot</div>
           </div>
         </div>
-        <nav className="flex-1 space-y-0.5 px-2 py-2" aria-label="Разделы">
+        <nav className="flex-1 space-y-0.5 px-2 py-2" aria-label={t("nav.label")}>
           {NAV.map((n) => {
             const active = route.page === n.page;
             return (
@@ -173,7 +181,7 @@ function Shell() {
                 )}
               >
                 <span className={active ? "text-brand-fg" : "text-faint"}>{n.icon}</span>
-                <span className="flex-1">{n.label}</span>
+                <span className="flex-1">{navLabel(n.page)}</span>
                 {badge(n.page)}
               </a>
             );
@@ -181,9 +189,14 @@ function Shell() {
         </nav>
         <div className="space-y-3 border-t border-line p-3">
           <LiveIndicator status={live} />
-          <ThemeSwitch />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <ThemeSwitch />
+            </div>
+            <LocaleSwitch />
+          </div>
           <Button variant="ghost" size="sm" className="w-full justify-start" icon={<LogOut className="size-4" />} onClick={() => void logout()}>
-            Выйти из пульта
+            {t("shell.logout")}
           </Button>
         </div>
       </aside>
@@ -193,10 +206,11 @@ function Shell() {
         <div className="mt-2.5 flex flex-1 items-center gap-2.5">
           <Logo />
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="truncate text-[15px] font-semibold text-fg">Пульт безопасности</div>
+            <div className="truncate text-[15px] font-semibold text-fg">{t("app.name")}</div>
             <LiveIndicator status={live} compact />
           </div>
-          <IconButton label="Выйти из пульта" onClick={() => void logout()}>
+          <LocaleSwitch />
+          <IconButton label={t("shell.logout")} onClick={() => void logout()}>
             <LogOut className="size-4.5" />
           </IconButton>
         </div>
@@ -213,7 +227,7 @@ function Shell() {
       </main>
 
       {/* Mobile tab bar */}
-      <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur md:hidden" aria-label="Разделы">
+      <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur md:hidden" aria-label={t("nav.label")}>
         <div className="grid grid-cols-5">
           {NAV.map((n) => {
             const active = route.page === n.page;
@@ -226,7 +240,7 @@ function Shell() {
               >
                 <span className="relative">{n.icon}</span>
                 {badge(n.page, true)}
-                <span>{n.short}</span>
+                <span>{navShort(n.page)}</span>
                 {active && <span className="absolute inset-x-5 top-0 h-0.5 rounded-full bg-brand" />}
               </a>
             );
@@ -238,9 +252,9 @@ function Shell() {
 }
 
 function LiveIndicator({ status, compact }: { status: "connecting" | "open" | "closed"; compact?: boolean }) {
-  const label = status === "open" ? "На связи с хабом" : status === "connecting" ? "Подключение…" : "Нет связи — переподключаемся";
+  const label = status === "open" ? t("live.open") : status === "connecting" ? t("live.connecting") : t("live.closed");
   return (
-    <div className={cx("flex items-center gap-2 text-xs text-muted", !compact && "px-1")} title="Живые обновления подтверждений и состояния vault">
+    <div className={cx("flex items-center gap-2 text-xs text-muted", !compact && "px-1")} title={t("live.hint")}>
       <span className={cx("size-2 shrink-0 rounded-full", status === "open" ? "bg-emerald-500" : status === "connecting" ? "bg-amber-400 animate-pulse" : "bg-red-500")} />
       <span className="truncate">{label}</span>
     </div>

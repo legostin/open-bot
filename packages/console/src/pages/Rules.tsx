@@ -8,12 +8,9 @@ import { Badge, Button, Card, EmptyState, ErrorText, IconButton, PageHeader, Seg
 import { ConfirmDialog, Dialog, useToast } from "../ui/overlay.tsx";
 import { ConditionChip, emptyRuleForm, formFromRule, RuleForm, ruleFromForm, type RuleFormValue } from "./RuleForm.tsx";
 import { LoadError } from "./Approvals.tsx";
+import { t, type MessageKey } from "../i18n/index.ts";
 
-const VIA: Record<Rule["createdVia"], string> = {
-  console: "в пульте",
-  telegram: "в Telegram",
-  approval: "из подтверждения",
-};
+const viaLabel = (via: string): string => (["console", "telegram", "approval"].includes(via) ? t(`rules.via.${via}` as MessageKey) : via);
 
 export function RulesPage() {
   const rules = useAsync(() => api.rules(), []);
@@ -27,11 +24,11 @@ export function RulesPage() {
   return (
     <div>
       <PageHeader
-        title="Правила"
-        description="Правила решают за вас: «разрешать» пропускает похожие внешние действия без вопроса, «запрещать» блокирует любые вызовы. Создать правило можно только здесь или в Telegram."
+        title={t("rules.title")}
+        description={t("rules.description")}
         actions={
           <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEditing("new")}>
-            Новое правило
+            {t("rules.new")}
           </Button>
         }
       />
@@ -43,9 +40,9 @@ export function RulesPage() {
             value={filter}
             onChange={setFilter}
             options={[
-              { value: "all", label: `Все · ${rules.data.length}` },
-              { value: "allow", label: "Разрешают" },
-              { value: "deny", label: "Запрещают" },
+              { value: "all", label: t("rules.filter.all", { count: rules.data.length }) },
+              { value: "allow", label: t("rules.filter.allow") },
+              { value: "deny", label: t("rules.filter.deny") },
             ]}
           />
         </div>
@@ -60,15 +57,15 @@ export function RulesPage() {
           </div>
         )
       ) : rules.data.length === 0 ? (
-        <EmptyState icon={<ListChecks className="size-8" />} title="Правил пока нет">
-          Каждое внешнее действие будет требовать подтверждения. Нажмите «Всегда разрешать такое…» на карточке подтверждения или создайте правило вручную.
+        <EmptyState icon={<ListChecks className="size-8" />} title={t("rules.empty.title")}>
+          {t("rules.empty.body")}
         </EmptyState>
       ) : (
         <div className="space-y-2.5">
           {list.map((r) => (
             <RuleCard key={r.id} rule={r} onEdit={() => setEditing(r)} onRemove={() => setRemoving(r)} />
           ))}
-          {list.length === 0 && <p className="py-6 text-center text-sm text-muted">Нет правил с таким решением.</p>}
+          {list.length === 0 && <p className="py-6 text-center text-sm text-muted">{t("rules.filterEmpty")}</p>}
         </div>
       )}
 
@@ -79,7 +76,7 @@ export function RulesPage() {
           onClose={() => setEditing(undefined)}
           onSaved={(created) => {
             setEditing(undefined);
-            toast(created ? "Правило создано" : "Правило сохранено");
+            toast(created ? t("rules.created") : t("rules.saved"));
             void rules.reload();
           }}
         />
@@ -88,20 +85,20 @@ export function RulesPage() {
       <ConfirmDialog
         open={!!removing}
         onClose={() => setRemoving(undefined)}
-        title="Удалить правило?"
-        confirmLabel="Удалить"
+        title={t("rules.remove.title")}
+        confirmLabel={t("common.delete")}
         onConfirm={async () => {
           if (!removing) return;
           await api.removeRule(removing.id);
-          toast("Правило удалено");
+          toast(t("rules.removed"));
           await rules.reload();
         }}
       >
         {removing && (
           <p>
-            {removing.decision === "allow" ? "Похожие действия снова будут требовать подтверждения" : "Действия, которые запрещало правило, снова будут решаться общей политикой"}:{" "}
+            {removing.decision === "allow" ? t("rules.remove.allow") : t("rules.remove.deny")}:{" "}
             <span className="font-mono text-fg">{removing.tool}</span>
-            {removing.agentId ? ` для агента ${removing.agentId}` : ""}.
+            {removing.agentId ? t("rules.remove.forAgent", { agent: removing.agentId }) : ""}.
           </p>
         )}
       </ConfirmDialog>
@@ -119,9 +116,9 @@ function RuleCard({ rule, onEdit, onRemove }: { rule: Rule; onEdit: () => void; 
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Badge tone={allow ? "ok" : "danger"}>{allow ? "разрешать" : "запрещать"}</Badge>
+            <Badge tone={allow ? "ok" : "danger"}>{allow ? t("rules.badge.allow") : t("rules.badge.deny")}</Badge>
             <span className="font-mono text-sm font-medium break-all text-fg">{rule.tool}</span>
-            <span className="text-xs text-muted">· {rule.agentId ? <>агент <span className="font-mono text-fg">{rule.agentId}</span></> : "любой агент"}</span>
+            <span className="text-xs text-muted">· {rule.agentId ? <>{t("rules.agent")} <span className="font-mono text-fg">{rule.agentId}</span></> : t("rules.anyAgent")}</span>
           </div>
           {rule.conditions.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -130,18 +127,18 @@ function RuleCard({ rule, onEdit, onRemove }: { rule: Rule; onEdit: () => void; 
               ))}
             </div>
           ) : (
-            <p className="mt-1.5 text-xs text-muted">Без условий — любой вход</p>
+            <p className="mt-1.5 text-xs text-muted">{t("rules.noConditions")}</p>
           )}
           {rule.note && <p className="mt-2 text-sm text-fg">{rule.note}</p>}
           <p className="mt-1.5 text-xs text-faint">
-            Создано {VIA[rule.createdVia] ?? rule.createdVia} · {formatDate(rule.createdAt)}
+            {t("rules.createdLine", { via: viaLabel(rule.createdVia), date: formatDate(rule.createdAt) })}
           </p>
         </div>
         <div className="flex shrink-0 items-center">
-          <IconButton label="Изменить правило" onClick={onEdit}>
+          <IconButton label={t("rules.edit")} onClick={onEdit}>
             <Pencil className="size-4" />
           </IconButton>
-          <IconButton label="Удалить правило" onClick={onRemove} className="hover:text-danger">
+          <IconButton label={t("rules.delete")} onClick={onRemove} className="hover:text-danger">
             <Trash2 className="size-4" />
           </IconButton>
         </div>
@@ -183,14 +180,14 @@ function RuleEditor({ rule, onClose, onSaved }: { rule?: Rule; onClose: () => vo
       open
       onClose={onClose}
       size="lg"
-      title={rule ? "Изменить правило" : "Новое правило"}
+      title={rule ? t("rules.edit") : t("rules.new")}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Отмена
+            {t("common.cancel")}
           </Button>
           <Button variant="primary" onClick={() => void save()} loading={busy}>
-            {rule ? "Сохранить" : "Создать правило"}
+            {rule ? t("common.save") : t("rules.create")}
           </Button>
         </>
       }

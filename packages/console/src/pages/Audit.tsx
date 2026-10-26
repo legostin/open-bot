@@ -4,19 +4,12 @@ import { api, errorText } from "../api.ts";
 import type { AuditEntry, AuditVerify } from "../types.ts";
 import { actorLabel, formatDate, shortHash } from "../lib/format.ts";
 import { Button, Callout, Card, cx, EmptyState, ErrorText, Input, PageHeader, Spinner } from "../ui/kit.tsx";
+import { t, type MessageKey } from "../i18n/index.ts";
 
 const PAGE = 50;
 
-const PRESETS: Array<{ label: string; action: string }> = [
-  { label: "Все", action: "" },
-  { label: "Подтверждения", action: "approval.*" },
-  { label: "Vault", action: "vault.*" },
-  { label: "Правила", action: "rule.*" },
-  { label: "Вход", action: "auth.*" },
-  { label: "Инструменты", action: "tool.*" },
-  { label: "Политика", action: "policy.*" },
-  { label: "Плагины", action: "plugin.*" },
-];
+/** Filter chips: "" = everything, otherwise `<prefix>.*`; labels come from `audit.preset.<name>`. */
+const PRESETS = ["all", "approval", "vault", "rule", "auth", "tool", "policy", "plugin"].map((name) => ({ name, action: name === "all" ? "" : `${name}.*` }));
 
 export function AuditPage() {
   const [action, setAction] = useState("");
@@ -75,23 +68,23 @@ export function AuditPage() {
   return (
     <div>
       <PageHeader
-        title="Аудит"
-        description="Журнал всех важных событий: вызовы инструментов, решения политики, подтверждения, обращения к vault, входы. Записи связаны хэш-цепочкой — подмену или удаление видно при проверке."
+        title={t("audit.title")}
+        description={t("audit.description")}
         actions={
           <Button icon={<ShieldCheck className="size-4" />} loading={verifying} onClick={() => void runVerify()}>
-            Проверить целостность
+            {t("audit.verify")}
           </Button>
         }
       />
 
       {verify &&
         (verify.ok ? (
-          <Callout tone="ok" className="mb-4" title="Цепочка цела">
-            Проверено записей: {verify.count}. Ни одна запись не изменена и не удалена.
+          <Callout tone="ok" className="mb-4" title={t("audit.ok.title")}>
+            {t("audit.ok.body", { count: verify.count })}
           </Callout>
         ) : (
-          <Callout tone="danger" className="mb-4" title={`Цепочка нарушена на записи #${verify.brokenAt}`} icon={<ShieldX className="size-4 text-danger" />}>
-            <p>Начиная с этой записи журнал был изменён или из него удалены записи. Цельных записей до разрыва: {verify.count}.</p>
+          <Callout tone="danger" className="mb-4" title={t("audit.broken.title", { seq: verify.brokenAt ?? "?" })} icon={<ShieldX className="size-4 text-danger" />}>
+            <p>{t("audit.broken.body", { count: verify.count })}</p>
             {verify.brokenAt !== undefined && (
               <button
                 type="button"
@@ -102,7 +95,7 @@ export function AuditPage() {
                   setFrom(verify.brokenAt! + 1);
                 }}
               >
-                Показать запись #{verify.brokenAt}
+                {t("audit.broken.show", { seq: verify.brokenAt })}
               </button>
             )}
           </Callout>
@@ -117,7 +110,7 @@ export function AuditPage() {
         <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
           {PRESETS.map((p) => (
             <button
-              key={p.label}
+              key={p.name}
               type="button"
               onClick={() => {
                 setFrom(undefined);
@@ -129,25 +122,25 @@ export function AuditPage() {
                 action === p.action ? "border-brand-line bg-brand-soft text-brand-fg" : "border-line bg-surface text-muted hover:text-fg",
               )}
             >
-              {p.label}
+              {t(`audit.preset.${p.name}` as MessageKey)}
             </button>
           ))}
         </div>
         <form onSubmit={applyCustom} className="flex gap-2">
           <div className="relative flex-1">
             <Filter className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
-            <Input mono value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="vault.reveal, auth.*" className="pl-9" autoCapitalize="off" spellCheck={false} aria-label="Фильтр по действию" />
+            <Input mono value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="vault.reveal, auth.*" className="pl-9" autoCapitalize="off" spellCheck={false} aria-label={t("audit.filterLabel")} />
           </div>
-          <Button type="submit">Найти</Button>
-          <Button icon={<RefreshCw className={cx("size-4", loading && "animate-spin")} />} onClick={() => void load({ action, before: from, append: false })} aria-label="Обновить" title="Обновить">
-            <span className="hidden sm:inline">Обновить</span>
+          <Button type="submit">{t("audit.find")}</Button>
+          <Button icon={<RefreshCw className={cx("size-4", loading && "animate-spin")} />} onClick={() => void load({ action, before: from, append: false })} aria-label={t("common.refresh")} title={t("common.refresh")}>
+            <span className="hidden sm:inline">{t("common.refresh")}</span>
           </Button>
         </form>
         {from !== undefined && (
           <div className="flex items-center gap-2 text-sm text-muted">
-            Показаны записи начиная с #{from - 1} и старше.
+            {t("audit.from", { seq: from - 1 })}
             <button type="button" className="inline-flex items-center gap-1 font-medium text-brand-fg hover:underline" onClick={() => setFrom(undefined)}>
-              <X className="size-3.5" /> к новым
+              <X className="size-3.5" /> {t("audit.toNewest")}
             </button>
           </div>
         )}
@@ -157,7 +150,7 @@ export function AuditPage() {
         error ? (
           <Card className="flex flex-col items-center gap-3 px-6 py-10 text-center">
             <ErrorText>{error}</ErrorText>
-            <Button onClick={() => void load({ action, before: from, append: false })}>Повторить</Button>
+            <Button onClick={() => void load({ action, before: from, append: false })}>{t("common.retry")}</Button>
           </Card>
         ) : (
           <div className="flex justify-center py-16">
@@ -165,17 +158,17 @@ export function AuditPage() {
           </div>
         )
       ) : rows.length === 0 ? (
-        <EmptyState icon={<ScrollText className="size-8" />} title="Записей не найдено">
-          {action ? "Попробуйте другой фильтр. Шаблон: «*» — любые символы, например approval.*" : "Журнал пуст."}
+        <EmptyState icon={<ScrollText className="size-8" />} title={t("audit.empty.title")}>
+          {action ? t("audit.empty.filtered") : t("audit.empty.all")}
         </EmptyState>
       ) : (
         <Card className="overflow-hidden">
           <div className="hidden grid-cols-[4.5rem_10.5rem_9rem_minmax(0,11rem)_minmax(0,1fr)_1.5rem] gap-3 border-b border-line bg-inset px-4 py-2 text-xs font-medium text-muted sm:grid">
             <span>#</span>
-            <span>Время</span>
-            <span>Кто</span>
-            <span>Действие</span>
-            <span>Объект</span>
+            <span>{t("audit.col.time")}</span>
+            <span>{t("audit.col.actor")}</span>
+            <span>{t("audit.col.action")}</span>
+            <span>{t("audit.col.target")}</span>
             <span />
           </div>
           <div className="divide-y divide-line">
@@ -191,10 +184,10 @@ export function AuditPage() {
           <ErrorText>{rows && error}</ErrorText>
           {more ? (
             <Button loading={loading} onClick={() => last && void load({ action, before: last.seq, append: true })}>
-              Показать ещё {PAGE}
+              {t("audit.more", { count: PAGE })}
             </Button>
           ) : (
-            <p className="text-xs text-faint">Это начало журнала{action ? " для этого фильтра" : ""}.</p>
+            <p className="text-xs text-faint">{action ? t("audit.startFiltered") : t("audit.start")}</p>
           )}
         </div>
       )}
@@ -245,7 +238,7 @@ function AuditRow({ r, highlighted }: { r: AuditEntry; highlighted: boolean }) {
           {hasData ? (
             <pre className="max-h-80 overflow-auto rounded-lg border border-line bg-inset p-3 font-mono text-xs leading-relaxed text-fg">{JSON.stringify(r.data, null, 2)}</pre>
           ) : (
-            <p className="text-xs text-faint">Без данных</p>
+            <p className="text-xs text-faint">{t("audit.noData")}</p>
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-faint">
             <span className="inline-flex items-center gap-1" title={r.prevHash}>

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ComponentProps, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { AlertTriangle, Check, CheckCircle2, Copy, Eye, EyeOff, Info, Loader2, ShieldAlert, X } from "lucide-react";
+import { t } from "../i18n/index.ts";
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -67,7 +68,7 @@ export function IconButton({ label, className, children, ...rest }: ButtonHTMLAt
 }
 
 export function Spinner({ className }: { className?: string }) {
-  return <Loader2 className={cx("size-5 animate-spin text-muted", className)} aria-label="Загрузка" />;
+  return <Loader2 className={cx("size-5 animate-spin text-muted", className)} aria-label={t("common.loading")} />;
 }
 
 // ---------- layout ----------
@@ -197,8 +198,8 @@ export function PasswordInput({ className, ...rest }: InputHTMLAttributes<HTMLIn
         type="button"
         onClick={() => setShow((s) => !s)}
         className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-faint hover:text-fg"
-        aria-label={show ? "Скрыть" : "Показать"}
-        title={show ? "Скрыть" : "Показать"}
+        aria-label={show ? t("common.hide") : t("common.show")}
+        title={show ? t("common.hide") : t("common.show")}
         tabIndex={-1}
       >
         {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -277,7 +278,7 @@ export function ChipsInput({ value, onChange, placeholder, suggestions, mono = t
       {value.map((v) => (
         <span key={v} className={cx("inline-flex max-w-full items-center gap-1 rounded-md bg-inset py-0.5 pr-1 pl-2 text-[13px] text-fg ring-1 ring-line", mono && "font-mono")}>
           <span className="truncate">{v}</span>
-          <button type="button" className="rounded p-0.5 text-faint hover:text-danger" aria-label={`Убрать ${v}`} onClick={() => onChange(value.filter((x) => x !== v))}>
+          <button type="button" className="rounded p-0.5 text-faint hover:text-danger" aria-label={t("common.removeItem", { value: v })} onClick={() => onChange(value.filter((x) => x !== v))}>
             <X className="size-3" />
           </button>
         </span>
@@ -346,7 +347,7 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function CopyButton({ text, label = "Копировать", className, showLabel }: { text: string; label?: string; className?: string; showLabel?: boolean }) {
+export function CopyButton({ text, label = t("common.copy"), className, showLabel }: { text: string; label?: string; className?: string; showLabel?: boolean }) {
   const [done, setDone] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -360,12 +361,12 @@ export function CopyButton({ text, label = "Копировать", className, sh
   if (showLabel) {
     return (
       <Button size="sm" variant="secondary" onClick={onClick} icon={done ? <Check className="size-3.5 text-ok" /> : <Copy className="size-3.5" />} className={className}>
-        {done ? "Скопировано" : label}
+        {done ? t("common.copied") : label}
       </Button>
     );
   }
   return (
-    <IconButton label={done ? "Скопировано" : label} onClick={onClick} className={className}>
+    <IconButton label={done ? t("common.copied") : label} onClick={onClick} className={className}>
       {done ? <Check className="size-4 text-ok" /> : <Copy className="size-4" />}
     </IconButton>
   );

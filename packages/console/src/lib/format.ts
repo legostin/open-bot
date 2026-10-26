@@ -1,13 +1,6 @@
-// Formatting helpers (Russian UI).
+// Formatting helpers; text comes from the i18n dictionaries, dates from Intl in the current locale.
 
-export function plural(n: number, forms: [one: string, few: string, many: string]): string {
-  const a = Math.abs(n) % 100;
-  const b = a % 10;
-  if (a > 10 && a < 20) return forms[2];
-  if (b > 1 && b < 5) return forms[1];
-  if (b === 1) return forms[0];
-  return forms[2];
-}
+import { getLocale, t, tn } from "../i18n/index.ts";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -15,30 +8,35 @@ export function formatTime(d: Date): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-const MONTHS = ["янв.", "февр.", "мар.", "апр.", "мая", "июн.", "июл.", "авг.", "сент.", "окт.", "нояб.", "дек."];
-
 export function formatDate(iso: string | undefined, withSeconds = false): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const sec = withSeconds ? `:${pad(d.getSeconds())}` : "";
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${formatTime(d)}${sec}`;
+  return new Intl.DateTimeFormat(getLocale(), {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: withSeconds ? "2-digit" : undefined,
+    hour12: false,
+  }).format(d);
 }
 
 export function relativeTime(iso: string | undefined, now: number = Date.now()): string {
   if (!iso) return "—";
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return iso;
-  const s = Math.round((now - t) / 1000);
-  if (s < 45) return "только что";
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return iso;
+  const s = Math.round((now - ts) / 1000);
+  if (s < 45) return t("time.justNow");
   const m = Math.round(s / 60);
-  if (m < 60) return `${m} ${plural(m, ["минуту", "минуты", "минут"])} назад`;
+  if (m < 60) return tn("time.minutesAgo", m);
   const h = Math.round(m / 60);
-  const d = new Date(t);
+  const d = new Date(ts);
   const today = new Date(now);
-  if (h < 24 && d.getDate() === today.getDate()) return `${h} ${plural(h, ["час", "часа", "часов"])} назад`;
+  if (h < 24 && d.getDate() === today.getDate()) return tn("time.hoursAgo", h);
   const yesterday = new Date(now - 86_400_000);
-  if (d.toDateString() === yesterday.toDateString()) return `вчера в ${formatTime(d)}`;
+  if (d.toDateString() === yesterday.toDateString()) return t("time.yesterdayAt", { time: formatTime(d) });
   return formatDate(iso);
 }
 
@@ -54,7 +52,7 @@ export interface InputRow {
 const scalar = (v: unknown): v is string | number | boolean | null | undefined => v === null || v === undefined || ["string", "number", "boolean"].includes(typeof v);
 
 function rowFor(key: string, v: unknown): InputRow {
-  if (v === null || v === undefined || v === "") return { key, kind: "empty", text: v === "" ? "(пустая строка)" : "(нет)" };
+  if (v === null || v === undefined || v === "") return { key, kind: "empty", text: v === "" ? t("input.emptyString") : t("input.none") };
   if (typeof v === "string") return { key, kind: "text", text: v };
   if (typeof v === "number") return { key, kind: "number", text: String(v) };
   if (typeof v === "boolean") return { key, kind: "boolean", text: String(v) };
@@ -64,16 +62,16 @@ function rowFor(key: string, v: unknown): InputRow {
 /** Readable key/value rows for an approval's exact input. Nested objects are flattened to dotted keys. */
 export function flattenInput(input: unknown, prefix = "", depth = 0): InputRow[] {
   if (input === null || input === undefined || typeof input !== "object") {
-    return [rowFor(prefix || "значение", input)];
+    return [rowFor(prefix || t("input.value"), input)];
   }
   if (Array.isArray(input)) {
-    const key = prefix || "значение";
-    if (input.length === 0) return [{ key, kind: "empty", text: "(пустой список)" }];
+    const key = prefix || t("input.value");
+    if (input.length === 0) return [{ key, kind: "empty", text: t("input.emptyList") }];
     if (input.every(scalar)) return [{ key, kind: "list", text: input.map((x) => String(x)).join("\n"), items: input.map((x) => String(x)) }];
     return [{ key, kind: "json", text: JSON.stringify(input, null, 2) }];
   }
   const entries = Object.entries(input as Record<string, unknown>);
-  if (entries.length === 0) return prefix ? [{ key: prefix, kind: "empty", text: "(пустой объект)" }] : [];
+  if (entries.length === 0) return prefix ? [{ key: prefix, kind: "empty", text: t("input.emptyObject") }] : [];
   const out: InputRow[] = [];
   for (const [k, v] of entries) {
     const key = prefix ? `${prefix}.${k}` : k;
@@ -106,12 +104,12 @@ export function shortHash(h: string | undefined): string {
 }
 
 export function actorLabel(actor: string): string {
-  if (actor === "user") return "вы";
-  if (actor === "core") return "ядро";
+  if (actor === "user") return t("actor.user");
+  if (actor === "core") return t("actor.core");
   const [kind, ...rest] = actor.split(":");
   const id = rest.join(":");
-  if (kind === "agent") return `агент ${id}`;
-  if (kind === "plugin") return `плагин ${id}`;
-  if (kind === "machine") return `машина ${id}`;
+  if (kind === "agent") return t("actor.agent", { id });
+  if (kind === "plugin") return t("actor.plugin", { id });
+  if (kind === "machine") return t("actor.machine", { id });
   return actor;
 }

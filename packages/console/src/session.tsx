@@ -5,10 +5,10 @@ import { api } from "./api.ts";
 import { connectLive, type LiveStatus } from "./live.ts";
 import { chime, notifyApproval, primeAudio } from "./alerts.ts";
 import type { ApprovalView, AuthState, ConsoleEvent } from "./types.ts";
+import { t, useLocale, type MessageKey } from "./i18n/index.ts";
 
 /** Mirrors the server's console idle timeout; enforced client-side too, because live refreshes keep the cookie alive. */
 export const IDLE_MS = 30 * 60_000;
-const BASE_TITLE = "Пульт безопасности · open-bot";
 
 type Listener = (e: ConsoleEvent) => void;
 
@@ -40,7 +40,7 @@ export function useLiveEvents(handler: Listener): void {
   useEffect(() => subscribe((e) => ref.current(e)), [subscribe]);
 }
 
-export function SessionProvider({ auth, onLost, onLoggedOut, children }: { auth: AuthState; onLost: (reason?: string) => void; onLoggedOut: () => void; children: ReactNode }) {
+export function SessionProvider({ auth, onLost, onLoggedOut, children }: { auth: AuthState; onLost: (reason?: MessageKey) => void; onLoggedOut: () => void; children: ReactNode }) {
   const [live, setLive] = useState<LiveStatus>("connecting");
   const [pending, setPending] = useState<ApprovalView[]>();
   const [pendingError, setPendingError] = useState<string>();
@@ -97,12 +97,14 @@ export function SessionProvider({ auth, onLost, onLoggedOut, children }: { auth:
 
   // Title badge.
   const count = pending?.length ?? 0;
+  const locale = useLocale();
   useEffect(() => {
-    document.title = count ? `(${count}) ${BASE_TITLE}` : BASE_TITLE;
+    const base = t("app.title");
+    document.title = count ? `(${count}) ${base}` : base;
     return () => {
-      document.title = BASE_TITLE;
+      document.title = t("app.title");
     };
-  }, [count]);
+  }, [count, locale]);
 
   const logout = useCallback(async () => {
     try {
@@ -122,7 +124,7 @@ export function SessionProvider({ auth, onLost, onLoggedOut, children }: { auth:
     const check = () => {
       if (Date.now() - last > IDLE_MS) {
         void api.logout().catch(() => {});
-        lostRef.current("Сессия завершена после 30 минут бездействия.");
+        lostRef.current("session.idleLogout");
       }
     };
     const events = ["pointerdown", "keydown", "wheel", "touchstart"] as const;

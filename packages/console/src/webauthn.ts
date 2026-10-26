@@ -2,6 +2,7 @@
 
 import { browserSupportsWebAuthn, startAuthentication, startRegistration, WebAuthnError } from "@simplewebauthn/browser";
 import { api } from "./api.ts";
+import { t } from "./i18n/index.ts";
 
 /** WebAuthn relying-party ids must be domain names: browsers refuse passkeys on raw IP addresses. */
 export function isIpHost(hostname: string): boolean {
@@ -10,10 +11,10 @@ export function isIpHost(hostname: string): boolean {
 
 /** Why passkeys cannot be used here, or undefined if they can. */
 export function passkeyUnavailableReason(): string | undefined {
-  if (!window.isSecureContext) return "Passkey работают только по HTTPS или на localhost.";
-  if (!browserSupportsWebAuthn()) return "Этот браузер не поддерживает passkey.";
+  if (!window.isSecureContext) return t("webauthn.insecure");
+  if (!browserSupportsWebAuthn()) return t("webauthn.unsupported");
   if (isIpHost(location.hostname)) {
-    return `Passkey не работают по IP-адресу. Откройте пульт по имени хоста (например, http://localhost:${location.port || "8081"}) и укажите это имя в OPENBOT_PUBLIC_URL.`;
+    return t("webauthn.ipHost", { port: location.port || "8081" });
   }
   return undefined;
 }
@@ -26,15 +27,15 @@ function explain(e: unknown): Error {
   if (e instanceof WebAuthnError) {
     switch (e.code) {
       case "ERROR_CEREMONY_ABORTED":
-        return new Error("Операция с passkey отменена");
+        return new Error(t("webauthn.aborted"));
       case "ERROR_INVALID_DOMAIN":
       case "ERROR_INVALID_RP_ID":
-        return new Error("Passkey недоступен на этом адресе: откройте пульт по тому же имени хоста, что указано в OPENBOT_PUBLIC_URL");
+        return new Error(t("webauthn.badDomain"));
       case "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED":
-        return new Error("Этот ключ уже зарегистрирован");
+        return new Error(t("webauthn.alreadyRegistered"));
     }
   }
-  if (e instanceof Error && (e.name === "NotAllowedError" || e.name === "AbortError")) return new Error("Операция с passkey отменена или время ожидания истекло");
+  if (e instanceof Error && (e.name === "NotAllowedError" || e.name === "AbortError")) return new Error(t("webauthn.timeout"));
   return e instanceof Error ? e : new Error(String(e));
 }
 

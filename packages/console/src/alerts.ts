@@ -1,6 +1,7 @@
 // Attention signals for new approvals: a short chime (WebAudio, no files) and browser notifications.
 
 import { getPrefs } from "./prefs.ts";
+import { t } from "./i18n/index.ts";
 
 let audio: AudioContext | undefined;
 
@@ -51,8 +52,8 @@ export function notificationPermission(): NotificationPermission | "unsupported"
 export function notifyApproval(a: { id: string; agentId: string; tool: string }): void {
   if (!getPrefs().notify || notificationPermission() !== "granted" || document.visibilityState === "visible") return;
   try {
-    const n = new Notification("open-bot: нужно подтверждение", {
-      body: `Агент ${a.agentId} просит подтвердить действие (${a.tool}). Откройте пульт, чтобы посмотреть детали.`,
+    const n = new Notification(t("notify.title"), {
+      body: t("notify.body", { agent: a.agentId, tool: a.tool }),
       tag: `approval-${a.id}`,
       icon: "./favicon.svg",
     });

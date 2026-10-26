@@ -24,6 +24,8 @@ export interface AuthState {
   csrf?: string;
   passkeys: number;
   publicUrl: string;
+  /** Hub-wide default UI language ("ru" | "en"), when configured. */
+  language?: string;
 }
 
 export type RuleDraft = Omit<Rule, "id" | "createdAt" | "createdVia">;

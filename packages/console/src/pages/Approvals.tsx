@@ -10,6 +10,7 @@ import { setPrefs, usePrefs } from "../prefs.ts";
 import { chime, notificationPermission, notificationsSupported } from "../alerts.ts";
 import { Badge, Button, Callout, Card, cx, ErrorText, IconButton, PageHeader, Segmented, Spinner, EmptyState } from "../ui/kit.tsx";
 import { Dialog, useToast } from "../ui/overlay.tsx";
+import { t, useLocale, type MessageKey } from "../i18n/index.ts";
 import { effectLabel, emptyRuleForm, formFromRule, RuleForm, ruleFromForm, type RuleFormValue } from "./RuleForm.tsx";
 
 const HISTORY_STATUSES = "approved,denied,expired,executed,failed";
@@ -29,16 +30,16 @@ export function ApprovalsPage({ focusId }: { focusId?: string }) {
   return (
     <div>
       <PageHeader
-        title="Подтверждения"
-        description="Агенты просят разрешения на внешние действия. Проверьте точный вход — адресатов, текст, домены — прежде чем разрешить."
+        title={t("approvals.title")}
+        description={t("approvals.description")}
         actions={<AlertControls />}
       />
 
       <div className="mb-4 flex items-center justify-between gap-3">
         <Segmented
           value={tab}
-          onChange={(t) => {
-            setTab(t);
+          onChange={(next) => {
+            setTab(next);
             if (focusId) navigate("#/approvals");
           }}
           options={[
@@ -46,12 +47,12 @@ export function ApprovalsPage({ focusId }: { focusId?: string }) {
               value: "pending",
               label: (
                 <span className="inline-flex items-center gap-1.5">
-                  Ожидают
+                  {t("approvals.tab.pending")}
                   {pending && pending.length > 0 && <span className="rounded-full bg-amber-500 px-1.5 text-[11px] font-semibold leading-4 text-amber-950">{pending.length}</span>}
                 </span>
               ),
             },
-            { value: "history", label: "История" },
+            { value: "history", label: t("approvals.tab.history") },
           ]}
         />
       </div>
@@ -71,8 +72,8 @@ function PendingList({ pending, error, reload, focusId, now }: { pending?: Appro
   }
   if (pending.length === 0) {
     return (
-      <EmptyState icon={<ShieldCheck className="size-8" />} title="Нет ожидающих подтверждений">
-        Когда агент захочет сделать что-то во внешнем мире — отправить письмо, сообщение или запрос, — карточка появится здесь, а пульт подаст сигнал.
+      <EmptyState icon={<ShieldCheck className="size-8" />} title={t("approvals.empty.title")}>
+        {t("approvals.empty.body")}
       </EmptyState>
     );
   }
@@ -97,7 +98,7 @@ export function LoadError({ error, retry }: { error: string; retry: () => void |
   return (
     <Card className="flex flex-col items-center gap-3 px-6 py-10 text-center">
       <ErrorText>{error}</ErrorText>
-      <Button onClick={() => void retry()}>Повторить</Button>
+      <Button onClick={() => void retry()}>{t("common.retry")}</Button>
     </Card>
   );
 }
@@ -117,14 +118,14 @@ function AlertControls() {
       setPerm(p);
       if (p === "granted") {
         setPrefs({ notify: true });
-        toast("Уведомления включены: пульт сообщит о новых запросах, даже когда вкладка в фоне.");
+        toast(t("approvals.notify.enabled"));
       } else if (p === "denied") {
-        toast("Уведомления запрещены. Их можно разрешить в настройках сайта в браузере.", "info");
+        toast(t("approvals.notify.denied"), "info");
       }
       return;
     }
     if (perm === "denied") {
-      toast("Уведомления заблокированы в настройках браузера для этого адреса.", "info");
+      toast(t("approvals.notify.blocked"), "info");
       return;
     }
     setPrefs({ notify: !prefs.notify });
@@ -134,7 +135,7 @@ function AlertControls() {
   return (
     <>
       <IconButton
-        label={prefs.sound ? "Звук новых запросов включён" : "Звук новых запросов выключен"}
+        label={prefs.sound ? t("approvals.sound.on") : t("approvals.sound.off")}
         onClick={() => {
           setPrefs({ sound: !prefs.sound });
           if (!prefs.sound) setTimeout(chime, 0);
@@ -144,8 +145,8 @@ function AlertControls() {
         {prefs.sound ? <Volume2 className="size-4.5" /> : <VolumeX className="size-4.5" />}
       </IconButton>
       {supported && (
-        <Button onClick={() => void toggleNotify()} icon={notifyOn ? <Bell className="size-4" /> : <BellOff className="size-4" />} title="Системные уведомления, когда вкладка пульта в фоне">
-          {perm === "default" ? "Включить уведомления" : notifyOn ? "Уведомления вкл." : "Уведомления выкл."}
+        <Button onClick={() => void toggleNotify()} icon={notifyOn ? <Bell className="size-4" /> : <BellOff className="size-4" />} title={t("approvals.notify.hint")}>
+          {perm === "default" ? t("approvals.notify.enable") : notifyOn ? t("approvals.notify.on") : t("approvals.notify.off")}
         </Button>
       )}
     </>
@@ -170,7 +171,7 @@ function ApprovalCard({ a, highlighted, now }: { a: ApprovalView; highlighted: b
     try {
       await api.resolveApproval(a.id, { decision });
       dropPending(a.id);
-      toast(decision === "approve" ? "Разрешено один раз" : "Отклонено");
+      toast(decision === "approve" ? t("approvals.approvedOnce") : t("approvals.denied"));
       if (highlighted) navigate("#/approvals");
     } catch (e) {
       toast(errorText(e), "error");
@@ -187,8 +188,8 @@ function ApprovalCard({ a, highlighted, now }: { a: ApprovalView; highlighted: b
         <p className="text-[15px] leading-relaxed font-medium whitespace-pre-wrap text-fg [overflow-wrap:anywhere] sm:text-base">{a.summary}</p>
 
         {a.tainted && (
-          <Callout tone="warn" title="Сессия читала внешний контент">
-            Агент видел веб-страницы, письма или ответы внешних сервисов — там могли быть подложенные инструкции. Особенно внимательно проверьте адресатов, ссылки и текст.
+          <Callout tone="warn" title={t("approvals.tainted.title")}>
+            {t("approvals.tainted.body")}
           </Callout>
         )}
 
@@ -199,15 +200,15 @@ function ApprovalCard({ a, highlighted, now }: { a: ApprovalView; highlighted: b
 
       <div className="flex flex-col gap-2 border-t border-line bg-inset/50 p-3 sm:flex-row sm:items-center sm:px-5">
         <Button variant="primary" size="lg" className="sm:h-10 sm:text-sm" icon={<Check className="size-4.5" />} loading={busy === "approve"} disabled={!!busy} onClick={() => void resolve("approve")}>
-          Разрешить один раз
+          {t("approvals.approveOnce")}
         </Button>
         <div className="grid grid-cols-2 gap-2 sm:contents">
           <Button icon={<Repeat className="size-4" />} disabled={!!busy} onClick={() => setRemember(true)}>
-            <span className="sm:hidden">Всегда…</span>
-            <span className="hidden sm:inline">Всегда разрешать такое…</span>
+            <span className="sm:hidden">{t("approvals.always.short")}</span>
+            <span className="hidden sm:inline">{t("approvals.always.long")}</span>
           </Button>
           <Button variant="danger" className="sm:ml-auto" icon={<X className="size-4" />} loading={busy === "deny"} disabled={!!busy} onClick={() => void resolve("deny")}>
-            Отклонить
+            {t("approvals.deny")}
           </Button>
         </div>
       </div>
@@ -219,7 +220,7 @@ function ApprovalCard({ a, highlighted, now }: { a: ApprovalView; highlighted: b
         onDone={() => {
           setRemember(false);
           dropPending(a.id);
-          toast("Разрешено. Правило сохранено — похожие запросы больше не будут спрашивать.");
+          toast(t("approvals.rememberedToast"));
           if (highlighted) navigate("#/approvals");
         }}
       />
@@ -255,14 +256,14 @@ function ToolLine({ tool, description }: { tool: string; description?: string })
   const long = !!description && description.length > 140;
   return (
     <div className="text-sm">
-      <span className="text-muted">Инструмент: </span>
+      <span className="text-muted">{t("approvals.tool")} </span>
       <span className="rounded bg-inset px-1.5 py-0.5 font-mono text-[13px] text-fg ring-1 ring-line">{tool}</span>
       {description && (
         <p className={cx("mt-1.5 text-[13px] leading-relaxed text-muted", long && !open && "line-clamp-2")}>
           {description}
           {long && (
             <button type="button" className="ml-1 text-brand-fg hover:underline" onClick={() => setOpen((o) => !o)}>
-              {open ? "свернуть" : "ещё"}
+              {open ? t("approvals.collapse") : t("approvals.more")}
             </button>
           )}
         </p>
@@ -275,11 +276,11 @@ function Meta({ a }: { a: ApprovalView }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
       <span>
-        Создано: <span className="text-muted">{formatDate(a.createdAt, true)}</span>
+        {t("approvals.created")} <span className="text-muted">{formatDate(a.createdAt, true)}</span>
       </span>
       {a.taskId && (
         <span>
-          Задача: <span className="font-mono text-muted">{a.taskId}</span>
+          {t("approvals.task")} <span className="font-mono text-muted">{a.taskId}</span>
         </span>
       )}
       <span>
@@ -293,18 +294,20 @@ function Meta({ a }: { a: ApprovalView }) {
 
 export function InputView({ input }: { input: unknown }) {
   const [raw, setRaw] = useState(false);
-  const rows = useMemo(() => flattenInput(input), [input]);
+  const locale = useLocale();
+  // Placeholder texts ("(empty string)" etc.) are localized, so recompute on a language switch.
+  const rows = useMemo(() => flattenInput(input), [input, locale]);
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold tracking-wide text-muted uppercase">Точный вход</span>
+        <span className="text-xs font-semibold tracking-wide text-muted uppercase">{t("approvals.exactInput")}</span>
         <button type="button" onClick={() => setRaw((r) => !r)} className="inline-flex items-center gap-1 text-xs font-medium text-brand-fg hover:underline" aria-expanded={raw}>
           <Code2 className="size-3.5" />
-          {raw ? "Скрыть JSON" : "Показать JSON"}
+          {raw ? t("approvals.hideJson") : t("approvals.showJson")}
         </button>
       </div>
       {rows.length === 0 ? (
-        <p className="rounded-lg border border-line bg-inset px-3 py-2 text-sm text-muted">Без параметров</p>
+        <p className="rounded-lg border border-line bg-inset px-3 py-2 text-sm text-muted">{t("approvals.noParams")}</p>
       ) : (
         <dl className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-inset">
           {rows.map((r) => (
@@ -351,7 +354,7 @@ function Value({ row }: { row: InputRow }) {
       {long && (
         <button type="button" className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand-fg hover:underline" onClick={() => setFull((f) => !f)}>
           <ChevronDown className={cx("size-3.5 transition-transform", full && "rotate-180")} />
-          {full ? "Свернуть" : `Показать полностью (${row.text.length} симв.)`}
+          {full ? t("approvals.collapseFull") : t("approvals.showFull", { count: row.text.length })}
         </button>
       )}
     </div>
@@ -416,27 +419,27 @@ function RememberDialog({ open, a, onClose, onDone }: { open: boolean; a: Approv
       open={open}
       onClose={onClose}
       size="lg"
-      title="Разрешить и запомнить"
-      description="Этот запрос будет разрешён, а похожие в будущем — без вопроса. Сузьте правило условиями."
+      title={t("approvals.remember.title")}
+      description={t("approvals.remember.description")}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Отмена
+            {t("common.cancel")}
           </Button>
           <Button variant="primary" onClick={() => void save()} loading={busy} icon={<Check className="size-4" />}>
-            Разрешить и сохранить правило
+            {t("approvals.remember.submit")}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
         <div className="rounded-lg border border-line bg-inset px-3 py-2.5 text-sm">
-          <div className="text-xs text-muted">Запрос</div>
+          <div className="text-xs text-muted">{t("approvals.remember.request")}</div>
           <div className="mt-0.5 font-medium text-fg [overflow-wrap:anywhere]">{a.summary}</div>
         </div>
         {a.tainted && (
-          <Callout tone="warn" title="Сессия читала внешний контент">
-            Проверьте, что правило не разрешает адресатов или домены, подсказанные чужим текстом.
+          <Callout tone="warn" title={t("approvals.tainted.title")}>
+            {t("approvals.remember.taintedBody")}
           </Callout>
         )}
         <RuleForm value={form} onChange={setForm} tools={tools} sample={{ tool: a.tool, agentId: a.agentId, agentName: a.agentName, input: a.input }} />
@@ -448,20 +451,16 @@ function RememberDialog({ open, a, onClose, onDone }: { open: boolean; a: Approv
 
 // ---------- history ----------
 
-const STATUS: Record<Exclude<ApprovalStatus, "pending">, { label: string; tone: "ok" | "danger" | "neutral" }> = {
-  approved: { label: "разрешено", tone: "ok" },
-  executed: { label: "выполнено", tone: "ok" },
-  failed: { label: "ошибка выполнения", tone: "danger" },
-  denied: { label: "отклонено", tone: "danger" },
-  expired: { label: "истекло", tone: "neutral" },
+const STATUS_TONE: Record<Exclude<ApprovalStatus, "pending">, "ok" | "danger" | "neutral"> = {
+  approved: "ok",
+  executed: "ok",
+  failed: "danger",
+  denied: "danger",
+  expired: "neutral",
 };
 
-const VIA: Record<string, string> = {
-  console: "в пульте",
-  telegram: "в Telegram",
-  rule: "правилом",
-  timeout: "по истечении срока",
-};
+const VIA = new Set(["console", "telegram", "rule", "timeout"]);
+const viaLabel = (via: string | undefined): string => (via && VIA.has(via) ? t(`approvals.via.${via}` as MessageKey) : (via ?? ""));
 
 function HistoryList({ focusId, now }: { focusId?: string; now: number }) {
   const { data, error, reload, loading } = useAsync(() => api.approvals(HISTORY_STATUSES), []);
@@ -474,13 +473,13 @@ function HistoryList({ focusId, now }: { focusId?: string; now: number }) {
   return (
     <div className="space-y-3">
       {focusMissing && (
-        <Callout tone="warn" title="Запрос не найден">
-          Подтверждения <span className="font-mono">{focusId}</span> нет ни среди ожидающих, ни в последних 200 записях истории.
+        <Callout tone="warn" title={t("approvals.notFound.title")}>
+          {t("approvals.notFound.body", { id: focusId })}
         </Callout>
       )}
       {data.length === 0 ? (
-        <EmptyState icon={<Inbox className="size-8" />} title="История пуста">
-          Здесь появятся разрешённые, отклонённые и истёкшие запросы с результатами выполнения.
+        <EmptyState icon={<Inbox className="size-8" />} title={t("approvals.history.empty.title")}>
+          {t("approvals.history.empty.body")}
         </EmptyState>
       ) : (
         data.map((a) => <HistoryCard key={a.id} a={a} now={now} highlighted={a.id === focusId} />)
@@ -498,7 +497,8 @@ function HistoryCard({ a, now, highlighted }: { a: ApprovalView; now: number; hi
       ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [highlighted]);
-  const st = STATUS[a.status as Exclude<ApprovalStatus, "pending">] ?? { label: a.status, tone: "neutral" as const };
+  const tone = STATUS_TONE[a.status as Exclude<ApprovalStatus, "pending">];
+  const st = tone ? { label: t(`approvals.status.${a.status}` as MessageKey), tone } : { label: a.status, tone: "neutral" as const };
   return (
     <Card ref={ref} className={cx("scroll-mt-24", highlighted && "ob-flash ring-2 ring-accent-500")}>
       <div
@@ -520,12 +520,12 @@ function HistoryCard({ a, now, highlighted }: { a: ApprovalView; now: number; hi
           <span className="font-mono">{a.tool}</span>
           {a.resolvedAt && (
             <span>
-              решено {VIA[a.resolvedVia ?? ""] ?? a.resolvedVia ?? ""} · {formatDate(a.resolvedAt)}
+              {t("approvals.resolved", { via: viaLabel(a.resolvedVia), date: formatDate(a.resolvedAt) })}
             </span>
           )}
           {a.tainted && (
             <span className="inline-flex items-center gap-1 text-warn">
-              <AlertTriangle className="size-3.5" /> внешний контент
+              <AlertTriangle className="size-3.5" /> {t("approvals.externalContent")}
             </span>
           )}
           <ChevronDown className={cx("ml-auto size-4 transition-transform", open && "rotate-180")} />
@@ -534,9 +534,8 @@ function HistoryCard({ a, now, highlighted }: { a: ApprovalView; now: number; hi
       {open && (
         <div className="space-y-4 border-t border-line p-4 sm:px-5">
           {highlighted && (
-            <Callout tone="brand" title="Этот запрос уже обработан">
-              Статус: {st.label}
-              {a.resolvedVia ? `, ${VIA[a.resolvedVia] ?? a.resolvedVia}` : ""}.
+            <Callout tone="brand" title={t("approvals.alreadyResolved")}>
+              {t("approvals.statusLine", { status: st.label, via: a.resolvedVia ? `, ${viaLabel(a.resolvedVia)}` : "" })}
             </Callout>
           )}
           <ToolLine tool={a.tool} description={a.toolDescription} />
@@ -551,19 +550,19 @@ function HistoryCard({ a, now, highlighted }: { a: ApprovalView; now: number; hi
 
 function ResultView({ result }: { result: ToolResult }) {
   const text = result.content
-    .map((p) => (p.type === "text" ? p.text : `[изображение ${p.mimeType}]`))
+    .map((p) => (p.type === "text" ? p.text : t("approvals.image", { type: p.mimeType })))
     .join("\n\n")
     .trim();
   return (
     <div>
-      <div className="mb-1.5 text-xs font-semibold tracking-wide text-muted uppercase">Результат</div>
+      <div className="mb-1.5 text-xs font-semibold tracking-wide text-muted uppercase">{t("approvals.result")}</div>
       <pre
         className={cx(
           "max-h-80 overflow-auto rounded-lg border p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]",
           result.isError ? "border-danger-line bg-danger-soft text-danger" : "border-line bg-inset text-fg",
         )}
       >
-        {text || "(пусто)"}
+        {text || t("approvals.resultEmpty")}
       </pre>
     </div>
   );

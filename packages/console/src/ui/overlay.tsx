@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import { Button, cx, ErrorText, IconButton } from "./kit.tsx";
 import { errorText } from "../api.ts";
+import { t } from "../i18n/index.ts";
 
 export function Dialog({
   open,
@@ -94,7 +95,7 @@ function DialogInner({
           </h2>
           {description && <div className="mt-0.5 text-sm text-muted">{description}</div>}
         </div>
-        <IconButton label="Закрыть" onClick={onClose} className="-mr-1.5 -mt-0.5">
+        <IconButton label={t("common.close")} onClick={onClose} className="-mr-1.5 -mt-0.5">
           <X className="size-4" />
         </IconButton>
       </div>
@@ -151,7 +152,7 @@ export function ConfirmDialog({
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Отмена
+            {t("common.cancel")}
           </Button>
           <Button variant={tone === "danger" ? "danger-solid" : "primary"} onClick={run} loading={busy}>
             {confirmLabel}
@@ -185,7 +186,7 @@ export function useToast() {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const seq = useRef(0);
-  const dismiss = useCallback((id: number) => setItems((l) => l.filter((t) => t.id !== id)), []);
+  const dismiss = useCallback((id: number) => setItems((l) => l.filter((x) => x.id !== id)), []);
   const push = useCallback(
     (text: string, tone: ToastTone = "ok") => {
       const id = ++seq.current;
@@ -198,24 +199,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastCtx.Provider value={push}>
       {children}
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-3 z-[60] flex flex-col items-center gap-2 px-3 sm:top-auto sm:bottom-4 sm:left-auto sm:right-4 sm:items-end">
-        {items.map((t) => (
+        {items.map((item) => (
           <div
-            key={t.id}
-            role={t.tone === "error" ? "alert" : "status"}
+            key={item.id}
+            role={item.tone === "error" ? "alert" : "status"}
             className={cx(
               "ob-in pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border bg-surface px-3 py-2.5 text-sm text-fg shadow-lg",
-              t.tone === "error" ? "border-danger-line" : t.tone === "ok" ? "border-ok-line" : "border-line",
+              item.tone === "error" ? "border-danger-line" : item.tone === "ok" ? "border-ok-line" : "border-line",
             )}
           >
-            {t.tone === "error" ? (
+            {item.tone === "error" ? (
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
-            ) : t.tone === "ok" ? (
+            ) : item.tone === "ok" ? (
               <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-ok" />
             ) : (
               <Info className="mt-0.5 size-4 shrink-0 text-brand-fg" />
             )}
-            <span className="min-w-0 flex-1 break-words">{t.text}</span>
-            <button type="button" className="text-faint hover:text-fg" aria-label="Закрыть" onClick={() => dismiss(t.id)}>
+            <span className="min-w-0 flex-1 break-words">{item.text}</span>
+            <button type="button" className="text-faint hover:text-fg" aria-label={t("common.close")} onClick={() => dismiss(item.id)}>
               <X className="size-4" />
             </button>
           </div>

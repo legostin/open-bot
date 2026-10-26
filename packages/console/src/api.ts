@@ -19,6 +19,7 @@ import type {
   VaultUpsert,
   VaultView,
 } from "./types.ts";
+import { getLocale, LOCALE_HEADER, t } from "./i18n/index.ts";
 
 export class ApiError extends Error {
   status: number;
@@ -33,7 +34,7 @@ export class ApiError extends Error {
 /** The console session is gone (idle timeout, logout elsewhere, password change). */
 export class SessionLostError extends ApiError {
   constructor() {
-    super(401, "Сессия пульта завершена — войдите снова");
+    super(401, t("api.sessionLost"));
   }
 }
 
@@ -57,7 +58,7 @@ interface RequestOptions {
 }
 
 async function send(method: Method, path: string, body: unknown): Promise<Response> {
-  const headers: Record<string, string> = { accept: "application/json" };
+  const headers: Record<string, string> = { accept: "application/json", [LOCALE_HEADER]: getLocale() };
   if (csrf) headers["x-csrf"] = csrf;
   let payload: string | undefined;
   if (method !== "GET") {
@@ -67,7 +68,7 @@ async function send(method: Method, path: string, body: unknown): Promise<Respon
   try {
     return await fetch(path, { method, headers, body: payload, credentials: "same-origin", cache: "no-store", redirect: "error" });
   } catch {
-    throw new ApiError(0, "Нет связи с хабом. Проверьте, что он запущен, и повторите.");
+    throw new ApiError(0, t("api.offline"));
   }
 }
 
@@ -81,7 +82,7 @@ async function errorFrom(res: Response): Promise<ApiError> {
   } catch {
     /* not JSON */
   }
-  if (!message) message = res.status === 429 ? "Слишком много попыток. Подождите и попробуйте снова." : `Ошибка ${res.status}`;
+  if (!message) message = res.status === 429 ? t("api.tooMany") : t("api.httpError", { status: res.status });
   return new ApiError(res.status, message, code);
 }
 
