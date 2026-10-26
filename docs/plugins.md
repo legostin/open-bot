@@ -101,7 +101,7 @@ import { definePluginUI, Card, useHubEvent } from "@openbot/ui";
 export default definePluginUI({
   activate(ui) {
     ui.slots.register("sidebar.panel", { id: "weather", title: "Погода", icon: "☀", component: Panel });
-    ui.slots.register("chat.toolResult", { id: "forecast", match: { tool: "weather_*" }, component: ForecastCard });
+    ui.slots.register("chat.toolResult", { id: "forecast", match: { tool: ["weather_*"] }, component: ForecastCard });
     ui.statusbar.add({ id: "temp", render: () => <span>+12°</span> });
   },
 });
