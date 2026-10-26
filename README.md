@@ -86,12 +86,23 @@ The address and model of an OpenAI-compatible server are set in the API brain pl
 
 The **Brains** page shows the state of every brain: installed, signed in, rate-limited until a given time. The order in which brains are tried is set per agent.
 
+## Group chats
+
+Invite several agents into one chat: in the sidebar, under **Groups**, choose **New group**, give it a name and pick two to eight agents. The first one you pick leads.
+
+- A message without a mention goes to the lead.
+- `@name` asks a particular agent: type `@` and the chat suggests the members.
+- `@all` has everyone answer in turn, each seeing what was said before.
+- An agent can hand the floor to another by mentioning it in its reply (at most three hand-offs per message of yours).
+
+Change a group's name and members with the button next to its name. Group chats live in the app and the web UI; Telegram does not mirror them.
+
 ## Telegram
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and ask the assistant to connect Telegram: its card takes the token. The bot connects by itself.
 2. In the same card, tap **Open the bot in Telegram** and press Start: that links your chat. The bot only answers the private chat it was linked from.
 
-Telegram receives replies, notifications, the digest, and approval cards with buttons. Chat commands: `/help`, `/tasks`, `/stop`. The full details of an action are shown only in the console unless you turn on the `channelApprovalDetails` setting.
+Telegram receives replies (with formatting: bold, lists, code, tables), notifications, the digest, and approval cards with buttons. Pictures in a reply arrive as photos or an album, a map as a location pin. Chat commands: `/help`, `/tasks`, `/stop`. The full details of an action are shown only in the console unless you turn on the `channelApprovalDetails` setting.
 
 ## Other computers
 
