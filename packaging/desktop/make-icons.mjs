@@ -1,5 +1,6 @@
-// Renders the web UI's favicon into the installers' icons: packaging/assets/owlbot.ico (Windows, PNG entries) and
-// owlbot.icns (macOS). Run by hand when the logo changes; the outputs are committed so builds need no browser.
+// Renders the web UI's favicon into the desktop icons: packaging/assets/owlbot.ico (Windows, PNG entries), owlbot.icns
+// (macOS) and png/ (the Tauri bundle icons). Run by hand when the logo changes; the outputs are committed so builds
+// need no browser.
 //   node packaging/desktop/make-icons.mjs
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -52,4 +53,7 @@ const icnsHead = Buffer.alloc(8);
 icnsHead.write("icns", 0, "ascii");
 icnsHead.writeUInt32BE(8 + chunks.reduce((n, c) => n + c.length, 0), 4);
 writeFileSync(join(out, "owlbot.icns"), Buffer.concat([icnsHead, ...chunks]));
+// PNGs for the Tauri bundle (tauri.conf.json "bundle.icon"; the tray uses the app icon).
+mkdirSync(join(out, "png"), { recursive: true });
+for (const [file, size] of [["32x32.png", 32], ["128x128.png", 128], ["128x128@2x.png", 256], ["icon.png", 512]]) writeFileSync(join(out, "png", file), png[size]);
 console.log(`icons written to ${out}`);

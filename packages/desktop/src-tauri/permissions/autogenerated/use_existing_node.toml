@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-use-existing-node"
+description = "Enables the use_existing_node command without any pre-configured scope."
+commands.allow = ["use_existing_node"]
+
+[[permission]]
+identifier = "deny-use-existing-node"
+description = "Denies the use_existing_node command without any pre-configured scope."
+commands.deny = ["use_existing_node"]

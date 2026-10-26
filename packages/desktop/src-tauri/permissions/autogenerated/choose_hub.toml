@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-choose-hub"
+description = "Enables the choose_hub command without any pre-configured scope."
+commands.allow = ["choose_hub"]
+
+[[permission]]
+identifier = "deny-choose-hub"
+description = "Denies the choose_hub command without any pre-configured scope."
+commands.deny = ["choose_hub"]
