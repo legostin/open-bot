@@ -21,19 +21,21 @@ A friendly, proactive personal agent that lives on your own hardware. Owlbot is 
 
 ### On your computer (Windows, macOS)
 
-Use the installer: `owlbot-setup-<version>-x64.exe` for Windows 10 and 11, `owlbot-<version>.dmg` for macOS 13.5 or later (Apple silicon and Intel). It brings everything it needs: no Node.js, Docker or WSL. To build one yourself, see [Desktop installers](#desktop-installers).
+Get the app: `owlbot-setup-<version>-x64.exe` for Windows 10 and 11, `owlbot-<version>.dmg` for macOS 13.5 or later (Apple silicon and Intel). It brings everything it needs: no Node.js, Docker or WSL. To build it yourself, see [Desktop app](#desktop-app).
 
 1. On Windows, run the installer: it installs for your user only and needs no administrator rights. On macOS, open the disk image, drag Owlbot to Applications and open it from there.
-2. Owlbot starts in the background and opens in your browser. Choose a password and you are in (no setup code to copy).
-3. From then on it starts when you sign in to your computer. On Windows it lives in the tray (Open, Start at login, Show log, Restart, Quit); on macOS open **Owlbot** from Applications.
+2. The app asks how you will use this computer:
+   - **A new Owlbot on this computer**: the hub starts here and opens in the app's window. Choose a password and you are in (no setup code to copy). From then on the app signs its window in by itself.
+   - **Connect to my Owlbot**: your hub runs elsewhere and this computer becomes one of its machines. Paste the hub's address and the code from its **Machines** page, or click **Connect with the app** there. The window then shows that hub.
+3. Closing the window keeps Owlbot running in the background (Telegram, tasks, reminders); its icon in the menu bar or tray has Open, Start at login, Show log, Restart, Set up again… and Quit. It starts by itself when you sign in to your computer.
 
 Claude Code and Codex: if one is already installed on the computer, Owlbot uses it. If not, pressing **Sign in** on its card installs it for Owlbot (a one-time download of a few hundred MB), then the sign-in starts.
 
-Your data stays in `%LOCALAPPDATA%\Owlbot` (Windows) or `~/Library/Application Support/Owlbot` (macOS); upgrading keeps it. To upgrade on macOS, drag the new Owlbot to Applications and replace the old one: the hub restarts on the new version by itself. To uninstall, use **Settings → Apps** on Windows (it asks before deleting your data) or move Owlbot from Applications to the Trash on macOS (the data stays; delete `~/Library/Application Support/Owlbot` to remove it too). The hub is reachable from this computer only; for your phone, see [Remote access](#remote-access).
+Your data stays in `%LOCALAPPDATA%\Owlbot` (Windows) or `~/Library/Application Support/Owlbot` (macOS); upgrading keeps it. To upgrade on macOS, drag the new Owlbot to Applications and replace the old one. To uninstall, use **Settings → Apps** on Windows (it asks before deleting your data) or move Owlbot from Applications to the Trash on macOS (the data stays; delete `~/Library/Application Support/Owlbot` to remove it too). The hub is reachable from this computer only; for your phone, see [Remote access](#remote-access).
 
 The desktop version runs the hub, plugins and CLI brains as your own user: the Docker image's separate Unix users and its kernel-level network block are not there. For the strongest isolation, run Owlbot in Docker.
 
-The installers are not signed yet. Windows SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**. If macOS refuses to open the app, choose **Open Anyway** in **System Settings → Privacy & Security** (on macOS 13 and 14, Control-clicking the app and choosing **Open** works too).
+The app is not signed yet. Windows SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**. If macOS refuses to open it, choose **Open Anyway** in **System Settings → Privacy & Security** (on macOS 13 and 14, Control-clicking the app and choosing **Open** works too).
 
 ### On a server (Docker)
 
@@ -173,18 +175,18 @@ npm run typecheck
 
 You need Node.js 24.5+ (TypeScript runs without a build step). Outside Docker the browser plugin downloads Playwright's Chromium by itself the first time it starts without one (a one-time download into Playwright's cache, or `PLAYWRIGHT_BROWSERS_PATH`); browser calls made meanwhile wait for it. Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` to turn that off and install it yourself with `npx playwright install chromium`. The project layout and conventions are described in [CLAUDE.md](CLAUDE.md), the design in [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md) (in Russian). Core messages live in `packages/core/src/locales/{en,ru}.ts`, plugin messages in `.owlbot-plugin/locales/{en,ru}.json`; `npm test` checks that every translation matches English.
 
-### Desktop installers
+### Desktop app
 
 ```bash
-npm run package:win   # on Windows: dist/desktop/owlbot-setup-<version>-x64.exe
-npm run package:mac   # on macOS:   dist/desktop/owlbot-<version>.dmg and .pkg
+npm run package:desktop   # on Windows: dist/desktop/owlbot-setup-<version>-x64.exe
+                          # on macOS:   dist/desktop/owlbot-<version>.dmg and .pkg
 ```
 
-Both build the UIs, then stage the hub with its production `node_modules` and the official Node 24 build, checked against the release's SHA-256 (`packaging/desktop/stage.mjs`; `NODE_VERSION` picks another release). The Windows build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`) and compiles the tray app with the C# compiler that ships with Windows; the macOS build uses `osacompile`, `codesign`, `hdiutil`, `pkgbuild` and `productbuild` from macOS. Installer text lives in `packaging/desktop/locales/{en,ru}.json`.
+The app lives in `packages/desktop` (Tauri 2: Rust in `src-tauri`, its setup screens in `ui`). The build compiles the UIs, stages the hub with its production `node_modules` and the official Node 24 build, checked against the release's SHA-256 (`packaging/desktop/stage.mjs`; `NODE_VERSION` picks another release), and bundles it into the app. It needs Rust from [rustup](https://rustup.rs); on macOS also the Intel target for the universal build (`rustup target add x86_64-apple-darwin`) and Xcode's command line tools. App and installer texts live in `packaging/desktop/locales/{en,ru}.json`.
 
-On macOS the `.dmg` is for people and the `.pkg` for silent installs (`sudo installer -pkg owlbot-<version>.pkg -target /`, over SSH or MDM): it puts the same app into Applications and starts it for the user at the console. `sudo /Applications/Owlbot.app/Contents/Resources/bin/uninstall.sh <uid> <home> [--delete-data]` removes it again.
+Silent installs: `owlbot-setup-<version>-x64.exe /S` (add `/NOSTART` to leave it stopped) on Windows; `sudo installer -pkg owlbot-<version>.pkg -target /` on macOS (over SSH or MDM), and `sudo /Applications/Owlbot.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]` removes it again. `Owlbot --mode hub --background` makes the first-run choice without a window, `Owlbot --quit` stops the running app. `.github/workflows/desktop.yml` builds both on clean runners and checks that they install, start the hub, quit and uninstall.
 
-The Windows installer takes Inno Setup's `/VERYSILENT` plus `/PORT=18080` (another port, say for a second hub next to Docker) and `/NOSTART` (don't start after a silent install). `.github/workflows/desktop.yml` builds both installers on clean runners and checks that they install, start the hub and uninstall.
+To run the app from source without touching an installed Owlbot: stage once (`node packaging/desktop/stage.mjs --skip-build`), then `OWLBOT_APP_ROOT=$PWD/dist/desktop/stage-darwin/app OWLBOT_DATA_DIR=/tmp/owl-data npm run tauri -w @owlbot/desktop -- dev` with `{"port":18080}` in `/tmp/owl-data/desktop.json`. With `OWLBOT_DATA_DIR` set the app writes no start-at-login entries.
 
 ## License
 
