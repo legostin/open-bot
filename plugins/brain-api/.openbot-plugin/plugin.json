@@ -1,0 +1,76 @@
+{
+  "id": "brain-api",
+  "name": "API-мозг",
+  "version": "0.1.0",
+  "description": "Собственная петля агента поверх API: Anthropic (Messages API), OpenAI, OpenRouter и любые OpenAI-совместимые серверы (Ollama, LM Studio, vLLM). Ссылки на мозг: api:anthropic, api:openai, api:openrouter, api:custom. Запросы к моделям идут через сетевой прокси сессии мозга: чтобы подключить сервер в локальной сети, добавьте его хост в настройку хаба «brainEgressAllow» (localhost доступен всегда).",
+  "server": "./server/index.ts",
+  "builtin": true,
+  "contributes": {
+    "brains": ["api"],
+    "settings": {
+      "type": "object",
+      "properties": {
+        "defaultVariant": {
+          "type": "string",
+          "title": "Вариант по умолчанию",
+          "description": "Используется для ссылки «api» без варианта.",
+          "enum": ["anthropic", "openai", "openrouter", "custom"],
+          "default": "anthropic"
+        },
+        "anthropicModel": {
+          "type": "string",
+          "title": "Модель Anthropic по умолчанию",
+          "description": "Если у агента не указана модель. Псевдонимы агента: opus, sonnet, haiku, fable.",
+          "default": "claude-sonnet-5-5"
+        },
+        "openaiModel": { "type": "string", "title": "Модель OpenAI по умолчанию", "default": "gpt-5" },
+        "openrouterModel": { "type": "string", "title": "Модель OpenRouter по умолчанию", "default": "openrouter/auto" },
+        "customModel": { "type": "string", "title": "Модель OpenAI-совместимого сервера", "default": "llama3.1" },
+        "maxTokens": { "type": "integer", "title": "max_tokens одного ответа", "minimum": 256, "default": 16000 },
+        "maxSteps": { "type": "integer", "title": "Максимум шагов (вызовов модели) за ход", "minimum": 1, "default": 40 },
+        "anthropicBaseUrl": { "type": "string", "title": "Адрес Anthropic API", "default": "https://api.anthropic.com" },
+        "openaiBaseUrl": { "type": "string", "title": "Адрес OpenAI API", "default": "https://api.openai.com/v1" },
+        "openrouterBaseUrl": { "type": "string", "title": "Адрес OpenRouter API", "default": "https://openrouter.ai/api/v1" },
+        "customBaseUrl": {
+          "type": "string",
+          "title": "Адрес OpenAI-совместимого сервера",
+          "description": "Например http://127.0.0.1:11434/v1 (Ollama) или http://127.0.0.1:1234/v1 (LM Studio).",
+          "default": "http://127.0.0.1:11434/v1"
+        },
+        "customKeyRef": {
+          "type": "string",
+          "title": "Ключ OpenAI-совместимого сервера",
+          "description": "Необязательно. Ссылка на запись vault, например vault://custom_llm_api_key (плагину разрешена только эта запись).",
+          "default": ""
+        },
+        "customVision": { "type": "boolean", "title": "Сервер понимает изображения", "default": false },
+        "anthropicEffort": {
+          "type": "string",
+          "title": "Усилие (effort) для Claude",
+          "description": "Пусто — значение модели по умолчанию.",
+          "enum": ["", "low", "medium", "high", "xhigh", "max"],
+          "default": ""
+        },
+        "anthropicRefusalFallback": {
+          "type": "boolean",
+          "title": "Резервная модель при отказе Claude",
+          "description": "fallbacks: \"default\" — при отказе классификатора запрос повторяется на рекомендованной модели (только api.anthropic.com).",
+          "default": true
+        },
+        "anthropicEagerToolStreaming": {
+          "type": "boolean",
+          "title": "Потоковая передача аргументов инструментов (Claude)",
+          "description": "Выключите, если адрес API — прокси, который не понимает eager_input_streaming.",
+          "default": true
+        },
+        "historyTokenBudget": { "type": "integer", "title": "Бюджет истории, токенов (оценка)", "minimum": 4000, "default": 150000 },
+        "customHistoryTokenBudget": { "type": "integer", "title": "Бюджет истории для OpenAI-совместимого сервера, токенов", "minimum": 2000, "default": 24000 },
+        "maxToolResultChars": { "type": "integer", "title": "Максимум символов результата инструмента для модели", "minimum": 1000, "default": 200000 }
+      }
+    }
+  },
+  "permissions": {
+    "network": ["api.anthropic.com", "api.openai.com", "openrouter.ai"],
+    "vault": ["anthropic_api_key", "openai_api_key", "openrouter_api_key", "custom_llm_api_key"]
+  }
+}

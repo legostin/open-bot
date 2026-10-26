@@ -1,0 +1,7 @@
+{
+  "name": "@openbot/plugin-brain-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API brain: own agent loop over Anthropic / OpenAI-compatible APIs"
+}
