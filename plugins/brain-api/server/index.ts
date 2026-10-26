@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { BrainSessionOptions, ProbeResult } from "@openbot/shared";
 import type { PluginContext, PluginModule } from "@openbot/plugin-sdk";
 import { isSafeSessionId, loadSession, type HistoryMessage } from "./history.ts";
+import { request, trimSlash } from "./http.ts";
 import { ApiBrainSession, readKey } from "./session.ts";
 import { ANTHROPIC_MODELS, VARIANTS, resolveSettings, type ApiSettings } from "./settings.ts";
 
@@ -23,6 +24,28 @@ function pruneOldSessions(ctx: PluginContext): void {
     } catch {
       /* ignore */
     }
+  }
+}
+
+/**
+ * True when a server on this machine (the default Ollama address) does not answer. Without this the brain counts
+ * as ready on a fresh install and the first message fails. Other hosts are not checked: with egress enforcement
+ * only the sessions' proxy reaches them.
+ */
+async function localServerDown(base: string): Promise<boolean> {
+  let host: string;
+  try {
+    host = new URL(base).hostname;
+  } catch {
+    return false;
+  }
+  if (!["localhost", "::1", "[::1]"].includes(host) && !host.startsWith("127.")) return false;
+  try {
+    const r = await request(`${trimSlash(base)}/models`, { signal: AbortSignal.timeout(2500) });
+    await r.text().catch(() => "");
+    return false; // any answer, even 401 or 404, means something is listening
+  } catch {
+    return true;
   }
 }
 
@@ -50,6 +73,9 @@ const plugin: PluginModule = {
       const models = v.protocol === "anthropic" ? [...new Set([...ANTHROPIC_MODELS, def])] : [def];
       const key = await readKey(ctx, v, s);
       if (key.error) return { available: true, authenticated: false, models, detail: key.error };
+      if (v.id === "custom" && (await localServerDown(v.baseUrl(s)))) {
+        return { available: true, authenticated: false, models, detail: ctx.i18n.t("probe.serverDown", { url: v.baseUrl(s) }) };
+      }
       return { available: true, authenticated: true, models, ...(v.id === "custom" ? { detail: v.baseUrl(s) } : {}) };
     }
 

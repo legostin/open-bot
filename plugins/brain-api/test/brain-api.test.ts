@@ -238,7 +238,7 @@ describe("brain-api plugin", () => {
     await h.brainCreate("api", opts("s-nokey", { variant: "openrouter" }));
     // openrouter has no key in this vault → fatal before any request.
     const events = await h.brainSend("s-nokey", { text: "hi" });
-    expect(events[0]).toEqual({ type: "error", message: "Add the openrouter_api_key key to the vault", fatal: true });
+    expect(events[0]).toEqual({ type: "error", message: "No API key yet: paste it into the chat (it is stored as openrouter_api_key)", fatal: true });
     expect(llm.requests).toHaveLength(0);
   });
 
@@ -333,14 +333,18 @@ describe("brain-api plugin", () => {
 
     const bare = await startPlugin({ dir: PLUGIN_DIR, settings, vault: {} });
     try {
-      expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ available: true, authenticated: false, detail: "Add the anthropic_api_key key to the vault" });
-      expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ available: true, authenticated: false, detail: "Add the openrouter_api_key key to the vault" });
-      expect(await bare.brainProbe("api")).toMatchObject({ authenticated: false, detail: "Add the anthropic_api_key key to the vault" });
+      expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ available: true, authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as anthropic_api_key)" });
+      expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ available: true, authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as openrouter_api_key)" });
+      expect(await bare.brainProbe("api")).toMatchObject({ authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as anthropic_api_key)" });
       expect(await bare.brainProbe("api", "custom")).toMatchObject({ available: true, authenticated: true });
       expect(await bare.brainProbe("api", "nope")).toMatchObject({ available: false, authenticated: false, detail: 'Unknown variant "nope". Available: anthropic, openai, openrouter, custom' });
       // Probe details are shown on the Brains page in the hub language.
       bare.setLocale("ru");
-      expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ authenticated: false, detail: "Добавьте ключ anthropic_api_key в vault" });
+      expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ authenticated: false, detail: "Нет ключа API: вставьте его в чат (он сохранится как anthropic_api_key)" });
+      // A local server that does not answer (Ollama not started) is not a ready brain.
+      bare.setLocale("en");
+      bare.setSettings({ ...settings, customBaseUrl: "http://127.0.0.1:1/v1" });
+      expect(await bare.brainProbe("api", "custom")).toMatchObject({ available: true, authenticated: false, detail: expect.stringMatching(/does not answer at http:\/\/127\.0\.0\.1:1\/v1/) });
     } finally {
       await bare.stop();
     }
