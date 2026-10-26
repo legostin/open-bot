@@ -197,7 +197,8 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
         version: cfg.version,
         publicUrl: cfg.publicUrl,
         consoleUrl: cfg.consoleUrl,
-        mainConversationId: hub.store.mainConversation(s.defaultAgent).id,
+        // The default agent's dialog: what "/" opens.
+        mainConversationId: hub.store.agentConversation(s.defaultAgent).id,
         defaultAgent: s.defaultAgent,
         timezone: s.timezone,
         language: s.language,
@@ -219,9 +220,18 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.patch("/api/conversations/:id", async (req) => {
       const b = (req.body ?? {}) as { title?: string; agentId?: string };
       if (b.agentId && !hub.agents.get(b.agentId)) throw new HttpError(400, "agent.notFound");
-      const c = hub.store.updateConversation((req.params as any).id, b);
-      if (!c) throw new HttpError(404, "conversation.notFound");
-      return c;
+      const prev = hub.store.getConversation((req.params as any).id);
+      if (!prev) throw new HttpError(404, "conversation.notFound");
+      // An agent's dialog belongs to that agent.
+      if (prev.kind === "main" && b.agentId !== undefined && b.agentId !== prev.agentId) throw new HttpError(400, "conversation.agentFixed");
+      return hub.store.updateConversation(prev.id, b);
+    });
+    api.post("/api/conversations/:id/read", async (req) => {
+      const id = (req.params as any).id as string;
+      if (!hub.store.getConversation(id)) throw new HttpError(404, "conversation.notFound");
+      const at = (req.body as { at?: unknown } | undefined)?.at;
+      hub.team.markRead(id, typeof at === "string" ? at : undefined);
+      return { ok: true };
     });
     api.get("/api/conversations/:id/messages", async (req) => {
       const q = req.query as { before?: string; limit?: string };
@@ -234,6 +244,9 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       return hub.runner.userMessage((req.params as any).id, text, { channel: "web" });
     });
     api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
+
+    // ----- team: every agent with its long-lived dialog (created on first listing) -----
+    api.get("/api/team", async () => hub.team.list());
 
     // ----- tasks -----
     api.get("/api/tasks", async (req) => {

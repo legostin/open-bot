@@ -74,6 +74,7 @@ export class SessionRunner {
   private timer?: NodeJS.Timeout;
   private kickoff?: NodeJS.Timeout;
   private streamingMessage = new Map<string, string>(); // conversationId -> messageId
+  private turning = new Map<string, number>(); // conversationId -> turns in progress
 
   constructor(deps: RunnerDeps) {
     this.d = deps;
@@ -185,6 +186,19 @@ export class SessionRunner {
     if (!a) return false;
     void a.handle.interrupt();
     return true;
+  }
+
+  /** A turn (brain selection included) is in progress in the conversation. */
+  isRunning(conversationId: string): boolean {
+    return (this.turning.get(conversationId) ?? 0) > 0;
+  }
+
+  private setTurning(conversationId: string, delta: 1 | -1): void {
+    const was = this.isRunning(conversationId);
+    const n = Math.max(0, (this.turning.get(conversationId) ?? 0) + delta);
+    if (n) this.turning.set(conversationId, n);
+    else this.turning.delete(conversationId);
+    if (was !== n > 0) this.d.bus.emit("conversation.activity", { conversationId, running: n > 0 });
   }
 
   createTask(t: {
@@ -487,6 +501,7 @@ export class SessionRunner {
     const s = this.d.settings.get();
     const systemPrompt = buildSystemPrompt({
       agent,
+      defaultAgent: agent.id === s.defaultAgent,
       timezone: s.timezone,
       language: s.language,
       consoleUrl: this.d.config.consoleUrl,
@@ -544,6 +559,15 @@ export class SessionRunner {
   }
 
   async runTurn(conv: Conversation, prompt: string, opts: { task?: Task; replyChannel?: string }): Promise<TurnResult> {
+    this.setTurning(conv.id, 1);
+    try {
+      return await this.turn(conv, prompt, opts);
+    } finally {
+      this.setTurning(conv.id, -1);
+    }
+  }
+
+  private async turn(conv: Conversation, prompt: string, opts: { task?: Task; replyChannel?: string }): Promise<TurnResult> {
     const agent = this.d.agents.get(conv.agentId) ?? this.d.agents.get(this.d.settings.get().defaultAgent)!;
     const task = opts.task ?? (conv.taskId ? this.d.store.getTask(conv.taskId) : undefined);
     const prior = this.d.store.activeSession(conv.id, agent.id);
@@ -723,7 +747,9 @@ export class SessionRunner {
     this.d.store.updateMessage(msg.id, { parts, status: error && !produced ? "error" : "complete" });
 
     if (replyChannel && fullText.trim() && this.d.channels.has(replyChannel)) {
-      await this.d.channels.send(replyChannel, { kind: "reply", text: fullText.trim(), conversationId: conv.id, link: `${this.d.config.publicUrl}/` });
+      const path =
+        conv.kind === "main" ? `agent/${encodeURIComponent(conv.agentId)}` : conv.taskId ? `tasks/${encodeURIComponent(conv.taskId)}` : `chat/${encodeURIComponent(conv.id)}`;
+      await this.d.channels.send(replyChannel, { kind: "reply", text: fullText.trim(), conversationId: conv.id, link: `${this.d.config.publicUrl}/${path}` });
     }
     return { text: fullText.trim(), error, limited, awaitingApproval };
   }

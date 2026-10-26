@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { Route, Switch, useLocation, useSearch } from "wouter";
 import { useStore } from "./lib/store";
-import { init, phase, session } from "./state/app";
+import { agentPath } from "./lib/team";
+import { conversations, init, phase, session, team } from "./state/app";
 import { openPanel } from "./state/panel";
 import { syncUiPlugins, unloadAllUiPlugins } from "./plugins/host";
 import { matchRoute } from "./plugins/registry";
@@ -13,6 +14,7 @@ import { Toasts } from "./components/Toasts";
 import { Button, EmptyState, Loading } from "./components/ui";
 import { sectionForPath, type PanelSection } from "./components/nav";
 import { ChatPage } from "./pages/chat/ChatPage";
+import { AgentPage } from "./pages/chat/AgentPage";
 import { TaskDetailPage } from "./pages/TaskDetail";
 import { t } from "./i18n";
 
@@ -61,7 +63,7 @@ function ReadyApp() {
   );
 }
 
-/** A former page URL: open its panel section over the main chat (keeping the query, e.g. /tasks?new=1). */
+/** A former page URL: open its panel section over the default agent's dialog (keeping the query, e.g. /tasks?new=1). */
 function OpenSection({ section }: { section: PanelSection }) {
   const [, navigate] = useLocation();
   const search = useSearch();
@@ -69,7 +71,21 @@ function OpenSection({ section }: { section: PanelSection }) {
     openPanel(section);
     navigate(search ? `/?${search}` : "/", { replace: true });
   }, [section, search, navigate]);
-  return <ChatPage />;
+  return <AgentPage />;
+}
+
+/** /chat/:id: an agent's dialog moves to its own address; older chats still open here. */
+function ChatRoute({ id }: { id: string }) {
+  const [, navigate] = useLocation();
+  const s = useStore(session);
+  const convs = useStore(conversations);
+  const members = useStore(team);
+  const conv = convs.find((c) => c.id === id);
+  const dialogOf = conv?.kind === "main" ? conv.agentId : members?.find((m) => m.conversationId === id)?.agentId;
+  useEffect(() => {
+    if (dialogOf) navigate(agentPath(dialogOf, s?.defaultAgent), { replace: true });
+  }, [dialogOf, s?.defaultAgent, navigate]);
+  return dialogOf ? null : <ChatPage conversationId={id} />;
 }
 
 function Routes() {
@@ -98,8 +114,9 @@ function Routes() {
   if (section) return <OpenSection section={section} />;
   return (
     <Switch>
-      <Route path="/">{() => <ChatPage />}</Route>
-      <Route path="/chat/:id">{(params) => <ChatPage conversationId={params.id} />}</Route>
+      <Route path="/">{() => <AgentPage />}</Route>
+      <Route path="/agent/:id">{(params) => <AgentPage key={params.id} agentId={params.id} />}</Route>
+      <Route path="/chat/:id">{(params) => <ChatRoute id={params.id} />}</Route>
       <Route path="/tasks/:id">{(params) => <TaskDetailPage id={params.id} />}</Route>
       <Route>
         <TopBar />

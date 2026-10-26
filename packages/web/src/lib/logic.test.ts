@@ -7,6 +7,7 @@ import { parseMcpConfig } from "./mcp-config";
 import { slugify } from "./format";
 import { mergeClasses } from "./classes";
 import { sectionForPath } from "../components/nav";
+import { agentForPath, agentPath, teamOrder } from "./team";
 import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, parseAvatar } from "@openbot/shared/avatar";
 
 describe("glob", () => {
@@ -132,6 +133,37 @@ describe("settings panel sections", () => {
     expect(sectionForPath("/settings")).toBe("settings");
     expect(sectionForPath("/chat/abc")).toBeUndefined();
     expect(sectionForPath("/tasks/t1")).toBeUndefined();
+  });
+});
+
+describe("team sidebar", () => {
+  const member = (agentId: string, at?: string) => ({
+    agentId,
+    conversationId: `c_${agentId}`,
+    lastActivityAt: at ?? "2026-01-01T00:00:00.000Z",
+    lastMessage: at ? { role: "assistant" as const, text: "hi", createdAt: at } : undefined,
+    running: false,
+    unread: 0,
+  });
+
+  it("puts the default agent first, then whoever talked last, then the quiet ones by name", () => {
+    const entries = [
+      { agent: { id: "zed", name: "Zed" }, member: member("zed") },
+      { agent: { id: "writer", name: "Writer" }, member: member("writer", "2026-10-26T09:00:00.000Z") },
+      { agent: { id: "assistant", name: "Assistant" }, member: member("assistant", "2026-10-01T00:00:00.000Z") },
+      { agent: { id: "coder", name: "Coder" }, member: member("coder", "2026-10-26T10:00:00.000Z") },
+      { agent: { id: "anna", name: "Anna" } },
+    ];
+    expect(teamOrder(entries, "assistant").map((e) => e.agent.id)).toEqual(["assistant", "coder", "writer", "anna", "zed"]);
+  });
+
+  it("gives every agent a stable address, the default agent the root", () => {
+    expect(agentPath("assistant", "assistant")).toBe("/");
+    expect(agentPath("researcher", "assistant")).toBe("/agent/researcher");
+    expect(agentForPath("/", "assistant")).toBe("assistant");
+    expect(agentForPath("/agent/researcher", "assistant")).toBe("researcher");
+    expect(agentForPath("/tasks/t1", "assistant")).toBeUndefined();
+    expect(agentForPath("/chat/c1", "assistant")).toBeUndefined();
   });
 });
 

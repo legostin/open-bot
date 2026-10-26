@@ -95,6 +95,7 @@ export class Store {
   createConversation(c: { kind: Conversation["kind"]; title: string; agentId: string; taskId?: string; id?: string }): Conversation {
     const now = nowIso();
     const conv: Conversation = { id: c.id ?? newId("c_"), kind: c.kind, title: c.title, agentId: c.agentId, taskId: c.taskId, createdAt: now, updatedAt: now };
+    // read_at stays empty: everything that arrives in a new conversation is unread until the user looks.
     this.db
       .prepare("insert into conversations(id, kind, title, agent_id, task_id, created_at, updated_at) values (?,?,?,?,?,?,?)")
       .run(conv.id, conv.kind, conv.title, conv.agentId, conv.taskId ?? null, now, now);
@@ -107,10 +108,14 @@ export class Store {
     return r ? convFrom(r) : undefined;
   }
 
-  mainConversation(defaultAgent: string): Conversation {
-    const r = this.db.prepare("select * from conversations where kind = 'main' order by created_at limit 1").get();
+  /**
+   * The agent's one long-lived dialog with the user, created on first use. The dialog of an install from before
+   * per-agent dialogs (id "main") stays with the agent it belongs to, so its history carries on.
+   */
+  agentConversation(agentId: string): Conversation {
+    const r = this.db.prepare("select * from conversations where kind = 'main' and agent_id = ? order by created_at limit 1").get(agentId);
     if (r) return convFrom(r);
-    return this.createConversation({ kind: "main", title: t("conversation.mainTitle"), agentId: defaultAgent, id: "main" });
+    return this.createConversation({ kind: "main", title: agentId, agentId });
   }
 
   listConversations(limit = 100): Conversation[] {
@@ -119,6 +124,25 @@ export class Store {
 
   touchConversation(id: string): void {
     this.db.prepare("update conversations set updated_at = ? where id = ?").run(nowIso(), id);
+  }
+
+  /** The user has seen the conversation up to `at` (a message's createdAt; default: now). The marker only moves forward. */
+  markRead(id: string, at?: string): void {
+    const ms = at === undefined ? Date.now() : Date.parse(at);
+    if (!Number.isFinite(ms)) return;
+    const ts = new Date(Math.min(ms, Date.now())).toISOString();
+    this.db.prepare("update conversations set read_at = ? where id = ? and (read_at is null or read_at < ?)").run(ts, id, ts);
+  }
+
+  /** Finished messages from the agent or the system after the user's read marker. */
+  unreadCount(id: string): number {
+    const r = this.db
+      .prepare(
+        "select count(*) as n from messages m join conversations c on c.id = m.conversation_id " +
+          "where m.conversation_id = ? and m.role != 'user' and m.status != 'streaming' and m.created_at > coalesce(c.read_at, '')",
+      )
+      .get(id) as { n: number };
+    return r.n;
   }
 
   updateConversation(id: string, patch: { title?: string; agentId?: string }): Conversation | undefined {

@@ -37,6 +37,13 @@ const MIGRATIONS: string[] = [
   // Secrets the hub asked for in the chat (values never stored here, only where they went).
   `create table secret_requests(id text primary key, vault_id text not null, title text not null, hint text, link text, plugin_id text, setting text,
     conversation_id text, status text not null, created_at text not null, resolved_at text);`,
+  // One long-lived dialog per agent: find it by agent, and remember what the user has read (unread counts).
+  // History from before counts as read.
+  `
+  alter table conversations add column read_at text;
+  update conversations set read_at = updated_at;
+  create index conversations_kind_agent on conversations(kind, agent_id);
+  `,
 ];
 
 export function openDb(file: string): Db {

@@ -48,7 +48,7 @@ export default {
   "policy.externalNeedsApproval": "external actions need approval",
 
   // chat, tasks, brains
-  "conversation.mainTitle": "Main",
+  "conversation.agentFixed": "An agent's dialog stays with that agent",
   "conversation.newTitle": "New chat",
   "conversation.notFound": "Conversation not found",
   "message.empty": "The message is empty",

@@ -6,6 +6,8 @@ import type { Skill } from "./skills.ts";
 
 export interface PromptContext {
   agent: AgentDef;
+  /** The hub's default agent: its dialog also receives what the user writes in channels (Telegram). */
+  defaultAgent?: boolean;
   timezone: string;
   language: string;
   consoleUrl: string;
@@ -22,7 +24,7 @@ export function buildSystemPrompt(c: PromptContext): string {
   const now = new Intl.DateTimeFormat("ru-RU", { timeZone: c.timezone, dateStyle: "full", timeStyle: "short" }).format(new Date());
   const where = c.task
     ? `You are working on a ${c.background ? "background " : ""}task "${c.task.title}" (id ${c.task.id}, created by ${c.task.createdBy}${c.task.triggerId ? `, trigger ${c.task.triggerId}` : ""}).`
-    : "You are chatting with the user in their main thread (web UI and/or Telegram).";
+    : `You are one of the agents on the user's team, talking with them in your own long-lived dialog (${c.defaultAgent ? "web UI and/or Telegram" : "web UI"}). There are no separate chats: this dialog is your ongoing thread with the user.`;
   const lines: string[] = [];
   if (c.agent.prompt) lines.push(c.agent.prompt.trim(), "");
   lines.push(

@@ -21,14 +21,15 @@ export function createCoreCall(hub: Hub) {
     p = p ?? {};
     switch (method) {
       case "conversations.post": {
-        const conv = p.conversationId ? hub.store.getConversation(p.conversationId) : hub.store.mainConversation(hub.settings.get().defaultAgent);
+        const conv = p.conversationId ? hub.store.getConversation(p.conversationId) : hub.store.agentConversation(hub.settings.get().defaultAgent);
         if (!conv) throw new Error("conversation not found");
         const role = p.role === "assistant" ? "assistant" : "system";
         const m = hub.store.addMessage({ conversationId: conv.id, role, parts: [{ type: "text", text: String(p.text ?? "") }], status: "complete", channel: `plugin:${pluginId}` });
         return { messageId: m.id, conversationId: conv.id };
       }
       case "channels.inbound": {
-        const conv = p.conversationId ? hub.store.getConversation(p.conversationId) : hub.store.mainConversation(hub.settings.get().defaultAgent);
+        // Channels (Telegram) talk to the default agent, in its dialog.
+        const conv = p.conversationId ? hub.store.getConversation(p.conversationId) : hub.store.agentConversation(hub.settings.get().defaultAgent);
         if (!conv) throw new Error("conversation not found");
         const text = String(p.text ?? "").trim();
         if (!text) return { ignored: true };

@@ -1,7 +1,7 @@
-// Global client state: auth/bootstrap, realtime connection, conversations, messages, tasks, agents.
+// Global client state: auth/bootstrap, realtime connection, the team (agents and their dialogs), conversations, messages, tasks.
 
 import { useSyncExternalStore } from "react";
-import type { AgentDef, Catalog, Conversation, Locale, Message, Task, UiEvent, VaultState } from "@openbot/shared";
+import type { AgentDef, Catalog, Conversation, Locale, Message, Task, TeamMember, UiEvent, VaultState } from "@openbot/shared";
 import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
 import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";
@@ -29,6 +29,7 @@ export interface Bootstrap {
   version: string;
   publicUrl: string;
   consoleUrl: string;
+  /** The default agent's dialog (what "/" opens). */
   mainConversationId: string;
   defaultAgent: string;
   timezone: string;
@@ -71,6 +72,8 @@ export const connection = createStore<ConnectionState>("connecting");
 export const conversations = createStore<Conversation[]>([]);
 export const tasks = createStore<Task[] | null>(null);
 export const agents = createStore<AgentDef[] | null>(null);
+/** Each agent's dialog and what happens there (`/api/team`, kept current by "team.updated"). */
+export const team = createStore<TeamMember[] | null>(null);
 export const messages = createStore<Record<string, ConvMessages>>({});
 
 /** Every realtime event from the hub. */
@@ -133,6 +136,7 @@ export async function bootstrap(): Promise<Bootstrap> {
   session.set(b);
   startSocket();
   void refreshConversations();
+  void refreshTeam();
   return b;
 }
 
@@ -157,6 +161,7 @@ export async function logout(): Promise<void> {
   messages.set({});
   tasks.set(null);
   agents.set(null);
+  team.set(null);
   conversations.set([]);
   await showLogin();
 }
@@ -171,6 +176,7 @@ function startSocket(): void {
     onReconnect: () => {
       void refreshBootstrap();
       void refreshConversations();
+      void refreshTeam();
       if (tasks.get()) void refreshTasks();
       for (const id of Object.keys(messages.get())) if (messages.get()[id].loaded) void loadMessages(id, true);
       reconnected.emit();
@@ -242,6 +248,9 @@ function handleEvent(e: UiEvent): void {
     case "conversation.updated":
       conversations.set((list) => sortConversations(upsertById(list, e.data)));
       break;
+    case "team.updated":
+      team.set((list) => (list ? upsertMember(list, e.data) : list));
+      break;
     case "task.updated":
       tasks.set((list) => (list ? upsertById(list, e.data) : list));
       break;
@@ -263,6 +272,7 @@ function handleEvent(e: UiEvent): void {
       break;
     case "agents.updated":
       if (agents.get()) void refreshAgents().catch(() => {});
+      void refreshTeam();
       break;
   }
   hubEvents.emit(e);
@@ -276,13 +286,6 @@ export async function refreshConversations(): Promise<void> {
   } catch {
     /* keep previous */
   }
-}
-
-export async function createChat(title?: string, agentId?: string): Promise<Conversation> {
-  // Without a title the hub names the chat in the request's language.
-  const c = await api.post<Conversation>("/api/conversations", { ...(title ? { title } : {}), ...(agentId ? { agentId } : {}) });
-  conversations.set((list) => sortConversations(upsertById(list, c)));
-  return c;
 }
 
 export async function updateConversation(id: string, patch: { title?: string; agentId?: string }): Promise<Conversation> {
@@ -331,6 +334,40 @@ export async function sendMessage(id: string, text: string): Promise<void> {
 export async function interrupt(id: string): Promise<boolean> {
   const r = await api.post<{ interrupted: boolean }>(`/api/conversations/${encodeURIComponent(id)}/interrupt`, {});
   return !!r?.interrupted;
+}
+
+// ---------- team ----------
+
+function upsertMember(list: TeamMember[], m: TeamMember): TeamMember[] {
+  const i = list.findIndex((x) => x.agentId === m.agentId);
+  if (i < 0) return [...list, m];
+  const next = list.slice();
+  next[i] = m;
+  return next;
+}
+
+export async function refreshTeam(): Promise<TeamMember[] | null> {
+  try {
+    const list = await api.get<TeamMember[]>("/api/team");
+    team.set(list);
+    return list;
+  } catch {
+    return team.get();
+  }
+}
+
+export function ensureTeam(): void {
+  if (!team.get()) void refreshTeam();
+}
+
+/** The user has seen the dialog up to the message created at `at`. */
+export async function markRead(conversationId: string, at: string): Promise<void> {
+  team.set((list) => (list ? list.map((m) => (m.conversationId === conversationId && m.unread ? { ...m, unread: 0 } : m)) : list));
+  try {
+    await api.post(`/api/conversations/${encodeURIComponent(conversationId)}/read`, { at });
+  } catch {
+    /* the next team update corrects the count */
+  }
 }
 
 // ---------- tasks & agents ----------

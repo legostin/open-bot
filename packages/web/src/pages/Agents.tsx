@@ -1,13 +1,16 @@
 // Agents: list, create (name + avatar first) / edit, delete.
 
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { AgentAvatar as AgentAvatarValue, AgentDef } from "@openbot/shared";
 import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar } from "@openbot/shared/avatar";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { slugify } from "../lib/format";
-import { agents, refreshAgents } from "../state/app";
+import { agentForPath, agentPath } from "../lib/team";
+import { agents, refreshAgents, session } from "../state/app";
+import { clearPanelIntent, closePanel, panel } from "../state/panel";
 import { toast } from "../state/toast";
 import { t, tRich, type MessageKey } from "../i18n";
 import { AgentAvatar, AVATAR_HEX } from "../components/AgentAvatar";
@@ -23,8 +26,13 @@ const SOURCE: Record<string, MessageKey> = { builtin: "agents.source.builtin", u
 
 export function AgentsPage() {
   const list = useStore(agents);
+  const p = useStore(panel);
+  const s = useStore(session);
+  const [loc, navigate] = useLocation();
   const [error, setError] = useState<string>();
   const [editing, setEditing] = useState<AgentDef | "new" | null>(null);
+  // Opened by "Add agent": once created, the new team member's dialog opens.
+  const [openDialog, setOpenDialog] = useState(false);
   const [deleting, setDeleting] = useState<AgentDef | null>(null);
 
   const load = () => {
@@ -32,6 +40,26 @@ export function AgentsPage() {
     refreshAgents().catch((e) => setError(errorText(e)));
   };
   useEffect(load, []);
+
+  // Requests from outside the panel: "Add agent" (sidebar, palette) and an agent's settings (dialog header).
+  useEffect(() => {
+    const intent = p.intent;
+    if (!intent) return;
+    if (intent.kind === "agent.new") {
+      setEditing("new");
+      setOpenDialog(true);
+    } else {
+      if (!list) return;
+      const a = list.find((x) => x.id === intent.agentId);
+      if (a) setEditing(a);
+    }
+    clearPanelIntent();
+  }, [p.intent, list]);
+
+  const closeEditor = () => {
+    setEditing(null);
+    setOpenDialog(false);
+  };
 
   return (
     <Page
@@ -84,7 +112,17 @@ export function AgentsPage() {
         ))}
       </div>
 
-      {editing && <AgentEditor agent={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <AgentEditor
+          agent={editing === "new" ? undefined : editing}
+          onClose={closeEditor}
+          onSaved={(a) => {
+            if (editing !== "new" || !openDialog) return;
+            navigate(agentPath(a.id, s?.defaultAgent));
+            closePanel();
+          }}
+        />
+      )}
       <Modal
         open={!!deleting}
         onClose={() => setDeleting(null)}
@@ -100,6 +138,8 @@ export function AgentsPage() {
                 try {
                   await api.del(`/api/agents/${encodeURIComponent(a.id)}`);
                   toast(t("agents.deleted", { name: a.name }), "success");
+                  // Its dialog stays on the hub, but it is no longer on the team: leave it.
+                  if (agentForPath(loc, s?.defaultAgent) === a.id) navigate("/");
                   await refreshAgents();
                 } catch (e) {
                   toast(errorText(e), "error");
