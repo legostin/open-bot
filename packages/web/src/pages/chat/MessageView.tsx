@@ -20,6 +20,8 @@ import { PluginSetupCard, SecretRequestCard } from "../../components/SecretCards
 import { AgentDraftCard } from "./AgentDraftCard";
 import { BrainLoginCard } from "../../components/BrainLoginCard";
 import { BrainSetupCard } from "../../components/BrainSetupCard";
+import { ImagesCard } from "./ImagesCard";
+import { MapCard } from "./MapCard";
 import { t, type MessageKey } from "../../i18n";
 
 const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
@@ -188,6 +190,10 @@ function Parts({ message }: { message: Message }) {
             return <ErrorPart key={it.key} message={p.message} />;
           case "attachment":
             return <Attachment key={it.key} part={p} />;
+          case "images":
+            return <ImagesCard key={it.key} items={p.items} />;
+          case "map":
+            return <MapCard key={it.key} part={p} />;
           case "secret_request":
             return <SecretRequestCard key={it.key} part={p} />;
           case "plugin_setup":
