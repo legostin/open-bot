@@ -31,9 +31,12 @@ describe("@mention autocomplete", () => {
     expect(filterMentions(members, "ou").map((o) => o.id)).toEqual(["scout"]);
     expect(filterMentions(members, "a")).toEqual([{ id: "assistant", name: "Owl" }, { id: "research-lead", name: "Research Lead" }, { id: "all", name: "all", all: true }]);
     // The start of the Russian "@all" offers everyone too.
-    expect(filterMentions(members, "\u0432\u0441")).toEqual([{ id: "all", name: "all", all: true }]);
+    expect(filterMentions(members, "\u0432\u0441")).toEqual([{ id: "\u0432\u0441\u0435", name: "\u0432\u0441\u0435", all: true }]);
     expect(filterMentions(members, "zzz")).toEqual([]);
     expect(filterMentions(members.slice(0, 1), "")).toEqual([{ id: "assistant", name: "Owl" }]);
+    // In Russian its own word comes first; "@a…" still offers "@all".
+    expect(filterMentions(members, "", 8, "\u0432\u0441\u0435").at(-1)).toEqual({ id: "\u0432\u0441\u0435", name: "\u0432\u0441\u0435", all: true });
+    expect(filterMentions(members, "al", 8, "\u0432\u0441\u0435").at(-1)).toEqual({ id: "all", name: "all", all: true });
   });
 
   it("inserts @id and a space, replacing the word under the caret", () => {

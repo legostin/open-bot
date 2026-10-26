@@ -90,7 +90,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
   }, [query !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   const suggestions = query !== null && !dismissed ? filterCommands(commands, query) : [];
   const mention = isGroup ? mentionQuery(text, caret) : null;
-  const mentions = mention && !dismissed ? filterMentions(mentionable, mention.query) : [];
+  const mentions = mention && !dismissed ? filterMentions(mentionable, mention.query, 8, t("composer.everyoneMention")) : [];
   // One list at a time: "/command" only at the very start, "@member" anywhere.
   const options = suggestions.length || mentions.length;
   const active = Math.min(sel, Math.max(0, options - 1));

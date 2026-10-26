@@ -19,9 +19,10 @@ export function mentionQuery(text: string, caret: number): { start: number; quer
 
 /**
  * Members matching the query: id or name (or a word of it) starting with it first, then the ones containing it; "@all"
- * last when it matches too. An empty query offers everyone.
+ * last when it matches too. An empty query offers everyone. `everyone` is the word for "@all" in the UI's language
+ * ("all" or its Russian form); the one the user started typing wins.
  */
-export function filterMentions(members: readonly Mentionable[], query: string, limit = 8): MentionOption[] {
+export function filterMentions(members: readonly Mentionable[], query: string, limit = 8, everyone = "all"): MentionOption[] {
   const q = query.toLocaleLowerCase();
   const starts: MentionOption[] = [];
   const contains: MentionOption[] = [];
@@ -32,7 +33,9 @@ export function filterMentions(members: readonly Mentionable[], query: string, l
     else if (id.includes(q) || name.includes(q)) contains.push({ id: m.id, name: m.name });
   }
   const out = [...starts, ...contains].slice(0, limit);
-  if (members.length > 1 && MENTION_ALL.some((a) => a.startsWith(q))) out.push({ id: MENTION_ALL[0], name: MENTION_ALL[0], all: true });
+  const words = [...MENTION_ALL].sort((a, b) => (a === everyone ? -1 : b === everyone ? 1 : 0));
+  const all = words.find((a) => a.startsWith(q));
+  if (members.length > 1 && all) out.push({ id: all, name: all, all: true });
   return out;
 }
 

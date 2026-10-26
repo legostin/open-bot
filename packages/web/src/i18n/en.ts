@@ -162,6 +162,7 @@ export default {
   "composer.mentions": "Members",
   "composer.everyone": "Everyone",
   "composer.everyoneHint": "each member answers in turn",
+  "composer.everyoneMention": "all",
   "message.assistant": "Assistant",
   "message.typing": "The agent is typing",
   "message.approval.title": "Approval",

@@ -162,6 +162,7 @@ export default {
   "composer.mentions": "Участники",
   "composer.everyone": "Все",
   "composer.everyoneHint": "ответят по очереди",
+  "composer.everyoneMention": "все",
   "message.assistant": "Ассистент",
   "message.typing": "Агент печатает",
   "message.approval.title": "Подтверждение",
