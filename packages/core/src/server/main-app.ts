@@ -616,6 +616,10 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       const p = String((req.query as any).path ?? "");
       const file = safeFile(join(cfg.dataDir, "workspaces"), p);
       if (!file) throw new HttpError(404, "file.notFound");
+      // Files come from agents, web pages and whoever writes to the user: one opened in a tab (a page, an SVG)
+      // gets an opaque origin without script. A PDF keeps the browser's own viewer, which never runs as the hub.
+      reply.header("x-content-type-options", "nosniff");
+      if (!/\.pdf$/i.test(file)) reply.header("content-security-policy", "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'");
       return sendFile(reply, file, { download: (req.query as any).download === "1" });
     });
 

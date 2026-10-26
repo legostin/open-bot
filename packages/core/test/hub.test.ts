@@ -1,6 +1,7 @@
 // End-to-end tests of the hub with a scripted brain plugin (test/fixtures/plugins/fakebrain).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
+import { request } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -184,11 +185,39 @@ describe("hub (integration)", () => {
     expect(await refused(c.id, { attachments: [`assistant/${c.id}/attachments/../../x`] })).toBe("This file is not an attachment of the conversation");
     expect(await refused(c.id, { attachments: Array.from({ length: 11 }, (_, i) => `p${i}`) })).toBe("At most 10 files per message");
     expect(await refused(c.id, { text: "  " })).toBe("The message is empty");
-    const big = await web.upload(`/api/conversations/${c.id}/attachments?name=big.bin`, Buffer.alloc(25 * 1024 * 1024 + 1));
+    // The hub answers from the declared length, before the body: send its start only.
+    const big = await new Promise<{ status: number; json: any }>((resolve, reject) => {
+      const req = request(
+        `${hub.config.publicUrl}/api/conversations/${c.id}/attachments?name=big.bin`,
+        { method: "POST", headers: { "content-type": "application/octet-stream", "content-length": String(25 * 1024 * 1024 + 1), origin: web.origin, cookie: web.cookie, "x-csrf": web.csrf } },
+        (res) => {
+          let body = "";
+          res.on("data", (d) => (body += d));
+          res.on("end", () => {
+            req.destroy();
+            resolve({ status: res.statusCode!, json: JSON.parse(body) });
+          });
+        },
+      );
+      req.on("error", reject);
+      req.write(Buffer.alloc(1024));
+    });
     expect(big).toEqual({ status: 413, json: { error: "The file is larger than 25 MB" } });
     expect((await web.upload(`/api/conversations/${c.id}/attachments?name=x.txt`, Buffer.from("x"), { "x-csrf": "wrong" })).status).toBe(403);
     expect((await web.upload(`/api/conversations/${c.id}/attachments?name=x.txt`, Buffer.alloc(0))).json.error).toBe("The file is empty");
     expect((await web.upload("/api/conversations/nope/attachments?name=x.txt", Buffer.from("x"))).status).toBe(404);
+  });
+
+  it("serves workspace files sandboxed: an uploaded page cannot run script on the hub's origin", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "page" });
+    const page = (await web.upload(`/api/conversations/${c.id}/attachments?name=evil.html`, Buffer.from("<script>fetch('/api/bootstrap')</script>"))).json;
+    const r = await fetch(`${hub.config.publicUrl}/api/files?path=${encodeURIComponent(page.path)}`, { headers: { cookie: web.cookie } });
+    expect(r.headers.get("content-security-policy")).toMatch(/^sandbox; default-src 'none'/);
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+    const pdf = (await web.upload(`/api/conversations/${c.id}/attachments?name=doc.pdf`, Buffer.from("%PDF-1.4"))).json;
+    const p = await fetch(`${hub.config.publicUrl}/api/files?path=${encodeURIComponent(pdf.path)}`, { headers: { cookie: web.cookie } });
+    expect(p.headers.get("content-type")).toBe("application/pdf");
+    expect(p.headers.get("content-security-policy")).toBeNull();
   });
 
   it("takes a channel's files inline (a Telegram voice note)", async () => {
