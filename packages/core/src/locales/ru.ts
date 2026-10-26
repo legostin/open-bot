@@ -47,7 +47,7 @@ export default {
   "policy.externalNeedsApproval": "внешнее действие требует подтверждения",
 
   // chat, tasks, brains
-  "conversation.mainTitle": "Главный",
+  "conversation.agentFixed": "Диалог агента нельзя передать другому агенту",
   "conversation.newTitle": "Новый чат",
   "conversation.notFound": "Переписка не найдена",
   "message.empty": "Пустое сообщение",

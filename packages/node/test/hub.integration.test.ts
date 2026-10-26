@@ -215,7 +215,7 @@ describe("remote brain session", () => {
   });
 
   it("gives the machine's brain a working MCP bridge to the hub", async () => {
-    const conv = hub.store.mainConversation("assistant");
+    const conv = hub.store.agentConversation("assistant");
     const { row, token } = hub.store.createSession({ conversationId: conv.id, agentId: "assistant", brainRef: `claude-code@${machineId}`, background: false });
     const handle = await hub.brains.create(`claude-code@${machineId}`, { ...opts(row.id, "assistant/c_mcp"), mcp: { url: "http://unused.invalid/mcp", token, bridgeCommand: [] } });
     const stateDir = join(nodeHomeDir, "brains", "claude-code", "sessions", row.id.replace(/[^\w-]/g, "_"));

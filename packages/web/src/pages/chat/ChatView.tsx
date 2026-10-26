@@ -1,4 +1,4 @@
-// A conversation: top bar (agent switcher, title), scrolling message list with history loading, composer.
+// A conversation: top bar (agent, title), scrolling message list with history loading, composer.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, Check, Pencil, X } from "lucide-react";
@@ -8,7 +8,7 @@ import { agents, conversations, ensureAgents, loadMessages, loadOlder, updateCon
 import { toast } from "../../state/toast";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
 import { TopBar } from "../../components/Layout";
-import { AgentSwitcher } from "./AgentSwitcher";
+import { AgentHeader } from "./AgentHeader";
 import { t } from "../../i18n";
 import { MessageView } from "./MessageView";
 import { Composer } from "./Composer";
@@ -118,7 +118,7 @@ export function ChatView({
     <div className="flex h-full min-w-0 flex-1 flex-col">
       {header && (
         <TopBar>
-          {meta && <AgentSwitcher conversationId={conversationId} agentId={meta.agentId} readOnly={meta.kind === "task"} />}
+          {meta && <AgentHeader agentId={meta.agentId} settings={meta.kind !== "task"} />}
           <span className="hidden text-border sm:inline">/</span>
           <div className="hidden min-w-0 flex-1 text-sm text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
         </TopBar>

@@ -1,12 +1,15 @@
 // In-process event bus. Web clients and plugin subscribers are attached by the server and plugin host.
 
-import type { UiEvent } from "@openbot/shared";
+import type { TeamMember, UiEvent } from "@openbot/shared";
 
 export type BusEvents = {
   "message.created": any;
   "message.updated": any;
   "message.delta": { id: string; conversationId: string; delta: string };
   "conversation.updated": any;
+  /** A turn started or ended in a conversation. */
+  "conversation.activity": { conversationId: string; running: boolean };
+  "team.updated": TeamMember;
   "task.updated": any;
   "notification.created": any;
   "notification.feedback": any;
@@ -64,6 +67,7 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "message.updated":
     case "message.delta":
     case "conversation.updated":
+    case "team.updated":
     case "task.updated":
     case "notification.created":
     case "plugins.updated":

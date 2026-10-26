@@ -124,6 +124,58 @@ describe("hub (integration)", () => {
     expect(m.brainRef).toBe("fake@local");
   });
 
+  it("routes channel messages to the default agent's dialog and shows it in the team", async () => {
+    const seen: any[] = [];
+    const off = hub.bus.on("team.updated", (m) => seen.push(m));
+    try {
+      const r = (await createCoreCall(hub)("fakebrain", "channels.inbound", { channel: "test", text: "from the channel" })) as any;
+      expect(r.conversationId).toBe(conv);
+      expect(hub.store.agentConversation("assistant").id).toBe(conv);
+      await lastReply(conv, /fake heard: from the channel/);
+      await until(() => {
+        const mine = seen.filter((m) => m.conversationId === conv);
+        return mine.some((m) => m.running) && mine.at(-1)?.running === false;
+      }, "the turn to start and end");
+
+      const team: any[] = await web.req("GET", "/api/team");
+      const me = team.find((m) => m.agentId === "assistant");
+      expect(me).toMatchObject({ conversationId: conv, running: false, lastMessage: { role: "assistant", text: "fake heard: from the channel" } });
+      expect(me.unread).toBeGreaterThan(0);
+      await web.req("POST", `/api/conversations/${conv}/read`, {});
+      expect(((await web.req("GET", "/api/team")) as any[]).find((m) => m.agentId === "assistant").unread).toBe(0);
+      expect((await web.raw("POST", "/api/conversations/nope/read", {})).status).toBe(404);
+    } finally {
+      off();
+    }
+  });
+
+  it("gives each agent its own dialog, keeps it when the agent leaves", async () => {
+    await web.req("PUT", "/api/agents/scout", { name: "Scout", description: "Looks around", brains: ["fake@local"], prompt: "Look around." });
+    const scout = ((await web.req("GET", "/api/team")) as any[]).find((m) => m.agentId === "scout");
+    expect(scout.conversationId).not.toBe(conv);
+    expect(scout.unread).toBe(0);
+
+    // The agent's proactive messages land in its own dialog.
+    await hub.notifier.notify({ level: "ask", title: "scout found something", body: "details", agentId: "scout" });
+    const msgs: any[] = await web.req("GET", `/api/conversations/${scout.conversationId}/messages`);
+    expect(msgs.some((m) => m.parts.some((p: any) => p.type === "notification" && p.title === "scout found something"))).toBe(true);
+    expect(((await web.req("GET", "/api/team")) as any[]).find((m) => m.agentId === "scout").unread).toBe(1);
+
+    // Talking in the dialog runs that agent, and the dialog cannot be handed to another agent.
+    await web.req("POST", `/api/conversations/${scout.conversationId}/messages`, { text: "hi scout" });
+    expect((await lastReply(scout.conversationId, /fake heard: hi scout/)).agentId).toBe("scout");
+    expect((await web.raw("PATCH", `/api/conversations/${scout.conversationId}`, { agentId: "assistant" })).status).toBe(400);
+
+    // "/" follows the default agent; deleting it falls back to the assistant.
+    await web.req("PATCH", "/api/settings", { defaultAgent: "scout" });
+    expect((await web.req("GET", "/api/bootstrap")).mainConversationId).toBe(scout.conversationId);
+    await web.req("DELETE", "/api/agents/scout");
+    expect((await web.req("GET", "/api/settings")).defaultAgent).toBe("assistant");
+    expect((await web.req("GET", "/api/bootstrap")).mainConversationId).toBe(conv);
+    expect(((await web.req("GET", "/api/team")) as any[]).some((m) => m.agentId === "scout")).toBe(false);
+    expect(((await web.req("GET", `/api/conversations/${scout.conversationId}/messages`)) as any[]).length).toBeGreaterThan(0);
+  });
+
   it("serves tools to brains over MCP with per-session tokens", async () => {
     expect((await web.raw("POST", "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }, { authorization: "Bearer nope" })).status).toBe(401);
     await web.req("POST", `/api/conversations/${conv}/messages`, { text: 'CALL notify {"level":"silent","title":"from-mcp"}' });

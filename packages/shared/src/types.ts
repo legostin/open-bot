@@ -140,12 +140,27 @@ export interface Message {
 
 export interface Conversation {
   id: string;
+  /** "main": an agent's long-lived dialog with the user (one per agent); "task": a task's thread; "chat": an older ad-hoc chat. */
   kind: "main" | "task" | "chat";
   title: string;
   agentId: string;
   taskId?: string;
   createdAt: ISODate;
   updatedAt: ISODate;
+}
+
+/** An agent of the user's team as the sidebar shows it: its long-lived dialog and what happens there. */
+export interface TeamMember {
+  agentId: string;
+  /** The agent's dialog (kind "main"). */
+  conversationId: string;
+  /** The latest message worth a preview, as short plain text. */
+  lastMessage?: { role: MessageRole; text: string; createdAt: ISODate };
+  lastActivityAt: ISODate;
+  /** A turn is in progress in the dialog. */
+  running: boolean;
+  /** Messages from the agent (or the system) the user has not seen yet. */
+  unread: number;
 }
 
 // ---------- Tasks ----------
@@ -366,6 +381,7 @@ export type UiEvent =
   | { type: "message.delta"; data: { id: string; conversationId: string; delta: string } }
   | { type: "message.updated"; data: Message }
   | { type: "conversation.updated"; data: Conversation }
+  | { type: "team.updated"; data: TeamMember }
   | { type: "task.updated"; data: Task }
   | { type: "notification.created"; data: Notification }
   | { type: "approval.pending"; data: { count: number } }

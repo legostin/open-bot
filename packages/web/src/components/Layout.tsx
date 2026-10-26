@@ -1,18 +1,20 @@
-// App shell, kept minimal: the conversation list on the left (a drawer on phones), the current view, and the
-// settings panel beside it. Views put their own slim top bar (TopBar) with the shared header actions.
+// App shell, kept minimal: the team on the left (each agent with its dialog; a drawer on phones), the current view,
+// and the settings panel beside it. Views put their own slim top bar (TopBar) with the shared header actions.
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, PanelRight, Settings, X } from "lucide-react";
+import { ListChecks, Menu, PanelRight, Settings, X } from "lucide-react";
 import { useStore } from "../lib/store";
-import { session } from "../state/app";
+import { ACTIVE_STATUSES } from "../lib/format";
+import { agentForPath } from "../lib/team";
+import { ensureTasks, session, tasks } from "../state/app";
 import { openPanel, panel, togglePanel } from "../state/panel";
 import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlot } from "../plugins/slots";
 import { cx, IconButton } from "./ui";
 import { ApprovalsBadge, ConnectionBadge, VaultBadge } from "./StatusBadges";
 import { CommandPalette } from "./CommandPalette";
 import { SettingsPanel } from "./SettingsPanel";
-import { ConversationList } from "../pages/chat/ConversationList";
+import { TeamList } from "../pages/chat/TeamList";
 import { t } from "../i18n";
 
 interface Shell {
@@ -37,28 +39,49 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const [loc] = useLocation();
   const s = useStore(session);
   const p = useStore(panel);
-  const active = loc.startsWith("/chat/") ? loc.slice(6) : loc.startsWith("/tasks/") ? "" : (s?.mainConversationId ?? "");
+  const taskList = useStore(tasks);
+  useEffect(() => ensureTasks(), []);
+  const activeTasks = (taskList ?? []).filter((x) => ACTIVE_STATUSES.includes(x.status)).length;
+  const tasksOpen = p.open && p.section === "tasks";
+  const item = (on: boolean) =>
+    cx("flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition", on ? "bg-accent-soft text-accent-text" : "text-muted hover:bg-surface-2 hover:text-fg");
   return (
     <>
       <div className="min-h-0 flex-1">
-        <ConversationList activeId={active} onNavigate={onNavigate} />
+        <TeamList activeAgentId={agentForPath(loc, s?.defaultAgent)} onNavigate={onNavigate} />
       </div>
       <div className="flex flex-col gap-2 px-3 empty:hidden">
         <PluginSidebarItems />
         <SidebarPanels />
       </div>
-      <div className="border-t border-border p-2">
+      <div className="flex flex-col gap-0.5 border-t border-border p-2">
         <button
           type="button"
           onClick={() => {
-            togglePanel();
+            if (tasksOpen) togglePanel();
+            else openPanel("tasks");
             onNavigate?.();
           }}
-          aria-pressed={p.open}
-          className={cx(
-            "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition",
-            p.open ? "bg-accent-soft text-accent-text" : "text-muted hover:bg-surface-2 hover:text-fg",
+          aria-pressed={tasksOpen}
+          className={item(tasksOpen)}
+        >
+          <ListChecks className="size-[18px]" />
+          <span className="min-w-0 flex-1 truncate">{t("nav.tasks")}</span>
+          {activeTasks > 0 && (
+            <span className="rounded-full bg-info-soft px-1.5 text-[11px] font-semibold text-info" title={t("team.activeTasks", { n: activeTasks })}>
+              {activeTasks}
+            </span>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (p.open && !tasksOpen) togglePanel();
+            else openPanel("home");
+            onNavigate?.();
+          }}
+          aria-pressed={p.open && !tasksOpen}
+          className={item(p.open && !tasksOpen)}
         >
           <Settings className="size-[18px]" />
           {t("nav.settings")}

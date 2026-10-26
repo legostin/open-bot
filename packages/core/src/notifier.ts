@@ -56,10 +56,21 @@ export class Notifier {
   store: Store;
   sign: (payload: string) => string;
   publicUrl: string;
+  hasAgent: (id: string) => boolean;
   private digestTimer?: NodeJS.Timeout;
   private lastDigestKey = "";
 
-  constructor(d: { db: Db; bus: EventBus; settings: Settings; channels: ChannelRegistry; hooks: HookRegistry; store: Store; sign: (p: string) => string; publicUrl: string }) {
+  constructor(d: {
+    db: Db;
+    bus: EventBus;
+    settings: Settings;
+    channels: ChannelRegistry;
+    hooks: HookRegistry;
+    store: Store;
+    sign: (p: string) => string;
+    publicUrl: string;
+    hasAgent: (id: string) => boolean;
+  }) {
     this.db = d.db;
     this.bus = d.bus;
     this.settings = d.settings;
@@ -68,6 +79,12 @@ export class Notifier {
     this.store = d.store;
     this.sign = d.sign;
     this.publicUrl = d.publicUrl;
+    this.hasAgent = d.hasAgent;
+  }
+
+  /** Whose dialog a notification goes to: the agent that raised it, or the default agent. */
+  private recipient(agentId: string | undefined): string {
+    return agentId && this.hasAgent(agentId) ? agentId : this.settings.get().defaultAgent;
   }
 
   feedbackToken(id: string, value: string): string {
@@ -137,9 +154,11 @@ export class Notifier {
 
   private async deliver(n: Notification): Promise<void> {
     const s = this.settings.get();
-    const main = this.store.mainConversation(s.defaultAgent);
+    // A proactive message lands in the dialog of the agent that raised it.
+    const agentId = this.recipient(n.agentId);
+    const dialog = this.store.agentConversation(agentId);
     this.store.addMessage({
-      conversationId: main.id,
+      conversationId: dialog.id,
       role: "assistant",
       parts: [{ type: "notification", level: n.level, title: n.title, body: n.body }],
       status: "complete",
@@ -150,7 +169,7 @@ export class Notifier {
     await this.channels.broadcast({
       kind: "notification",
       text: `${n.title}\n\n${truncate(n.body, 3500)}`,
-      link: `${this.publicUrl}/${n.taskId ? `tasks/${n.taskId}` : ""}`,
+      link: `${this.publicUrl}/${n.taskId ? `tasks/${n.taskId}` : `agent/${encodeURIComponent(agentId)}`}`,
       notificationId: n.id,
       silent: quiet,
       feedback: n.triggerId
@@ -187,9 +206,10 @@ export class Notifier {
     if (rows.length === 0) return 0;
     const s = this.settings.get();
     const body = rows.map((n) => `• ${n.title}${n.body ? ` — ${truncate(n.body.replace(/\s+/g, " "), 300)}` : ""}`).join("\n");
-    const main = this.store.mainConversation(s.defaultAgent);
+    // The digest gathers the whole team's items: it goes to the default agent's dialog.
+    const dialog = this.store.agentConversation(s.defaultAgent);
     this.store.addMessage({
-      conversationId: main.id,
+      conversationId: dialog.id,
       role: "assistant",
       parts: [{ type: "notification", level: "digest", title: t("notify.digestTitle", { count: rows.length }), body }],
       status: "complete",

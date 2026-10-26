@@ -59,6 +59,17 @@ export function formatTime(iso: string | undefined): string {
   return iso ? formatDate(iso, { hour: "2-digit", minute: "2-digit" }) : "";
 }
 
+/** Compact time for lists: the time today, the weekday within the last week, otherwise the date. */
+export function shortTime(iso: string | undefined, now = new Date()): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  if (d.toDateString() === now.toDateString()) return formatTime(iso);
+  const age = now.getTime() - d.getTime();
+  if (age > 0 && age < 6 * 86_400_000) return formatDate(iso, { weekday: "short" });
+  return formatDate(iso, { day: "numeric", month: "short" });
+}
+
 // Transliteration for ids made from Cyrillic names: U+0430..U+044F in alphabet order, then U+0451 (yo).
 // Built from code points so the source stays ASCII (Cyrillic lives only in i18n/ru.ts).
 const CYRILLIC_LATIN = ["a", "b", "v", "g", "d", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "h", "c", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"];

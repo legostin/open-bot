@@ -24,6 +24,7 @@ import { BrainRegistry } from "./brains.ts";
 import { ChannelRegistry } from "./channels.ts";
 import { Notifier } from "./notifier.ts";
 import { SessionRunner } from "./runner.ts";
+import { Team } from "./team.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
 import { McpClientManager } from "./mcp/client.ts";
@@ -56,6 +57,7 @@ export class Hub {
   channels: ChannelRegistry;
   notifier: Notifier;
   runner: SessionRunner;
+  team: Team;
   plugins: PluginHost;
   mcp: McpEndpoint;
   mcpClients: McpClientManager;
@@ -93,6 +95,7 @@ export class Hub {
       store: this.store,
       sign: (p) => this.approvals.sign(p),
       publicUrl: config.publicUrl,
+      hasAgent: (id) => !!this.agents.get(id),
     });
     this.gateway = new ToolGateway({
       store: this.store,
@@ -129,6 +132,7 @@ export class Hub {
       claudePluginDirs: () => this.plugins.enabledLayouts().filter((l) => l.formats.includes("claude") && !l.manifest.builtin).map((l) => l.dir),
       machineName: (id) => this.machines.name(id),
     });
+    this.team = new Team({ store: this.store, agents: this.agents, bus: this.bus, isRunning: (id) => this.runner.isRunning(id) });
     this.mcpClients = new McpClientManager({ config, registry: this.tools, vault: this.vault, audit: this.audit, egress: this.egress });
     this.plugins = new PluginHost({
       config,
@@ -194,10 +198,13 @@ export class Hub {
     return saved;
   }
 
+  /** The agent leaves the team (and the sidebar); its dialog and messages stay in the database. */
   removeAgent(id: string, actor: string): void {
     if (id === "assistant" && this.agents.get(id)?.source !== "user") throw new LocalizedError("agent.builtinCannotDelete", undefined, 400);
     this.agents.remove(id);
     this.audit.append(actor, "agent.remove", id);
+    // Channels and "/" need a default agent that exists; the built-in assistant always does.
+    if (this.settings.get().defaultAgent === id && !this.agents.get(id)) this.updateSettings({ defaultAgent: "assistant" }, "core");
     this.bus.emit("agents.updated", {});
   }
 
@@ -251,7 +258,7 @@ export class Hub {
     await this.egress.listen(cfg.egressPort);
     this.plugins.discover();
     this.started = true;
-    this.store.mainConversation(this.settings.get().defaultAgent);
+    this.store.agentConversation(this.settings.get().defaultAgent);
 
     if (opts.listen !== false) {
       this.mainApp = await buildMainApp(this);

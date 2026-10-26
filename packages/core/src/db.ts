@@ -34,6 +34,13 @@ const MIGRATIONS: string[] = [
   `,
   // Vault items the user granted a plugin beyond its manifest (security console only).
   `alter table plugins add column extra_vault text not null default '[]';`,
+  // One long-lived dialog per agent: find it by agent, and remember what the user has read (unread counts).
+  // History from before counts as read.
+  `
+  alter table conversations add column read_at text;
+  update conversations set read_at = updated_at;
+  create index conversations_kind_agent on conversations(kind, agent_id);
+  `,
 ];
 
 export function openDb(file: string): Db {

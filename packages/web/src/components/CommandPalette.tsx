@@ -1,17 +1,18 @@
-// Ctrl/Cmd+K command palette: settings sections, quick actions and plugin commands.
+// Ctrl/Cmd+K command palette: the team, settings sections, quick actions and plugin commands.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { CornerDownLeft, Search } from "lucide-react";
 import { createStore, useStore } from "../lib/store";
-import { createChat, logout, session } from "../state/app";
+import { agentPath } from "../lib/team";
+import { agents, ensureAgents, logout, session } from "../state/app";
 import { toast } from "../state/toast";
 import { usePluginRegistry } from "../plugins/slots";
 import { Icon } from "./icon";
 import { cx } from "./ui";
 import { SECTIONS } from "./nav";
-import { openPanel } from "../state/panel";
+import { addAgent, openPanel } from "../state/panel";
 import { t } from "../i18n";
 
 const open = createStore(false);
@@ -45,6 +46,7 @@ export function CommandPalette() {
   const [, navigate] = useLocation();
   const { routes, commands } = usePluginRegistry();
   const s = useStore(session);
+  const agentList = useStore(agents);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -63,6 +65,7 @@ export function CommandPalette() {
 
   useEffect(() => {
     if (isOpen) {
+      ensureAgents();
       setQ("");
       setSel(0);
       setTimeout(() => input.current?.focus(), 0);
@@ -73,9 +76,10 @@ export function CommandPalette() {
     const actions = t("palette.group.actions");
     const goTo = t("palette.group.goTo");
     const out: Item[] = [
-      { id: "new-chat", title: t("chat.newChat"), group: actions, icon: "plus", run: async () => navigate(`/chat/${(await createChat()).id}`) },
+      { id: "add-agent", title: t("team.add"), group: actions, icon: "plus", run: addAgent },
       { id: "new-task", title: t("tasks.new"), group: actions, icon: "list-todo", run: () => navigate("/tasks?new=1") },
     ];
+    for (const a of agentList ?? []) out.push({ id: `agent:${a.id}`, title: a.name, group: t("palette.group.team"), icon: "bot", run: () => navigate(agentPath(a.id, s?.defaultAgent)) });
     out.push({ id: "settings", title: t("nav.settings"), group: goTo, icon: "settings", run: () => openPanel("home") });
     for (const n of SECTIONS) out.push({ id: `section:${n.id}`, title: t(n.label), group: goTo, run: () => openPanel(n.id), icon: undefined });
     for (const r of routes)
@@ -87,7 +91,7 @@ export function CommandPalette() {
     }
     out.push({ id: "logout", title: t("common.logout"), group: actions, icon: "power", run: () => logout() });
     return out;
-  }, [routes, commands, s, navigate]);
+  }, [routes, commands, s, agentList, navigate]);
 
   const filtered = useMemo(() => filterItems(items, q), [items, q]);
 
