@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { api, errorText } from "../lib/api";
 import { hubEvents } from "../state/app";
+import { locale, t, type MessageKey } from "../i18n";
 import { Badge, EmptyState, ErrorNote, Input, Loading, Page, Segmented } from "../components/ui";
 
 interface Skill {
@@ -26,11 +27,14 @@ interface Tool {
 
 type Tab = "skills" | "commands" | "tools";
 
-const EFFECT: Record<Tool["effect"], { label: string; tone: "success" | "info" | "warning" }> = {
-  read: { label: "чтение", tone: "success" },
-  "local-write": { label: "локальная запись", tone: "info" },
-  external: { label: "внешнее действие", tone: "warning" },
+const EFFECT: Record<Tool["effect"], { label: MessageKey; tone: "success" | "info" | "warning" }> = {
+  read: { label: "skills.effect.read", tone: "success" },
+  "local-write": { label: "skills.effect.localWrite", tone: "info" },
+  external: { label: "skills.effect.external", tone: "warning" },
 };
+
+const TAB_LABELS: Record<Tab, MessageKey> = { skills: "skills.tab.skills", commands: "skills.tab.commands", tools: "skills.tab.tools" };
+const EMPTY: Record<Tab, MessageKey> = { skills: "skills.empty.skills", commands: "skills.empty.commands", tools: "skills.empty.tools" };
 
 export function SkillsPage() {
   const [tab, setTab] = useState<Tab>("skills");
@@ -44,10 +48,10 @@ export function SkillsPage() {
     const load = () => {
       setError(undefined);
       Promise.all([api.get<Skill[]>("/api/skills"), api.get<Command[]>("/api/commands"), api.get<Tool[]>("/api/tools")]).then(
-        ([s, c, t]) => {
+        ([s, c, tl]) => {
           setSkills(s);
           setCommands(c);
-          setTools(t);
+          setTools(tl);
         },
         (e) => setError(errorText(e)),
       );
@@ -62,25 +66,24 @@ export function SkillsPage() {
   const match = (x: { name: string; description: string }) => !query || x.name.toLowerCase().includes(query) || x.description.toLowerCase().includes(query);
   const items = useMemo(() => {
     const list = tab === "skills" ? skills : tab === "commands" ? commands : tools;
-    return (list ?? []).filter(match).sort((a, b) => a.name.localeCompare(b.name));
+    return (list ?? []).filter(match).sort((a, b) => a.name.localeCompare(b.name, locale));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, skills, commands, tools, query]);
 
   return (
-    <Page title="Скиллы и команды" subtitle="Скиллы — инструкции, которые агент подгружает по необходимости. Команды — шаблоны «/имя» для чата.">
+    <Page title={t("nav.skills")} subtitle={t("skills.subtitle")}>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Segmented<Tab>
           value={tab}
           onChange={setTab}
-          options={[
-            { value: "skills", label: `Скиллы ${skills?.length ?? ""}` },
-            { value: "commands", label: `Команды ${commands?.length ?? ""}` },
-            { value: "tools", label: `Инструменты ${tools?.length ?? ""}` },
-          ]}
+          options={(Object.keys(TAB_LABELS) as Tab[]).map((value) => ({
+            value,
+            label: `${t(TAB_LABELS[value])} ${(value === "skills" ? skills : value === "commands" ? commands : tools)?.length ?? ""}`,
+          }))}
         />
         <div className="relative sm:w-64">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск" className="pl-9" aria-label="Поиск" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("common.search")} className="pl-9" aria-label={t("common.search")} />
         </div>
       </div>
       {error && <ErrorNote>{error}</ErrorNote>}
@@ -88,8 +91,8 @@ export function SkillsPage() {
       {skills && items.length === 0 && (
         <EmptyState
           icon="sparkles"
-          title={query ? "Ничего не найдено" : tab === "skills" ? "Скиллов пока нет" : tab === "commands" ? "Команд пока нет" : "Инструментов пока нет"}
-          hint={!query && tab !== "tools" ? "Положите папку со SKILL.md в /data/skills или установите плагин со скиллами и командами." : undefined}
+          title={query ? t("common.nothingFound") : t(EMPTY[tab])}
+          hint={!query && tab !== "tools" ? t("skills.emptyHint") : undefined}
         />
       )}
       {items.length > 0 && (
@@ -100,9 +103,9 @@ export function SkillsPage() {
                 <span className="font-mono text-sm font-medium">{tab === "commands" ? `/${x.name.replace(/^\//, "")}` : x.name}</span>
                 {"effect" in x ? (
                   <>
-                    <Badge tone={EFFECT[(x as Tool).effect]?.tone ?? "info"}>{EFFECT[(x as Tool).effect]?.label ?? (x as Tool).effect}</Badge>
+                    <Badge tone={EFFECT[(x as Tool).effect]?.tone ?? "info"}>{EFFECT[(x as Tool).effect] ? t(EFFECT[(x as Tool).effect].label) : (x as Tool).effect}</Badge>
                     <Badge>{(x as Tool).owner}</Badge>
-                    {(x as Tool).source && <Badge tone="warning">внешний контент</Badge>}
+                    {(x as Tool).source && <Badge tone="warning">{t("skills.externalContent")}</Badge>}
                   </>
                 ) : (
                   <Badge>{(x as Skill).source}</Badge>

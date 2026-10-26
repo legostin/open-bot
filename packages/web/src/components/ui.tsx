@@ -6,6 +6,7 @@ import { Check, Copy, Loader2, X } from "lucide-react";
 import type { BadgeProps, ButtonProps, CardProps, EmptyStateProps } from "@openbot/ui";
 import { Icon } from "./icon";
 import { mergeClasses } from "../lib/classes";
+import { t } from "../i18n";
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -115,13 +116,13 @@ export function EmptyState({ title, hint, icon }: EmptyStateProps) {
 }
 
 export function Spinner({ size = 18, className }: { size?: number; className?: string }) {
-  return <Loader2 style={{ width: size, height: size }} className={cx("animate-spin text-muted", className)} aria-label="Загрузка" />;
+  return <Loader2 style={{ width: size, height: size }} className={cx("animate-spin text-muted", className)} aria-label={t("common.loading")} />;
 }
 
-export function Loading({ text = "Загрузка…" }: { text?: string }) {
+export function Loading({ text }: { text?: string }) {
   return (
     <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
-      <Spinner /> {text}
+      <Spinner /> {text ?? t("common.loading")}
     </div>
   );
 }
@@ -132,7 +133,7 @@ export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?
       <span className="min-w-0 flex-1">{children}</span>
       {onRetry && (
         <Button size="sm" variant="ghost" onClick={onRetry}>
-          Повторить
+          {t("common.retry")}
         </Button>
       )}
     </div>
@@ -203,7 +204,7 @@ export function TagInput({ value, onChange, placeholder, inputType = "text" }: {
       {value.map((v, i) => (
         <span key={v + i} className="inline-flex items-center gap-1 rounded-lg bg-surface-2 py-0.5 pr-1 pl-2 font-mono text-xs">
           {v}
-          <button type="button" aria-label={`Убрать ${v}`} className="rounded p-0.5 text-muted hover:bg-surface-3 hover:text-fg" onClick={() => onChange(value.filter((_, j) => j !== i))}>
+          <button type="button" aria-label={t("common.removeItem", { value: v })} className="rounded p-0.5 text-muted hover:bg-surface-3 hover:text-fg" onClick={() => onChange(value.filter((_, j) => j !== i))}>
             <X className="size-3" />
           </button>
         </span>
@@ -281,7 +282,7 @@ export function Modal({
           <h2 id={titleId} className="min-w-0 truncate text-base font-semibold">
             {title}
           </h2>
-          <IconButton label="Закрыть" onClick={onClose}>
+          <IconButton label={t("common.close")} onClick={onClose}>
             <X className="size-4" />
           </IconButton>
         </div>
@@ -295,7 +296,7 @@ export function Modal({
 
 // ---------- Copy ----------
 
-export function CopyButton({ text, label = "Копировать", className }: { text: string; label?: string; className?: string }) {
+export function CopyButton({ text, label, className }: { text: string; label?: string; className?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
@@ -317,7 +318,7 @@ export function CopyButton({ text, label = "Копировать", className }: 
       }}
     >
       {done ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      {done ? "Скопировано" : label}
+      {done ? t("common.copied") : (label ?? t("common.copy"))}
     </button>
   );
 }

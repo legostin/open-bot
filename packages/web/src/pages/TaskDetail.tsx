@@ -6,9 +6,10 @@ import { ArrowLeft, Ban, ChevronDown, ChevronUp, RotateCcw } from "lucide-react"
 import type { Task } from "@openbot/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
-import { ACTIVE_STATUSES, formatDateTime, relativeTime, TASK_STATUS } from "../lib/format";
+import { ACTIVE_STATUSES, formatDateTime, relativeTime, taskStatus } from "../lib/format";
 import { agents, ensureAgents, hubEvents, reconnected, tasks } from "../state/app";
 import { toast } from "../state/toast";
+import { t, tRich } from "../i18n";
 import { Markdown } from "../components/markdown";
 import { Badge, Button, EmptyState, ErrorNote, Loading } from "../components/ui";
 import { ChatView } from "./chat/ChatView";
@@ -19,13 +20,13 @@ export function TaskDetailPage({ id }: { id: string }) {
   const [busy, setBusy] = useState<"cancel" | "retry" | undefined>();
   const [expanded, setExpanded] = useState(false);
   const agentList = useStore(agents);
-  const cached = useStore(tasks)?.find((t) => t.id === id);
+  const cached = useStore(tasks)?.find((x) => x.id === id);
 
   useEffect(() => {
     let alive = true;
     const load = () =>
       api.get<Task>(`/api/tasks/${encodeURIComponent(id)}`).then(
-        (t) => alive && setTask(t),
+        (loaded) => alive && setTask(loaded),
         (e) => alive && setError(errorText(e)),
       );
     setTask(null);
@@ -43,33 +44,33 @@ export function TaskDetailPage({ id }: { id: string }) {
     };
   }, [id]);
 
-  const t = task ?? cached ?? null;
-  const agentName = useMemo(() => (t ? (agentList?.find((a) => a.id === t.agentId)?.name ?? t.agentId) : ""), [agentList, t]);
+  const current = task ?? cached ?? null;
+  const agentName = useMemo(() => (current ? (agentList?.find((a) => a.id === current.agentId)?.name ?? current.agentId) : ""), [agentList, current]);
 
-  if (error && !t)
+  if (error && !current)
     return (
       <div className="p-6">
-        <EmptyState icon="list-todo" title="Задача не найдена" hint={error} />
+        <EmptyState icon="list-todo" title={t("task.notFound")} hint={error} />
         <div className="flex justify-center">
           <Link href="/tasks" className="text-sm text-accent-text underline">
-            К списку задач
+            {t("task.toList")}
           </Link>
         </div>
       </div>
     );
-  if (!t) return <Loading />;
+  if (!current) return <Loading />;
 
-  const st = TASK_STATUS[t.status] ?? { label: t.status, tone: "neutral" as const };
-  const active = ACTIVE_STATUSES.includes(t.status);
-  const canRetry = ["failed", "cancelled", "interrupted", "paused", "done"].includes(t.status);
+  const st = taskStatus(current.status);
+  const active = ACTIVE_STATUSES.includes(current.status);
+  const canRetry = ["failed", "cancelled", "interrupted", "paused", "done"].includes(current.status);
 
   const act = async (kind: "cancel" | "retry") => {
     setBusy(kind);
     try {
-      const r = await api.post<Task & { error?: string }>(`/api/tasks/${encodeURIComponent(t.id)}/${kind}`, {});
-      if (r && (r as { error?: string }).error && !r.id) throw new Error("Задача не найдена");
+      const r = await api.post<Task & { error?: string }>(`/api/tasks/${encodeURIComponent(current.id)}/${kind}`, {});
+      if (r && (r as { error?: string }).error && !r.id) throw new Error(t("task.notFound"));
       if (r?.id) setTask(r);
-      toast(kind === "cancel" ? "Задача отменена" : "Задача поставлена в очередь", "success");
+      toast(kind === "cancel" ? t("task.cancelled") : t("task.requeued"), "success");
     } catch (e) {
       toast(errorText(e), "error");
     } finally {
@@ -80,41 +81,44 @@ export function TaskDetailPage({ id }: { id: string }) {
   const summary = (
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-card">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={st.tone} dot={t.status === "running"}>
+        <Badge tone={st.tone} dot={current.status === "running"}>
           {st.label}
         </Badge>
-        {t.background && <Badge>фоновая</Badge>}
+        {current.background && <Badge>{t("tasks.background")}</Badge>}
         <span className="text-xs text-muted">
           {agentName}
-          {t.brainRef ? ` · ${t.brainRef}` : ""} · создана {formatDateTime(t.createdAt)}
-          {t.resumeAt && t.status === "paused" ? ` · продолжит ${relativeTime(t.resumeAt)}` : ""}
+          {current.brainRef ? ` · ${current.brainRef}` : ""} · {t("task.createdAt", { time: formatDateTime(current.createdAt) })}
+          {current.resumeAt && current.status === "paused" ? ` · ${t("tasks.resumes", { time: relativeTime(current.resumeAt) })}` : ""}
         </span>
       </div>
       <div className={expanded ? "mt-3" : "mt-3 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"}>
-        <div className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">Цель</div>
-        <Markdown text={t.goal} className="text-sm" />
-        {t.result && (
+        <div className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("task.goal")}</div>
+        <Markdown text={current.goal} className="text-sm" />
+        {current.result && (
           <>
-            <div className="mt-3 mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">Результат</div>
-            <Markdown text={t.result} className="text-sm" />
+            <div className="mt-3 mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("task.result")}</div>
+            <Markdown text={current.result} className="text-sm" />
           </>
         )}
       </div>
       <button type="button" onClick={() => setExpanded((v) => !v)} className="mt-1 inline-flex items-center gap-1 text-xs text-muted hover:text-fg">
         {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-        {expanded ? "Свернуть" : "Подробнее"}
+        {expanded ? t("task.collapse") : t("task.expand")}
       </button>
-      {t.error && (
+      {current.error && (
         <div className="mt-2">
-          <ErrorNote>{t.error}</ErrorNote>
+          <ErrorNote>{current.error}</ErrorNote>
         </div>
       )}
-      {t.parentTaskId && (
+      {current.parentTaskId && (
         <div className="mt-2 text-xs text-muted">
-          Подзадача для{" "}
-          <Link href={`/tasks/${t.parentTaskId}`} className="text-accent-text underline">
-            родительской задачи
-          </Link>
+          {tRich("task.subtaskOf", {
+            parent: (
+              <Link href={`/tasks/${current.parentTaskId}`} className="text-accent-text underline">
+                {t("task.parent")}
+              </Link>
+            ),
+          })}
         </div>
       )}
     </div>
@@ -123,23 +127,23 @@ export function TaskDetailPage({ id }: { id: string }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-2 sm:px-4">
-        <Link href="/tasks" aria-label="К задачам" className="inline-flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-fg">
+        <Link href="/tasks" aria-label={t("task.toTasks")} className="inline-flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-fg">
           <ArrowLeft className="size-[18px]" />
         </Link>
-        <span className="min-w-0 flex-1 truncate font-semibold">{t.title || "Задача"}</span>
+        <span className="min-w-0 flex-1 truncate font-semibold">{current.title || t("task.untitled")}</span>
         {active && (
           <Button size="sm" variant="danger" icon={<Ban className="size-3.5" />} onClick={() => void act("cancel")} loading={busy === "cancel"}>
-            Отменить
+            {t("task.cancel")}
           </Button>
         )}
         {canRetry && (
           <Button size="sm" icon={<RotateCcw className="size-3.5" />} onClick={() => void act("retry")} loading={busy === "retry"}>
-            Повторить
+            {t("common.retry")}
           </Button>
         )}
       </div>
       <div className="min-h-0 flex-1">
-        <ChatView conversationId={t.conversationId} header={false} top={summary} emptyHint="Агент ещё не начал работу над задачей." />
+        <ChatView conversationId={current.conversationId} header={false} top={summary} emptyHint={t("task.notStarted")} />
       </div>
     </div>
   );

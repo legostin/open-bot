@@ -1,17 +1,21 @@
 // Global client state: auth/bootstrap, realtime connection, conversations, messages, tasks, agents.
 
 import { useSyncExternalStore } from "react";
-import type { AgentDef, Conversation, Message, Task, UiEvent, VaultState } from "@openbot/shared";
+import type { AgentDef, Catalog, Conversation, Locale, Message, Task, UiEvent, VaultState } from "@openbot/shared";
 import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
 import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";
 import { applyDelta, mergeFetched, prependOlder, upsertMessage } from "../lib/messages";
+import { adoptHubLocale, t } from "../i18n";
 import { toast } from "./toast";
 
 export interface UiPluginEntry {
   id: string;
+  /** Already in the interface language. */
   name: string;
   url: string;
+  /** The plugin's own messages: English plus the interface language (for ui.i18n.t). */
+  messages?: Catalog;
 }
 
 export interface ChannelEntry {
@@ -28,7 +32,9 @@ export interface Bootstrap {
   mainConversationId: string;
   defaultAgent: string;
   timezone: string;
-  language: string;
+  /** Hub language (Settings → language). */
+  language: Locale;
+  locales: Locale[];
   vaultState: VaultState;
   pendingApprovals: number;
   uiPlugins: UiPluginEntry[];
@@ -40,6 +46,9 @@ export interface AuthState {
   authenticated: boolean;
   passkeys: number;
   version: string;
+  /** Hub language: the interface language for browsers without their own choice. */
+  language?: Locale;
+  locales?: Locale[];
 }
 
 export type Phase = { kind: "loading" } | { kind: "error"; message: string } | { kind: "setup" | "login"; auth: AuthState } | { kind: "ready" };
@@ -89,9 +98,10 @@ export async function init(): Promise<void> {
   phase.set({ kind: "loading" });
   try {
     const auth = await request<AuthState>("GET", "/api/auth/state");
+    adoptHubLocale(auth.language);
     if (!auth.hasPassword) return phase.set({ kind: "setup", auth });
     if (!auth.authenticated) return phase.set({ kind: "login", auth });
-    await bootstrap();
+    adoptHubLocale((await bootstrap()).language);
     phase.set({ kind: "ready" });
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return void showLogin();
@@ -112,7 +122,7 @@ async function showLogin(): Promise<void> {
 
 onUnauthorized(() => {
   if (phase.get().kind === "ready") {
-    toast("Сессия истекла — войдите снова", "info");
+    toast(t("app.sessionExpired"), "info");
     void showLogin();
   }
 });
@@ -170,7 +180,7 @@ function startSocket(): void {
       try {
         const auth = await request<AuthState>("GET", "/api/auth/state");
         if (!auth.authenticated && phase.get().kind === "ready") {
-          toast("Сессия истекла — войдите снова", "info");
+          toast(t("app.sessionExpired"), "info");
           void showLogin();
         }
       } catch {
@@ -262,7 +272,8 @@ export async function refreshConversations(): Promise<void> {
 }
 
 export async function createChat(title?: string, agentId?: string): Promise<Conversation> {
-  const c = await api.post<Conversation>("/api/conversations", { title: title || "Новый чат", ...(agentId ? { agentId } : {}) });
+  // Without a title the hub names the chat in the request's language.
+  const c = await api.post<Conversation>("/api/conversations", { ...(title ? { title } : {}), ...(agentId ? { agentId } : {}) });
   conversations.set((list) => sortConversations(upsertById(list, c)));
   return c;
 }

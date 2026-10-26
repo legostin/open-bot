@@ -8,6 +8,7 @@ import { Markdown } from "../components/markdown";
 import { api } from "../lib/api";
 import { useStore } from "../lib/store";
 import { ensureTasks, hubEvents, tasks } from "../state/app";
+import { locale } from "../i18n";
 
 const NO_TASKS: never[] = [];
 
@@ -34,4 +35,9 @@ export const uiRuntime: OpenBotUIRuntime = {
   useTasks,
   useHubEvent,
   api,
+  // A getter: the shim (/shared/openbot-ui.js) reads it when the first plugin is imported, after the hub
+  // language has been adopted, while this object is built before that.
+  get locale() {
+    return locale;
+  },
 };

@@ -11,6 +11,7 @@ import { usePluginRegistry } from "../plugins/slots";
 import { Icon } from "./icon";
 import { cx } from "./ui";
 import { NAV } from "./nav";
+import { t } from "../i18n";
 
 const open = createStore(false);
 export const openPalette = () => open.set(true);
@@ -68,18 +69,21 @@ export function CommandPalette() {
   }, [isOpen]);
 
   const items: Item[] = useMemo(() => {
+    const actions = t("palette.group.actions");
+    const goTo = t("palette.group.goTo");
     const out: Item[] = [
-      { id: "new-chat", title: "Новый чат", group: "Действия", icon: "plus", run: async () => navigate(`/chat/${(await createChat()).id}`) },
-      { id: "new-task", title: "Новая задача", group: "Действия", icon: "list-todo", run: () => navigate("/tasks?new=1") },
+      { id: "new-chat", title: t("chat.newChat"), group: actions, icon: "plus", run: async () => navigate(`/chat/${(await createChat()).id}`) },
+      { id: "new-task", title: t("tasks.new"), group: actions, icon: "list-todo", run: () => navigate("/tasks?new=1") },
     ];
-    for (const n of NAV) out.push({ id: `nav:${n.path}`, title: n.label, group: "Перейти", run: () => navigate(n.path), icon: undefined });
-    for (const r of routes) if (!r.path.includes(":")) out.push({ id: `route:${r.key}`, title: r.title, group: "Плагины", icon: r.icon, run: () => navigate(r.path.replace(/\/\*$/, "")) });
-    for (const c of commands) out.push({ id: `cmd:${c.key}`, title: c.title, group: `Команда · ${c.pluginId}`, icon: "zap", run: c.run });
+    for (const n of NAV) out.push({ id: `nav:${n.path}`, title: t(n.label), group: goTo, run: () => navigate(n.path), icon: undefined });
+    for (const r of routes)
+      if (!r.path.includes(":")) out.push({ id: `route:${r.key}`, title: r.title, group: t("palette.group.plugins"), icon: r.icon, run: () => navigate(r.path.replace(/\/\*$/, "")) });
+    for (const c of commands) out.push({ id: `cmd:${c.key}`, title: c.title, group: t("palette.group.command", { plugin: c.pluginId }), icon: "zap", run: c.run });
     if (s) {
-      out.push({ id: "console", title: "Пульт безопасности", group: "Перейти", icon: "shield-check", run: () => void window.open(s.consoleUrl, "_blank", "noopener") });
-      out.push({ id: "approvals", title: "Подтверждения", group: "Перейти", icon: "shield", run: () => void window.open(`${s.consoleUrl}/#/approvals`, "_blank", "noopener") });
+      out.push({ id: "console", title: t("common.securityConsole"), group: goTo, icon: "shield-check", run: () => void window.open(s.consoleUrl, "_blank", "noopener") });
+      out.push({ id: "approvals", title: t("palette.approvals"), group: goTo, icon: "shield", run: () => void window.open(`${s.consoleUrl}/#/approvals`, "_blank", "noopener") });
     }
-    out.push({ id: "logout", title: "Выйти", group: "Действия", icon: "power", run: () => logout() });
+    out.push({ id: "logout", title: t("common.logout"), group: actions, icon: "power", run: () => logout() });
     return out;
   }, [routes, commands, s, navigate]);
 
@@ -104,7 +108,7 @@ export function CommandPalette() {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center p-3 pt-[10vh]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => open.set(false)} />
-      <div className="animate-in relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-surface shadow-card" role="dialog" aria-label="Палитра команд">
+      <div className="animate-in relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-surface shadow-card" role="dialog" aria-label={t("palette.title")}>
         <div className="flex items-center gap-2 border-b border-border px-3">
           <Search className="size-4 text-muted" />
           <input
@@ -127,13 +131,13 @@ export function CommandPalette() {
                 void run(filtered[sel]);
               }
             }}
-            placeholder="Куда перейти или что сделать?"
+            placeholder={t("palette.placeholder")}
             className="h-12 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted"
           />
           <kbd className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted">Esc</kbd>
         </div>
         <div ref={list} className="max-h-[50vh] overflow-y-auto p-1.5">
-          {filtered.length === 0 && <div className="px-3 py-6 text-center text-sm text-muted">Ничего не найдено</div>}
+          {filtered.length === 0 && <div className="px-3 py-6 text-center text-sm text-muted">{t("common.nothingFound")}</div>}
           {filtered.map((it, i) => (
             <button
               key={it.id}

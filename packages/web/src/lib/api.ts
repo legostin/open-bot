@@ -1,6 +1,8 @@
-// HTTP client for the hub API. Non-GET requests carry the CSRF token and a JSON body ({} when empty).
+// HTTP client for the hub API. Every request names the interface language (x-openbot-locale) so the hub answers
+// in it; non-GET requests carry the CSRF token and a JSON body ({} when empty).
 
 import type { HubApi } from "@openbot/ui";
+import { locale, t } from "../i18n";
 
 export class ApiError extends Error {
   status: number;
@@ -27,7 +29,7 @@ export function onUnauthorized(cb: () => void): void {
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export async function request<T = any>(method: Method, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { accept: "application/json" };
+  const headers: Record<string, string> = { accept: "application/json", "x-openbot-locale": locale };
   const init: RequestInit = {
     method,
     headers,
@@ -45,7 +47,7 @@ export async function request<T = any>(method: Method, path: string, body?: unkn
   try {
     res = await fetch(path, init);
   } catch {
-    throw new ApiError(0, "Нет связи с хабом");
+    throw new ApiError(0, t("app.offline"));
   }
   const text = await res.text();
   let data: any = undefined;

@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, LogOut, Save } from "lucide-react";
+import type { Locale } from "@openbot/shared";
+import { LOCALE_NAMES } from "@openbot/shared/i18n";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
 import { agents, ensureAgents, logout, refreshBootstrap, session } from "../state/app";
 import { toast } from "../state/toast";
+import { explicitLocale, locale, LOCALES, t, type MessageKey } from "../i18n";
 import { usePluginRegistry } from "../plugins/slots";
 import { PluginBoundary } from "../plugins/boundary";
+import { BrowserLanguageSelect } from "../components/LanguageSelect";
 import { Button, Card, ErrorNote, Field, Input, Loading, Page, Select, TagInput, Toggle } from "../components/ui";
 
 interface CoreSettings {
@@ -21,7 +25,8 @@ interface CoreSettings {
   brainConcurrency: number;
   approvalInlineWaitSec: number;
   approvalExpireHours: number;
-  language: string;
+  /** Hub language: notifications, channels, approval cards, agent replies; the UI default. */
+  language: Locale;
 }
 
 type NumKey = "notifyRatePerHour" | "brainConcurrency" | "approvalInlineWaitSec" | "approvalExpireHours";
@@ -74,13 +79,13 @@ export function SettingsPage() {
 
   if (error && !form)
     return (
-      <Page title="Настройки">
+      <Page title={t("nav.settings")}>
         <ErrorNote onRetry={() => void load()}>{error}</ErrorNote>
       </Page>
     );
   if (!form || !orig)
     return (
-      <Page title="Настройки">
+      <Page title={t("nav.settings")}>
         <Loading />
       </Page>
     );
@@ -89,22 +94,22 @@ export function SettingsPage() {
 
   const build = (): { next?: CoreSettings; error?: string } => {
     const next: CoreSettings = { ...form };
-    const limits: Record<NumKey, [number, number, string]> = {
-      notifyRatePerHour: [0, 100, "Уведомлений в час"],
-      brainConcurrency: [1, 16, "Параллельных сессий"],
-      approvalInlineWaitSec: [0, 600, "Ожидание подтверждения"],
-      approvalExpireHours: [1, 24 * 30, "Срок подтверждения"],
+    const limits: Record<NumKey, [number, number, MessageKey]> = {
+      notifyRatePerHour: [0, 100, "settings.notifyRate"],
+      brainConcurrency: [1, 16, "settings.brainConcurrencyName"],
+      approvalInlineWaitSec: [0, 600, "settings.approvalWaitName"],
+      approvalExpireHours: [1, 24 * 30, "settings.approvalExpireName"],
     };
     for (const k of Object.keys(limits) as NumKey[]) {
       const n = Number(nums[k]);
       const [min, max, label] = limits[k];
-      if (!Number.isInteger(n) || n < min || n > max) return { error: `${label}: целое число от ${min} до ${max}` };
+      if (!Number.isInteger(n) || n < min || n > max) return { error: t("settings.error.integer", { field: t(label), min, max }) };
       next[k] = n;
     }
-    if (!TIME_RE.test(next.quietHours.start) || !TIME_RE.test(next.quietHours.end)) return { error: "Тихие часы: время в формате ЧЧ:ММ" };
-    const badTime = next.digestTimes.find((t) => !TIME_RE.test(t));
-    if (badTime) return { error: `Время сводки «${badTime}»: формат ЧЧ:ММ` };
-    if (zones.length && !zones.includes(next.timezone) && next.timezone !== "UTC") return { error: `Неизвестный часовой пояс «${next.timezone}»` };
+    if (!TIME_RE.test(next.quietHours.start) || !TIME_RE.test(next.quietHours.end)) return { error: t("settings.error.quietHours") };
+    const badTime = next.digestTimes.find((x) => !TIME_RE.test(x));
+    if (badTime) return { error: t("settings.error.digestTime", { value: badTime }) };
+    if (zones.length && !zones.includes(next.timezone) && next.timezone !== "UTC") return { error: t("settings.error.timezone", { value: next.timezone }) };
     return { next };
   };
 
@@ -113,15 +118,17 @@ export function SettingsPage() {
 
   const save = async () => {
     const r = build();
-    if (!r.next) return toast(r.error ?? "Проверьте поля", "error");
+    if (!r.next) return toast(r.error ?? t("settings.error.checkFields"), "error");
     const patch = Object.fromEntries(changedKeys(orig as unknown as Record<string, unknown>, r.next as unknown as Record<string, unknown>).map((k) => [k, (r.next as unknown as Record<string, unknown>)[k]]));
     if (!Object.keys(patch).length) return;
     setBusy(true);
     try {
       const saved = await api.patch<CoreSettings>("/api/settings", patch);
+      // This browser follows the hub language: show the interface in the new one.
+      if ("language" in patch && !explicitLocale() && saved.language !== locale) return location.reload();
       setOrig(saved);
       setForm(saved);
-      toast("Настройки сохранены", "success");
+      toast(t("common.settingsSaved"), "success");
       void refreshBootstrap();
     } catch (e) {
       toast(errorText(e), "error");
@@ -132,16 +139,18 @@ export function SettingsPage() {
 
   const saveBar = (
     <Button variant="primary" icon={<Save className="size-4" />} onClick={() => void save()} disabled={!changed.length} loading={busy}>
-      Сохранить
+      {t("common.save")}
     </Button>
   );
 
+  const hubLocales = s?.locales?.length ? s.locales : LOCALES;
+
   return (
-    <Page title="Настройки" actions={saveBar}>
+    <Page title={t("nav.settings")} actions={saveBar}>
       <div className="flex flex-col gap-4">
-        <Card title="Общие">
+        <Card title={t("settings.general")}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Часовой пояс" hint="Для расписаний, тихих часов и сводок">
+            <Field label={t("settings.timezone")} hint={t("settings.timezoneHint")}>
               <Input list="tz-list" value={form.timezone} onChange={(e) => set("timezone", e.target.value)} />
               <datalist id="tz-list">
                 {zones.map((z) => (
@@ -149,13 +158,7 @@ export function SettingsPage() {
                 ))}
               </datalist>
             </Field>
-            <Field label="Язык">
-              <Select value={form.language} onChange={(e) => set("language", e.target.value)}>
-                <option value="ru">Русский</option>
-                <option value="en">English</option>
-              </Select>
-            </Field>
-            <Field label="Агент по умолчанию" hint="Отвечает в главном треде и берёт новые задачи">
+            <Field label={t("settings.defaultAgent")} hint={t("settings.defaultAgentHint")}>
               <Select value={form.defaultAgent} onChange={(e) => set("defaultAgent", e.target.value)}>
                 {!(agentList ?? []).some((a) => a.id === form.defaultAgent) && <option value={form.defaultAgent}>{form.defaultAgent}</option>}
                 {(agentList ?? []).map((a) => (
@@ -168,54 +171,72 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        <Card title="Уведомления">
+        <Card title={t("settings.language.title")}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t("settings.language.browser")} hint={t("settings.language.browserHint")}>
+              <BrowserLanguageSelect hubLanguage={orig.language} />
+            </Field>
+            <Field label={t("settings.language.hub")} hint={t("settings.language.hubHint")}>
+              <Select value={form.language} onChange={(e) => set("language", e.target.value as Locale)}>
+                {!hubLocales.includes(form.language) && <option value={form.language}>{form.language}</option>}
+                {hubLocales.map((l) => (
+                  <option key={l} value={l}>
+                    {LOCALE_NAMES[l] ?? l}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        </Card>
+
+        <Card title={t("settings.notifications")}>
           <div className="flex flex-col gap-4">
             <div>
-              <Toggle checked={form.quietHours.enabled} onChange={(v) => set("quietHours", { ...form.quietHours, enabled: v })} label={<span className="font-medium">Тихие часы</span>} />
-              <div className="mt-1 pl-12 text-xs text-muted">Уведомления приходят без звука, неважное копится до утра</div>
+              <Toggle checked={form.quietHours.enabled} onChange={(v) => set("quietHours", { ...form.quietHours, enabled: v })} label={<span className="font-medium">{t("settings.quietHours")}</span>} />
+              <div className="mt-1 pl-12 text-xs text-muted">{t("settings.quietHoursHint")}</div>
               {form.quietHours.enabled && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 pl-12 text-sm">
-                  с
-                  <Input type="time" value={form.quietHours.start} onChange={(e) => set("quietHours", { ...form.quietHours, start: e.target.value })} className="w-32" aria-label="Начало тихих часов" />
-                  до
-                  <Input type="time" value={form.quietHours.end} onChange={(e) => set("quietHours", { ...form.quietHours, end: e.target.value })} className="w-32" aria-label="Конец тихих часов" />
+                  {t("settings.quietFrom")}
+                  <Input type="time" value={form.quietHours.start} onChange={(e) => set("quietHours", { ...form.quietHours, start: e.target.value })} className="w-32" aria-label={t("settings.quietStart")} />
+                  {t("settings.quietTo")}
+                  <Input type="time" value={form.quietHours.end} onChange={(e) => set("quietHours", { ...form.quietHours, end: e.target.value })} className="w-32" aria-label={t("settings.quietEnd")} />
                 </div>
               )}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field group label="Время сводок" hint="ЧЧ:ММ, Enter — добавить">
+              <Field group label={t("settings.digestTimes")} hint={t("settings.digestTimesHint")}>
                 <TagInput value={form.digestTimes} onChange={(v) => set("digestTimes", v)} placeholder="09:00" />
               </Field>
-              <Field label="Уведомлений в час" hint="Лимит срочных уведомлений на один триггер">
+              <Field label={t("settings.notifyRate")} hint={t("settings.notifyRateHint")}>
                 <Input type="number" min={0} value={nums.notifyRatePerHour} onChange={(e) => setNums((n) => ({ ...n, notifyRatePerHour: e.target.value }))} />
               </Field>
             </div>
           </div>
         </Card>
 
-        <Card title="Подтверждения">
+        <Card title={t("settings.approvals")}>
           <div className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Ждать ответа в ходе, сек" hint="Сколько агент ждёт решения, прежде чем отложить действие">
+              <Field label={t("settings.approvalWait")} hint={t("settings.approvalWaitHint")}>
                 <Input type="number" min={0} value={nums.approvalInlineWaitSec} onChange={(e) => setNums((n) => ({ ...n, approvalInlineWaitSec: e.target.value }))} />
               </Field>
-              <Field label="Срок подтверждения, ч" hint="После — запрос отменяется">
+              <Field label={t("settings.approvalExpire")} hint={t("settings.approvalExpireHint")}>
                 <Input type="number" min={1} value={nums.approvalExpireHours} onChange={(e) => setNums((n) => ({ ...n, approvalExpireHours: e.target.value }))} />
               </Field>
             </div>
             <div>
-              <Toggle checked={form.channelApprovalDetails} onChange={(v) => set("channelApprovalDetails", v)} label={<span className="font-medium">Показывать детали в Telegram</span>} />
-              <div className="mt-1 pl-12 text-xs text-muted">Полные параметры действия в сообщении. Выключено — только краткое описание и ссылка на пульт.</div>
+              <Toggle checked={form.channelApprovalDetails} onChange={(v) => set("channelApprovalDetails", v)} label={<span className="font-medium">{t("settings.approvalDetails")}</span>} />
+              <div className="mt-1 pl-12 text-xs text-muted">{t("settings.approvalDetailsHint")}</div>
             </div>
           </div>
         </Card>
 
-        <Card title="Мозги">
+        <Card title={t("settings.brains")}>
           <div className="flex flex-col gap-4">
-            <Field label="Параллельных сессий на мозг" hint="Сколько задач одновременно на одной паре «мозг@машина»" className="sm:max-w-xs">
+            <Field label={t("settings.brainConcurrency")} hint={t("settings.brainConcurrencyHint")} className="sm:max-w-xs">
               <Input type="number" min={1} value={nums.brainConcurrency} onChange={(e) => setNums((n) => ({ ...n, brainConcurrency: e.target.value }))} />
             </Field>
-            <Field group label="Дополнительные разрешённые хосты" hint="Куда мозгам можно ходить в сеть помимо стандартного списка (Anthropic, OpenAI, GitHub, npm…). Маски вида *.example.com">
+            <Field group label={t("settings.egress")} hint={t("settings.egressHint")}>
               <TagInput value={form.brainEgressAllow} onChange={(v) => set("brainEgressAllow", v)} placeholder="api.example.com" />
             </Field>
           </div>
@@ -234,8 +255,8 @@ export function SettingsPage() {
           );
         })}
 
-        <Card title="Безопасность">
-          <p className="mb-3 text-sm text-muted">Пароль, passkey, vault, правила и журнал аудита живут в отдельном пульте безопасности — основная страница и плагины не имеют к ним доступа.</p>
+        <Card title={t("settings.security")}>
+          <p className="mb-3 text-sm text-muted">{t("settings.securityText")}</p>
           <div className="flex flex-wrap gap-2">
             {s && (
               <a
@@ -244,11 +265,11 @@ export function SettingsPage() {
                 rel="noopener noreferrer"
                 className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface px-4 text-sm font-medium hover:bg-surface-2"
               >
-                Открыть пульт <ExternalLink className="size-4" />
+                {t("common.openConsole")} <ExternalLink className="size-4" />
               </a>
             )}
             <Button icon={<LogOut className="size-4" />} onClick={() => void logout()}>
-              Выйти
+              {t("common.logout")}
             </Button>
           </div>
         </Card>

@@ -7,6 +7,7 @@ import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";
 import { hubEvents } from "../state/app";
 import { toast } from "../state/toast";
+import { t, tRich } from "../i18n";
 import { Badge, Button, CodeLine, EmptyState, ErrorNote, Field, IconButton, Input, Loading, Modal, Page } from "../components/ui";
 
 interface Pairing {
@@ -39,19 +40,17 @@ export function MachinesPage() {
 
   return (
     <Page
-      title="Машины"
-      subtitle="Ваши компьютеры, на которых агенты могут запускать Claude Code и Codex и работать с файлами."
+      title={t("nav.machines")}
+      subtitle={t("machines.subtitle")}
       actions={
         <Button variant="primary" icon={<Link2 className="size-4" />} onClick={() => setPairOpen(true)}>
-          Подключить машину
+          {t("machines.pair")}
         </Button>
       }
     >
       {error && <ErrorNote onRetry={() => void load()}>{error}</ErrorNote>}
       {!list && !error && <Loading />}
-      {list && list.length === 0 && (
-        <EmptyState icon="laptop" title="Машин пока нет" hint="Подключите ноутбук или рабочий компьютер — агенты смогут работать с кодом там, где он лежит." />
-      )}
+      {list && list.length === 0 && <EmptyState icon="laptop" title={t("machines.empty")} hint={t("machines.emptyHint")} />}
       <div className="grid gap-3 md:grid-cols-2">
         {list?.map((m) => (
           <MachineCard key={m.id} m={m} onChanged={load} onRevoke={() => setRevoking(m)} />
@@ -62,10 +61,10 @@ export function MachinesPage() {
       <Modal
         open={!!revoking}
         onClose={() => setRevoking(null)}
-        title={`Отключить «${revoking?.name}»?`}
+        title={t("machines.revokeTitle", { name: revoking?.name })}
         footer={
           <>
-            <Button onClick={() => setRevoking(null)}>Отмена</Button>
+            <Button onClick={() => setRevoking(null)}>{t("common.cancel")}</Button>
             <Button
               variant="danger"
               onClick={async () => {
@@ -73,19 +72,19 @@ export function MachinesPage() {
                 setRevoking(null);
                 try {
                   await api.del(`/api/machines/${encodeURIComponent(m.id)}`);
-                  toast("Машина отключена", "success");
+                  toast(t("machines.revoked"), "success");
                   await load();
                 } catch (e) {
                   toast(errorText(e), "error");
                 }
               }}
             >
-              Отключить
+              {t("machines.revoke")}
             </Button>
           </>
         }
       >
-        <p className="text-sm">Ключ машины будет отозван — демон больше не сможет подключиться. Чтобы вернуть машину, привяжите её заново.</p>
+        <p className="text-sm">{t("machines.revokeText")}</p>
       </Modal>
     </Page>
   );
@@ -122,11 +121,11 @@ function MachineCard({ m, onChanged, onRevoke }: { m: Machine; onChanged: () => 
               }}
             >
               <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} className="h-8" maxLength={60} />
-              <IconButton label="Сохранить" onClick={() => void save()} className="size-8 shrink-0">
+              <IconButton label={t("common.save")} onClick={() => void save()} className="size-8 shrink-0">
                 <Check className="size-4" />
               </IconButton>
               <IconButton
-                label="Отмена"
+                label={t("common.cancel")}
                 onClick={() => {
                   setEditing(false);
                   setName(m.name);
@@ -140,18 +139,20 @@ function MachineCard({ m, onChanged, onRevoke }: { m: Machine; onChanged: () => 
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{m.name}</span>
               <Badge tone={online ? "success" : "neutral"} dot>
-                {online ? "онлайн" : "офлайн"}
+                {online ? t("machines.online") : t("machines.offline")}
               </Badge>
-              <IconButton label="Переименовать" onClick={() => setEditing(true)} className="size-7">
+              <IconButton label={t("common.rename")} onClick={() => setEditing(true)} className="size-7">
                 <Pencil className="size-3.5" />
               </IconButton>
             </div>
           )}
           <div className="mt-0.5 text-xs text-muted">
-            {m.info ? `${m.info.os} · ${m.info.arch} · ${m.info.hostname}` : "нет данных о системе"}
+            {m.info ? `${m.info.os} · ${m.info.arch} · ${m.info.hostname}` : t("machines.noInfo")}
             {m.info?.nodeVersion && ` · node ${m.info.nodeVersion}`}
           </div>
-          <div className="text-xs text-muted">{online ? "на связи" : m.lastSeenAt ? `был ${relativeTime(m.lastSeenAt)}` : "ещё не подключался"}</div>
+          <div className="text-xs text-muted">
+            {online ? t("machines.connected") : m.lastSeenAt ? t("machines.lastSeen", { time: relativeTime(m.lastSeenAt) }) : t("machines.neverConnected")}
+          </div>
         </div>
       </div>
       {m.info?.clis && m.info.clis.length > 0 && (
@@ -160,19 +161,19 @@ function MachineCard({ m, onChanged, onRevoke }: { m: Machine; onChanged: () => 
             <Badge key={c.brainId} tone={c.authenticated ? "success" : c.available ? "warning" : "neutral"}>
               {c.brainId}
               {c.version ? ` ${c.version}` : ""}
-              {!c.available ? " — нет" : !c.authenticated ? " — нужен вход" : ""}
+              {!c.available ? ` — ${t("machines.cliMissing")}` : !c.authenticated ? ` — ${t("machines.cliNeedsLogin")}` : ""}
             </Badge>
           ))}
         </div>
       )}
       {m.info?.allowedDirs && m.info.allowedDirs.length > 0 && (
         <div className="mt-2 text-xs text-muted">
-          Папки: <span className="font-mono">{m.info.allowedDirs.join(", ")}</span>
+          {tRich("machines.folders", { list: <span className="font-mono">{m.info.allowedDirs.join(", ")}</span> })}
         </div>
       )}
       <div className="mt-3 flex justify-end">
         <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={onRevoke}>
-          Отключить
+          {t("machines.revoke")}
         </Button>
       </div>
     </div>
@@ -188,15 +189,15 @@ function PairModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     if (!pairing) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, [pairing]);
 
   useEffect(
     () =>
       hubEvents.on((e) => {
         if (e.type === "machine.updated" && pairing && e.data?.name) {
-          toast(`Машина «${e.data.name}» подключена`, "success");
+          toast(t("machines.paired", { name: e.data.name }), "success");
           onClose();
         }
       }),
@@ -222,24 +223,24 @@ function PairModal({ onClose }: { onClose: () => void }) {
     <Modal
       open
       onClose={onClose}
-      title="Подключить машину"
+      title={t("machines.pair")}
       footer={
         pairing ? (
           <>
             {expired && (
               <Button onClick={() => void create()} loading={busy}>
-                Новый код
+                {t("machines.newCode")}
               </Button>
             )}
             <Button variant="primary" onClick={onClose}>
-              Готово
+              {t("common.done")}
             </Button>
           </>
         ) : (
           <>
-            <Button onClick={onClose}>Отмена</Button>
+            <Button onClick={onClose}>{t("common.cancel")}</Button>
             <Button variant="primary" onClick={() => void create()} loading={busy}>
-              Получить код
+              {t("machines.getCode")}
             </Button>
           </>
         )
@@ -247,33 +248,31 @@ function PairModal({ onClose }: { onClose: () => void }) {
     >
       {!pairing ? (
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-muted">На машине понадобится Node.js 24+. Демон подключится к хабу исходящим соединением — открывать порты не нужно.</p>
-          <Field label="Название" hint="Необязательно — по умолчанию имя компьютера">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="ноутбук" maxLength={60} autoFocus />
+          <p className="text-sm text-muted">{t("machines.intro")}</p>
+          <Field label={t("machines.name")} hint={t("machines.nameHint")}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("machines.namePlaceholder")} maxLength={60} autoFocus />
           </Field>
           {error && <ErrorNote>{error}</ErrorNote>}
         </div>
       ) : (
         <div className="flex flex-col gap-4">
           <div>
-            <div className="mb-1.5 text-sm font-medium">1. На машине выполните</div>
+            <div className="mb-1.5 text-sm font-medium">{t("machines.step1")}</div>
             <CodeLine>{`npx openbot-node pair ${pairing.hubUrl} ${pairing.code}`}</CodeLine>
           </div>
           <div>
-            <div className="mb-1.5 text-sm font-medium">2. Затем запустите демон</div>
+            <div className="mb-1.5 text-sm font-medium">{t("machines.step2")}</div>
             <CodeLine>npx openbot-node run</CodeLine>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            Код: <span className="font-mono text-base font-semibold tracking-widest">{pairing.code}</span>
+            {t("machines.code")} <span className="font-mono text-base font-semibold tracking-widest">{pairing.code}</span>
             {expired ? (
-              <Badge tone="danger">истёк</Badge>
+              <Badge tone="danger">{t("machines.expired")}</Badge>
             ) : (
-              <Badge tone="info">
-                действует {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}
-              </Badge>
+              <Badge tone="info">{t("machines.validFor", { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` })}</Badge>
             )}
           </div>
-          <p className="text-xs text-muted">Если машина в другой сети, используйте Tailscale или укажите публичный адрес хаба (OPENBOT_PUBLIC_URL).</p>
+          <p className="text-xs text-muted">{t("machines.otherNetwork")}</p>
         </div>
       )}
     </Modal>

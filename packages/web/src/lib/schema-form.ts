@@ -2,6 +2,8 @@
 // Supported: string (with enum → select, multiline via format "textarea"), number/integer, boolean,
 // array of strings. Anything else is edited as JSON.
 
+import { t } from "../i18n";
+
 export type FieldKind = "string" | "text" | "secret" | "number" | "integer" | "boolean" | "enum" | "string-list" | "json";
 
 export interface FormField {
@@ -94,17 +96,17 @@ export function coerceFormValues(fields: FormField[], form: Record<string, strin
     }
     const str = typeof raw === "string" ? raw : "";
     if (str.trim() === "") {
-      if (f.required) errors[f.key] = "Обязательное поле";
+      if (f.required) errors[f.key] = t("form.required");
       continue;
     }
     switch (f.kind) {
       case "number":
       case "integer": {
         const n = Number(str.replace(",", "."));
-        if (!Number.isFinite(n)) errors[f.key] = "Нужно число";
-        else if (f.kind === "integer" && !Number.isInteger(n)) errors[f.key] = "Нужно целое число";
-        else if (f.min !== undefined && n < f.min) errors[f.key] = `Не меньше ${f.min}`;
-        else if (f.max !== undefined && n > f.max) errors[f.key] = `Не больше ${f.max}`;
+        if (!Number.isFinite(n)) errors[f.key] = t("form.number");
+        else if (f.kind === "integer" && !Number.isInteger(n)) errors[f.key] = t("form.integer");
+        else if (f.min !== undefined && n < f.min) errors[f.key] = t("form.min", { min: f.min });
+        else if (f.max !== undefined && n > f.max) errors[f.key] = t("form.max", { max: f.max });
         else values[f.key] = n;
         break;
       }
@@ -118,7 +120,7 @@ export function coerceFormValues(fields: FormField[], form: Record<string, strin
         try {
           values[f.key] = JSON.parse(str);
         } catch {
-          errors[f.key] = "Неверный JSON";
+          errors[f.key] = t("form.badJson");
         }
         break;
       case "enum":

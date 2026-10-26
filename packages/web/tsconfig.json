@@ -15,7 +15,8 @@
     "resolveJsonModule": true,
     "types": ["vite/client"],
     "paths": {
-      "@openbot/shared": ["../shared/src/types.ts"],
+      "@openbot/shared": ["./src/shared-types.ts"],
+      "@openbot/shared/i18n": ["../shared/src/i18n.ts"],
       "@openbot/ui": ["../ui-sdk/src/index.ts"]
     }
   },

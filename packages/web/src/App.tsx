@@ -21,6 +21,7 @@ import { McpPage } from "./pages/Mcp";
 import { NotificationsPage } from "./pages/Notifications";
 import { SkillsPage } from "./pages/Skills";
 import { SettingsPage } from "./pages/Settings";
+import { t } from "./i18n";
 
 export function App() {
   const p = useStore(phase);
@@ -32,14 +33,14 @@ export function App() {
     <>
       {p.kind === "loading" && (
         <div className="flex h-dvh items-center justify-center">
-          <Loading text="Подключаюсь к хабу…" />
+          <Loading text={t("app.connecting")} />
         </div>
       )}
       {p.kind === "error" && (
         <div className="flex h-dvh flex-col items-center justify-center gap-4 p-6">
-          <EmptyState icon="wifi" title="Хаб недоступен" hint={p.message} />
+          <EmptyState icon="wifi" title={t("app.hubUnavailable")} hint={p.message} />
           <Button variant="primary" onClick={() => void init()}>
-            Повторить
+            {t("common.retry")}
           </Button>
         </div>
       )}
@@ -97,7 +98,7 @@ function Routes() {
       <Route path="/settings">{() => <SettingsPage />}</Route>
       <Route>
         <div className="flex h-full items-center justify-center">
-          <EmptyState icon="compass" title="Страница не найдена" hint="Возможно, плагин, который её добавлял, отключён." />
+          <EmptyState icon="compass" title={t("app.notFound")} hint={t("app.notFoundHint")} />
         </div>
       </Route>
     </Switch>

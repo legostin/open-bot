@@ -8,15 +8,16 @@ import { api, errorText } from "../lib/api";
 import { slugify } from "../lib/format";
 import { agents, refreshAgents } from "../state/app";
 import { toast } from "../state/toast";
+import { t, tRich, type MessageKey } from "../i18n";
 import { Badge, Button, cx, EmptyState, ErrorNote, Field, IconButton, Input, Loading, Modal, Page, TagInput, Textarea } from "../components/ui";
 
-const INITIATIVE: Array<{ value: 0 | 1 | 2; title: string; text: string }> = [
-  { value: 0, title: "Только отвечает", text: "Работает, только когда вы пишете. Фоновых задач не берёт." },
-  { value: 1, title: "Предлагает", text: "Может работать в фоне, но только с инструментами чтения: находит, сводит, предлагает. По умолчанию." },
-  { value: 2, title: "Действует", text: "В фоне выполняет действия в рамках ваших правил; всё внешнее — через подтверждения." },
+const INITIATIVE: Array<{ value: 0 | 1 | 2; title: MessageKey; text: MessageKey }> = [
+  { value: 0, title: "agents.initiative0", text: "agents.initiative0Text" },
+  { value: 1, title: "agents.initiative1", text: "agents.initiative1Text" },
+  { value: 2, title: "agents.initiative2", text: "agents.initiative2Text" },
 ];
 
-const SOURCE: Record<string, string> = { builtin: "встроенный", user: "ваш" };
+const SOURCE: Record<string, MessageKey> = { builtin: "agents.source.builtin", user: "agents.source.user" };
 
 export function AgentsPage() {
   const list = useStore(agents);
@@ -32,17 +33,17 @@ export function AgentsPage() {
 
   return (
     <Page
-      title="Агенты"
-      subtitle="Агент — это роль: характер, набор мозгов, инструменты и уровень инициативы."
+      title={t("nav.agents")}
+      subtitle={t("agents.subtitle")}
       actions={
         <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEditing("new")}>
-          Новый агент
+          {t("agents.new")}
         </Button>
       }
     >
       {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
       {!list && !error && <Loading />}
-      {list && list.length === 0 && <EmptyState icon="bot" title="Агентов нет" />}
+      {list && list.length === 0 && <EmptyState icon="bot" title={t("agents.empty")} />}
       <div className="grid gap-3 sm:grid-cols-2">
         {list?.map((a) => (
           <div key={a.id} className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-card">
@@ -55,12 +56,12 @@ export function AgentsPage() {
                   <span className="font-semibold">{a.name}</span>
                   <span className="font-mono text-xs text-muted">{a.id}</span>
                 </div>
-                <div className="mt-0.5 line-clamp-2 text-sm text-muted">{a.description || "Без описания"}</div>
+                <div className="mt-0.5 line-clamp-2 text-sm text-muted">{a.description || t("agents.noDescription")}</div>
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <Badge tone="info">инициатива {a.initiative}</Badge>
-              <Badge>{SOURCE[a.source] ?? a.source}</Badge>
+              <Badge tone="info">{t("agents.initiativeBadge", { level: a.initiative })}</Badge>
+              <Badge>{SOURCE[a.source] ? t(SOURCE[a.source]) : a.source}</Badge>
               {a.model && <Badge>{a.model}</Badge>}
               {a.brains.slice(0, 3).map((b) => (
                 <Badge key={b} className="font-mono">
@@ -72,11 +73,11 @@ export function AgentsPage() {
             <div className="mt-auto flex justify-end gap-1 pt-3">
               {a.source === "user" && (
                 <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setDeleting(a)}>
-                  Удалить
+                  {t("common.delete")}
                 </Button>
               )}
               <Button size="sm" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(a)}>
-                Изменить
+                {t("common.edit")}
               </Button>
             </div>
           </div>
@@ -87,10 +88,10 @@ export function AgentsPage() {
       <Modal
         open={!!deleting}
         onClose={() => setDeleting(null)}
-        title="Удалить агента?"
+        title={t("agents.deleteTitle")}
         footer={
           <>
-            <Button onClick={() => setDeleting(null)}>Отмена</Button>
+            <Button onClick={() => setDeleting(null)}>{t("common.cancel")}</Button>
             <Button
               variant="danger"
               onClick={async () => {
@@ -98,21 +99,19 @@ export function AgentsPage() {
                 setDeleting(null);
                 try {
                   await api.del(`/api/agents/${encodeURIComponent(a.id)}`);
-                  toast(`Агент «${a.name}» удалён`, "success");
+                  toast(t("agents.deleted", { name: a.name }), "success");
                   await refreshAgents();
                 } catch (e) {
                   toast(errorText(e), "error");
                 }
               }}
             >
-              Удалить
+              {t("common.delete")}
             </Button>
           </>
         }
       >
-        <p className="text-sm">
-          Файл агента <code className="font-mono">{deleting?.id}.md</code> будет удалён. Если это была ваша версия встроенного агента, вернётся встроенная.
-        </p>
+        <p className="text-sm">{tRich("agents.deleteText", { file: <code className="font-mono">{deleting?.id}.md</code> })}</p>
       </Modal>
     </Page>
   );
@@ -141,19 +140,19 @@ function BrainsEditor({ value, onChange, suggestions }: { value: string[]; onCha
   const free = suggestions.filter((s) => !taken.has(normalizeBrainRef(s)));
   return (
     <div className="flex flex-col gap-2">
-      {value.length === 0 && <div className="text-sm text-muted">Список пуст — агенту не на чем думать.</div>}
+      {value.length === 0 && <div className="text-sm text-muted">{t("agents.brainsEmpty")}</div>}
       <ol className="flex flex-col gap-1.5">
         {value.map((b, i) => (
           <li key={b} className="flex items-center gap-2 rounded-xl border border-border bg-surface-2/60 py-1 pr-1 pl-3">
             <span className="w-5 text-xs text-muted">{i + 1}.</span>
             <span className="min-w-0 flex-1 truncate font-mono text-sm">{b}</span>
-            <IconButton label="Выше" disabled={i === 0} onClick={() => move(i, -1)} className="size-7">
+            <IconButton label={t("agents.moveUp")} disabled={i === 0} onClick={() => move(i, -1)} className="size-7">
               <ArrowUp className="size-3.5" />
             </IconButton>
-            <IconButton label="Ниже" disabled={i === value.length - 1} onClick={() => move(i, 1)} className="size-7">
+            <IconButton label={t("agents.moveDown")} disabled={i === value.length - 1} onClick={() => move(i, 1)} className="size-7">
               <ArrowDown className="size-3.5" />
             </IconButton>
-            <IconButton label="Убрать" onClick={() => onChange(value.filter((x) => x !== b))} className="size-7">
+            <IconButton label={t("common.remove")} onClick={() => onChange(value.filter((x) => x !== b))} className="size-7">
               <X className="size-3.5" />
             </IconButton>
           </li>
@@ -174,7 +173,7 @@ function BrainsEditor({ value, onChange, suggestions }: { value: string[]; onCha
           }}
         />
         <Button onClick={() => add(draft)} disabled={!draft.trim()}>
-          Добавить
+          {t("common.add")}
         </Button>
         <datalist id="brain-refs">
           {free.map((s) => (
@@ -224,11 +223,11 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
 
   const save = async () => {
     setError(undefined);
-    if (!name.trim()) return setError("Укажите имя");
-    if (!/^[a-z0-9_-]{1,40}$/.test(effectiveId)) return setError("Идентификатор: латинские буквы, цифры, «-» и «_»");
+    if (!name.trim()) return setError(t("agents.errorName"));
+    if (!/^[a-z0-9_-]{1,40}$/.test(effectiveId)) return setError(t("agents.errorId"));
     const n = Number(runs);
-    if (!Number.isInteger(n) || n < 0) return setError("Фоновых запусков в день — целое число ≥ 0");
-    if (isNew && currentAgents().some((a) => a.id === effectiveId)) return setError(`Агент «${effectiveId}» уже существует`);
+    if (!Number.isInteger(n) || n < 0) return setError(t("agents.errorRuns"));
+    if (isNew && currentAgents().some((a) => a.id === effectiveId)) return setError(t("agents.errorExists", { id: effectiveId }));
     setBusy(true);
     try {
       await api.put(`/api/agents/${encodeURIComponent(effectiveId)}`, {
@@ -243,7 +242,7 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
         budget: { ...(agent?.budget ?? {}), backgroundRunsPerDay: n },
         prompt,
       });
-      toast(isNew ? "Агент создан" : "Агент сохранён", "success");
+      toast(isNew ? t("agents.created") : t("agents.saved"), "success");
       await refreshAgents();
       onClose();
     } catch (e) {
@@ -258,22 +257,22 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
       open
       wide
       onClose={onClose}
-      title={isNew ? "Новый агент" : `Агент «${agent.name}»`}
+      title={isNew ? t("agents.new") : t("agents.editTitle", { name: agent.name })}
       footer={
         <>
-          <Button onClick={onClose}>Отмена</Button>
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="primary" onClick={() => void save()} loading={busy}>
-            Сохранить
+            {t("common.save")}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Имя">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Исследователь" autoFocus={isNew} />
+          <Field label={t("agents.name")}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("agents.namePlaceholder")} autoFocus={isNew} />
           </Field>
-          <Field label="Идентификатор" hint={isNew ? "Имя файла agents/<id>.md" : "Нельзя изменить"}>
+          <Field label={t("agents.id")} hint={isNew ? t("agents.idHint") : t("agents.idFixed")}>
             <Input
               value={effectiveId}
               disabled={!isNew}
@@ -285,21 +284,21 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
             />
           </Field>
         </div>
-        <Field label="Описание" hint="Коротко: зачем этот агент. Видно другим агентам при делегировании.">
+        <Field label={t("agents.description")} hint={t("agents.descriptionHint")}>
           <Input value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
-        <Field group label="Мозги по порядку" hint="Первый доступный и залогиненный используется; при лимите или ошибке задача переходит к следующему.">
+        <Field group label={t("agents.brains")} hint={t("agents.brainsHint")}>
           <BrainsEditor value={brains} onChange={setBrains} suggestions={suggestions} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Модель" hint="Необязательно: sonnet, opus, gpt-5… — как понимает мозг">
+          <Field label={t("agents.model")} hint={t("agents.modelHint")}>
             <Input value={model} onChange={(e) => setModel(e.target.value)} className="font-mono" />
           </Field>
-          <Field label="Профиль политики">
+          <Field label={t("agents.policy")}>
             <Input value={policyProfile} onChange={(e) => setPolicyProfile(e.target.value)} className="font-mono" />
           </Field>
         </div>
-        <Field group label="Инициатива">
+        <Field group label={t("agents.initiative")}>
           <div className="grid gap-2 sm:grid-cols-3">
             {INITIATIVE.map((o) => (
               <button
@@ -313,26 +312,26 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
                 )}
               >
                 <div className="text-sm font-semibold">
-                  {o.value} · {o.title}
+                  {o.value} · {t(o.title)}
                 </div>
-                <div className="mt-1 text-xs leading-relaxed text-muted">{o.text}</div>
+                <div className="mt-1 text-xs leading-relaxed text-muted">{t(o.text)}</div>
               </button>
             ))}
           </div>
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field group label="Инструменты" hint="Маски имён: * — все, browser_* — только браузер">
+          <Field group label={t("agents.tools")} hint={t("agents.toolsHint")}>
             <TagInput value={tools} onChange={setTools} placeholder="*" />
           </Field>
-          <Field group label="Скиллы" hint="Маски имён скиллов">
+          <Field group label={t("agents.skills")} hint={t("agents.skillsHint")}>
             <TagInput value={skills} onChange={setSkills} placeholder="*" />
           </Field>
         </div>
-        <Field label="Фоновых запусков в день" hint="Бюджет проактивности: сколько раз агент может работать сам">
+        <Field label={t("agents.runs")} hint={t("agents.runsHint")}>
           <Input type="number" min={0} value={runs} onChange={(e) => setRuns(e.target.value)} className="sm:w-40" />
         </Field>
-        <Field label="Промпт" hint="Характер и правила агента. Markdown.">
-          <Textarea rows={8} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="font-mono text-[13px]" placeholder="Ты — дружелюбный и проактивный ассистент…" />
+        <Field label={t("agents.prompt")} hint={t("agents.promptHint")}>
+          <Textarea rows={8} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="font-mono text-[13px]" placeholder={t("agents.promptPlaceholder")} />
         </Field>
         {error && <ErrorNote>{error}</ErrorNote>}
       </div>

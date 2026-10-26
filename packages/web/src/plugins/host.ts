@@ -1,12 +1,15 @@
 // UI plugin host: builds the per-plugin OpenBotUI object and loads plugin modules listed in /api/bootstrap.
 
 import type { ComponentType } from "react";
+import type { Catalog } from "@openbot/shared";
 import type { OpenBotUI, SlotContribution, SlotName, SlotProps } from "@openbot/ui";
+import { translator } from "@openbot/shared/i18n";
 import { navigate } from "wouter/use-browser-location";
 import { api, request, type Method } from "../lib/api";
 import { createStore } from "../lib/store";
 import { hubEvents, sendToHub, type UiPluginEntry } from "../state/app";
 import { toast } from "../state/toast";
+import { formatDate, formatNumber, locale, t } from "../i18n";
 import { addCommand, addContribution, addRoute, addSettings, addStatus, normalizePath, removePlugin } from "./registry";
 import { resolveActivate } from "./activate";
 
@@ -22,7 +25,8 @@ function setLoad(id: string, s: PluginLoadState): void {
   pluginLoad.set((all) => ({ ...all, [id]: s }));
 }
 
-export function createOpenBotUI(pluginId: string): OpenBotUI {
+/** `messages`: the plugin's own catalog from /api/bootstrap (English plus the interface language). */
+export function createOpenBotUI(pluginId: string, messages: Catalog = {}): OpenBotUI {
   const register = <P = any>(slot: SlotName, c: SlotContribution<P>): (() => void) => {
     switch (slot) {
       case "route":
@@ -70,6 +74,7 @@ export function createOpenBotUI(pluginId: string): OpenBotUI {
         }),
     },
     events: { on: (cb) => hubEvents.on(cb) },
+    i18n: { locale, t: translator(messages, locale), formatDate, formatNumber },
   };
 }
 
@@ -102,8 +107,8 @@ async function load(entry: UiPluginEntry): Promise<void> {
     const url = reload ? `${entry.url}${entry.url.includes("?") ? "&" : "?"}v=${Date.now()}` : entry.url;
     const mod = await import(/* @vite-ignore */ url);
     const activate = resolveActivate(mod);
-    if (!activate) throw new Error("модуль не экспортирует activate()");
-    const ret = await activate(createOpenBotUI(entry.id));
+    if (!activate) throw new Error(t("plugins.noActivate"));
+    const ret = await activate(createOpenBotUI(entry.id, entry.messages));
     const cur = loaded.get(entry.id);
     if (cur) cur.cleanup = typeof ret === "function" ? ret : undefined;
     setLoad(entry.id, { name: entry.name, status: "active" });
@@ -112,7 +117,7 @@ async function load(entry: UiPluginEntry): Promise<void> {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[ui-plugin ${entry.id}] failed to load`, e);
     setLoad(entry.id, { name: entry.name, status: "error", error: msg });
-    toast(`UI-плагин «${entry.name}» не загрузился: ${msg}`, "error");
+    toast(t("plugins.loadFailed", { name: entry.name, error: msg }), "error");
   }
 }
 

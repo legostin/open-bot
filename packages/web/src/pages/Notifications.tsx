@@ -5,21 +5,29 @@ import { Link } from "wouter";
 import { BellOff, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { Notification } from "@openbot/shared";
 import { api, errorText } from "../lib/api";
-import { NOTIFY_LEVEL, plural, relativeTime } from "../lib/format";
+import { notifyLevel, relativeTime } from "../lib/format";
 import { hubEvents, reconnected } from "../state/app";
 import { toast } from "../state/toast";
+import { t, type MessageKey } from "../i18n";
 import { Markdown } from "../components/markdown";
 import { Badge, Button, cx, EmptyState, ErrorNote, Loading, Page, Segmented } from "../components/ui";
 
 type Feedback = NonNullable<Notification["feedback"]>;
 
-const FEEDBACK: Array<{ value: Feedback; label: string; icon: typeof ThumbsUp; title: string }> = [
-  { value: "useful", label: "полезно", icon: ThumbsUp, title: "Полезно — продолжай в том же духе" },
-  { value: "less", label: "реже", icon: ThumbsDown, title: "Присылай такое реже" },
-  { value: "off", label: "выключить", icon: BellOff, title: "Больше не присылай такое" },
+const FEEDBACK: Array<{ value: Feedback; label: MessageKey; icon: typeof ThumbsUp; title: MessageKey; thanks: MessageKey }> = [
+  { value: "useful", label: "notifications.feedback.useful", icon: ThumbsUp, title: "notifications.feedback.usefulTitle", thanks: "notifications.thanks.useful" },
+  { value: "less", label: "notifications.feedback.less", icon: ThumbsDown, title: "notifications.feedback.lessTitle", thanks: "notifications.thanks.less" },
+  { value: "off", label: "notifications.feedback.off", icon: BellOff, title: "notifications.feedback.offTitle", thanks: "notifications.thanks.off" },
 ];
 
 type Filter = "all" | "notify" | "digest" | "silent";
+
+const FILTER_LABELS: Record<Filter, MessageKey> = {
+  all: "notifications.filter.all",
+  notify: "notifications.filter.notify",
+  digest: "notifications.filter.digest",
+  silent: "notifications.filter.silent",
+};
 
 export function NotificationsPage() {
   const [list, setList] = useState<Notification[] | null>(null);
@@ -52,7 +60,8 @@ export function NotificationsPage() {
     try {
       const updated = await api.post<Notification>(`/api/notifications/${encodeURIComponent(n.id)}/feedback`, { value });
       setList((l) => l?.map((x) => (x.id === n.id ? { ...x, ...updated, feedback: value } : x)) ?? l);
-      toast(value === "useful" ? "Спасибо! Учту" : value === "less" ? "Буду присылать реже" : "Больше не буду присылать такое", "success");
+      const option = FEEDBACK.find((f) => f.value === value);
+      if (option) toast(t(option.thanks), "success");
     } catch (e) {
       toast(errorText(e), "error");
     }
@@ -62,7 +71,7 @@ export function NotificationsPage() {
     setFlushing(true);
     try {
       const r = await api.post<{ sent: number }>("/api/digest/flush", {});
-      toast(r.sent ? `Сводка отправлена: ${r.sent} ${plural(r.sent, "пункт", "пункта", "пунктов")}` : "Для сводки пока ничего нет", r.sent ? "success" : "info");
+      toast(r.sent ? t("notifications.digestSent", { n: r.sent }) : t("notifications.digestEmpty"), r.sent ? "success" : "info");
     } catch (e) {
       toast(errorText(e), "error");
     } finally {
@@ -74,32 +83,23 @@ export function NotificationsPage() {
 
   return (
     <Page
-      title="Уведомления"
-      subtitle="Что агенты сочли достойным вашего внимания. Оценки помогают им понять, что важно."
+      title={t("nav.notifications")}
+      subtitle={t("notifications.subtitle")}
       actions={
         <Button icon={<Send className="size-4" />} onClick={() => void flush()} loading={flushing}>
-          Отправить сводку сейчас
+          {t("notifications.flush")}
         </Button>
       }
     >
       <div className="mb-4">
-        <Segmented<Filter>
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: "all", label: "Все" },
-            { value: "notify", label: "Важные" },
-            { value: "digest", label: "В сводку" },
-            { value: "silent", label: "Тихие" },
-          ]}
-        />
+        <Segmented<Filter> value={filter} onChange={setFilter} options={(Object.keys(FILTER_LABELS) as Filter[]).map((f) => ({ value: f, label: t(FILTER_LABELS[f]) }))} />
       </div>
       {error && <ErrorNote onRetry={() => void load()}>{error}</ErrorNote>}
       {!list && !error && <Loading />}
-      {list && shown.length === 0 && <EmptyState icon="bell" title="Уведомлений нет" hint="Когда фоновые задачи найдут что-то интересное, оно появится здесь." />}
+      {list && shown.length === 0 && <EmptyState icon="bell" title={t("notifications.empty")} hint={t("notifications.emptyHint")} />}
       <div className="flex flex-col gap-3">
         {shown.map((n) => {
-          const lvl = NOTIFY_LEVEL[n.level] ?? { label: n.level, tone: "neutral" as const };
+          const lvl = notifyLevel(n.level);
           return (
             <article key={n.id} className="rounded-2xl border border-border bg-surface p-4 shadow-card">
               <div className="flex flex-wrap items-center gap-2">
@@ -115,7 +115,7 @@ export function NotificationsPage() {
                   <button
                     key={f.value}
                     type="button"
-                    title={f.title}
+                    title={t(f.title)}
                     onClick={() => void feedback(n, f.value)}
                     aria-pressed={n.feedback === f.value}
                     className={cx(
@@ -124,18 +124,18 @@ export function NotificationsPage() {
                     )}
                   >
                     <f.icon className="size-3.5" />
-                    {f.label}
+                    {t(f.label)}
                   </button>
                 ))}
                 <span className="flex-1" />
                 {n.taskId && (
                   <Link href={`/tasks/${n.taskId}`} className="text-xs text-accent-text hover:underline">
-                    задача →
+                    {t("notifications.toTask")}
                   </Link>
                 )}
                 {!n.taskId && n.conversationId && (
                   <Link href={`/chat/${n.conversationId}`} className="text-xs text-accent-text hover:underline">
-                    в чат →
+                    {t("notifications.toChat")}
                   </Link>
                 )}
               </div>

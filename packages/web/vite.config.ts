@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -27,6 +28,10 @@ function devImportMap(): Plugin {
 export default defineConfig({
   base: "/",
   plugins: [react(), tailwindcss(), devImportMap()],
+  resolve: {
+    // The browser-safe part of @openbot/shared, taken from this checkout (not whatever node_modules links to).
+    alias: { "@openbot/shared/i18n": resolve(import.meta.dirname, "../shared/src/i18n.ts") },
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,

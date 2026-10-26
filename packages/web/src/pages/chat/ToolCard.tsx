@@ -5,10 +5,11 @@ import { ChevronRight, CircleCheck, CircleX, Loader2, Wrench } from "lucide-reac
 import type { ToolCallPart, ToolResultPart } from "../../lib/parts";
 import { inputPreview, prettyJson } from "../../lib/parts";
 import { CopyButton, cx } from "../../components/ui";
+import { t } from "../../i18n";
 
 export function ToolCard({ call, result, running }: { call?: ToolCallPart; result?: ToolResultPart; running?: boolean }) {
   const [open, setOpen] = useState(false);
-  const name = call?.name ?? "инструмент";
+  const name = call?.name ?? t("tool.default");
   const isError = !!result?.isError;
   const preview = call ? inputPreview(call.input) : "";
   const input = call ? prettyJson(call.input) : "";
@@ -22,12 +23,12 @@ export function ToolCard({ call, result, running }: { call?: ToolCallPart; resul
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted">{preview}</span>
         {result ? (
           isError ? (
-            <CircleX className="size-4 shrink-0 text-danger" aria-label="ошибка" />
+            <CircleX className="size-4 shrink-0 text-danger" aria-label={t("tool.statusError")} />
           ) : (
-            <CircleCheck className="size-4 shrink-0 text-success" aria-label="готово" />
+            <CircleCheck className="size-4 shrink-0 text-success" aria-label={t("tool.statusDone")} />
           )
         ) : running ? (
-          <Loader2 className="size-4 shrink-0 animate-spin text-muted" aria-label="выполняется" />
+          <Loader2 className="size-4 shrink-0 animate-spin text-muted" aria-label={t("tool.statusRunning")} />
         ) : null}
       </button>
       {open && (
@@ -35,19 +36,19 @@ export function ToolCard({ call, result, running }: { call?: ToolCallPart; resul
           {call && (
             <div>
               <div className="mb-1 flex items-center justify-between text-[11px] font-semibold tracking-wide text-muted uppercase">
-                Вход <CopyButton text={input} label="" />
+                {t("tool.input")} <CopyButton text={input} label="" />
               </div>
               <pre className="max-h-64 overflow-auto rounded-lg bg-code-bg p-2 font-mono text-xs whitespace-pre-wrap break-words">{input || "—"}</pre>
             </div>
           )}
           <div>
             <div className="mb-1 flex items-center justify-between text-[11px] font-semibold tracking-wide text-muted uppercase">
-              {isError ? "Ошибка" : "Результат"} {result && <CopyButton text={output} label="" />}
+              {isError ? t("tool.error") : t("tool.result")} {result && <CopyButton text={output} label="" />}
             </div>
             {result ? (
-              <pre className={cx("max-h-80 overflow-auto rounded-lg bg-code-bg p-2 font-mono text-xs whitespace-pre-wrap break-words", isError && "text-danger")}>{output || "(пусто)"}</pre>
+              <pre className={cx("max-h-80 overflow-auto rounded-lg bg-code-bg p-2 font-mono text-xs whitespace-pre-wrap break-words", isError && "text-danger")}>{output || t("tool.empty")}</pre>
             ) : (
-              <div className="text-xs text-muted">{running ? "выполняется…" : "нет результата"}</div>
+              <div className="text-xs text-muted">{running ? t("tool.running") : t("tool.noResult")}</div>
             )}
           </div>
         </div>

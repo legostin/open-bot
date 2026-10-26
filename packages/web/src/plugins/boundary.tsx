@@ -2,6 +2,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
+import { t } from "../i18n";
 
 interface Props {
   pluginId: string;
@@ -31,10 +32,10 @@ export class PluginBoundary extends Component<Props, { error?: Error }> {
       <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-xs text-warning" role="alert">
         <TriangleAlert className="size-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate" title={this.state.error.message}>
-          Плагин {this.props.pluginId}: ошибка отображения
+          {t("plugins.renderFailed", { id: this.props.pluginId })}
         </span>
         <button type="button" className="shrink-0 underline underline-offset-2" onClick={() => this.setState({ error: undefined })}>
-          повторить
+          {t("plugins.renderRetry")}
         </button>
       </div>
     );
