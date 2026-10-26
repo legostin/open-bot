@@ -1,0 +1,13 @@
+{
+  "name": "@openbot/plugin-memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Long-term memory about the user: markdown facts, full-text search, review queue",
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18"
+  }
+}
