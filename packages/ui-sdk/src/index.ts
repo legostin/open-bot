@@ -139,6 +139,39 @@ export interface EmptyStateProps {
   icon?: string;
 }
 
+// ---------- the iOS app's bridge ----------
+
+/** Haptic feedback the phone can play. */
+export type NativeHapticKind = "light" | "success" | "warning";
+
+/** What the app tells the page (a `owlbot-native` CustomEvent on window): live words while the mic is held. */
+/** What the app tells the page: live dictation words, the "Show steps" switch in its header, the hub answering again. */
+export type NativeEvent = { type: "dictation"; text: string } | { type: "details"; on: boolean } | { type: "online" };
+
+/**
+ * The Owlbot iOS app around the page (its chat screen is the web UI's chat in a WKWebView). Every call is
+ * `window.webkit.messageHandlers.owlbot.postMessage({ type, ... })`; a failed call rejects with an Error whose
+ * message is the app's reason.
+ */
+export interface NativeBridge {
+  /** Any bridge message: resolves with the app's reply object. */
+  call<T = Record<string, unknown>>(type: string, payload?: Record<string, unknown>): Promise<T>;
+  /** The page has rendered the conversation (the app hides its spinner). */
+  ready(conversationId: string): Promise<{ ok: boolean }>;
+  /** The app loads the approval from the hub, asks for Face ID and signs it; `cancelled` when the user backed out. */
+  approve(approvalId: string): Promise<{ ok: boolean; cancelled?: boolean }>;
+  deny(approvalId: string): Promise<{ ok: boolean }>;
+  /** Hold-to-talk: `start` rejects with the reason when the mic or speech recognition is not allowed. */
+  dictation: { start(): Promise<{ ok: boolean }>; stop(): Promise<{ text: string }> };
+  /** Open a link in Safari (sign-in pages, anything outside the hub). */
+  openURL(url: string): Promise<{ ok: boolean }>;
+  haptic(kind: NativeHapticKind): Promise<{ ok: boolean }>;
+  /** The page's session ended: the app gets a new one and reloads the page (no reply). */
+  reauth(): void;
+  /** Messages from the app. Returns unsubscribe. */
+  onEvent(listener: (e: NativeEvent) => void): () => void;
+}
+
 declare global {
   interface Window {
     __OWLBOT_SHARED__?: {
@@ -167,6 +200,11 @@ export interface OwlbotUIRuntime {
   api: HubApi;
   /** Interface language (same as ui.i18n.locale). */
   locale: Locale;
+  /**
+   * The iOS app's bridge when the page runs inside the Owlbot app; `undefined` in a browser, so check it first:
+   * `native?.haptic("success")`.
+   */
+  native: NativeBridge | undefined;
 }
 
 // Value exports: declared here for type-checking only. At runtime the import map points "@owlbot/ui"
@@ -182,4 +220,6 @@ export declare const useTasks: OwlbotUIRuntime["useTasks"];
 export declare const useHubEvent: OwlbotUIRuntime["useHubEvent"];
 export declare const api: OwlbotUIRuntime["api"];
 export declare const locale: OwlbotUIRuntime["locale"];
+/** The iOS app's bridge; `undefined` in a browser. */
+export declare const native: OwlbotUIRuntime["native"];
 export type { Locale, Message, MessagePart, Params, Task, UiEvent };

@@ -13,7 +13,7 @@ import { ChatView } from "./ChatView";
 import { SetupGate } from "../../components/BrainSetupCard";
 
 /** While the dialog is on screen, tell the hub the user has seen it up to the newest finished message. */
-function useReadMarker(conversationId: string | undefined, unread: number): void {
+export function useReadMarker(conversationId: string | undefined, unread: number): void {
   const conv = useConversationMessages(conversationId);
   const [visible, setVisible] = useState(() => document.visibilityState === "visible");
   useEffect(() => {

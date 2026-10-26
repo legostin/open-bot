@@ -119,6 +119,13 @@ export default {
   "machines.writeApproval": "Записать файл на машине {machine}: {path}",
   "machine.badPairingCode": "Код привязки неверный или устарел",
   "machine.badPublicKey": "Неверный публичный ключ",
+  "device.badPairingCode": "Код неверный или устарел. Сделайте новый QR в Owlbot: Настройки → Устройства.",
+  "device.badPublicKey": "Телефон прислал неверный ключ",
+  "device.notFound": "Такого устройства нет",
+  "device.badSignature": "Подтверждение Face ID не прошло проверку. Попробуйте ещё раз.",
+  "device.networkOff": "Телефоны пока не видят хаб: сначала включите «Телефоны в сети».",
+  "device.noAddress": "У компьютера нет сетевого адреса, доступного телефону. Подключите его к Wi-Fi или Tailscale.",
+  "device.portInUse": "Порт {port} для телефонов занят другой программой. Укажите свободный в OWLBOT_DEVICE_PORT.",
 
   // settings, files, builds
   "settings.secretInPlainText": "{field}: храните секреты в vault и указывайте ссылку vault://<id>",
@@ -168,6 +175,8 @@ export default {
   "cli.firstRun": "Owlbot: первый запуск. Откройте {url}\n  и введите код установки: {code}",
   "cli.passwordChanged": "Пароль изменён, все сессии завершены.",
   "cli.pairingCode": "Код привязки (действует 10 минут): {code}\nНа машине: node owlbot-node.mjs pair {url} {code}",
+  "cli.devicePair": "Отсканируйте QR приложением Owlbot на телефоне или откройте эту ссылку на телефоне (действует 10 минут):\n{link}\nКод: {code}",
+  "cli.devicesOff": "Телефоны пока не видят хаб: включите «Телефоны в сети» в Настройки → Устройства или запустите хаб с OWLBOT_DEVICES=1.",
   "cli.backupDone": "Резервная копия: {path} (vault остаётся зашифрованным)",
   "cli.auditOk": "Журнал цел: {count, plural, one {# запись} few {# записи} many {# записей} other {# записи}}",
   "cli.auditBroken": "Цепочка нарушена на записи {seq}",

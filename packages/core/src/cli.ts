@@ -1,4 +1,4 @@
-// Owlbot hub CLI: start | reset-password | pairing-code | backup | audit-verify
+// Owlbot hub CLI: start | reset-password | pairing-code | devices pair | backup | audit-verify
 
 import { cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -12,6 +12,10 @@ import { AuditLog } from "./audit.ts";
 import { AuthService } from "./auth.ts";
 import { Hub } from "./app.ts";
 import { readDesktopCommands } from "./desktop-login.ts";
+import { EventBus } from "./bus.ts";
+import { DeviceRegistry } from "./devices.ts";
+import { deviceTls } from "./devices-tls.ts";
+import { deviceUrls, hubName, pairingLink, qrText } from "./pairing.ts";
 
 const [cmd = "start", ...args] = process.argv.slice(2);
 const config = loadConfig();
@@ -62,6 +66,18 @@ async function main(): Promise<void> {
       console.log(cliT(db)("cli.pairingCode", { code, url: config.publicUrl }));
       return;
     }
+    case "devices": {
+      if (args[0] !== "pair") throw new Error("usage: owlbot devices pair");
+      // A phone pairs with the running hub's device port; the code lives in the shared database.
+      const db = openDb(join(config.dataDir, "owlbot.db"));
+      const T = cliT(db);
+      const { code } = new DeviceRegistry({ db, bus: new EventBus(), audit: new AuditLog(db) }).createPairingCode();
+      const link = pairingLink({ code, hubName: hubName(), fingerprint: deviceTls(config.dataDir).fingerprint, urls: deviceUrls(config.devicePort, config.deviceUrls) });
+      console.log(`${qrText(link)}\n`);
+      console.log(T("cli.devicePair", { link, code }));
+      if (!config.devicesForced && !new Settings(db, config.timezone).get().devicesLan) console.log(`\n${T("cli.devicesOff")}`);
+      return;
+    }
     case "backup": {
       const target = args[0] ?? join(config.dataDir, "backups", new Date().toISOString().replace(/[:.]/g, "-"));
       mkdirSync(target, { recursive: true });
@@ -88,7 +104,7 @@ async function main(): Promise<void> {
       return;
     }
     default:
-      console.log("usage: owlbot [start|reset-password <pass>|pairing-code [name]|backup [dir]|audit-verify]");
+      console.log("usage: owlbot [start|reset-password <pass>|pairing-code [name]|devices pair|backup [dir]|audit-verify]");
       process.exitCode = 1;
   }
 }

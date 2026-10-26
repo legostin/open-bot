@@ -49,6 +49,11 @@ export class HubSocket {
     else if (this.queue.length < 200) this.queue.push(s);
   }
 
+  /** Try now instead of waiting out the backoff (the phone app saw the hub come back). */
+  retryNow(): void {
+    this.wake();
+  }
+
   /** Reconnect immediately when the tab becomes visible / network comes back. */
   private wake = () => {
     if (this.stopped || document.visibilityState === "hidden") return;
@@ -99,7 +104,8 @@ export class HubSocket {
   private scheduleReconnect(): void {
     const delay = backoffDelay(this.attempt);
     this.attempt++;
-    if (this.attempt === 3) this.h.onRepeatedFailure?.();
+    // Every third failure: the hub may be back with the session gone (it restarted), and the upgrade fails for good.
+    if (this.attempt % 3 === 0) this.h.onRepeatedFailure?.();
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.connect(), delay);
   }

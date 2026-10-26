@@ -120,6 +120,13 @@ export default {
   "machines.writeApproval": "Write a file on {machine}: {path}",
   "machine.badPairingCode": "The pairing code is wrong or has expired",
   "machine.badPublicKey": "Invalid public key",
+  "device.badPairingCode": "The code is wrong or has expired. Make a new QR code in Owlbot: Settings → Devices.",
+  "device.badPublicKey": "The phone sent an invalid key",
+  "device.notFound": "No such device",
+  "device.badSignature": "The Face ID confirmation did not check out. Try again.",
+  "device.networkOff": "Phones cannot reach the hub yet: turn on \"Phones on the network\" first.",
+  "device.noAddress": "This computer has no network address a phone could use. Connect it to Wi-Fi or Tailscale.",
+  "device.portInUse": "Port {port} for phones is taken by another program. Set OWLBOT_DEVICE_PORT to a free one.",
 
   // settings, files, builds
   "settings.secretInPlainText": "{field}: keep secrets in the vault and reference them as vault://<id>",
@@ -169,6 +176,8 @@ export default {
   "cli.firstRun": "Owlbot: first run. Open {url}\n  and enter the setup code: {code}",
   "cli.passwordChanged": "Password changed; all sessions were signed out.",
   "cli.pairingCode": "Pairing code (valid 10 minutes): {code}\nOn the machine: node owlbot-node.mjs pair {url} {code}",
+  "cli.devicePair": "Scan the QR code with the Owlbot app on your phone, or open this link on the phone (valid 10 minutes):\n{link}\nCode: {code}",
+  "cli.devicesOff": "Phones cannot reach the hub yet: turn on \"Phones on the network\" in Settings → Devices, or start the hub with OWLBOT_DEVICES=1.",
   "cli.backupDone": "Backup: {path} (the vault stays encrypted)",
   "cli.auditOk": "Audit log intact: {count, plural, one {# entry} other {# entries}}",
   "cli.auditBroken": "The chain is broken at entry {seq}",

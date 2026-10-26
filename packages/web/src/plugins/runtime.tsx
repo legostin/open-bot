@@ -6,6 +6,7 @@ import type { UiEvent } from "@owlbot/shared";
 import { Badge, Button, Card, EmptyState, Spinner } from "../components/ui";
 import { Markdown } from "../components/markdown";
 import { api } from "../lib/api";
+import { native } from "../lib/native";
 import { useStore } from "../lib/store";
 import { ensureTasks, hubEvents, tasks } from "../state/app";
 import { locale } from "../i18n";
@@ -40,4 +41,6 @@ export const uiRuntime: OwlbotUIRuntime = {
   get locale() {
     return locale;
   },
+  // The iOS app's bridge (undefined in a browser): fixed for the page's lifetime.
+  native,
 };

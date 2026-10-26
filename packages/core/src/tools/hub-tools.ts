@@ -26,7 +26,7 @@ export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHou
 const SECRET_KEY = /key|token|secret|password/i;
 
 /** Tools that only put a card in front of the user, who then decides: fine even after outside content was read. */
-const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft", "brain_login"]);
+const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft", "brain_login", "device_pairing"]);
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 const json = (v: unknown): ToolResult => text(JSON.stringify(v, null, 2));
@@ -484,6 +484,37 @@ export function registerHubTools(hub: Hub): void {
   );
 
   // ---------- first-run setup (the "Hub setup" section of the default agent's prompt) ----------
+
+  // ---------- phones ----------
+
+  reg(
+    {
+      name: "device_pairing",
+      effect: "local-write",
+      description:
+        "Show a card in this chat for connecting the user's phone (the Owlbot iOS app): it has the switch that lets phones reach the hub " +
+        "and makes a one-time QR code and link. Use it whenever the user wants Owlbot on their phone; never send them to settings pages for it.",
+      inputSchema: obj({}),
+    },
+    (_i, ctx) => {
+      hub.runner.attachPart(ctx.conversationId, { type: "device_pairing" });
+      const n = hub.deviceNetwork();
+      const paired = hub.devices.list().map((d) => d.name);
+      return text(
+        [
+          "A card for connecting a phone is shown in the chat: the user opens the Owlbot app and scans its QR code (or opens its link on the phone).",
+          n.listening ? `Phones can reach the hub at ${n.urls.join(", ") || "no address (the computer is not on a network)"}.` : "Phone access is off; the card has the switch.",
+          "Away from the home network the phone and this computer both need Tailscale.",
+          `Paired phones: ${paired.join(", ") || "none"}.`,
+        ].join("\n"),
+      );
+    },
+  );
+
+  reg(
+    { name: "devices_list", effect: "read", description: "List the phones paired with the hub (name, model, last seen) and whether phones can reach it.", inputSchema: obj({}) },
+    () => json({ devices: hub.devices.list(), network: hub.deviceNetwork() }),
+  );
 
   reg(
     {

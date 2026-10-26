@@ -846,6 +846,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "plugin_setup") return `setup:${p.pluginId}`;
   if (p.type === "agent_draft") return `draft:${p.draftId}`;
   if (p.type === "brain_login") return `login:${p.ref}`;
+  if (p.type === "device_pairing") return "device_pairing";
   return undefined;
 }
 

@@ -6,6 +6,7 @@ import { ExternalLink, LogIn } from "lucide-react";
 import type { BrainLoginView } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { formatTime } from "../lib/format";
+import { openOutside } from "../lib/native";
 import { hubEvents } from "../state/app";
 import { Badge, Button, CopyButton, Input, Spinner, cx } from "./ui";
 import { t } from "../i18n";
@@ -155,6 +156,7 @@ function Running({ login, label, busy, onCode, onCancel }: { login: NonNullable<
             href={login.url}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => openOutside(e, login.url)}
             className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-accent px-2.5 text-[13px] font-medium whitespace-nowrap text-accent-fg shadow-sm transition hover:brightness-110"
           >
             {t("brainLogin.open")} <ExternalLink className="size-3.5" />

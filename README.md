@@ -99,6 +99,16 @@ Telegram receives replies, notifications, the digest, and approval cards with bu
    ```
 3. The node appears in the list. Its local Claude Code and Codex become the brains `claude-code@<machine>` and `codex@<machine>`. What the agent may do on the machine (folders, commands, brains) is decided by the machine's owner in `~/.owlbot-node/policy.json`; commands are off by default. Running the daemon as a service with systemd, launchd or Task Scheduler is covered in [packages/node/README.md](packages/node/README.md).
 
+## Phone
+
+The Owlbot iOS app (repository `owlbot-ios`) is the hub in your pocket: your team of agents, the chats with every card, tasks, notifications, and approvals that need Face ID. The phone runs no brains; it connects to this hub.
+
+1. In **Settings → Devices**, turn on **Phones on the network**. Only the phones' own HTTPS port (8082, `OWLBOT_DEVICE_PORT`) opens to the network; the web UI stays where it was.
+2. Press **Connect a phone** and scan the QR code with the app, or open its link on the phone. You can also ask the assistant to "connect my phone", or run `owlbot devices pair` on the server to get the QR in the terminal.
+3. Confirm on the phone with Face ID.
+
+At home the phone uses the Wi-Fi; away from home, Tailscale on both the phone and the hub (the QR carries the Tailscale address too). The phone pins the hub's own certificate from the QR, so no domain or CA is involved. Its token is revoked in one click in **Devices**; approving an action needs a signature by a key that stays in the phone's Secure Enclave, so a stolen token cannot approve anything. Rules, the vault's items and the audit stay in the security console. In Docker, publish the device port and list the addresses phones should use: `OWLBOT_DEVICE_URLS=https://192.168.1.10:8082`.
+
 ## Remote access
 
 Don't publish the ports to the internet directly. The easiest option is [Tailscale](https://tailscale.com): install it on the host and let `tailscale serve` put HTTPS in front of both ports (HTTPS certificates must be enabled for your tailnet):
@@ -155,6 +165,9 @@ docker exec owlbot owlbot-entrypoint audit-verify
 | `OWLBOT_TRUST_PROXY` | — | `1` trusts `X-Forwarded-*` from a reverse proxy |
 | `OWLBOT_HOST` | `127.0.0.1` (`0.0.0.0` in the image) | listen address |
 | `OWLBOT_PORT`, `OWLBOT_CONSOLE_PORT`, `OWLBOT_EGRESS_PORT` | `8080`, `8081`, `8089` | ports of the chat UI, the console and the egress proxy |
+| `OWLBOT_DEVICE_PORT`, `OWLBOT_DEVICE_HOST` | port + 2 (`8082`), `0.0.0.0` | the phones' HTTPS port and where it listens |
+| `OWLBOT_DEVICES` | — | `1` keeps the phones' port on regardless of the switch in **Devices** |
+| `OWLBOT_DEVICE_URLS` | detected | addresses for the pairing QR, comma-separated, ahead of the detected ones |
 | `OWLBOT_DATA_DIR` | `.data/` (`/data` in the image) | data directory |
 | `OWLBOT_INSTALL_CLIS` | — (`1` in the desktop installers) | `1` lets **Sign in** install a missing Claude Code or Codex into `<data>/tools` |
 | `TZ` | system time zone (`UTC` in the image) | default time zone for reminders, quiet hours and the digest |

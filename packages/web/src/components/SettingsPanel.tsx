@@ -16,6 +16,7 @@ import { AgentsPage } from "../pages/Agents";
 import { BrainsPage } from "../pages/Brains";
 import { PluginsPage } from "../pages/Plugins";
 import { MachinesPage } from "../pages/Machines";
+import { DevicesPage } from "../pages/Devices";
 import { McpPage } from "../pages/Mcp";
 import { NotificationsPage } from "../pages/Notifications";
 import { SkillsPage } from "../pages/Skills";
@@ -33,6 +34,8 @@ function SectionBody({ section }: { section: PanelSection }) {
       return <PluginsPage />;
     case "machines":
       return <MachinesPage />;
+    case "devices":
+      return <DevicesPage />;
     case "mcp":
       return <McpPage />;
     case "notifications":
