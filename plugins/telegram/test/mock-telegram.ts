@@ -21,7 +21,9 @@ export interface MockTelegram {
   close(): Promise<void>;
 }
 
-export async function startMockTelegram(token: string): Promise<MockTelegram> {
+/** maxPollSec: how long an empty getUpdates may hold (capped for fast tests; raise it to act like Telegram). */
+export async function startMockTelegram(token: string, opts: { maxPollSec?: number } = {}): Promise<MockTelegram> {
+  const maxPollSec = opts.maxPollSec ?? 2;
   const calls: MockCall[] = [];
   const updates: Array<Record<string, unknown> & { update_id: number }> = [];
   const failures = new Map<string, { code: number; description: string }>();
@@ -50,7 +52,7 @@ export async function startMockTelegram(token: string): Promise<MockTelegram> {
         const pending = () => updates.filter((u) => u.update_id >= offset);
         if (!pending().length && params.timeout > 0) {
           await new Promise<void>((resolve) => {
-            const t = setTimeout(done, Math.min(Number(params.timeout), 2) * 1000);
+            const t = setTimeout(done, Math.min(Number(params.timeout), maxPollSec) * 1000);
             function done() {
               clearTimeout(t);
               pollWaiters = pollWaiters.filter((w) => w !== done);

@@ -253,6 +253,9 @@ export class TelegramBot {
     // Update ids are per bot: a new token starts from its own offset.
     this.offset = Number(await this.ctx.storage.get<number>(this.offsetKey())) || 0;
     this.api = api;
+    // The token works: connected now. Waiting for the first getUpdates kept the card on "Connecting…"
+    // (and hid the pairing button) for a whole empty long poll.
+    this.setState("polling");
     this.ctx.log.info(`connected as @${this.botUser.username ?? this.botUser.id}`);
     void this.registerCommands(api);
     return true;
@@ -548,7 +551,13 @@ export class TelegramBot {
       buttons.push([{ text: this.t("button.open"), url: msg.link }]);
     }
 
-    const chunks = splitMarkdown(msg.text ?? "", TELEGRAM_LIMIT - 96 - htmlToPlain(footer).length);
+    // A reply to something typed in the web UI: show what it answers, so the chat here reads as one conversation.
+    let header = "";
+    if (msg.kind === "reply" && msg.quote?.trim()) {
+      const q = msg.quote.trim();
+      header = `<blockquote><i>${escapeHtml(this.t("bot.fromWeb"))}</i> ${escapeHtml(q.length > 300 ? `${q.slice(0, 300)}…` : q)}</blockquote>\n`;
+    }
+    const chunks = splitMarkdown(msg.text ?? "", TELEGRAM_LIMIT - 96 - htmlToPlain(footer).length - htmlToPlain(header).length);
     if (!chunks.length) chunks.push("");
     let lastId: number | undefined;
     for (let i = 0; i < chunks.length; i++) {
@@ -558,6 +567,7 @@ export class TelegramBot {
         const [first, ...rest] = chunks[0].split("\n");
         html = `<b>${escapeHtml(first)}</b>${rest.length ? "\n" + markdownToHtml(rest.join("\n")) : ""}`;
       } else html = markdownToHtml(chunks[i]);
+      if (i === 0) html = header + html;
       const last = i === chunks.length - 1;
       if (last) html += footer;
       if (!html.trim()) html = "…";

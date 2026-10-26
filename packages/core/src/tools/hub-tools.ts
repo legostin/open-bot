@@ -17,7 +17,7 @@ import { hubLocale } from "../i18n.ts";
 export const HUB_TOOL_PREFIX = "hub_";
 
 /** Settings the assistant may change on request. Everything else is refused with a pointer to the settings panel. */
-export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHours", "digestTimes", "notifyRatePerHour", "brainConcurrency"] as const;
+export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHours", "digestTimes", "notifyRatePerHour", "brainConcurrency", "channelMirror"] as const;
 
 const SECRET_KEY = /key|token|secret|password/i;
 
@@ -57,7 +57,8 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         `Change hub settings when the user asks. Allowed keys: ${AGENT_SETTABLE.join(", ")}. ` +
-        'Shapes: timezone "Europe/Berlin"; language "en"|"ru"; quietHours {enabled, start:"23:00", end:"08:00"}; digestTimes ["09:00","19:00"]; notifyRatePerHour number; brainConcurrency number; defaultAgent agent id. ' +
+        'Shapes: timezone "Europe/Berlin"; language "en"|"ru"; quietHours {enabled, start:"23:00", end:"08:00"}; digestTimes ["09:00","19:00"]; notifyRatePerHour number; brainConcurrency number; defaultAgent agent id; ' +
+        "channelMirror true|false (the default agent's replies to messages typed in the web UI also go to Telegram). " +
         "Network allowlists and approval behaviour can only be changed by the user in the settings panel.",
       inputSchema: obj({ patch: { type: "object", description: "Keys to change and their new values" } }, ["patch"]),
     },
@@ -410,6 +411,7 @@ function validateSettings(p: Record<string, unknown>): string | undefined {
     if (!q || typeof q !== "object" || typeof q.enabled !== "boolean" || !hhmm(q.start) || !hhmm(q.end)) return 'quietHours must be {enabled: boolean, start: "HH:MM", end: "HH:MM"}.';
   }
   if ("digestTimes" in p && (!Array.isArray(p.digestTimes) || !p.digestTimes.every(hhmm))) return 'digestTimes must be a list of "HH:MM".';
+  if ("channelMirror" in p && typeof p.channelMirror !== "boolean") return "channelMirror must be true or false.";
   for (const [k, min, max] of [["notifyRatePerHour", 0, 100], ["brainConcurrency", 1, 16]] as const) {
     if (k in p && (!Number.isInteger(p[k]) || (p[k] as number) < min || (p[k] as number) > max)) return `${k} must be a whole number from ${min} to ${max}.`;
   }

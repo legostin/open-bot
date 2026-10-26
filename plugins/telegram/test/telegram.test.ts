@@ -140,6 +140,13 @@ describe("telegram plugin", () => {
     expect(reply.params.chat_id).toBe(OWNER);
   });
 
+  it("quotes the web message a mirrored reply answers", async () => {
+    const from = tg.calls.length;
+    await h.channelSend("telegram", { kind: "reply", text: "Кофе в **турке**", quote: "где кофе <в турке>?" });
+    const sent = await tg.waitFor("sendMessage", (p) => p.text.includes("турке</b>"), { from });
+    expect(sent.params.text).toBe("<blockquote><i>You, in the web app:</i> где кофе &lt;в турке&gt;?</blockquote>\nКофе в <b>турке</b>");
+  });
+
   it("handles /stop, /tasks and non-text messages", async () => {
     let from = tg.calls.length;
     tg.push(privateMsg(OWNER, "/stop"));
@@ -330,6 +337,25 @@ describe("telegram plugin without a token", () => {
       expect(h.logs.join("\n")).not.toContain("uncaught");
     } finally {
       await h.stop();
+    }
+  });
+});
+
+describe("telegram plugin with Telegram's long polls", () => {
+  it("is connected (and shows the pairing link) as soon as the token works, not after the first empty poll", async () => {
+    const tg = await startMockTelegram(TOKEN, { maxPollSec: 30 });
+    const h = await startPlugin({ dir, settings: { apiBaseUrl: tg.url, pollTimeoutSec: 30 }, vault: { telegram_bot_token: { value: TOKEN } } });
+    try {
+      await tg.waitFor("getUpdates");
+      // The first getUpdates now holds for 30 s; the card must not say "Connecting…" meanwhile.
+      const st = await until(async () => {
+        const s = (await h.http({ path: "/status" })).body as any;
+        return s.state === "polling" ? s : undefined;
+      }, 1500);
+      expect(st.deepLink).toMatch(/^https:\/\/t\.me\/openbot_test_bot\?start=\d{6}$/);
+    } finally {
+      await h.stop();
+      await tg.close();
     }
   });
 });

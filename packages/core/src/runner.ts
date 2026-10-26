@@ -3,7 +3,7 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, SecretRequest, Task, ToolResult } from "@openbot/shared";
+import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, OutboundMessage, SecretRequest, Task, ToolResult } from "@openbot/shared";
 import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@openbot/shared";
 import type { Config } from "./config.ts";
 import type { Store, SessionRow } from "./store.ts";
@@ -46,6 +46,17 @@ export interface RunnerDeps {
   claudePluginDirs: () => string[];
   machineName: (machineId: string) => string | undefined;
   secrets: SecretIntake;
+}
+
+/** What the web UI passes as the channel of a typed message (not a registered channel). */
+const WEB_CHANNEL = "web";
+
+interface TurnOpts {
+  task?: Task;
+  /** The channel the user's message came from: the reply goes back there. */
+  replyChannel?: string;
+  /** The user's words typed in the web UI, quoted when the reply is mirrored to the channels. */
+  quote?: string;
 }
 
 interface Live {
@@ -143,7 +154,9 @@ export class SessionRunner {
     const note = captureNote(cap);
     const expanded = this.d.skills.expandCommand(hooked.payload.text) ?? hooked.payload.text;
     const prompt = note ? `${expanded}\n\n${note}` : expanded;
-    void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { replyChannel: opts.channel }));
+    // From the web UI: the user's words travel with a mirrored reply, so the phone shows the exchange.
+    const fromWeb = !opts.channel || opts.channel === WEB_CHANNEL;
+    void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { replyChannel: opts.channel, ...(fromWeb ? { quote: text } : {}) }));
     return msg;
   }
 
@@ -558,7 +571,7 @@ export class SessionRunner {
     return this.d.redactor.text(lines.join("\n"));
   }
 
-  async runTurn(conv: Conversation, prompt: string, opts: { task?: Task; replyChannel?: string }): Promise<TurnResult> {
+  async runTurn(conv: Conversation, prompt: string, opts: TurnOpts): Promise<TurnResult> {
     this.setTurning(conv.id, 1);
     try {
       return await this.turn(conv, prompt, opts);
@@ -567,7 +580,27 @@ export class SessionRunner {
     }
   }
 
-  private async turn(conv: Conversation, prompt: string, opts: { task?: Task; replyChannel?: string }): Promise<TurnResult> {
+  /**
+   * Where a finished reply goes besides the web UI: back to the channel the message came from; or, in the default
+   * agent's dialog, to every channel, so the user follows the main agent on the phone too (setting channelMirror).
+   */
+  private async deliver(conv: Conversation, text: string, opts: TurnOpts): Promise<void> {
+    if (!text) return;
+    const path = conv.kind === "main" ? `agent/${encodeURIComponent(conv.agentId)}` : conv.taskId ? `tasks/${encodeURIComponent(conv.taskId)}` : `chat/${encodeURIComponent(conv.id)}`;
+    const reply: OutboundMessage = { kind: "reply", text, conversationId: conv.id, link: `${this.d.config.publicUrl}/${path}` };
+    const ch = opts.replyChannel;
+    if (ch && ch !== WEB_CHANNEL) {
+      if (this.d.channels.has(ch)) await this.d.channels.send(ch, reply);
+      return;
+    }
+    // Typed in the web UI, or a turn nobody typed (a task finished, a system note).
+    const s = this.d.settings.get();
+    if (conv.kind === "main" && conv.agentId === s.defaultAgent && s.channelMirror !== false) {
+      await this.d.channels.broadcast(opts.quote ? { ...reply, quote: opts.quote } : reply);
+    }
+  }
+
+  private async turn(conv: Conversation, prompt: string, opts: TurnOpts): Promise<TurnResult> {
     const agent = this.d.agents.get(conv.agentId) ?? this.d.agents.get(this.d.settings.get().defaultAgent)!;
     const task = opts.task ?? (conv.taskId ? this.d.store.getTask(conv.taskId) : undefined);
     const prior = this.d.store.activeSession(conv.id, agent.id);
@@ -624,6 +657,7 @@ export class SessionRunner {
           void this.closeLive(row!.id);
           continue;
         }
+        await this.deliver(conv, r.text, opts);
         return r;
       } finally {
         this.brainLoad.set(key, Math.max(0, (this.brainLoad.get(key) ?? 1) - 1));
@@ -745,12 +779,6 @@ export class SessionRunner {
     if (error) parts.push({ type: "error", message: error });
     parts = mergeAttached(parts, current());
     this.d.store.updateMessage(msg.id, { parts, status: error && !produced ? "error" : "complete" });
-
-    if (replyChannel && fullText.trim() && this.d.channels.has(replyChannel)) {
-      const path =
-        conv.kind === "main" ? `agent/${encodeURIComponent(conv.agentId)}` : conv.taskId ? `tasks/${encodeURIComponent(conv.taskId)}` : `chat/${encodeURIComponent(conv.id)}`;
-      await this.d.channels.send(replyChannel, { kind: "reply", text: fullText.trim(), conversationId: conv.id, link: `${this.d.config.publicUrl}/${path}` });
-    }
     return { text: fullText.trim(), error, limited, awaitingApproval };
   }
 }

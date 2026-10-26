@@ -149,6 +149,45 @@ describe("hub (integration)", () => {
     }
   });
 
+  it("mirrors the main agent's replies to web messages into the channels, once", async () => {
+    const sent: any[] = [];
+    const peer = { closed: false, request: async (_m: string, p: any) => (sent.push(p), {}) } as any;
+    hub.channels.register("mirror", "Mirror", "mirror-test", peer);
+    try {
+      // Typed in the web UI: the reply also goes to the channel, with the question quoted.
+      await web.req("POST", `/api/conversations/${conv}/messages`, { text: "web question" });
+      await lastReply(conv, /fake heard: web question/);
+      const out = await until(() => sent.find((s) => /fake heard: web question/.test(s.message.text)), "the mirrored reply");
+      expect(out).toMatchObject({ channelId: "mirror", message: { kind: "reply", quote: "web question", conversationId: conv } });
+
+      // Written in the channel: the answer goes back there once, without quoting the user to themselves.
+      await createCoreCall(hub)("mirror-test", "channels.inbound", { channel: "mirror", text: "phone question" });
+      await lastReply(conv, /fake heard: phone question/);
+      await until(() => sent.some((s) => /fake heard: phone question/.test(s.message.text)), "the channel reply");
+      await new Promise((r) => setTimeout(r, 200));
+      const phone = sent.filter((s) => /fake heard: phone question/.test(s.message.text));
+      expect(phone).toHaveLength(1);
+      expect(phone[0].message.quote).toBeUndefined();
+
+      // Another agent's dialog stays in the web.
+      await web.req("PUT", "/api/agents/quiet", { name: "Quiet", description: "Stays home", brains: ["fake@local"], prompt: "Be quiet." });
+      const quiet = ((await web.req("GET", "/api/team")) as any[]).find((m) => m.agentId === "quiet");
+      await web.req("POST", `/api/conversations/${quiet.conversationId}/messages`, { text: "side question" });
+      await lastReply(quiet.conversationId, /fake heard: side question/);
+
+      // And the user can turn mirroring off.
+      await web.req("PATCH", "/api/settings", { channelMirror: false });
+      await web.req("POST", `/api/conversations/${conv}/messages`, { text: "private question" });
+      await lastReply(conv, /fake heard: private question/);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(sent.some((s) => /side question|private question/.test(s.message.text))).toBe(false);
+    } finally {
+      await web.req("PATCH", "/api/settings", { channelMirror: true });
+      await web.req("DELETE", "/api/agents/quiet");
+      hub.channels.unregisterPlugin("mirror-test");
+    }
+  });
+
   it("gives each agent its own dialog, keeps it when the agent leaves", async () => {
     await web.req("PUT", "/api/agents/scout", { name: "Scout", description: "Looks around", brains: ["fake@local"], prompt: "Look around." });
     const scout = ((await web.req("GET", "/api/team")) as any[]).find((m) => m.agentId === "scout");

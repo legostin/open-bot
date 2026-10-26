@@ -338,6 +338,8 @@ export interface Notification {
 export interface OutboundMessage {
   kind: "reply" | "notification" | "approval" | "digest";
   text: string;
+  /** A reply to a message the user wrote elsewhere (the web UI): their words, so the channel shows the exchange. */
+  quote?: string;
   /** Deep link into the web UI or console. */
   link?: string;
   conversationId?: string;

@@ -14,6 +14,8 @@ export interface CoreSettings {
   egressPrivateAllow: string[];
   /** Show approval details (full input) in channels like Telegram. */
   channelApprovalDetails: boolean;
+  /** The default agent's replies to messages typed in the web UI also go to the channels (Telegram). */
+  channelMirror: boolean;
   /** Concurrent sessions per brain@machine. */
   brainConcurrency: number;
   approvalInlineWaitSec: number;
@@ -56,6 +58,7 @@ export function defaultSettings(timezone: string, language: Locale = localeFromE
     brainEgressAllow: [],
     egressPrivateAllow: [],
     channelApprovalDetails: false,
+    channelMirror: true,
     brainConcurrency: 2,
     approvalInlineWaitSec: 45,
     approvalExpireHours: 24,
