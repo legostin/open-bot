@@ -1,0 +1,7 @@
+{
+  "name": "@openbot/plugin-telegram",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram channel for open-bot: chat, notifications, approvals"
+}

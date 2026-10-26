@@ -1,0 +1,143 @@
+// A tiny in-process fake of the Telegram Bot API for plugin tests.
+
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+
+export interface MockCall {
+  method: string;
+  params: any;
+}
+
+export interface MockTelegram {
+  url: string;
+  calls: MockCall[];
+  /** Queue an update; update_id is assigned automatically. */
+  push(update: Record<string, unknown>): number;
+  /** Resolve with the first call of `method` (after index `from`) that matches `pred`. */
+  waitFor(method: string, pred?: (params: any) => boolean, opts?: { from?: number; timeoutMs?: number }): Promise<MockCall>;
+  callsOf(method: string, pred?: (params: any) => boolean): MockCall[];
+  /** Make the next call of `method` fail with this Telegram error. */
+  failNext(method: string, code: number, description: string): void;
+  close(): Promise<void>;
+}
+
+export async function startMockTelegram(token: string): Promise<MockTelegram> {
+  const calls: MockCall[] = [];
+  const updates: Array<Record<string, unknown> & { update_id: number }> = [];
+  const failures = new Map<string, { code: number; description: string }>();
+  let nextUpdate = 1000;
+  let nextMessage = 1;
+  let pollWaiters: Array<() => void> = [];
+  let callWaiters: Array<() => void> = [];
+
+  const notifyCalls = () => {
+    const w = callWaiters;
+    callWaiters = [];
+    w.forEach((f) => f());
+  };
+
+  const handle = async (method: string, params: any): Promise<{ status: number; body: unknown }> => {
+    const fail = failures.get(method);
+    if (fail) {
+      failures.delete(method);
+      return { status: fail.code, body: { ok: false, error_code: fail.code, description: fail.description } };
+    }
+    switch (method) {
+      case "getMe":
+        return ok({ id: 4242, is_bot: true, first_name: "OpenBot", username: "openbot_test_bot" });
+      case "getUpdates": {
+        const offset = Number(params.offset ?? 0);
+        const pending = () => updates.filter((u) => u.update_id >= offset);
+        if (!pending().length && params.timeout > 0) {
+          await new Promise<void>((resolve) => {
+            const t = setTimeout(done, Math.min(Number(params.timeout), 2) * 1000);
+            function done() {
+              clearTimeout(t);
+              pollWaiters = pollWaiters.filter((w) => w !== done);
+              resolve();
+            }
+            pollWaiters.push(done);
+          });
+        }
+        return ok(pending());
+      }
+      case "sendMessage":
+        return ok({ message_id: nextMessage++, chat: { id: params.chat_id, type: "private" }, date: Math.floor(Date.now() / 1000), text: params.text });
+      case "editMessageText":
+      case "editMessageReplyMarkup":
+      case "answerCallbackQuery":
+      case "sendChatAction":
+      case "deleteWebhook":
+        return ok(true);
+      default:
+        return { status: 404, body: { ok: false, error_code: 404, description: "Not Found: method not found" } };
+    }
+  };
+
+  const server: Server = createServer((req, res) => {
+    let raw = "";
+    req.setEncoding("utf8");
+    req.on("data", (c) => (raw += c));
+    req.on("end", async () => {
+      const m = /^\/bot([^/]+)\/(\w+)$/.exec(req.url ?? "");
+      let status = 404;
+      let body: unknown = { ok: false, error_code: 404, description: "Not Found" };
+      if (m && m[1] !== token) {
+        status = 401;
+        body = { ok: false, error_code: 401, description: "Unauthorized" };
+      } else if (m) {
+        const params = raw ? JSON.parse(raw) : {};
+        calls.push({ method: m[2], params });
+        notifyCalls();
+        ({ status, body } = await handle(m[2], params));
+      }
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as AddressInfo).port;
+
+  const callsOf = (method: string, pred: (p: any) => boolean = () => true) => calls.filter((c) => c.method === method && pred(c.params));
+
+  return {
+    url: `http://127.0.0.1:${port}`,
+    calls,
+    push(update) {
+      const update_id = nextUpdate++;
+      updates.push({ update_id, ...update });
+      const w = pollWaiters;
+      pollWaiters = [];
+      w.forEach((f) => f());
+      return update_id;
+    },
+    callsOf,
+    waitFor(method, pred = () => true, opts = {}) {
+      const from = opts.from ?? 0;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`timeout waiting for ${method}; calls: ${JSON.stringify(calls.slice(from).map((c) => c.method))}`)), opts.timeoutMs ?? 8000);
+        const check = () => {
+          const hit = calls.slice(from).find((c) => c.method === method && pred(c.params));
+          if (hit) {
+            clearTimeout(timer);
+            resolve(hit);
+          } else callWaiters.push(check);
+        };
+        check();
+      });
+    },
+    failNext(method, code, description) {
+      failures.set(method, { code, description });
+    },
+    close: () =>
+      new Promise<void>((r) => {
+        pollWaiters.forEach((f) => f());
+        server.closeAllConnections();
+        server.close(() => r());
+      }),
+  };
+}
+
+function ok(result: unknown) {
+  return { status: 200, body: { ok: true, result } };
+}

@@ -1,0 +1,79 @@
+export const TRIGGER_KINDS = ["schedule", "once", "watch", "event", "heartbeat"] as const;
+export type TriggerKind = (typeof TRIGGER_KINDS)[number];
+
+export type RunReason = "schedule" | "catch-up" | "once" | "change" | "webhook" | "heartbeat" | "manual";
+
+export interface TriggerState {
+  /** Next planned firing (ISO). Persisted so missed runs can be detected after a restart. */
+  nextRunAt?: string;
+  lastRunAt?: string;
+  lastStatus?: "ok" | "error" | "skipped";
+  lastError?: string;
+  lastTaskId?: string;
+  /** Runs started today (local date in the user's timezone). */
+  runsToday?: { date: string; count: number };
+  /** once: already fired. */
+  done?: boolean;
+  /** watch: last poll, extracted value and its hash. */
+  lastCheckedAt?: string;
+  lastValue?: string;
+  lastHash?: string;
+  lastChangeAt?: string;
+  lastFeedback?: { value: "useful" | "less" | "off"; at: string };
+}
+
+export interface Trigger {
+  id: string;
+  kind: TriggerKind;
+  name: string;
+  prompt: string;
+  agentId: string;
+  enabled: boolean;
+  maxRunsPerDay: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  /** schedule: 5-field cron in the user's timezone. */
+  cron?: string;
+  /** once: ISO datetime. */
+  at?: string;
+  /** watch */
+  url?: string;
+  selector?: string;
+  jsonPath?: string;
+  intervalMinutes?: number;
+  /** event: shared secret for the public webhook. */
+  secret?: string;
+  /** heartbeat: local "HH:MM" slots and ISO weekdays (0 = Sunday … 6 = Saturday). */
+  times?: string[];
+  weekdays?: number[];
+  state: TriggerState;
+}
+
+export interface TriggerRun {
+  id: string;
+  at: string;
+  reason: RunReason;
+  status: "started" | "skipped" | "error";
+  taskId?: string;
+  detail?: string;
+}
+
+/** Fields accepted from tools and the UI for create / update. */
+export interface TriggerInput {
+  kind?: string;
+  name?: string;
+  prompt?: string;
+  agent?: string;
+  agentId?: string;
+  enabled?: boolean;
+  maxRunsPerDay?: number;
+  cron?: string;
+  at?: string;
+  url?: string;
+  selector?: string | null;
+  jsonPath?: string | null;
+  intervalMinutes?: number;
+  times?: string[];
+  weekdays?: number[];
+}
