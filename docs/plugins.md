@@ -89,7 +89,7 @@ export default definePlugin({
 
 ## Мозги
 
-Мозг — это `BrainProviderImpl`: `probe()` (установлен? есть вход?) и `createSession(opts)`. Сессия получает системный промпт, рабочую папку и MCP-доступ к инструментам хаба (`opts.mcp.url`, `opts.mcp.token`, `opts.mcp.bridgeCommand` для stdio-клиентов). `send(turn)` выдаёт события `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error`, `done`. При `limit_hit` ядро помечает мозг занятым до `resetAt` и переключается на следующий в списке агента. Готовые адаптеры для CLI — в `@openbot/brains-cli`.
+Мозг — это `BrainProviderImpl`: `probe()` (установлен? есть вход?) и `createSession(opts)`. Сессия получает системный промпт, рабочую папку и MCP-доступ к инструментам хаба (`opts.mcp.url`, `opts.mcp.token`, `opts.mcp.bridgeCommand` для stdio-клиентов). `send(turn)` выдаёт события `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error`, `done`. При `limit_hit` ядро помечает мозг занятым до `resetAt` и переключается на следующий в списке агента. Готовые адаптеры для CLI — в `@openbot/brains-cli`. Если у мозга есть варианты (например, провайдеры API), перечислите их в `variants: ["anthropic", "openai"]` — в интерфейсе они появятся отдельными мозгами `<id>:<вариант>@local`, а вариант придёт в `probe(variant)` и `opts.variant`.
 
 ## UI
 

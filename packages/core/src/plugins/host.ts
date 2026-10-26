@@ -32,7 +32,7 @@ export interface PluginRecord {
 }
 
 export interface BrainSink {
-  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer): void;
+  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer, variants?: string[]): void;
   unregisterPlugin(pluginId: string): void;
 }
 
@@ -379,9 +379,10 @@ export class PluginHost {
       return {};
     });
 
-    peer.handle("register.brain", (p: { id: string; label: string }) => {
+    peer.handle("register.brain", (p: { id: string; label: string; variants?: string[] }) => {
       if (!m.contributes.brains.includes(p.id)) deny(`brain ${p.id} not declared in contributes.brains`);
-      this.d.brains.registerPluginBrain(p.id, p.label, id, peer);
+      const variants = Array.isArray(p.variants) ? p.variants.filter((v) => typeof v === "string" && /^[\w.-]{1,64}$/.test(v)).slice(0, 32) : [];
+      this.d.brains.registerPluginBrain(p.id, p.label, id, peer, variants);
       this.d.bus.emit("brains.updated", {});
       return {};
     });

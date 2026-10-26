@@ -160,6 +160,8 @@ describe("hub (integration)", () => {
     expect(m.brainRef).toBe("fake2@local");
     const brains: any[] = await web.req("GET", "/api/brains");
     expect(brains.find((b) => b.ref === "fake@local").limitedUntil).toBeTruthy();
+    expect(brains.find((b) => b.ref === "fake2:a@local")).toMatchObject({ label: "fake2 (a)", connected: true });
+    expect(brains.find((b) => b.ref === "fake2@local")?.connected).toBe(true);
     await web.req("DELETE", `/api/brains/limits/${encodeURIComponent("fake@local")}`);
   });
 

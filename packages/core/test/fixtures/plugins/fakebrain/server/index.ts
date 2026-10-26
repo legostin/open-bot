@@ -28,6 +28,7 @@ export default {
       ctx.brains.register({
         id,
         label: id,
+        variants: id === "fake2" ? ["a", "b"] : undefined,
         probe: async () => ({ available: true, authenticated: true }),
         createSession: async (o: BrainSessionOptions) => ({
           async *send(turn): AsyncGenerator<BrainEvent> {

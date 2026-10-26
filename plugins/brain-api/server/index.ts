@@ -69,7 +69,7 @@ const plugin: PluginModule = {
       return new ApiBrainSession({ ctx, opts, variant: v, settings: () => settings, history, prefixHash });
     }
 
-    ctx.brains.register({ id: "api", label: "API", probe, createSession });
+    ctx.brains.register({ id: "api", label: "API", variants: ["anthropic", "openai", "openrouter", "custom"], probe, createSession });
   },
 };
 

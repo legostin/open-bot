@@ -31,6 +31,8 @@ export interface BrainSessionImpl {
 export interface BrainProviderImpl {
   id: string;
   label: string;
+  /** Named variants listed as separate brains (`<id>:<variant>`), e.g. API providers. */
+  variants?: string[];
   probe(variant?: string): Promise<ProbeResult>;
   createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl>;
 }
