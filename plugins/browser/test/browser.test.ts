@@ -10,8 +10,21 @@ import { connect, type AddressInfo, type Socket } from "node:net";
 import type { ToolResult } from "@owlbot/shared";
 import { catalogLookup, localizeValue, readPluginLayout } from "@owlbot/shared";
 import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import { chromium } from "playwright";
 
 const PLUGIN_DIR = join(import.meta.dirname, "..");
+
+/**
+ * The harness gives the plugin its own HOME, where Playwright finds no browsers and would download Chromium on the
+ * first call (too slow for a test, and impossible behind the fake proxy below, which tunnels every CONNECT to a plain
+ * HTTP server). Point the plugin at the browsers this machine already has, unless PLAYWRIGHT_BROWSERS_PATH is set.
+ */
+function browsersEnv(): Record<string, string> {
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH) return {};
+  const exe = chromium.executablePath();
+  const m = /^(.*?)[\\/]chromium-\d+[\\/]/.exec(exe);
+  return m && existsSync(exe) ? { PLAYWRIGHT_BROWSERS_PATH: m[1] } : {};
+}
 const SECRET = "S3cr3t-Pa55!word";
 const LONG = Array.from({ length: 600 }, (_, i) => `Строка номер ${i} с некоторым текстом.`).join("\n");
 
@@ -154,6 +167,7 @@ describe("browser plugin (headless Chromium)", () => {
       settings: { headless: "always", allowLocalNetwork: true, takeoverWaitSec: 0 },
       vault: { "site-login": { url: base, username: "alice", password: SECRET } },
       core: fakeCore,
+      env: browsersEnv(),
     });
   }, 60_000);
 
@@ -477,7 +491,7 @@ describe("browser plugin behind the hub egress proxy", () => {
     h = await startPlugin({
       dir: PLUGIN_DIR,
       settings: { headless: "always" },
-      env: { HTTP_PROXY: url, HTTPS_PROXY: url, http_proxy: url, https_proxy: url, NO_PROXY: "", no_proxy: "" },
+      env: { ...browsersEnv(), HTTP_PROXY: url, HTTPS_PROXY: url, http_proxy: url, https_proxy: url, NO_PROXY: "", no_proxy: "" },
     });
   }, 60_000);
 
