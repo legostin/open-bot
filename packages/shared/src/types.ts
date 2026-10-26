@@ -150,6 +150,26 @@ export interface PluginSetupView {
   secrets: Array<{ vaultId: string; title: string; hint?: string; link?: string; pattern?: string; required: boolean; present: boolean; setting?: string }>;
 }
 
+/** A new team agent the default agent puts together with the user in the chat. Nothing exists until it is created. */
+export interface AgentDraft {
+  id: string;
+  conversationId: string;
+  name: string;
+  /** Shown to the user, in their language. */
+  description: string;
+  /** The new agent's instructions. */
+  prompt: string;
+  avatar: AgentAvatar;
+  /** Unset until the user has said how proactive the agent should be (the agent then gets the default). */
+  initiative?: 0 | 1 | 2;
+  brains: string[];
+  status: "draft" | "created";
+  /** The agent made from the draft. */
+  agentId?: string;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
 // ---------- Conversations, messages ----------
 
 export type MessageRole = "user" | "assistant" | "system";
@@ -165,7 +185,9 @@ export type MessagePart =
   /** A secret the user types into the chat card; the value goes straight to the vault and never into the conversation. */
   | { type: "secret_request"; requestId: string; vaultId: string; title: string; status: SecretRequestStatus }
   /** A plugin's setup card: its secrets and its own setup UI (e.g. Telegram pairing), live. */
-  | { type: "plugin_setup"; pluginId: string };
+  | { type: "plugin_setup"; pluginId: string }
+  /** A new agent being put together in the chat: its look, description and proactivity, live, with a button that creates it. */
+  | { type: "agent_draft"; draftId: string };
 
 export interface Message {
   id: string;
@@ -437,4 +459,5 @@ export type UiEvent =
   | { type: "machine.updated"; data: Machine }
   | { type: "vault.state"; data: { state: VaultState } }
   | { type: "secret.request"; data: SecretRequest }
+  | { type: "agent_draft.updated"; data: AgentDraft }
   | { type: "plugin.event"; data: { pluginId: string; channel: string; payload: unknown } };

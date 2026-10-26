@@ -44,6 +44,9 @@ const MIGRATIONS: string[] = [
   update conversations set read_at = updated_at;
   create index conversations_kind_agent on conversations(kind, agent_id);
   `,
+  // New agents put together in the chat: the card shows the live draft; the agent exists once it is created.
+  `create table agent_drafts(id text primary key, conversation_id text not null, data text not null, status text not null, agent_id text,
+    created_at text not null, updated_at text not null);`,
 ];
 
 export function openDb(file: string): Db {

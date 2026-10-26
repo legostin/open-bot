@@ -1,6 +1,6 @@
 // In-process event bus. Web clients and plugin subscribers are attached by the server and plugin host.
 
-import type { TeamMember, UiEvent } from "@openbot/shared";
+import type { AgentDraft, TeamMember, UiEvent } from "@openbot/shared";
 
 export type BusEvents = {
   "message.created": any;
@@ -22,6 +22,8 @@ export type BusEvents = {
   "plugins.updated": Record<string, never>;
   "brains.updated": Record<string, never>;
   "agents.updated": Record<string, never>;
+  /** A new agent's draft in the chat changed (or became the agent). */
+  "agent_draft.updated": AgentDraft;
   "settings.updated": Record<string, unknown>;
   "machine.updated": any;
   "plugin.event": { pluginId: string; channel: string; payload: unknown };
@@ -80,6 +82,7 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "machine.updated":
     case "plugin.event":
     case "secret.request":
+    case "agent_draft.updated":
       return { type: name, data: payload } as UiEvent;
     case "vault.state":
       return { type: "vault.state", data: payload } as UiEvent;

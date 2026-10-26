@@ -1,10 +1,15 @@
 // The settings panel beside the chat: open or closed, and which section it shows ("home" = the section list).
 
+import { navigate } from "wouter/use-browser-location";
 import { createStore } from "../lib/store";
+import { errorText } from "../lib/api";
 import type { PanelSection } from "../components/nav";
+import { sendMessage, session } from "./app";
+import { toast } from "./toast";
+import { t } from "../i18n";
 
 /** A one-off request for the section to act on as it opens (the section clears it). */
-export type PanelIntent = { kind: "agent.new" } | { kind: "agent.edit"; agentId: string };
+export type PanelIntent = { kind: "agent.edit"; agentId: string };
 
 export interface PanelState {
   open: boolean;
@@ -30,9 +35,16 @@ export function clearPanelIntent(): void {
   panel.set((p) => (p.intent ? { ...p, intent: undefined } : p));
 }
 
-/** "Add agent": the Agents section with its new-agent form open. */
+/**
+ * "Add agent": no form. The default agent's dialog opens with the request, and the agent asks for a name, writes a
+ * description and shows the newcomer as a card where the user picks the look.
+ */
 export function addAgent(): void {
-  openPanel("agents", { kind: "agent.new" });
+  const s = session.get();
+  if (!s) return;
+  closePanel();
+  navigate("/");
+  sendMessage(s.mainConversationId, t("team.addPrompt")).catch((e) => toast(errorText(e), "error"));
 }
 
 /** An agent's settings: the Agents section with that agent's editor open. */

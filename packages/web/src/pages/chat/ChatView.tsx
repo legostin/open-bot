@@ -12,6 +12,7 @@ import { AgentHeader } from "./AgentHeader";
 import { DetailsToggle } from "./DetailsToggle";
 import { t } from "../../i18n";
 import { MessageView } from "./MessageView";
+import { LatestDraftCards } from "./AgentDraftCard";
 import { Composer } from "./Composer";
 
 function TitleEditor({ id, title }: { id: string; title: string }) {
@@ -73,6 +74,11 @@ export function ChatView({
   const meta = convList.find((c) => c.id === conversationId);
   const agentList = useStore(agents);
   const agentById = useMemo(() => new Map((agentList ?? []).map((a) => [a.id, a])), [agentList]);
+  const latestDrafts = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const msg of conv.messages) for (const p of msg.parts) if (p.type === "agent_draft") m.set(p.draftId, msg.id);
+    return m;
+  }, [conv.messages]);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const prevHeight = useRef<number | null>(null);
@@ -145,9 +151,11 @@ export function ChatView({
           {conv.loaded && !conv.messages.length && !conv.error && (
             <EmptyState icon="sparkles" title={t("chat.empty")} hint={emptyHint ?? t("chat.emptyHint")} />
           )}
-          {conv.messages.map((m) => (
-            <MessageView key={m.id} message={m} agent={m.agentId ? agentById.get(m.agentId) : undefined} />
-          ))}
+          <LatestDraftCards.Provider value={latestDrafts}>
+            {conv.messages.map((m) => (
+              <MessageView key={m.id} message={m} agent={m.agentId ? agentById.get(m.agentId) : undefined} />
+            ))}
+          </LatestDraftCards.Provider>
         </div>
         {showDown && (
           <button

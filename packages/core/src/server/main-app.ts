@@ -14,6 +14,7 @@ import type { Hub } from "../app.ts";
 import { toUiEvent } from "../bus.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
 import { agentFromMarkdown, localizedAgent } from "../agents.ts";
+import { draftPatch } from "../agent-drafts.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, safeFile, securityHeaders, sendFile } from "./http.ts";
 
 const COOKIE = "ob_session";
@@ -293,6 +294,28 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.delete("/api/agents/:id", async (req) => {
       hub.removeAgent((req.params as any).id as string, "user");
       return { ok: true };
+    });
+
+    // ----- new agents put together in the chat (the card) -----
+    api.get("/api/agent-drafts/:id", async (req) => {
+      const d = hub.agentDrafts.get((req.params as any).id);
+      if (!d) throw new HttpError(404, "agentDraft.notFound");
+      return d;
+    });
+    // In the card the user picks the look and the proactivity; everything else they say in words.
+    api.patch("/api/agent-drafts/:id", async (req) => {
+      const patch = draftPatch((req.body ?? {}) as Record<string, unknown>, ["avatar", "initiative"]);
+      return hub.agentDrafts.update((req.params as any).id, patch);
+    });
+    api.post("/api/agent-drafts/:id/create", async (req) => {
+      const agent = hub.createAgentFromDraft((req.params as any).id, "user");
+      const draft = hub.agentDrafts.get((req.params as any).id)!;
+      hub.runner.noteAndContinue(
+        draft.conversationId,
+        `[System] The user pressed Create in the card: agent “${agent.name}” (id ${agent.id}) is on the team now, with its own dialog in the sidebar. ` +
+          "Say so in one short sentence; do not call hub_agent_draft for it again.",
+      );
+      return { draft, agent: localizedAgent(agent, requestLocale(req)) };
     });
 
     // ----- brains -----

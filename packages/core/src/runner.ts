@@ -166,6 +166,9 @@ export class SessionRunner {
   attachPart(conversationId: string, part: MessagePart): void {
     const msgId = this.streamingMessage.get(conversationId);
     const m = msgId ? this.d.store.getMessage(msgId) : undefined;
+    // The same card twice in one reply (the agent called the tool again) shows once.
+    const key = attachedKey(part);
+    if (m && key && m.parts.some((p) => attachedKey(p) === key)) return;
     if (m) this.d.store.updateMessage(m.id, { parts: [...m.parts, part] });
     else this.d.store.addMessage({ conversationId, role: "system", parts: [part], status: "complete" });
   }
@@ -183,6 +186,14 @@ export class SessionRunner {
       return;
     }
     const note = `[System] The user stored ${r.title} in the vault as vault://${r.vaultId}${r.pluginId ? ` and plugin ${r.pluginId} now uses it` : ""}. Carry on with what it was needed for.`;
+    this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete" });
+    void this.enqueue(conv.id, () => this.runTurn(conv, note, {}));
+  }
+
+  /** The user did something in a card, outside any turn: note it for the agent and let it answer. */
+  noteAndContinue(conversationId: string, note: string): void {
+    const conv = this.d.store.getConversation(conversationId);
+    if (!conv) return;
     this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete" });
     void this.enqueue(conv.id, () => this.runTurn(conv, note, {}));
   }
@@ -790,6 +801,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "approval") return `approval:${p.approvalId}`;
   if (p.type === "secret_request") return `secret:${p.requestId}`;
   if (p.type === "plugin_setup") return `setup:${p.pluginId}`;
+  if (p.type === "agent_draft") return `draft:${p.draftId}`;
   return undefined;
 }
 

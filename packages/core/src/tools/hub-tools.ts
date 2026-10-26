@@ -8,10 +8,11 @@
 // - security-relevant settings (egress allowlists, approval behaviour) stay with the user in the settings panel;
 // - revoking a machine is an external effect and needs the user's approval in the security console.
 
-import type { AgentDef, JsonSchema, ToolCallContext, ToolDescriptor, ToolResult } from "@openbot/shared";
+import type { AgentDef, AgentDraft, JsonSchema, ToolCallContext, ToolDescriptor, ToolResult } from "@openbot/shared";
 import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, parseAvatar, parseBrainRef } from "@openbot/shared";
 import type { Hub } from "../app.ts";
 import { agentFromMarkdown } from "../agents.ts";
+import { draftPatch } from "../agent-drafts.ts";
 import { hubLocale } from "../i18n.ts";
 
 export const HUB_TOOL_PREFIX = "hub_";
@@ -22,7 +23,7 @@ export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHou
 const SECRET_KEY = /key|token|secret|password/i;
 
 /** Tools that only put a card in front of the user, who then decides: fine even after outside content was read. */
-const CARDS = new Set(["secret_request", "plugin_setup"]);
+const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft"]);
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 const json = (v: unknown): ToolResult => text(JSON.stringify(v, null, 2));
@@ -101,7 +102,7 @@ export function registerHubTools(hub: Hub): void {
       name: "agent_save",
       effect: "local-write",
       description:
-        "Create an agent or change one. For a new agent give at least a name (and ideally an avatar and a prompt); pass id to edit an existing one. " +
+        "Change an agent: pass its id. New agents go through hub_agent_draft, which shows the user a card to confirm; create one here (with at least a name) only when the user asks to skip that. " +
         `avatar = {color, shape}; colors: ${AVATAR_COLORS.join(", ")}; shapes: ${AVATAR_SHAPES.join(", ")}. ` +
         "brains is the ordered fallback list (see hub_brains_list), initiative 0 = only reacts, 1 = suggests, 2 = acts within rules.",
       inputSchema: obj({
@@ -152,6 +153,51 @@ export function registerHubTools(hub: Hub): void {
       if (id === ctx.agentId) return text("You cannot delete yourself; the user can do it in the settings panel.", true);
       hub.removeAgent(id, "agent");
       return text(`Agent ${id} deleted.`);
+    },
+  );
+
+  reg(
+    {
+      name: "agent_draft",
+      effect: "local-write",
+      description:
+        "Add a new agent to the user's team through the conversation: a live card in this chat shows it, no forms. " +
+        "1) If the user has not named it yet, ask for a name in one short question. " +
+        "2) Call this with name, description (one or two sentences in the user's language: what the agent does for them, your best guess from the name) " +
+        "and prompt (its instructions: role, duties, how it works and talks with the user). The card shows the avatar with shape and color pickers: " +
+        "the user picks them there or tells you (then pass avatar). " +
+        '3) When the user corrects what the agent is for ("SEO as in search optimisation, not CEO"), call again with draft and a rewritten description and prompt, and a better name if one fits. ' +
+        "4) Ask in one short question how proactive it should be (the card shows the levels, so do not list them) and pass initiative: " +
+        "0 = answers only when asked; 1 = suggests ideas and reminders, background work with read-only tools; 2 = acts on its own within the user's rules. " +
+        "5) When the user says to create it, call with draft and create: true (the card also has a Create button). " +
+        "One question per message, short replies. Call with just draft to see what the user picked in the card. hub_agent_save is for agents that already exist.",
+      inputSchema: obj({
+        draft: { type: "string", description: "Draft id from an earlier call; omit to start a new draft" },
+        name: { type: "string" },
+        description: { type: "string", description: "For the user, in their language" },
+        prompt: { type: "string", description: "The new agent's system instructions" },
+        avatar: obj({ color: { type: "string", enum: [...AVATAR_COLORS] }, shape: { type: "string", enum: [...AVATAR_SHAPES] } }),
+        initiative: { type: "number", enum: [0, 1, 2] },
+        brains: { type: "array", items: { type: "string" }, description: "Ordered fallback list; defaults to yours" },
+        create: { type: "boolean", description: "Create the agent now; only once the user has agreed" },
+      }),
+    },
+    (i, ctx) => {
+      const patch = draftPatch(i);
+      let d = i.draft ? hub.agentDrafts.get(String(i.draft)) : undefined;
+      if (i.draft && !d) return text(`There is no draft ${i.draft}. Start a new one without draft.`, true);
+      if (d?.status === "created") return text(`That draft is already the agent ${d.agentId}. Change it with hub_agent_save {"id":"${d.agentId}"}.`, true);
+      const fresh = !d;
+      if (!d) {
+        if (!patch.name) return text("A new agent needs a name: ask the user for one first.", true);
+        d = hub.agentDrafts.create({ ...patch, name: patch.name, brains: patch.brains ?? hub.agents.get(ctx.agentId)?.brains ?? [], conversationId: ctx.conversationId });
+      } else if (Object.keys(patch).length) d = hub.agentDrafts.update(d.id, patch);
+      hub.runner.attachPart(ctx.conversationId, { type: "agent_draft", draftId: d.id });
+      if (!i.create) return text(draftSummary(d, fresh));
+      // Showing the card is fine after outside content was read; making the agent on the model's word is not.
+      if (ctx.tainted) return text("Not created: this conversation has read outside content. Ask the user to press Create in the card.", true);
+      const agent = hub.createAgentFromDraft(d.id, "agent");
+      return text(`Agent ${agent.id} “${agent.name}” created: it is on the team, with its own dialog in the sidebar. Tell the user in one sentence.`);
     },
   );
 
@@ -434,7 +480,24 @@ function servesSession(hub: Hub, pluginId: string, ctx: ToolCallContext): boolea
 const CYRILLIC_LATIN = ["a", "b", "v", "g", "d", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "h", "c", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"];
 const TRANSLIT: Record<string, string> = Object.fromEntries([...CYRILLIC_LATIN.map((l, i) => [String.fromCharCode(0x430 + i), l]), [String.fromCharCode(0x451), "e"]]);
 
-function slug(s: string): string {
+/** What the model needs to know about a draft after each call, and what to do next. */
+function draftSummary(d: AgentDraft, fresh: boolean): string {
+  const next = !d.description || !d.prompt
+    ? "Write its description and prompt (call again with draft)."
+    : fresh
+      ? "Tell the user in a short message that the card is in the chat (it sits above your text): they pick the look there or tell you, and correct the description in their own words. Then ask how proactive it should be."
+      : d.initiative === undefined
+        ? "Ask how proactive it should be, unless you just did. Mention the card only as \"the card\", it sits above your text."
+        : "Ask whether to create it, or let the user press Create in the card.";
+  return [
+    `Draft ${d.id} for “${d.name}” is shown in the chat as a card.`,
+    `Description: ${d.description || "(none yet)"}`,
+    `Avatar: ${d.avatar.color} ${d.avatar.shape}. Proactivity: ${d.initiative ?? "not chosen yet"}. Brains: ${d.brains.join(", ") || "none"}.`,
+    `Next: ${next}`,
+  ].join("\n");
+}
+
+export function slug(s: string): string {
   const latin = [...s.toLowerCase()]
     .map((c) => TRANSLIT[c] ?? c)
     .join("")

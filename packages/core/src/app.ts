@@ -16,7 +16,7 @@ import { ApprovalService } from "./approvals.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { HookRegistry } from "./hooks.ts";
 import { ToolGateway } from "./tools/gateway.ts";
-import { AgentRegistry, agentName } from "./agents.ts";
+import { AgentRegistry, agentFromMarkdown, agentName } from "./agents.ts";
 import { SkillIndex } from "./skills.ts";
 import { PluginHost } from "./plugins/host.ts";
 import { EgressProxy } from "./egress.ts";
@@ -32,8 +32,9 @@ import { AuthService } from "./auth.ts";
 import { MachineHub } from "./machines.ts";
 import { createCoreCall } from "./core-call.ts";
 import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, LocalizedError, t } from "./i18n.ts";
-import { registerHubTools } from "./tools/hub-tools.ts";
+import { registerHubTools, slug } from "./tools/hub-tools.ts";
 import { SecretIntake } from "./secrets.ts";
+import { AgentDrafts } from "./agent-drafts.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -65,6 +66,7 @@ export class Hub {
   auth: AuthService;
   machines: MachineHub;
   secrets: SecretIntake;
+  agentDrafts: AgentDrafts;
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -116,6 +118,7 @@ export class Hub {
     });
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit });
     this.secrets = new SecretIntake({ db: this.db, bus: this.bus, audit: this.audit, vault: this.vault, plugins: () => this.plugins });
+    this.agentDrafts = new AgentDrafts({ db: this.db, bus: this.bus });
     this.runner = new SessionRunner({
       config,
       store: this.store,
@@ -216,6 +219,30 @@ export class Hub {
     const saved = this.agents.save(agent);
     this.audit.append(actor, "agent.save", saved.id);
     this.bus.emit("agents.updated", {});
+    return saved;
+  }
+
+  /** A draft from the chat joins the team under a fresh id derived from its name; it never replaces an existing agent. */
+  createAgentFromDraft(draftId: string, actor: string): AgentDef {
+    const d = this.agentDrafts.open(draftId);
+    const base = slug(d.name);
+    let id = base;
+    for (let n = 2; this.agents.get(id); n++) id = `${base.slice(0, 36)}-${n}`;
+    const saved = this.saveAgent(
+      {
+        ...agentFromMarkdown(id, "", "user"),
+        id,
+        name: d.name,
+        description: d.description,
+        prompt: d.prompt,
+        avatar: d.avatar,
+        brains: d.brains,
+        ...(d.initiative !== undefined ? { initiative: d.initiative } : {}),
+        source: "user",
+      },
+      actor,
+    );
+    this.agentDrafts.markCreated(d.id, saved.id);
     return saved;
   }
 

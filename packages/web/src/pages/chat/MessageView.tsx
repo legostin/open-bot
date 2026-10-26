@@ -17,6 +17,7 @@ import { pickMessageRenderer, pickToolRenderer } from "../../plugins/registry";
 import { usePluginRegistry } from "../../plugins/slots";
 import { ToolCard } from "./ToolCard";
 import { PluginSetupCard, SecretRequestCard } from "../../components/SecretCards";
+import { AgentDraftCard } from "./AgentDraftCard";
 import { t, type MessageKey } from "../../i18n";
 
 const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
@@ -189,6 +190,8 @@ function Parts({ message }: { message: Message }) {
             return <SecretRequestCard key={it.key} part={p} />;
           case "plugin_setup":
             return <PluginSetupCard key={it.key} pluginId={p.pluginId} />;
+          case "agent_draft":
+            return <AgentDraftCard key={it.key} draftId={p.draftId} messageId={message.id} />;
           default:
             return null;
         }
