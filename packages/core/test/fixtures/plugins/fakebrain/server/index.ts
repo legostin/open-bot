@@ -1,7 +1,12 @@
 // Scriptable brain for core integration tests.
 // "CALL <tool> <json>" calls a hub tool over MCP; "LIMIT" makes brain `fake` hit its limit; "PROMPT?" echoes the instructions.
+// Group chats: "HANDOFF <id>" on the last line replies "over to @<id>"; "ECHO?" anywhere echoes the turn's "[...]" lines;
+// "SLOW" at the end of the last line keeps the turn going until it is interrupted (or 5 s pass).
 import type { PluginContext } from "@owlbot/plugin-sdk";
 import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
+
+/** Sessions in a "SLOW" turn: interrupt() ends it. */
+const slow = new Map<string, () => void>();
 
 async function mcpCall(o: BrainSessionOptions, name: string, args: unknown): Promise<{ text: string; isError: boolean }> {
   const r = await fetch(o.mcp.url, {
@@ -53,6 +58,28 @@ export default {
               yield { type: "done", resumeToken: `${id}-resume` };
               return;
             }
+            if ((turn.text.trim().split("\n").at(-1) ?? "").endsWith("SLOW")) {
+              yield { type: "text", delta: `${id} is thinking` };
+              await new Promise<void>((resolve) => {
+                slow.set(o.sessionId, resolve);
+                setTimeout(resolve, 5000);
+              });
+              slow.delete(o.sessionId);
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
+            const handoff = /HANDOFF (\S+)$/.exec(turn.text.trim().split("\n").at(-1) ?? "");
+            if (handoff) {
+              yield { type: "text", delta: `over to @${handoff[1]}` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
+            if (turn.text.includes("ECHO?")) {
+              const seen = turn.text.split("\n").filter((l) => l.startsWith("["));
+              yield { type: "text", delta: `${id} saw: ${seen.join(" | ")}` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
             const m = /CALL (\S+) (\{.*\})/.exec(turn.text);
             if (m && !turn.text.includes("[System]")) {
               yield { type: "tool_call", id: "c1", name: m[1], input: JSON.parse(m[2]) };
@@ -65,7 +92,9 @@ export default {
             }
             yield { type: "done", resumeToken: `${id}-resume` };
           },
-          interrupt() {},
+          interrupt() {
+            slow.get(o.sessionId)?.();
+          },
           close() {},
         }),
       });

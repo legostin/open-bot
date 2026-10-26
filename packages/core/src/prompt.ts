@@ -20,13 +20,31 @@ export interface PromptContext {
   machineName?: string;
   /** What is left of the hub's first-run setup (the default agent, interactive sessions only). */
   setup?: string;
+  /** A group chat the agent takes part in: its title and members, the lead first. */
+  group?: { title: string; members: Array<{ id: string; name: string }> };
+}
+
+/** Where the agent is when it talks in a group chat, and how the floor passes between members. */
+function groupWhere(c: PromptContext & { group: NonNullable<PromptContext["group"]> }): string {
+  const others = c.group.members.filter((m) => m.id !== c.agent.id);
+  const example = others[0]?.id ?? "id";
+  const members = c.group.members.map((m, i) => `${m.name} (@${m.id}${i === 0 ? ", the lead" : ""}${m.id === c.agent.id ? ", you" : ""})`).join(", ");
+  return [
+    `You are taking part in the group chat "${c.group.title}" (web UI): the user and ${c.group.members.length} agents of their team. Members: ${members}.`,
+    "Each turn, the messages you have not seen yet (the user's and other members') come first as `[Name]: text` lines; after them comes the user's message to you, or a `[System]` note saying why it is your turn.",
+    "A user's message is answered by the members it mentions with @, one after another, or by the lead when it mentions nobody.",
+    `To hand the floor to another member, mention them as @id in your reply (e.g. @${example}): they answer right after you. Mention a member only when you want them to reply now, never yourself; a mention inside backticks does not count.`,
+    "Reply as yourself in plain text, without a `[Name]:` prefix, and add your own part instead of repeating what others said.",
+  ].join("\n");
 }
 
 export function buildSystemPrompt(c: PromptContext): string {
   const now = new Intl.DateTimeFormat("ru-RU", { timeZone: c.timezone, dateStyle: "full", timeStyle: "short" }).format(new Date());
   const where = c.task
     ? `You are working on a ${c.background ? "background " : ""}task "${c.task.title}" (id ${c.task.id}, created by ${c.task.createdBy}${c.task.triggerId ? `, trigger ${c.task.triggerId}` : ""}).`
-    : `You are one of the agents on the user's team, talking with them in your own long-lived dialog (${c.defaultAgent ? "web UI and/or Telegram" : "web UI"}). There are no separate chats: this dialog is your ongoing thread with the user.`;
+    : c.group
+      ? groupWhere({ ...c, group: c.group })
+      : `You are one of the agents on the user's team, talking with them in your own long-lived dialog (${c.defaultAgent ? "web UI and/or Telegram" : "web UI"}). There are no separate chats: this dialog is your ongoing thread with the user.`;
   const lines: string[] = [];
   if (c.agent.prompt) lines.push(c.agent.prompt.trim(), "");
   lines.push(

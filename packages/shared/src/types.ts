@@ -209,10 +209,16 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  /** "main": an agent's long-lived dialog with the user (one per agent); "task": a task's thread; "chat": an older ad-hoc chat. */
-  kind: "main" | "task" | "chat";
+  /**
+   * "main": an agent's long-lived dialog with the user (one per agent); "task": a task's thread; "chat": an older ad-hoc chat;
+   * "group": the user with several agents (`members`).
+   */
+  kind: "main" | "task" | "chat" | "group";
   title: string;
+  /** The agent who answers; in a group, its lead (`members[0]`). */
   agentId: string;
+  /** A group's agents in order, the lead first (2–8, see GROUP_MAX_MEMBERS). */
+  members?: string[];
   taskId?: string;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -229,6 +235,22 @@ export interface TeamMember {
   /** A turn is in progress in the dialog. */
   running: boolean;
   /** Messages from the agent (or the system) the user has not seen yet. */
+  unread: number;
+}
+
+/** A group chat as the sidebar shows it, kept current by "group.updated". */
+export interface GroupChat {
+  conversationId: string;
+  title: string;
+  /** The lead first. */
+  members: string[];
+  /** The latest message worth a preview, as short plain text; `agentId` says who wrote it. */
+  lastMessage?: { role: MessageRole; text: string; createdAt: ISODate; agentId?: string };
+  lastActivityAt: ISODate;
+  /** Members are answering. */
+  running: boolean;
+  /** While running: the member who has the floor, then those who answer after them. */
+  speaking: string[];
   unread: number;
 }
 
@@ -528,6 +550,7 @@ export type UiEvent =
   | { type: "message.updated"; data: Message }
   | { type: "conversation.updated"; data: Conversation }
   | { type: "team.updated"; data: TeamMember }
+  | { type: "group.updated"; data: GroupChat }
   | { type: "task.updated"; data: Task }
   | { type: "notification.created"; data: Notification }
   | { type: "approval.pending"; data: { count: number } }

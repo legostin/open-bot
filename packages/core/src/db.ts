@@ -47,6 +47,8 @@ const MIGRATIONS: string[] = [
   // New agents put together in the chat: the card shows the live draft; the agent exists once it is created.
   `create table agent_drafts(id text primary key, conversation_id text not null, data text not null, status text not null, agent_id text,
     created_at text not null, updated_at text not null);`,
+  // Group chats: the agents taking part (JSON array, the lead first; agent_id holds the lead too).
+  `alter table conversations add column members text;`,
 ];
 
 export function openDb(file: string): Db {
