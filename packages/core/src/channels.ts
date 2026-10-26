@@ -36,7 +36,8 @@ export class ChannelRegistry {
     const c = this.channels.get(id);
     if (!c || c.peer.closed) return false;
     try {
-      await c.peer.request("channel.send", { channelId: id, message: this.redactor.value(message) }, { timeoutMs: 30_000 });
+      // Uploading pictures takes longer than a text.
+      await c.peer.request("channel.send", { channelId: id, message: this.redactor.value(message) }, { timeoutMs: message.media?.length ? 180_000 : 30_000 });
       return true;
     } catch (e) {
       console.error(`[channels] ${id} send failed:`, (e as Error).message);

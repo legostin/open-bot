@@ -40,6 +40,7 @@ import { BrainLogins } from "./brain-login.ts";
 import { CliTools } from "./cli-tools.ts";
 import { UserPath } from "./user-path.ts";
 import { SetupGuide } from "./setup.ts";
+import { MediaService } from "./media.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -79,6 +80,8 @@ export class Hub {
   /** Where the user's own CLIs live (their shell or account PATH): read on desktop installs, which start with a short PATH. */
   userPath = new UserPath();
   setup: SetupGuide;
+  /** External images and OpenStreetMap tiles the web UI shows, fetched and cached by the hub. */
+  media: MediaService;
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -186,6 +189,7 @@ export class Hub {
       cliBinDirs: () => [...this.userPath.dirs(), ...this.cliTools.binDirs()],
     });
     this.mcp = new McpEndpoint(this.gateway, this.store, config.version);
+    this.media = new MediaService({ dataDir: config.dataDir, version: config.version, resolve: (host) => this.egress.resolveTarget(host) });
     const rpId = new URL(config.publicUrl).hostname;
     this.auth = new AuthService(this.db, this.audit, {
       rpId,
@@ -200,6 +204,8 @@ export class Hub {
       notifier: this.notifier,
       agents: this.agents,
       createTask: (t) => this.runner.createTask(t),
+      attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
+      workspacesRoot: join(config.dataDir, "workspaces"),
     });
     this.machines.registerTools(this.tools);
     registerHubTools(this);
@@ -371,6 +377,9 @@ export class Hub {
     const sweep = setInterval(() => this.auth.sweep(), 3600_000);
     sweep.unref();
     this.timers.push(sweep);
+    const prune = setInterval(() => this.media.prune(), 24 * 3600_000);
+    prune.unref();
+    this.timers.push(prune);
 
     if (this.auth.setupToken) {
       const line = "═".repeat(64);

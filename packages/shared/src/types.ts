@@ -191,7 +191,24 @@ export type MessagePart =
   /** A CLI brain's sign-in card (device code or browser code), live. */
   | { type: "brain_login"; ref: string }
   /** No brain of the agent works yet: the hub's own setup card (sign in, install, API key), live. */
-  | { type: "brain_setup" };
+  | { type: "brain_setup" }
+  /** Pictures the agent shows (show_images): one item is a single image, two or more a carousel. */
+  | { type: "images"; items: ImageItem[] }
+  /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers. */
+  | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[] };
+
+/** `src` is an http(s) URL (shown through the hub's image proxy) or `file:<path relative to the workspaces root>`. */
+export interface ImageItem {
+  src: string;
+  alt?: string;
+  caption?: string;
+}
+
+export interface MapMarker {
+  lat: number;
+  lon: number;
+  label?: string;
+}
 
 export interface Message {
   id: string;
@@ -454,7 +471,17 @@ export interface OutboundMessage {
   feedback?: { notificationId: string; tokens: { useful: string; less: string; off: string } };
   /** Deliver without sound (quiet hours). */
   silent?: boolean;
+  /** Images and maps of the reply, sent after its text. */
+  media?: OutboundMedia[];
 }
+
+/**
+ * Media for a channel. An image comes as a public URL (the channel may let its service fetch it) or inline as base64
+ * `data` (a file from the agent's workspace, at most 10 MB).
+ */
+export type OutboundMedia =
+  | { kind: "image"; url?: string; data?: string; mimeType?: string; name?: string; caption?: string }
+  | { kind: "map"; lat: number; lon: number; title?: string };
 
 // ---------- Machines ----------
 

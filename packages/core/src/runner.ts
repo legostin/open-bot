@@ -3,7 +3,7 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, OutboundMessage, SecretRequest, Task, ToolResult } from "@owlbot/shared";
+import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, ToolResult } from "@owlbot/shared";
 import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import type { Store, SessionRow } from "./store.ts";
@@ -25,6 +25,7 @@ import { buildSystemPrompt } from "./prompt.ts";
 import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
+import { MAX_IMAGE_BYTES, readWorkspaceImage } from "./media.ts";
 
 export interface RunnerDeps {
   config: Config;
@@ -78,11 +79,15 @@ export interface TurnResult {
   error?: string;
   limited?: { resetAt?: string };
   awaitingApproval: boolean;
+  /** The assistant message the turn wrote. */
+  messageId?: string;
 }
 
 /** Harness built-in tools whose results come from the outside world. */
 const NATIVE_SOURCE_TOOLS = /^(WebFetch|WebSearch|web_search|fetch)$/i;
 const MAX_TASK_CONCURRENCY = 4;
+/** Workspace images a channel gets inline with one reply, in all. */
+const MAX_INLINE_MEDIA_BYTES = 4 * MAX_IMAGE_BYTES;
 
 export class SessionRunner {
   d: RunnerDeps;
@@ -169,7 +174,7 @@ export class SessionRunner {
     return msg;
   }
 
-  /** A card (secret request, plugin setup) for the message the agent is writing right now in this conversation. */
+  /** A card (secret request, plugin setup, images, a map) for the message the agent is writing right now in this conversation. */
   attachPart(conversationId: string, part: MessagePart): void {
     const msgId = this.streamingMessage.get(conversationId);
     const m = msgId ? this.d.store.getMessage(msgId) : undefined;
@@ -609,7 +614,19 @@ export class SessionRunner {
     const lines: string[] = [];
     for (const m of msgs) {
       const t = m.parts
-        .map((p) => (p.type === "text" ? p.text : p.type === "tool_call" ? `[called ${p.name}]` : p.type === "notification" ? `[notification: ${p.title}]` : ""))
+        .map((p) =>
+          p.type === "text"
+            ? p.text
+            : p.type === "tool_call"
+              ? `[called ${p.name}]`
+              : p.type === "notification"
+                ? `[notification: ${p.title}]`
+                : p.type === "images"
+                  ? `[showed ${p.items.length} image(s)${p.items.some((it) => it.caption) ? `: ${p.items.map((it) => it.caption ?? "").filter(Boolean).join("; ")}` : ""}]`
+                  : p.type === "map"
+                    ? `[showed a map${p.title ? ` of ${p.title}` : ""} at ${p.lat}, ${p.lon}]`
+                    : "",
+        )
         .filter(Boolean)
         .join(" ");
       if (t) lines.push(`${m.role === "user" ? "User" : m.role === "assistant" ? "Assistant" : "System"}: ${truncate(t, 800)}`);
@@ -630,20 +647,43 @@ export class SessionRunner {
    * Where a finished reply goes besides the web UI: back to the channel the message came from; or, in the default
    * agent's dialog, to every channel, so the user follows the main agent on the phone too (setting channelMirror).
    */
-  private async deliver(conv: Conversation, text: string, opts: TurnOpts): Promise<void> {
-    if (!text) return;
-    const path = conv.kind === "main" ? `agent/${encodeURIComponent(conv.agentId)}` : conv.taskId ? `tasks/${encodeURIComponent(conv.taskId)}` : `chat/${encodeURIComponent(conv.id)}`;
-    const reply: OutboundMessage = { kind: "reply", text, conversationId: conv.id, link: `${this.d.config.publicUrl}/${path}` };
+  private async deliver(conv: Conversation, text: string, opts: TurnOpts, messageId?: string): Promise<void> {
     const ch = opts.replyChannel;
-    if (ch && ch !== WEB_CHANNEL) {
-      if (this.d.channels.has(ch)) await this.d.channels.send(ch, reply);
-      return;
-    }
-    // Typed in the web UI, or a turn nobody typed (a task finished, a system note).
+    const toChannel = !!ch && ch !== WEB_CHANNEL;
+    // Typed in the web UI, or a turn nobody typed (a task finished, a system note): only the default agent's dialog is mirrored.
     const s = this.d.settings.get();
-    if (conv.kind === "main" && conv.agentId === s.defaultAgent && s.channelMirror !== false) {
-      await this.d.channels.broadcast(opts.quote ? { ...reply, quote: opts.quote } : reply);
+    const mirror = conv.kind === "main" && conv.agentId === s.defaultAgent && s.channelMirror !== false && this.d.channels.list().length > 0;
+    if (toChannel ? !this.d.channels.has(ch) : !mirror) return;
+    const media = await this.replyMedia(messageId);
+    if (!text && !media.length) return;
+    const path = conv.kind === "main" ? `agent/${encodeURIComponent(conv.agentId)}` : conv.taskId ? `tasks/${encodeURIComponent(conv.taskId)}` : `chat/${encodeURIComponent(conv.id)}`;
+    const reply: OutboundMessage = { kind: "reply", text, conversationId: conv.id, link: `${this.d.config.publicUrl}/${path}`, ...(media.length ? { media } : {}) };
+    if (toChannel) await this.d.channels.send(ch, reply);
+    else await this.d.channels.broadcast(opts.quote ? { ...reply, quote: opts.quote } : reply);
+  }
+
+  /** The reply's images and maps for the channels: web images by address, workspace files inline (10 MB each, 40 MB in all). */
+  private async replyMedia(messageId: string | undefined): Promise<OutboundMedia[]> {
+    const parts = (messageId ? this.d.store.getMessage(messageId)?.parts : undefined) ?? [];
+    const out: OutboundMedia[] = [];
+    let inline = 0;
+    for (const p of parts) {
+      if (p.type === "map") out.push({ kind: "map", lat: p.lat, lon: p.lon, ...(p.title ? { title: p.title } : {}) });
+      if (p.type !== "images") continue;
+      for (const it of p.items) {
+        const caption = it.caption ? { caption: it.caption } : {};
+        if (/^https?:\/\//i.test(it.src)) {
+          out.push({ kind: "image", url: it.src, ...caption });
+          continue;
+        }
+        if (!it.src.startsWith("file:")) continue;
+        const file = await readWorkspaceImage(join(this.d.config.dataDir, "workspaces"), it.src.slice("file:".length));
+        if (!file || inline + file.data.length > MAX_INLINE_MEDIA_BYTES) continue;
+        inline += file.data.length;
+        out.push({ kind: "image", data: file.data.toString("base64"), mimeType: file.type, name: file.name, ...caption });
+      }
     }
+    return out;
   }
 
   private async turn(conv: Conversation, prompt: string, opts: TurnOpts): Promise<TurnResult> {
@@ -713,7 +753,7 @@ export class SessionRunner {
           void this.closeLive(row!.id);
           continue;
         }
-        await this.deliver(conv, r.answer ?? r.text, opts);
+        await this.deliver(conv, r.answer ?? r.text, opts, r.messageId);
         return r;
       } finally {
         this.brainLoad.set(key, Math.max(0, (this.brainLoad.get(key) ?? 1) - 1));
@@ -835,17 +875,20 @@ export class SessionRunner {
     if (error) parts.push({ type: "error", message: error });
     parts = mergeAttached(parts, current());
     this.d.store.updateMessage(msg.id, { parts, status: error && !produced ? "error" : "complete" });
-    return { text: fullText.trim(), answer: finalAnswer(parts), error, limited, awaitingApproval };
+    return { text: fullText.trim(), answer: finalAnswer(parts), error, limited, awaitingApproval, messageId: msg.id };
   }
 }
 
-/** Parts the hub adds to a message from outside the brain stream: cards with their own live status. */
+/** Parts the hub adds to a message from outside the brain stream: cards (some with their own live status), images, maps. */
 function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "approval") return `approval:${p.approvalId}`;
   if (p.type === "secret_request") return `secret:${p.requestId}`;
   if (p.type === "plugin_setup") return `setup:${p.pluginId}`;
   if (p.type === "agent_draft") return `draft:${p.draftId}`;
   if (p.type === "brain_login") return `login:${p.ref}`;
+  // Pictures and maps carry no id: the same content shown twice in one reply is one card.
+  if (p.type === "images") return `images:${JSON.stringify(p.items)}`;
+  if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers])}`;
   return undefined;
 }
 

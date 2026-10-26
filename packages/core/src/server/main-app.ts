@@ -16,6 +16,7 @@ import { AuthError, type AuthSession } from "../auth.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, safeFile, securityHeaders, sendFile } from "./http.ts";
+import { MediaError } from "../media.ts";
 
 const COOKIE = "owlbot_session";
 
@@ -556,6 +557,34 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       const file = safeFile(join(cfg.dataDir, "workspaces"), p);
       if (!file) throw new HttpError(404, "file.notFound");
       return sendFile(reply, file, { download: (req.query as any).download === "1" });
+    });
+
+    // ----- images and maps the agents show (media.ts): the page CSP only loads pictures from here -----
+    const sendImage = (reply: FastifyReply, data: Buffer, type: string, maxAge: number) =>
+      reply
+        .header("content-type", type)
+        .header("cache-control", `private, max-age=${maxAge}`)
+        // Opened on its own (an SVG in a new tab), the picture still cannot run script on the hub's origin.
+        .header("content-security-policy", "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox")
+        .header("x-content-type-options", "nosniff")
+        .send(data);
+    const mediaFailure = (e: unknown) => (e instanceof MediaError ? new HttpError(e.status, e.key) : e);
+    api.get("/api/media", async (req, reply) => {
+      try {
+        const r = await hub.media.image((req.query as any).url);
+        return sendImage(reply, r.data, r.type, 24 * 3600);
+      } catch (e) {
+        throw mediaFailure(e);
+      }
+    });
+    api.get("/api/map/tiles/:z/:x/:y", async (req, reply) => {
+      const { z, x, y } = req.params as { z: string; x: string; y: string };
+      if (!y.endsWith(".png")) throw new HttpError(400, "media.badTile");
+      try {
+        return sendImage(reply, await hub.media.tile(z, x, y), "image/png", 7 * 24 * 3600);
+      } catch (e) {
+        throw mediaFailure(e);
+      }
     });
 
     // ----- UI plugin assets -----
