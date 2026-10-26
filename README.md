@@ -11,7 +11,7 @@ A friendly, proactive personal agent that lives on your own hardware. open-bot i
 - **Multiple agents.** Delegate work and run tasks in parallel. Agents are markdown files, each with its own list of brains and tools.
 - **Memory.** Long-term memory about you, kept as markdown facts with git history and full-text search. Facts picked up in untrusted sessions wait for your review.
 - **MCP and skills.** Connect any MCP server, skill or command. Claude Code and Codex plugins install as they are.
-- **Built-in browser.** Chromium inside the container: websites, forms, screenshots, sign-in with passwords from the vault, and a live view where you can take over.
+- **Built-in browser.** Chromium inside the container (outside Docker it installs itself on first use): websites, forms, screenshots, sign-in with passwords from the vault, and a live view where you can take over.
 - **A network of machines.** Other computers join as nodes. The agent runs commands and works with files on them, and can use their subscriptions (Claude Code or Codex on your laptop).
 - **Security.** A vault for passwords and personal data: the model only ever sees `vault://` references. External actions need your approval in a separate console. Plugins and CLI brains run in a sandbox under dedicated Unix users, and all their traffic goes through an egress filter. The audit log is protected by a hash chain.
 - **Everything is a plugin, including the UI.** Panels, tabs, tool-result renderers, the composer, channels, brains, tools. See [docs/plugins.md](docs/plugins.md).
@@ -158,7 +158,7 @@ npm test             # unit and integration tests
 npm run typecheck
 ```
 
-You need Node.js 24.5+ (TypeScript runs without a build step). The project layout and conventions are described in [CLAUDE.md](CLAUDE.md), the design in [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md) (in Russian). Core messages live in `packages/core/src/locales/{en,ru}.ts`, plugin messages in `.openbot-plugin/locales/{en,ru}.json`; `npm test` checks that every translation matches English.
+You need Node.js 24.5+ (TypeScript runs without a build step). Outside Docker the browser plugin downloads Playwright's Chromium by itself the first time it starts without one (a one-time download into Playwright's cache, or `PLAYWRIGHT_BROWSERS_PATH`); browser calls made meanwhile wait for it. Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` to turn that off and install it yourself with `npx playwright install chromium`. The project layout and conventions are described in [CLAUDE.md](CLAUDE.md), the design in [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md) (in Russian). Core messages live in `packages/core/src/locales/{en,ru}.ts`, plugin messages in `.openbot-plugin/locales/{en,ru}.json`; `npm test` checks that every translation matches English.
 
 ## License
 

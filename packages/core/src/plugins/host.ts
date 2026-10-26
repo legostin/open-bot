@@ -653,7 +653,7 @@ export function sudoSpawn(user: string, env: Record<string, string>, command: st
 /** Harmless variables isolated children still need: binaries, locale, X display, browsers. */
 export function passEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const out: Record<string, string> = { PATH: env.PATH ?? "/usr/local/bin:/usr/bin:/bin", LANG: env.LANG ?? "C.UTF-8" };
-  for (const k of ["LC_ALL", "DISPLAY", "PLAYWRIGHT_BROWSERS_PATH", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "DISABLE_AUTOUPDATER"]) if (env[k]) out[k] = env[k]!;
+  for (const k of ["LC_ALL", "DISPLAY", "PLAYWRIGHT_BROWSERS_PATH", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "DISABLE_AUTOUPDATER"]) if (env[k]) out[k] = env[k]!;
   return out;
 }
 
