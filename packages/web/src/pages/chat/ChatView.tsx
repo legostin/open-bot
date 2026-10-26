@@ -1,4 +1,4 @@
-// A conversation: top bar (agent, title), scrolling message list with history loading, composer.
+// A conversation: top bar (agent and title, or a group's members), scrolling message list with history loading, composer.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, Check, Pencil, X } from "lucide-react";
@@ -9,6 +9,7 @@ import { toast } from "../../state/toast";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
 import { TopBar } from "../../components/Layout";
 import { AgentHeader } from "./AgentHeader";
+import { GroupFloor, GroupHeader } from "./GroupHeader";
 import { DetailsToggle } from "./DetailsToggle";
 import { t } from "../../i18n";
 import { MessageView } from "./MessageView";
@@ -123,14 +124,22 @@ export function ChatView({
 
   const title = meta?.title || (meta?.kind === "main" ? t("chat.main") : t("chat.defaultTitle"));
   const editable = meta?.kind === "chat";
+  const isGroup = meta?.kind === "group";
+  const groupHint = isGroup ? t("group.emptyHint", { lead: agentById.get(meta.agentId)?.name ?? meta.agentId }) : undefined;
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       {header && (
         <TopBar>
-          {meta && <AgentHeader agentId={meta.agentId} settings={meta.kind !== "task"} />}
-          <span className="hidden text-border sm:inline">/</span>
-          <div className="hidden min-w-0 flex-1 text-sm text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
+          {meta && isGroup ? (
+            <GroupHeader conv={meta} />
+          ) : (
+            <>
+              {meta && <AgentHeader agentId={meta.agentId} settings={meta.kind !== "task"} />}
+              <span className="hidden text-border sm:inline">/</span>
+              <div className="hidden min-w-0 flex-1 text-sm text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
+            </>
+          )}
           <DetailsToggle />
         </TopBar>
       )}
@@ -152,13 +161,14 @@ export function ChatView({
             </div>
           )}
           {conv.loaded && !conv.messages.length && !conv.error && (
-            <EmptyState icon="sparkles" title={t("chat.empty")} hint={emptyHint ?? t("chat.emptyHint")} />
+            <EmptyState icon={isGroup ? "users" : "sparkles"} title={isGroup ? t("group.emptyTitle") : t("chat.empty")} hint={emptyHint ?? groupHint ?? t("chat.emptyHint")} />
           )}
           <LatestDraftCards.Provider value={latestDrafts}>
             {conv.messages.map((m) => (
               <MessageView key={m.id} message={m} agent={m.agentId ? agentById.get(m.agentId) : undefined} />
             ))}
           </LatestDraftCards.Provider>
+          {isGroup && <GroupFloor conversationId={conversationId} />}
           {bottom}
         </div>
         {showDown && (

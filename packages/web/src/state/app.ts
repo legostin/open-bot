@@ -1,7 +1,8 @@
-// Global client state: auth/bootstrap, realtime connection, the team (agents and their dialogs), conversations, messages, tasks.
+// Global client state: auth/bootstrap, realtime connection, the team (agents and their dialogs), group chats,
+// conversations, messages, tasks.
 
 import { useSyncExternalStore } from "react";
-import type { AgentDef, Catalog, Conversation, Locale, Message, Task, TeamMember, UiEvent, VaultState } from "@owlbot/shared";
+import type { AgentDef, Catalog, Conversation, GroupChat, Locale, Message, Task, TeamMember, UiEvent, VaultState } from "@owlbot/shared";
 import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
 import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";
@@ -75,6 +76,8 @@ export const tasks = createStore<Task[] | null>(null);
 export const agents = createStore<AgentDef[] | null>(null);
 /** Each agent's dialog and what happens there (`/api/team`, kept current by "team.updated"). */
 export const team = createStore<TeamMember[] | null>(null);
+/** Group chats and what happens there (`/api/groups`, kept current by "group.updated"). */
+export const groups = createStore<GroupChat[] | null>(null);
 export const messages = createStore<Record<string, ConvMessages>>({});
 
 /** Every realtime event from the hub. */
@@ -149,6 +152,7 @@ export async function bootstrap(): Promise<Bootstrap> {
   startSocket();
   void refreshConversations();
   void refreshTeam();
+  void refreshGroups();
   return b;
 }
 
@@ -174,6 +178,7 @@ export async function logout(): Promise<void> {
   tasks.set(null);
   agents.set(null);
   team.set(null);
+  groups.set(null);
   conversations.set([]);
   await showLogin();
 }
@@ -189,6 +194,7 @@ function startSocket(): void {
       void refreshBootstrap();
       void refreshConversations();
       void refreshTeam();
+      void refreshGroups();
       if (tasks.get()) void refreshTasks();
       for (const id of Object.keys(messages.get())) if (messages.get()[id].loaded) void loadMessages(id, true);
       reconnected.emit();
@@ -263,6 +269,9 @@ function handleEvent(e: UiEvent): void {
     case "team.updated":
       team.set((list) => (list ? upsertMember(list, e.data) : list));
       break;
+    case "group.updated":
+      groups.set((list) => (list ? upsertGroup(list, e.data) : list));
+      break;
     case "task.updated":
       tasks.set((list) => (list ? upsertById(list, e.data) : list));
       break;
@@ -300,7 +309,8 @@ export async function refreshConversations(): Promise<void> {
   }
 }
 
-export async function updateConversation(id: string, patch: { title?: string; agentId?: string }): Promise<Conversation> {
+/** New `members` of a group also make its first member the lead. */
+export async function updateConversation(id: string, patch: { title?: string; agentId?: string; members?: string[] }): Promise<Conversation> {
   const c = await api.patch<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, patch);
   conversations.set((list) => sortConversations(upsertById(list, c)));
   return c;
@@ -358,9 +368,18 @@ function upsertMember(list: TeamMember[], m: TeamMember): TeamMember[] {
   return next;
 }
 
+/** When the user last marked each conversation read here (ms): a listing asked for before that is stale on unread. */
+const readHere = new Map<string, number>();
+
+/** A fetched list without unread counts the user cleared after the request went out. */
+function withoutStaleUnread<T extends { conversationId: string; unread: number }>(list: T[], askedAt: number): T[] {
+  return list.map((x) => (x.unread && (readHere.get(x.conversationId) ?? 0) >= askedAt ? { ...x, unread: 0 } : x));
+}
+
 export async function refreshTeam(): Promise<TeamMember[] | null> {
   try {
-    const list = await api.get<TeamMember[]>("/api/team");
+    const askedAt = Date.now();
+    const list = withoutStaleUnread(await api.get<TeamMember[]>("/api/team"), askedAt);
     team.set(list);
     return list;
   } catch {
@@ -372,9 +391,54 @@ export function ensureTeam(): void {
   if (!team.get()) void refreshTeam();
 }
 
+// ---------- group chats ----------
+
+function upsertGroup(list: GroupChat[], g: GroupChat): GroupChat[] {
+  const i = list.findIndex((x) => x.conversationId === g.conversationId);
+  if (i < 0) return [g, ...list];
+  const next = list.slice();
+  next[i] = g;
+  return next;
+}
+
+let groupsLoading: Promise<GroupChat[] | null> | undefined;
+
+export function refreshGroups(): Promise<GroupChat[] | null> {
+  groupsLoading ??= (async () => {
+    try {
+      const askedAt = Date.now();
+      const list = withoutStaleUnread(await api.get<GroupChat[]>("/api/groups"), askedAt);
+      groups.set(list);
+      return list;
+    } catch {
+      return groups.get();
+    } finally {
+      groupsLoading = undefined;
+    }
+  })();
+  return groupsLoading;
+}
+
+/** Load the group chats once (several views ask at start-up; one request answers them all). */
+export function ensureGroups(): void {
+  if (!groups.get() && !groupsLoading) void refreshGroups();
+}
+
+/** A new group chat with these agents (the first one leads). */
+export async function createGroup(title: string, members: string[]): Promise<Conversation> {
+  const c = await api.post<Conversation>("/api/conversations", { kind: "group", title, members });
+  conversations.set((list) => sortConversations(upsertById(list, c)));
+  groups.set((list) =>
+    upsertGroup(list ?? [], { conversationId: c.id, title: c.title, members: c.members ?? members, lastActivityAt: c.updatedAt, running: false, speaking: [], unread: 0 }),
+  );
+  return c;
+}
+
 /** The user has seen the dialog up to the message created at `at`. */
 export async function markRead(conversationId: string, at: string): Promise<void> {
+  readHere.set(conversationId, Date.now());
   team.set((list) => (list ? list.map((m) => (m.conversationId === conversationId && m.unread ? { ...m, unread: 0 } : m)) : list));
+  groups.set((list) => (list ? list.map((g) => (g.conversationId === conversationId && g.unread ? { ...g, unread: 0 } : g)) : list));
   try {
     await api.post(`/api/conversations/${encodeURIComponent(conversationId)}/read`, { at });
   } catch {

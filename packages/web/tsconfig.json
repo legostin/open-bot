@@ -18,6 +18,7 @@
       "@owlbot/shared": ["./src/shared-types.ts"],
       "@owlbot/shared/i18n": ["../shared/src/i18n.ts"],
       "@owlbot/shared/avatar": ["../shared/src/avatar.ts"],
+      "@owlbot/shared/group": ["../shared/src/group.ts"],
       "@owlbot/ui": ["../ui-sdk/src/index.ts"]
     }
   },

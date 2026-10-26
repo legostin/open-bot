@@ -36,3 +36,32 @@ export function agentForPath(path: string, defaultAgent: string | undefined): st
     return m[1];
   }
 }
+
+// ---------- group chats ----------
+
+/** The route of a group chat. */
+export function groupPath(conversationId: string): string {
+  return `/chat/${encodeURIComponent(conversationId)}`;
+}
+
+/** Which conversation a "/chat/:id" route shows, if any. */
+export function chatForPath(path: string): string | undefined {
+  const m = /^\/chat\/([^/?#]+)/.exec(path);
+  if (!m) return undefined;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
+}
+
+/** The latest activity first. */
+export function groupOrder<G extends { lastActivityAt: string; title: string }>(groups: G[]): G[] {
+  return groups.slice().sort((a, b) => (a.lastActivityAt !== b.lastActivityAt ? (a.lastActivityAt < b.lastActivityAt ? 1 : -1) : a.title.localeCompare(b.title)));
+}
+
+/** A title for a group nobody named: the first members' names, "+N" for the rest. */
+export function suggestedTitle(names: string[], shown = 3): string {
+  const head = names.slice(0, shown).join(", ");
+  return names.length > shown ? `${head} +${names.length - shown}` : head;
+}
