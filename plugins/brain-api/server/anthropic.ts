@@ -146,7 +146,8 @@ function toLlmError(e: unknown, url: string): LlmError {
     const status = e.status ?? STREAM_ERROR_STATUS[errType] ?? 500;
     return classifyHttpError(status, headers, JSON.stringify(e.error ?? { error: { message: e.message } }), "Anthropic");
   }
-  return new LlmError("network", `Поток ответа Anthropic прервался: ${(e as Error)?.message ?? e}`);
+  const detail = String((e as Error)?.message ?? e);
+  return new LlmError("network", `The Anthropic response stream broke off: ${detail}`, { key: "error.streamBroken", params: { provider: "Anthropic", detail } });
 }
 
 interface BlockState {
@@ -311,7 +312,10 @@ export async function* anthropicStream(cfg: AnthropicConfig, call: ModelCall): M
   }
   if (call.signal.aborted) return { parts: textSoFar(blocks), stop: "aborted", usage, model };
   if (!stopReason) {
-    const err = new LlmError("network", "Поток ответа Anthropic оборвался до конца сообщения");
+    const err = new LlmError("network", "The Anthropic response stream ended before the message was complete", {
+      key: "error.streamEnded",
+      params: { provider: "Anthropic" },
+    });
     err.partial = textSoFar(blocks);
     throw err;
   }

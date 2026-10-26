@@ -118,7 +118,8 @@ export function pageScript(op: string, a: any): any {
     if (String(el.getAttribute("type") || "").toLowerCase() === "search") return true;
     if (!form) return false;
     const hint = [form.id, form.getAttribute("class"), form.getAttribute("action"), form.getAttribute("name"), form.getAttribute("aria-label")].join(" ");
-    if (/search|поиск/i.test(hint)) return true;
+    // "poisk" is Russian for search.
+    if (/search|\u043f\u043e\u0438\u0441\u043a/i.test(hint)) return true;
     if (form.querySelector('input[type="search" i]')) {
       const fields = Array.from(form.querySelectorAll("input, select, textarea")).filter((f: any) => {
         const t = String(f.type || "").toLowerCase();
@@ -268,7 +269,7 @@ export function pageScript(op: string, a: any): any {
       else if (r.top > vh) it.pos = "below";
       return it;
     });
-    return { items, total, seq: a.seq, modal: modal ? cut(nameOf(modal), 80) || "без названия" : "" };
+    return { items, total, seq: a.seq, modal: modal ? cut(nameOf(modal), 80) || "untitled" : "" };
   }
 
   if (op === "info") {
@@ -298,7 +299,8 @@ export function pageScript(op: string, a: any): any {
     }
     if (!captcha) {
       const sample = (document.title + " " + String((document.body && document.body.innerText) || "").slice(0, 1500)).toLowerCase();
-      captcha = /just a moment|verify you are (a )?human|are you a robot|подтвердите, что вы не робот|я не робот|проверка браузера/.test(sample);
+      // Russian: "confirm that you are not a robot", "I'm not a robot", "browser check".
+      captcha = /just a moment|verify you are (a )?human|are you a robot|\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435, \u0447\u0442\u043e \u0432\u044b \u043d\u0435 \u0440\u043e\u0431\u043e\u0442|\u044f \u043d\u0435 \u0440\u043e\u0431\u043e\u0442|\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430/.test(sample);
     }
     const se = document.scrollingElement || document.documentElement;
     return {

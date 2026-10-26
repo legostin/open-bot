@@ -1,8 +1,8 @@
 {
   "id": "brain-claude-code",
-  "name": "Claude Code",
+  "name": "%name%",
   "version": "0.1.0",
-  "description": "Мозг на подписке Claude: запускает Claude Code в режиме без интерфейса с инструментами open-bot.",
+  "description": "%description%",
   "builtin": true,
   "server": "./server/index.ts",
   "contributes": {
@@ -10,9 +10,9 @@
     "settings": {
       "type": "object",
       "properties": {
-        "tokenRef": { "type": "string", "title": "Токен (ссылка vault)", "default": "vault://claude_code_token", "description": "Результат `claude setup-token`, сохранённый в vault. Если пусто — используется вход CLI." },
-        "command": { "type": "string", "title": "Команда CLI", "default": "claude" },
-        "allowedTools": { "type": "array", "items": { "type": "string" }, "title": "Встроенные инструменты Claude Code", "description": "Пусто — набор по умолчанию (Bash, файлы, веб, задачи, скиллы и инструменты open-bot)." }
+        "tokenRef": { "type": "string", "title": "%settings.tokenRef.title%", "default": "vault://claude_code_token", "description": "%settings.tokenRef.description%" },
+        "command": { "type": "string", "title": "%settings.command.title%", "default": "claude" },
+        "allowedTools": { "type": "array", "items": { "type": "string" }, "title": "%settings.allowedTools.title%", "description": "%settings.allowedTools.description%" }
       }
     }
   },

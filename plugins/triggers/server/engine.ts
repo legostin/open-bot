@@ -2,9 +2,10 @@
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@openbot/plugin-sdk";
+import { errorFields, TriggerError, type ErrorParams } from "./errors.ts";
 import { DEFAULT_HEARTBEAT_PROMPT, renderPrompt, type FireContext } from "./prompt.ts";
 import { computeNextRun, localDate, validTimezone, zonedParts } from "./schedule.ts";
-import type { RunReason, Trigger, TriggerInput, TriggerRun } from "./types.ts";
+import type { RunReason, Trigger, TriggerInput, TriggerRun, TriggerState } from "./types.ts";
 import { applyUpdate, buildTrigger, DEFAULT_HEARTBEAT_TIMES, DEFAULT_WEEKDAYS, ValidationError } from "./validate.ts";
 import { extractValue, fetchPage, hashValue, lineDiff } from "./watch.ts";
 
@@ -26,7 +27,14 @@ export function readEngineSettings(s: Record<string, any> = {}): EngineSettings 
   };
 }
 
-export class NotFoundError extends Error {}
+export class NotFoundError extends TriggerError {}
+
+/** Remember (or clear) the last error of a trigger, with its code for the UI. */
+function setLastError(s: TriggerState, e?: { message?: string; code?: string; params?: ErrorParams }): void {
+  s.lastError = e?.message;
+  s.lastErrorCode = e?.code;
+  s.lastErrorParams = e?.params;
+}
 
 function header(headers: Record<string, string> | undefined, name: string): string | undefined {
   if (!headers) return undefined;
@@ -156,7 +164,7 @@ export class TriggerEngine {
 
   private async createDefaultHeartbeat(): Promise<void> {
     const t = buildTrigger(
-      { kind: "heartbeat", name: "Обзор дня", prompt: DEFAULT_HEARTBEAT_PROMPT, agent: "assistant", times: DEFAULT_HEARTBEAT_TIMES, weekdays: DEFAULT_WEEKDAYS },
+      { kind: "heartbeat", name: this.ctx.i18n.t("heartbeat.defaultName"), prompt: DEFAULT_HEARTBEAT_PROMPT, agent: "assistant", times: DEFAULT_HEARTBEAT_TIMES, weekdays: DEFAULT_WEEKDAYS },
       { now: new Date(this.now()), tz: this.tz, defaultAgent: "assistant", createdBy: "system" },
     );
     t.state.nextRunAt = computeNextRun(t, this.tz, new Date(this.now()))?.toISOString();
@@ -289,10 +297,13 @@ export class TriggerEngine {
     const run: TriggerRun = { id: `r_${randomBytes(4).toString("hex")}`, at: now.toISOString(), reason, status: "started" };
     if (!opts.force && rt.count >= t.maxRunsPerDay) {
       run.status = "skipped";
-      run.detail = `Дневной лимит запусков (${t.maxRunsPerDay}) исчерпан`;
+      run.detail = `Daily run limit (${t.maxRunsPerDay}) reached`;
+      run.code = "dailyLimit";
+      run.params = { max: t.maxRunsPerDay };
     } else if (opts.skipIfBusy && (await this.previousStillRunning(t))) {
       run.status = "skipped";
-      run.detail = "Предыдущий запуск ещё не завершён";
+      run.detail = "The previous run has not finished yet";
+      run.code = "previousRunning";
     } else {
       try {
         const goal = renderPrompt(t, { reason, now, tz: this.tz, ...extra });
@@ -308,7 +319,7 @@ export class TriggerEngine {
     }
     t.state.runsToday = rt;
     t.state.lastStatus = run.status === "started" ? "ok" : run.status;
-    t.state.lastError = run.status === "started" ? undefined : run.detail;
+    setLastError(t.state, run.status === "started" ? undefined : { message: run.detail, code: run.code, params: run.params });
     await this.save(t);
     await this.addRun(t.id, run);
     this.emit(t.id);
@@ -317,7 +328,9 @@ export class TriggerEngine {
   }
 
   /** Poll a watch; fire only when the extracted value changed (the first poll stores a baseline). */
-  private async check(t: Trigger): Promise<{ changed: boolean; baseline: boolean; error?: string; run?: TriggerRun }> {
+  private async check(
+    t: Trigger,
+  ): Promise<{ changed: boolean; baseline: boolean; error?: string; code?: string; params?: ErrorParams; run?: TriggerRun }> {
     const now = new Date(this.now());
     t.state.lastCheckedAt = now.toISOString();
     t.state.nextRunAt = t.enabled ? new Date(now.getTime() + (t.intervalMinutes ?? 60) * 60_000).toISOString() : undefined;
@@ -325,15 +338,19 @@ export class TriggerEngine {
     try {
       const page = await fetchPage(t.url!, { allowPrivate: this.settings.allowPrivateUrls, timeoutMs: this.settings.watchTimeoutSec * 1000 });
       value = extractValue(page.body, page.contentType, { selector: t.selector, jsonPath: t.jsonPath });
-    } catch (e: any) {
-      const msg = e?.message ?? String(e);
-      const repeated = t.state.lastStatus === "error" && t.state.lastError === msg;
+    } catch (e) {
+      const err = errorFields(e);
+      const repeated = t.state.lastStatus === "error" && t.state.lastError === err.message;
       t.state.lastStatus = "error";
-      t.state.lastError = msg;
+      setLastError(t.state, err);
       await this.save(t);
-      if (!repeated) await this.addRun(t.id, { id: `r_${randomBytes(4).toString("hex")}`, at: now.toISOString(), reason: "change", status: "error", detail: msg });
+      if (!repeated) {
+        const run: TriggerRun = { id: `r_${randomBytes(4).toString("hex")}`, at: now.toISOString(), reason: "change", status: "error", detail: err.message };
+        if (err.code) Object.assign(run, { code: err.code, params: err.params });
+        await this.addRun(t.id, run);
+      }
       this.emit(t.id);
-      return { changed: false, baseline: false, error: msg };
+      return { changed: false, baseline: false, error: err.message, code: err.code, params: err.params };
     }
     const hash = hashValue(value);
     const stored = value.length > STORED_VALUE_LIMIT ? value.slice(0, STORED_VALUE_LIMIT) : value;
@@ -341,7 +358,7 @@ export class TriggerEngine {
       t.state.lastHash = hash;
       t.state.lastValue = stored;
       t.state.lastStatus = "ok";
-      t.state.lastError = undefined;
+      setLastError(t.state);
       await this.save(t);
       this.emit(t.id);
       return { changed: false, baseline: true };
@@ -349,7 +366,7 @@ export class TriggerEngine {
     if (hash === t.state.lastHash) {
       if (t.state.lastStatus === "error") {
         t.state.lastStatus = "ok";
-        t.state.lastError = undefined;
+        setLastError(t.state);
       }
       await this.save(t);
       return { changed: false, baseline: false };
@@ -374,7 +391,7 @@ export class TriggerEngine {
 
   require(id: unknown): Trigger {
     const t = typeof id === "string" ? this.triggers.get(id) : undefined;
-    if (!t) throw new NotFoundError(`Триггер ${String(id)} не найден`);
+    if (!t) throw new NotFoundError("notFound", `Trigger ${String(id)} not found`, { id: String(id) });
     return t;
   }
 
@@ -393,7 +410,10 @@ export class TriggerEngine {
 
   private async assertAgent(id: string): Promise<void> {
     const agents = await this.agents();
-    if (agents.length && !agents.some((a) => a.id === id)) throw new ValidationError(`Неизвестный агент "${id}". Доступны: ${agents.map((a) => a.id).join(", ")}`);
+    if (agents.length && !agents.some((a) => a.id === id)) {
+      const available = agents.map((a) => a.id).join(", ");
+      throw new ValidationError("unknownAgent", `Unknown agent "${id}". Available: ${available}`, { id, available });
+    }
   }
 
   async create(input: TriggerInput, o: { createdBy: string; defaultAgent?: string }): Promise<Trigger> {
@@ -449,7 +469,7 @@ export class TriggerEngine {
   /** Poll a watch right now (fires only on change). */
   async checkNow(id: string) {
     const t0 = this.require(id);
-    if (t0.kind !== "watch") throw new ValidationError("Проверить сейчас можно только триггер слежения (watch)");
+    if (t0.kind !== "watch") throw new ValidationError("checkWatchOnly", "Only watch triggers can be checked now");
     this.inflight.add(id);
     try {
       return await this.withLock(id, async () => this.check(this.require(id)));
@@ -513,7 +533,7 @@ export class TriggerEngine {
     const payload = typeof body === "string" ? body : body === null || body === undefined ? "" : JSON.stringify(body, null, 2);
     const run = await this.withLock(t.id, async () => {
       const cur = this.triggers.get(t.id);
-      if (!cur) throw new NotFoundError("not found");
+      if (!cur) throw new NotFoundError("notFound", "not found", { id: t.id });
       return this.fire(cur, "webhook", { payload, query, contentType: header(req.headers, "content-type") });
     });
     if (run.status === "skipped") return { status: 429, body: { error: run.detail } };

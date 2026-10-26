@@ -88,7 +88,7 @@ export class TelegramApi {
       if (opts.signal?.aborted) throw e;
       // Never include the URL (it contains the token).
       const cause = e?.cause?.code ?? e?.cause?.message ?? e?.name ?? "";
-      throw new TelegramError(0, `сеть недоступна${cause ? ` (${cause})` : ""}`);
+      throw new TelegramError(0, `network unreachable${cause ? ` (${cause})` : ""}`);
     }
     const body = (await res.json().catch(() => null)) as { ok?: boolean; result?: T; error_code?: number; description?: string; parameters?: { retry_after?: number } } | null;
     if (!body?.ok) throw new TelegramError(body?.error_code ?? res.status, body?.description ?? `HTTP ${res.status}`, body?.parameters?.retry_after);

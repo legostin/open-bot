@@ -1,0 +1,9 @@
+{
+  "name": "Claude Code",
+  "description": "Мозг на подписке Claude: запускает Claude Code в режиме без интерфейса с инструментами open-bot.",
+  "settings.tokenRef.title": "Токен (ссылка vault)",
+  "settings.tokenRef.description": "Результат `claude setup-token`, сохранённый в vault. Если пусто — используется вход CLI.",
+  "settings.command.title": "Команда CLI",
+  "settings.allowedTools.title": "Встроенные инструменты Claude Code",
+  "settings.allowedTools.description": "Пусто — набор по умолчанию (Bash, файлы, веб, задачи, скиллы и инструменты open-bot)."
+}

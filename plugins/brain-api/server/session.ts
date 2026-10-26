@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { extname, isAbsolute, resolve } from "node:path";
-import type { BrainEvent, BrainSessionOptions, BrainTurn } from "@openbot/shared";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, Params } from "@openbot/shared";
 import type { BrainSessionImpl, PluginContext } from "@openbot/plugin-sdk";
 import { anthropicStream } from "./anthropic.ts";
 import {
@@ -33,19 +33,23 @@ const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
+/** The hub's "No vault item" error (older hubs and the testkit say "Net zapisi" in Russian, matched as escapes). */
+const VAULT_MISSING_RE = /No vault item|not.?found|\u041d\u0435\u0442 \u0437\u0430\u043f\u0438\u0441\u0438/i;
+
+/** The variant's API key from the vault; `error` is a message for people (probe detail, chat), in the hub language. */
 export async function readKey(ctx: PluginContext, v: VariantInfo, s: ApiSettings): Promise<{ key?: string; error?: string }> {
   const ref = v.keyRef(s);
   if (!ref) return {};
   const id = vaultId(ref);
   try {
-    const fields = await ctx.vault.get(`vault://${id}`, { reason: `API-мозг (${v.label})` });
+    const fields = await ctx.vault.get(`vault://${id}`, { reason: `API brain (${v.label})` });
     const value = fields?.value ?? Object.values(fields ?? {}).find((x) => typeof x === "string" && x.trim());
     if (typeof value === "string" && value.trim()) return { key: value.trim() };
-    return { error: `Добавьте ключ ${id} в vault` };
+    return { error: ctx.i18n.t("key.missing", { id }) };
   } catch (e: any) {
     const msg = String(e?.message ?? e);
-    if (/Нет записи|not.?found/i.test(msg)) return { error: `Добавьте ключ ${id} в vault` };
-    return { error: `Добавьте ключ ${id} в vault или откройте к нему доступ: ${msg}` };
+    if (VAULT_MISSING_RE.test(msg)) return { error: ctx.i18n.t("key.missing", { id }) };
+    return { error: ctx.i18n.t("key.noAccess", { id, detail: msg }) };
   }
 }
 
@@ -110,12 +114,12 @@ export class ApiBrainSession implements BrainSessionImpl {
 
   async *send(turn: BrainTurn): AsyncGenerator<BrainEvent> {
     if (this.closed) {
-      yield { type: "error", message: "Сессия API-мозга закрыта", fatal: true };
+      yield { type: "error", message: this.t("error.sessionClosed"), fatal: true };
       yield { type: "done", resumeToken: this.sessionId };
       return;
     }
     if (this.running) {
-      yield { type: "error", message: "Сессия уже выполняет ход" };
+      yield { type: "error", message: this.t("error.busy") };
       yield { type: "done", resumeToken: this.sessionId };
       return;
     }
@@ -125,7 +129,7 @@ export class ApiBrainSession implements BrainSessionImpl {
     try {
       yield* this.runTurn(turn, ac.signal);
     } catch (e: any) {
-      yield { type: "error", message: `Внутренняя ошибка API-мозга: ${e?.message ?? e}`, fatal: true };
+      yield { type: "error", message: this.t("error.internal", { detail: String(e?.message ?? e) }), fatal: true };
     } finally {
       this.running = false;
       this.abort = undefined;
@@ -146,6 +150,20 @@ export class ApiBrainSession implements BrainSessionImpl {
 
   // ---------- internals ----------
 
+  /** Text people read (chat errors and notes), in the hub language. */
+  private t(key: string, params?: Params): string {
+    return this.ctx.i18n.t(key, params);
+  }
+
+  private errorText(err: LlmError): string {
+    return err.key ? this.t(err.key, err.params) : err.message;
+  }
+
+  /** Provider name in messages people read (the OpenAI-compatible server has a translated name). */
+  private providerLabel(): string {
+    return this.variant.id === "custom" ? this.t("variant.custom") : this.variant.label;
+  }
+
   persist(): void {
     try {
       saveSession(this.ctx.dataDir, {
@@ -158,7 +176,7 @@ export class ApiBrainSession implements BrainSessionImpl {
         messages: this.history,
       });
     } catch (e: any) {
-      this.ctx.log.warn(`не удалось сохранить историю сессии ${this.sessionId}: ${e?.message ?? e}`);
+      this.ctx.log.warn(`could not save the history of session ${this.sessionId}: ${e?.message ?? e}`);
     }
   }
 
@@ -179,7 +197,7 @@ export class ApiBrainSession implements BrainSessionImpl {
     const cfg = {
       baseUrl: v.baseUrl(s),
       apiKey: key,
-      label: v.label,
+      label: this.providerLabel(),
       vision: v.vision(s),
       maxTokensField: v.id === "openai" ? ("max_completion_tokens" as const) : ("max_tokens" as const),
       extraHeaders: v.id === "openrouter" ? { "X-Title": "open-bot" } : undefined,
@@ -220,7 +238,7 @@ export class ApiBrainSession implements BrainSessionImpl {
   private trim(budget: number): void {
     const { messages, trimmed } = trimHistory(this.history, budget);
     if (!trimmed) return;
-    this.ctx.log.info(`сессия ${this.sessionId}: история сокращена ${this.history.length} → ${messages.length} сообщений`);
+    this.ctx.log.info(`session ${this.sessionId}: history trimmed ${this.history.length} → ${messages.length} messages`);
     this.history = messages;
     this.lastSent = 0;
   }
@@ -250,7 +268,7 @@ export class ApiBrainSession implements BrainSessionImpl {
       tools = await this.mcp.listTools(signal);
     } catch (e: any) {
       if (signal.aborted) return;
-      yield { type: "error", message: `MCP-шлюз хаба недоступен: ${e?.message ?? e}`, fatal: true };
+      yield { type: "error", message: this.t("error.mcpUnavailable", { detail: String(e?.message ?? e) }), fatal: true };
       return;
     }
     // Thinking blocks are bound to the system prompt and tool set they were produced under.
@@ -271,7 +289,7 @@ export class ApiBrainSession implements BrainSessionImpl {
 
     for (let step = 0; ; step++) {
       if (step >= s.maxSteps) {
-        const note = `\n\n(Ход остановлен: достигнут предел в ${s.maxSteps} шагов.)`;
+        const note = `\n\n${this.t("note.maxSteps", { n: s.maxSteps })}`;
         yield { type: "text", delta: note };
         this.history.push({ role: "assistant", parts: [{ type: "text", text: note.trim() }] });
         return;
@@ -298,7 +316,7 @@ export class ApiBrainSession implements BrainSessionImpl {
           continue;
         }
         if (err.kind === "limit") yield { type: "limit_hit", resetAt: err.resetAt, detail: err.message };
-        else if (err.kind !== "aborted") yield { type: "error", message: err.message, fatal: true };
+        else if (err.kind !== "aborted") yield { type: "error", message: this.errorText(err), fatal: true };
         return;
       }
       this.lastSent = call.messages.length;
@@ -310,7 +328,7 @@ export class ApiBrainSession implements BrainSessionImpl {
       }
       if (result.stop === "refusal") {
         // The declined partial is discarded (it may cut a tool call off mid-input).
-        yield { type: "error", message: `Модель отказалась отвечать${result.stopDetail ? ` (${result.stopDetail})` : ""}.` };
+        yield { type: "error", message: result.stopDetail ? this.t("error.refusalDetail", { detail: result.stopDetail }) : this.t("error.refusal") };
         return;
       }
       if (result.parts.length) this.history.push({ role: "assistant", parts: result.parts });
@@ -318,7 +336,7 @@ export class ApiBrainSession implements BrainSessionImpl {
       if (!calls.length) {
         if (result.stop === "pause") continue;
         if (result.stop === "max_tokens") {
-          const note = "\n\n(Ответ обрезан: достигнут лимит max_tokens.)";
+          const note = `\n\n${this.t("note.maxTokens")}`;
           yield { type: "text", delta: note };
           this.history.push({ role: "assistant", parts: [{ type: "text", text: note.trim() }] });
         }

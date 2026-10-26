@@ -1,9 +1,9 @@
 // Telegram channel: long polling, pairing with exactly one chat, inbound chat, outbound messages,
-// approval and feedback buttons.
+// approval and feedback buttons. Everything the bot writes is in the hub language (ctx.i18n).
 
 import { randomInt } from "node:crypto";
 import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@openbot/plugin-sdk";
-import type { OutboundMessage, Task, TaskStatus } from "@openbot/shared";
+import type { OutboundMessage, Params, Task, TaskStatus } from "@openbot/shared";
 import { TelegramApi, TelegramError, type InlineButton, type TgCallbackQuery, type TgChat, type TgMessage, type TgUpdate, type TgUser } from "./api.ts";
 import { TELEGRAM_LIMIT, entitiesToHtml, escapeHtml, htmlToPlain, isPublicHttpUrl, markdownToHtml, splitMarkdown } from "./format.ts";
 
@@ -36,34 +36,23 @@ export interface BoundChat {
 
 type State = "starting" | "no-token" | "unauthorized" | "polling" | "error" | "stopped";
 
+/** A status message: a catalog key (rendered in the hub language when read) or raw text from Telegram / the network. */
+type StatusText = string | { key: string; params?: Params };
+
 const TYPING_MAX_MS = 120_000;
 const TYPING_EVERY_MS = 4_500;
 const MAX_FAILS_PER_CHAT = 5;
 const MAX_FAILS_TOTAL = 20;
 
-const HELP = [
-  "<b>open-bot в Telegram</b>",
-  "",
-  "Пишите сюда как в чат с ассистентом — я передам сообщение и пришлю ответ.",
-  "Сюда же приходят уведомления и запросы на подтверждение действий.",
-  "",
-  "/tasks — задачи в работе и недавние",
-  "/stop — остановить текущую работу ассистента",
-  "/help — эта справка",
-].join("\n");
-
-const STATUS_RU: Record<TaskStatus, string> = {
-  queued: "в очереди",
-  running: "выполняется",
-  waiting_approval: "ждёт подтверждения",
-  waiting_input: "ждёт ответа",
-  interrupted: "прервана",
-  paused: "на паузе",
-  done: "готово",
-  failed: "ошибка",
-  cancelled: "отменена",
-};
+/** Bot commands handled here; their descriptions (cmd.<name>) go to the Telegram command menu. */
+const COMMANDS = ["tasks", "stop", "help"] as const;
 const FINAL: TaskStatus[] = ["done", "failed", "cancelled"];
+
+/**
+ * Error of approvals.resolve when the approval was already answered elsewhere: "... already been handled (denied)".
+ * The second alternative is the same message in Russian ("uzhe obrabotano"), as older hubs report it.
+ */
+const ALREADY_HANDLED_RE = /(?:already been handled|\u0443\u0436\u0435 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u043d\u043e) \((\w+)\)/;
 
 const fitsCallback = (data: string) => Buffer.byteLength(data, "utf8") <= 64;
 
@@ -82,8 +71,8 @@ export class TelegramBot {
   pairingCode?: string;
   offset = 0;
   state: State = "starting";
-  lastError?: string;
-  lastSendError?: string;
+  lastError?: StatusText;
+  lastSendError?: StatusText;
 
   private stopped = false;
   private ctrl = new AbortController();
@@ -98,6 +87,15 @@ export class TelegramBot {
   constructor(ctx: PluginContext) {
     this.ctx = ctx;
     this.settings = readSettings(ctx.settings);
+  }
+
+  /** Text in the hub language. */
+  private t(key: string, params?: Params): string {
+    return this.ctx.i18n.t(key, params);
+  }
+
+  private render(s: StatusText): string {
+    return typeof s === "string" ? s : this.t(s.key, s.params);
   }
 
   // ---------- lifecycle ----------
@@ -129,6 +127,22 @@ export class TelegramBot {
   /** Vault unlocked: retry right away instead of waiting for the next token check. */
   onVaultState(p: { state?: string } | undefined): void {
     if (p?.state === "unlocked" && !this.api) this.wake?.();
+  }
+
+  /** Hub language changed: new command menu and status text. */
+  onLocaleChange(): void {
+    this.emitStatus();
+    void this.registerCommands();
+  }
+
+  /** The command menu in the hub language; failures are not fatal. */
+  private async registerCommands(api = this.api): Promise<void> {
+    if (!api) return;
+    try {
+      await api.call("setMyCommands", { commands: COMMANDS.map((command) => ({ command, description: this.t(`cmd.${command}`) })) });
+    } catch (e: any) {
+      this.ctx.log.warn(`setMyCommands failed: ${e?.message ?? e}`);
+    }
   }
 
   private reconnect(): void {
@@ -187,7 +201,7 @@ export class TelegramBot {
         if (signal.aborted) continue; // settings changed: reconnect
         if (e instanceof TelegramError && e.unauthorized) {
           this.api = undefined;
-          this.setState("unauthorized", "Telegram не принял токен бота — проверьте запись в vault");
+          this.setState("unauthorized", { key: "status.tokenRejected" });
           await this.sleep(this.settings.tokenRetrySec * 1000);
           continue;
         }
@@ -209,11 +223,11 @@ export class TelegramBot {
       const fields = await this.ctx.vault.get(this.settings.botTokenRef, { reason: "Telegram bot" });
       token = (fields.value ?? fields.token ?? fields.password ?? "").trim();
     } catch (e: any) {
-      this.setState("no-token", `Нет токена бота (${this.settings.botTokenRef}): ${e?.message ?? e}`);
+      this.setState("no-token", { key: "status.tokenMissing", params: { ref: this.settings.botTokenRef, error: e?.message ?? String(e) } });
       return false;
     }
     if (!token) {
-      this.setState("no-token", `В записи ${this.settings.botTokenRef} нет поля value с токеном бота`);
+      this.setState("no-token", { key: "status.tokenEmpty", params: { ref: this.settings.botTokenRef } });
       return false;
     }
     const api = new TelegramApi(this.settings.apiBaseUrl, token);
@@ -221,7 +235,7 @@ export class TelegramBot {
       this.botUser = await api.call<TgUser>("getMe", {}, { signal });
     } catch (e) {
       if (e instanceof TelegramError && e.unauthorized) {
-        this.setState("unauthorized", "Telegram не принял токен бота — проверьте запись в vault");
+        this.setState("unauthorized", { key: "status.tokenRejected" });
         return false;
       }
       throw e;
@@ -230,6 +244,7 @@ export class TelegramBot {
     this.offset = Number(await this.ctx.storage.get<number>(this.offsetKey())) || 0;
     this.api = api;
     this.ctx.log.info(`connected as @${this.botUser.username ?? this.botUser.id}`);
+    void this.registerCommands(api);
     return true;
   }
 
@@ -237,7 +252,7 @@ export class TelegramBot {
     return `offset:${this.botUser?.id ?? "unknown"}`;
   }
 
-  private setState(state: State, error?: string): void {
+  private setState(state: State, error?: StatusText): void {
     this.state = state;
     this.lastError = state === "polling" || state === "starting" ? undefined : error;
     this.emitStatus();
@@ -258,27 +273,24 @@ export class TelegramBot {
     const text = (m.text ?? "").trim();
     const start = /^\/start(?:@\w+)?(?:\s+(\S+))?\s*$/i.exec(text);
     if (!start) {
-      await this.replyOnce(m.chat, "Это личный бот open-bot. Чтобы привязать его, отправьте <code>/start КОД</code> — код показан в настройках open-bot (раздел Telegram).");
+      await this.replyOnce(m.chat, this.t("bot.unboundHint"));
       return;
     }
     if (m.chat.type !== "private") {
-      await this.replyOnce(m.chat, "Привязать можно только личный чат с ботом.");
+      await this.replyOnce(m.chat, this.t("bot.privateOnly"));
       return;
     }
     const fails = this.pairingFails.get(m.chat.id) ?? 0;
     if (fails >= MAX_FAILS_PER_CHAT) return;
     const code = start[1];
     if (!code) {
-      await this.sendHtml(m.chat.id, "Отправьте <code>/start КОД</code> — шестизначный код из настроек open-bot (раздел Telegram).");
+      await this.sendHtml(m.chat.id, this.t("bot.sendCode"));
       return;
     }
     if (!this.pairingCode || code !== this.pairingCode) {
       this.pairingFails.set(m.chat.id, fails + 1);
       if (++this.pairingFailsTotal >= MAX_FAILS_TOTAL) await this.newPairingCode();
-      await this.sendHtml(
-        m.chat.id,
-        fails + 1 >= MAX_FAILS_PER_CHAT ? "Слишком много неверных попыток. Привязка из этого чата заблокирована." : "Код не подошёл. Проверьте код в настройках open-bot и попробуйте ещё раз.",
-      );
+      await this.sendHtml(m.chat.id, this.t(fails + 1 >= MAX_FAILS_PER_CHAT ? "bot.tooManyAttempts" : "bot.wrongCode"));
       return;
     }
     await this.bind(m.chat, m.from);
@@ -292,19 +304,13 @@ export class TelegramBot {
     this.pairingFails.clear();
     this.pairingFailsTotal = 0;
     this.ctx.log.info(`bound to chat ${chat.id}`);
-    const name = from?.first_name ? `, ${escapeHtml(from.first_name)}` : "";
-    await this.sendHtml(
-      chat.id,
-      `👋 Привет${name}! Готово — этот чат привязан к open-bot.\n\n` +
-        "Пишите сюда как в чат с ассистентом: я передам сообщение и пришлю ответ. " +
-        "Сюда же будут приходить уведомления и запросы на подтверждение действий.\n\n" +
-        "/help — справка, /tasks — задачи, /stop — остановить текущую работу.",
-    );
+    const hello = from?.first_name ? this.t("bot.helloName", { name: escapeHtml(from.first_name) }) : this.t("bot.hello");
+    await this.sendHtml(chat.id, `${hello} ${this.t("bot.linked")}`);
     this.emitStatus(true);
   }
 
   private async onForeign(m: TgMessage): Promise<void> {
-    await this.replyOnce(m.chat, "Извините, этот бот личный и уже привязан к другому чату.");
+    await this.replyOnce(m.chat, this.t("bot.foreign"));
   }
 
   /** One polite reply per foreign chat, remembered across restarts. */
@@ -318,7 +324,7 @@ export class TelegramBot {
   private async onOwner(m: TgMessage): Promise<void> {
     const chatId = m.chat.id;
     if (typeof m.text !== "string") {
-      await this.sendHtml(chatId, "Пока я понимаю только текстовые сообщения — напишите, пожалуйста, текстом.");
+      await this.sendHtml(chatId, this.t("bot.textOnly"));
       return;
     }
     const text = m.text.trim();
@@ -328,10 +334,10 @@ export class TelegramBot {
       if (cmd[2] && this.botUser?.username && cmd[2].toLowerCase() !== this.botUser.username.toLowerCase()) return;
       switch (cmd[1].toLowerCase()) {
         case "start":
-          await this.sendHtml(chatId, "Этот чат уже привязан к open-bot. Просто напишите, что нужно сделать.");
+          await this.sendHtml(chatId, this.t("bot.alreadyLinked"));
           return;
         case "help":
-          await this.sendHtml(chatId, HELP);
+          await this.sendHtml(chatId, this.help());
           return;
         case "tasks":
           await this.sendTasks(chatId);
@@ -340,9 +346,9 @@ export class TelegramBot {
           this.stopTyping();
           try {
             const r = await this.ctx.core.call<{ interrupted?: boolean }>("channels.inbound", { channel: "telegram", text: "/stop" });
-            await this.sendHtml(chatId, r?.interrupted ? "⏹ Остановил текущую работу." : "Сейчас ничего не выполняется.");
+            await this.sendHtml(chatId, this.t(r?.interrupted ? "bot.stopped" : "bot.nothingRunning"));
           } catch (e: any) {
-            await this.sendHtml(chatId, `Не удалось остановить: ${escapeHtml(e?.message ?? String(e))}`);
+            await this.sendHtml(chatId, this.t("bot.stopFailed", { error: escapeHtml(e?.message ?? String(e)) }));
           }
           return;
         }
@@ -355,8 +361,27 @@ export class TelegramBot {
       if (r?.ignored) this.stopTyping();
     } catch (e: any) {
       this.stopTyping();
-      await this.sendHtml(chatId, `Не удалось передать сообщение ассистенту: ${escapeHtml(e?.message ?? String(e))}`);
+      await this.sendHtml(chatId, this.t("bot.forwardFailed", { error: escapeHtml(e?.message ?? String(e)) }));
     }
+  }
+
+  private help(): string {
+    return [
+      `<b>${this.t("help.title")}</b>`,
+      "",
+      this.t("help.chat"),
+      this.t("help.notifications"),
+      "",
+      `/tasks — ${this.t("cmd.tasks")}`,
+      `/stop — ${this.t("cmd.stop")}`,
+      `/help — ${this.t("help.self")}`,
+    ].join("\n");
+  }
+
+  private statusLabel(status: TaskStatus): string {
+    const key = `task.status.${status}`;
+    const label = this.t(key);
+    return label === key ? status : label;
   }
 
   private async sendTasks(chatId: number): Promise<void> {
@@ -364,16 +389,16 @@ export class TelegramBot {
     try {
       tasks = (await this.ctx.core.call<Task[]>("tasks.list", { limit: 30 })) ?? [];
     } catch (e: any) {
-      await this.sendHtml(chatId, `Не удалось получить задачи: ${escapeHtml(e?.message ?? String(e))}`);
+      await this.sendHtml(chatId, this.t("bot.tasksFailed", { error: escapeHtml(e?.message ?? String(e)) }));
       return;
     }
-    const line = (t: Task) => `• ${escapeHtml(t.title || t.goal.slice(0, 60))} — <i>${STATUS_RU[t.status] ?? t.status}</i>`;
+    const line = (t: Task) => `• ${escapeHtml(t.title || t.goal.slice(0, 60))} — <i>${this.statusLabel(t.status)}</i>`;
     const active = tasks.filter((t) => !FINAL.includes(t.status)).slice(0, 15);
     const recent = tasks.filter((t) => FINAL.includes(t.status)).slice(0, 5);
     const parts: string[] = [];
-    if (active.length) parts.push("<b>В работе</b>", ...active.map(line));
-    if (recent.length) parts.push(...(parts.length ? [""] : []), "<b>Недавно завершены</b>", ...recent.map(line));
-    await this.sendHtml(chatId, parts.length ? parts.join("\n") : "Задач пока нет.");
+    if (active.length) parts.push(`<b>${this.t("tasks.active")}</b>`, ...active.map(line));
+    if (recent.length) parts.push(...(parts.length ? [""] : []), `<b>${this.t("tasks.recent")}</b>`, ...recent.map(line));
+    await this.sendHtml(chatId, parts.length ? parts.join("\n") : this.t("tasks.none"));
   }
 
   // ---------- typing indicator ----------
@@ -406,7 +431,7 @@ export class TelegramBot {
       api.call("answerCallbackQuery", { callback_query_id: q.id, text: text?.slice(0, 190), show_alert: alert || undefined }).catch(() => {});
     const msg = q.message;
     if (!this.chat || !msg || msg.chat.id !== this.chat.id) {
-      await answer("Эта кнопка недоступна.");
+      await answer(this.t("callback.unavailable"));
       return;
     }
     const data = q.data ?? "";
@@ -415,20 +440,20 @@ export class TelegramBot {
       const decision = a[2] === "a" ? "approve" : "deny";
       try {
         await this.ctx.core.call("approvals.resolve", { id: a[1], decision, token: a[3] });
-        const label = decision === "approve" ? "✅ Разрешено" : "❌ Отклонено";
+        const label = this.t(decision === "approve" ? "callback.approved" : "callback.denied");
         await answer(label);
         await this.markOutcome(msg, label);
       } catch (e: any) {
         const message = String(e?.message ?? e);
         // Already answered elsewhere (console, a second tap): show the actual outcome instead of an error.
-        const done = /уже обработано \((\w+)\)/.exec(message)?.[1];
-        const known: Record<string, string> = { approved: "✅ Разрешено", executed: "✅ Разрешено и выполнено", denied: "❌ Отклонено", expired: "⌛ Время на ответ истекло", failed: "⚠️ Разрешено, но выполнение не удалось" };
-        if (done && known[done]) {
-          await answer(`Уже обработано: ${known[done]}`);
-          await this.markOutcome(msg, known[done]);
+        const done = ALREADY_HANDLED_RE.exec(message)?.[1];
+        if (done && ["approved", "executed", "denied", "expired", "failed"].includes(done)) {
+          const outcome = this.t(`callback.${done}`);
+          await answer(this.t("callback.alreadyHandled", { outcome }));
+          await this.markOutcome(msg, outcome);
           return;
         }
-        const text = `Не получилось: ${message}`;
+        const text = this.t("callback.error", { error: message });
         await answer(text, true);
         await this.markOutcome(msg, `⚠️ ${text}`);
       }
@@ -439,11 +464,11 @@ export class TelegramBot {
       const value = ({ u: "useful", l: "less", o: "off" } as const)[f[2] as "u" | "l" | "o"];
       try {
         await this.ctx.core.call("notifications.feedback", { id: f[1], value, token: f[3] });
-        const label = { useful: "👍 Спасибо, учту!", less: "🔉 Хорошо, буду писать реже.", off: "🔕 Больше не буду присылать такие уведомления." }[value];
+        const label = this.t(`feedback.${value}`);
         await answer(label);
         await this.markOutcome(msg, label);
       } catch (e: any) {
-        await answer(`Не получилось: ${e?.message ?? String(e)}`, true);
+        await answer(this.t("callback.error", { error: e?.message ?? String(e) }), true);
       }
       return;
     }
@@ -471,7 +496,7 @@ export class TelegramBot {
   async send(msg: OutboundMessage): Promise<{ externalId?: string }> {
     if (msg.kind === "reply") this.stopTyping();
     if (!this.chat) return {};
-    if (!this.api) throw new Error(this.lastError ?? "Telegram не подключён");
+    if (!this.api) throw new Error(this.render(this.lastError ?? { key: "status.notConnected" }));
     const chatId = this.chat.id;
     const buttons: InlineButton[][] = [];
     let footer = "";
@@ -482,27 +507,27 @@ export class TelegramBot {
       const no = `a:${a.id}:d:${a.denyToken}`;
       if (fitsCallback(yes) && fitsCallback(no)) {
         buttons.push([
-          { text: "✅ Разрешить", callback_data: yes },
-          { text: "❌ Отклонить", callback_data: no },
+          { text: this.t("button.approve"), callback_data: yes },
+          { text: this.t("button.deny"), callback_data: no },
         ]);
       }
       if (msg.link) {
-        footer = `\n\n🔐 Подробности и ответ на пульте: ${escapeHtml(msg.link)}`;
-        if (isPublicHttpUrl(msg.link, { httpsOnly: true })) buttons.push([{ text: "🔐 Открыть пульт", url: msg.link }]);
+        footer = `\n\n${this.t("approval.footer", { link: escapeHtml(msg.link) })}`;
+        if (isPublicHttpUrl(msg.link, { httpsOnly: true })) buttons.push([{ text: this.t("button.console"), url: msg.link }]);
       }
     }
     if (msg.feedback) {
       const id = msg.feedback.notificationId;
       const t = msg.feedback.tokens;
       const row = [
-        { text: "👍 Полезно", callback_data: `f:${id}:u:${t.useful}` },
-        { text: "🔉 Реже", callback_data: `f:${id}:l:${t.less}` },
-        { text: "🔕 Выключить", callback_data: `f:${id}:o:${t.off}` },
+        { text: this.t("button.useful"), callback_data: `f:${id}:u:${t.useful}` },
+        { text: this.t("button.less"), callback_data: `f:${id}:l:${t.less}` },
+        { text: this.t("button.off"), callback_data: `f:${id}:o:${t.off}` },
       ];
       if (row.every((b) => fitsCallback(b.callback_data))) buttons.push(row);
     }
     if ((msg.kind === "notification" || msg.kind === "digest") && msg.link && isPublicHttpUrl(msg.link, { httpsOnly: true })) {
-      buttons.push([{ text: "Открыть", url: msg.link }]);
+      buttons.push([{ text: this.t("button.open"), url: msg.link }]);
     }
 
     const chunks = splitMarkdown(msg.text ?? "", TELEGRAM_LIMIT - 96 - htmlToPlain(footer).length);
@@ -530,7 +555,7 @@ export class TelegramBot {
 
   private async sendHtml(chatId: number, html: string, opts: { buttons?: InlineButton[][]; silent?: boolean; preview?: boolean } = {}): Promise<TgMessage | undefined> {
     const api = this.api;
-    if (!api) throw new Error("Telegram не подключён");
+    if (!api) throw new Error(this.t("status.notConnected"));
     const params: Record<string, unknown> = {
       chat_id: chatId,
       text: html,
@@ -549,7 +574,7 @@ export class TelegramBot {
         return api.send<TgMessage>("sendMessage", { ...params, text: htmlToPlain(html), parse_mode: undefined });
       }
       if (e instanceof TelegramError && e.code === 403 && this.chat?.id === chatId) {
-        this.lastSendError = "Бот заблокирован в привязанном чате";
+        this.lastSendError = { key: "status.blocked" };
         this.emitStatus();
       }
       throw e;
@@ -573,24 +598,25 @@ export class TelegramBot {
     this.stopTyping();
     await this.ctx.storage.delete("chat");
     await this.newPairingCode();
-    if (old && this.api) await this.sendHtml(old.id, "Этот чат отвязан от open-bot. Сообщения сюда больше не приходят.").catch(() => {});
+    if (old && this.api) await this.sendHtml(old.id, this.t("bot.unlinked")).catch(() => {});
   }
 
+  /** Connection status for the settings page and the channels list, in the hub language. */
   detail(): string {
-    const bot = this.botUser?.username ? `@${this.botUser.username}` : "Бот";
+    const bot = this.botUser?.username ? `@${this.botUser.username}` : this.t("status.bot");
     switch (this.state) {
       case "starting":
-        return "Подключение к Telegram…";
+        return this.t("status.connecting");
       case "stopped":
-        return "Остановлен";
+        return this.t("status.stopped");
       case "no-token":
       case "unauthorized":
-        return this.lastError ?? "Нет токена бота";
+        return this.render(this.lastError ?? { key: "status.noToken" });
       case "error":
-        return `Нет связи с Telegram: ${this.lastError ?? "ошибка"}`;
+        return this.t("status.noConnection", { error: this.render(this.lastError ?? { key: "status.unknownError" }) });
       case "polling":
-        if (!this.chat) return `${bot} ждёт привязки: отправьте ему /start ${this.pairingCode ?? ""}`.trim();
-        return this.lastSendError ? `${bot}: ${this.lastSendError}` : `${bot} привязан к чату «${this.chat.name}»`;
+        if (!this.chat) return this.t("status.waitingPairing", { bot, code: this.pairingCode ?? "" }).trim();
+        return this.lastSendError ? `${bot}: ${this.render(this.lastSendError)}` : this.t("status.linked", { bot, chat: this.chat.name });
     }
   }
 
@@ -628,7 +654,7 @@ export class TelegramBot {
       case "GET /status":
         return { status: 200, body: this.statusInfo() };
       case "POST /pairing-code":
-        if (this.chat) return { status: 409, body: { error: "Чат уже привязан. Сначала отвяжите его." } };
+        if (this.chat) return { status: 409, body: { error: this.t("http.alreadyLinked") } };
         await this.newPairingCode();
         return { status: 200, body: this.statusInfo() };
       case "POST /unbind":

@@ -1,8 +1,8 @@
 {
   "id": "browser",
-  "name": "Браузер",
+  "name": "%name%",
   "version": "0.1.0",
-  "description": "Chromium с постоянным профилем: агент открывает сайты, читает страницы и заполняет формы; живой экран и перехват управления",
+  "description": "%description%",
   "builtin": true,
   "server": "./server/index.ts",
   "ui": "./ui/dist/index.js",
@@ -19,33 +19,33 @@
             "never"
           ],
           "default": "auto",
-          "title": "Режим без окна",
-          "description": "auto — окно, если есть дисплей (Linux с DISPLAY, например Xvfb в Docker), иначе без окна; always — всегда без окна; never — всегда с окном"
+          "title": "%settings.headless.title%",
+          "description": "%settings.headless.description%"
         },
         "idleMinutes": {
           "type": "number",
           "default": 30,
           "minimum": 1,
-          "title": "Закрывать после простоя, минут"
+          "title": "%settings.idleMinutes.title%"
         },
         "allowLocalNetwork": {
           "type": "boolean",
           "default": false,
-          "title": "Разрешить агенту локальные адреса",
-          "description": "localhost, 192.168.*, 10.* и т. п. По умолчанию агент не может открывать адреса этого сервера и локальной сети"
+          "title": "%settings.allowLocalNetwork.title%",
+          "description": "%settings.allowLocalNetwork.description%"
         },
         "takeoverWaitSec": {
           "type": "number",
           "default": 10,
           "minimum": 0,
-          "title": "Ожидание агента при перехвате, секунд",
-          "description": "Сколько инструмент агента ждёт, пока вы вернёте управление браузером"
+          "title": "%settings.takeoverWaitSec.title%",
+          "description": "%settings.takeoverWaitSec.description%"
         },
         "maxDownloadMb": {
           "type": "number",
           "default": 200,
           "minimum": 1,
-          "title": "Максимальный размер скачиваемого файла, МБ"
+          "title": "%settings.maxDownloadMb.title%"
         }
       }
     }

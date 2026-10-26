@@ -1,8 +1,8 @@
 {
   "id": "telegram",
-  "name": "Telegram",
+  "name": "%name%",
   "version": "0.1.0",
-  "description": "Канал Telegram: чат с ассистентом, уведомления и подтверждения действий с телефона",
+  "description": "%description%",
   "builtin": true,
   "server": "./server/index.ts",
   "ui": "./ui/dist/index.js",
@@ -14,26 +14,26 @@
       "properties": {
         "botTokenRef": {
           "type": "string",
-          "title": "Токен бота",
-          "description": "Ссылка на запись vault с токеном бота от @BotFather (поле value)",
+          "title": "%settings.botTokenRef.title%",
+          "description": "%settings.botTokenRef.description%",
           "default": "vault://telegram_bot_token"
         },
         "apiBaseUrl": {
           "type": "string",
-          "title": "Адрес Bot API",
-          "description": "Обычно https://api.telegram.org; меняйте только для собственного сервера Bot API",
+          "title": "%settings.apiBaseUrl.title%",
+          "description": "%settings.apiBaseUrl.description%",
           "default": "https://api.telegram.org"
         },
         "pollTimeoutSec": {
           "type": "integer",
-          "title": "Таймаут long polling, с",
+          "title": "%settings.pollTimeoutSec.title%",
           "default": 30,
           "minimum": 1,
           "maximum": 50
         },
         "tokenRetrySec": {
           "type": "integer",
-          "title": "Повтор при отсутствии токена, с",
+          "title": "%settings.tokenRetrySec.title%",
           "default": 60,
           "minimum": 1
         }

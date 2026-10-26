@@ -1,6 +1,7 @@
 // Settings section for the Telegram channel: connection status, pairing code, bound chat, unbind.
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { Badge, Button, Card, Spinner, definePluginUI } from "@openbot/ui";
 import type { OpenBotUI } from "@openbot/ui";
 
@@ -15,9 +16,33 @@ interface Status {
   tokenRef: string;
 }
 
+// Set in definePluginUI: the page reloads on a language switch.
+let t: OpenBotUI["i18n"]["t"] = (key) => key;
+let formatDate: OpenBotUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleString();
+
+/** A message with React elements in its placeholders: rich("ui.x", { link: <a>…</a> }). */
+function rich(key: string, parts: Record<string, ReactNode>): ReactNode[] {
+  const marks = Object.fromEntries(Object.keys(parts).map((k) => [k, `\u0000${k}\u0000`]));
+  return t(key, marks)
+    .split("\u0000")
+    .map((s, i) => (i % 2 ? <Fragment key={i}>{parts[s]}</Fragment> : s));
+}
+
 const tone = (s: Status) => (s.connected ? "success" : s.state === "error" || s.state === "unauthorized" ? "danger" : s.state === "polling" ? "info" : "warning");
 const label = (s: Status) =>
-  s.connected ? "Подключён" : s.state === "polling" ? "Ждёт привязки" : s.state === "no-token" ? "Нет токена" : s.state === "unauthorized" ? "Токен не принят" : s.state === "error" ? "Нет связи" : "Подключение…";
+  t(
+    s.connected
+      ? "ui.state.connected"
+      : s.state === "polling"
+        ? "ui.state.waiting"
+        : s.state === "no-token"
+          ? "ui.state.noToken"
+          : s.state === "unauthorized"
+            ? "ui.state.unauthorized"
+            : s.state === "error"
+              ? "ui.state.error"
+              : "ui.state.connecting",
+  );
 
 const muted = { opacity: 0.75, fontSize: "0.9em" } as const;
 const code = { fontFamily: "ui-monospace, monospace", fontSize: "1.6em", letterSpacing: "0.2em", fontWeight: 600 } as const;
@@ -56,7 +81,7 @@ function TelegramSettings({ ui }: { ui: OpenBotUI }) {
     }
   };
 
-  if (!status) return <Card title="Telegram">{error ? <p>Не удалось получить статус: {error}</p> : <Spinner />}</Card>;
+  if (!status) return <Card title="Telegram">{error ? <p>{t("ui.statusFailed", { error })}</p> : <Spinner />}</Card>;
 
   return (
     <Card title="Telegram" actions={<Badge tone={tone(status)}>{label(status)}</Badge>}>
@@ -65,45 +90,47 @@ function TelegramSettings({ ui }: { ui: OpenBotUI }) {
       {(status.state === "no-token" || status.state === "unauthorized") && (
         <ol>
           <li>
-            Создайте бота у <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a> и скопируйте токен.
+            {rich("ui.setup.botfather", {
+              botfather: (
+                <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">
+                  @BotFather
+                </a>
+              ),
+            })}
           </li>
-          <li>
-            На пульте безопасности добавьте в vault секрет <code>{status.tokenRef.replace(/^vault:\/\//, "")}</code> с токеном в поле <code>value</code>.
-          </li>
-          <li>Бот подключится сам в течение минуты.</li>
+          <li>{rich("ui.setup.vault", { name: <code>{status.tokenRef.replace(/^vault:\/\//, "")}</code>, field: <code>value</code> })}</li>
+          <li>{t("ui.setup.wait")}</li>
         </ol>
       )}
 
       {status.state === "polling" && !status.chat && status.pairingCode && (
         <div>
-          <p>
-            Откройте бота{status.bot?.username ? ` @${status.bot.username}` : ""} в Telegram и отправьте ему команду:
-          </p>
+          <p>{status.bot?.username ? t("ui.pair.promptNamed", { bot: `@${status.bot.username}` }) : t("ui.pair.prompt")}</p>
           <div style={code}>/start {status.pairingCode}</div>
           <div style={row}>
             {status.deepLink && (
               <a href={status.deepLink} target="_blank" rel="noreferrer">
-                Открыть в Telegram ↗
+                {t("ui.pair.openLink")}
               </a>
             )}
             <Button variant="secondary" disabled={busy} onClick={() => act("/pairing-code")}>
-              Новый код
+              {t("ui.pair.newCode")}
             </Button>
           </div>
-          <p style={muted}>Бот отвечает только одному личному чату — тому, из которого пришёл код.</p>
+          <p style={muted}>{t("ui.pair.note")}</p>
         </div>
       )}
 
       {status.chat && (
         <div>
           <p>
-            Привязан чат: <b>{status.chat.name}</b>
-            <span style={muted}> · с {new Date(status.chat.boundAt).toLocaleString()}</span>
+            {rich("ui.chat.linked", { name: <b>{status.chat.name}</b> })}
+            <span style={muted}> · {t("ui.chat.since", { date: formatDate(status.chat.boundAt, { dateStyle: "medium", timeStyle: "short" }) })}</span>
           </p>
-          <p style={muted}>Сюда приходят ответы, уведомления и запросы на подтверждение. Команды в чате: /help, /tasks, /stop.</p>
+          <p style={muted}>{t("ui.chat.note")}</p>
           <div style={row}>
-            <Button variant="danger" disabled={busy} onClick={() => act("/unbind", "Отвязать чат Telegram? Уведомления перестанут приходить туда.")}>
-              Отвязать
+            <Button variant="danger" disabled={busy} onClick={() => act("/unbind", t("ui.unbindConfirm"))}>
+              {t("ui.unbind")}
             </Button>
           </div>
         </div>
@@ -113,5 +140,7 @@ function TelegramSettings({ ui }: { ui: OpenBotUI }) {
 }
 
 export default definePluginUI((ui) => {
+  t = (key, params) => ui.i18n.t(key, params);
+  formatDate = (d, opts) => ui.i18n.formatDate(d, opts);
   return ui.settings.section({ id: "telegram", title: "Telegram", component: () => <TelegramSettings ui={ui} /> });
 });

@@ -23,10 +23,10 @@ describe("cron in the user's timezone", () => {
 
   it("explains bad cron expressions", () => {
     expect(cronError("0 9 * * 1-5")).toBeUndefined();
-    expect(cronError("0 9 * *")).toContain("5 полей");
-    expect(cronError("0 0 9 * * *")).toContain("5 полей");
-    expect(cronError("61 9 * * *")).toMatch(/Неверное cron-выражение/);
-    expect(cronError("")).toContain("cron");
+    expect(cronError("0 9 * *")?.message).toContain("5 fields");
+    expect(cronError("0 0 9 * * *")).toMatchObject({ code: "cronFields", params: { expr: "0 0 9 * * *" } });
+    expect(cronError("61 9 * * *")?.message).toMatch(/Invalid cron expression/);
+    expect(cronError("")?.message).toContain("cron");
   });
 });
 
@@ -61,7 +61,7 @@ describe("local dates and ISO parsing", () => {
 
   it("formats and dates in the timezone", () => {
     expect(localDate(new Date("2026-10-26T22:30:00Z"), "Asia/Tokyo")).toBe("2026-10-27");
-    expect(formatLocal("2026-10-26T22:30:00Z", "Asia/Tokyo")).toBe("2026-10-27 07:30 (вт)");
+    expect(formatLocal("2026-10-26T22:30:00Z", "Asia/Tokyo")).toBe("2026-10-27 07:30 (Tue)");
   });
 
   it("computes next runs per kind", () => {
@@ -84,12 +84,12 @@ describe("local dates and ISO parsing", () => {
 
   it("validates trigger input with clear errors", () => {
     const opts = { now: new Date("2026-10-26T05:00:00Z"), tz: "UTC", defaultAgent: "assistant", createdBy: "test" };
-    expect(() => buildTrigger({ kind: "once", name: "o", prompt: "p", at: "2026-10-25T09:00" }, opts)).toThrow(/уже прошло/);
-    expect(() => buildTrigger({ kind: "watch", name: "w", prompt: "p", url: "https://e.com", intervalMinutes: 2 }, opts)).toThrow(/не меньше 5 минут/);
+    expect(() => buildTrigger({ kind: "once", name: "o", prompt: "p", at: "2026-10-25T09:00" }, opts)).toThrow(/already passed/);
+    expect(() => buildTrigger({ kind: "watch", name: "w", prompt: "p", url: "https://e.com", intervalMinutes: 2 }, opts)).toThrow(/at least 5 minutes/);
     expect(() => buildTrigger({ kind: "watch", name: "w", prompt: "p", url: "ftp://e.com" }, opts)).toThrow(/http/);
-    expect(() => buildTrigger({ kind: "watch", name: "w", prompt: "p", url: "https://e.com", jsonPath: "a..b" }, opts)).toThrow(/JSON-путь/);
-    expect(() => buildTrigger({ kind: "heartbeat", name: "h", prompt: "p", times: ["25:00"] }, opts)).toThrow(/ЧЧ:ММ/);
-    expect(() => buildTrigger({ kind: "nope", name: "x", prompt: "p" }, opts)).toThrow(/Неизвестный вид/);
+    expect(() => buildTrigger({ kind: "watch", name: "w", prompt: "p", url: "https://e.com", jsonPath: "a..b" }, opts)).toThrow(/JSON path/);
+    expect(() => buildTrigger({ kind: "heartbeat", name: "h", prompt: "p", times: ["25:00"] }, opts)).toThrow(/HH:MM/);
+    expect(() => buildTrigger({ kind: "nope", name: "x", prompt: "p" }, opts)).toThrow(/Unknown trigger kind/);
     expect(() => buildTrigger({ kind: "schedule", name: "x", prompt: "" }, opts)).toThrow(/prompt/);
   });
 });

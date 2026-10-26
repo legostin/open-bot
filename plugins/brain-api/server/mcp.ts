@@ -71,21 +71,21 @@ export class McpClient {
           /* skip */
         }
       }
-      throw new McpError(`MCP: нет ответа на ${String(message.method)}`);
+      throw new McpError(`MCP: no response to ${String(message.method)}`);
     }
     const text = await res.text();
-    if (res.status === 401) throw new McpError("MCP: токен сессии отклонён хабом (401)", 401);
+    if (res.status === 401) throw new McpError("MCP: the hub rejected the session token (401)", 401);
     try {
       return text ? JSON.parse(text) : undefined;
     } catch {
-      throw new McpError(`MCP: некорректный ответ (HTTP ${res.status}): ${text.slice(0, 200)}`);
+      throw new McpError(`MCP: malformed response (HTTP ${res.status}): ${text.slice(0, 200)}`);
     }
   }
 
   async rpc<T = any>(method: string, params: unknown, signal?: AbortSignal, id?: string | number): Promise<T> {
     const msg = { jsonrpc: "2.0", id: id ?? `ob_${++this.seq}`, method, params };
     const r = await this.post(msg, signal);
-    if (!r) throw new McpError(`MCP: пустой ответ на ${method}`);
+    if (!r) throw new McpError(`MCP: empty response to ${method}`);
     if (r.error) throw new McpError(String(r.error.message ?? "MCP error"), r.error.code);
     return r.result as T;
   }

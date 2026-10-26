@@ -5,6 +5,20 @@ import { isIPv4, isIPv6 } from "node:net";
 import { existsSync } from "node:fs";
 import { join, extname, basename } from "node:path";
 
+/**
+ * An error whose message is meant for the model as is (English). Errors that can also reach the browser pane carry
+ * a `code` (and `params`) so the pane can show them in the user's language (ui.error.<code> in the plugin's locales).
+ */
+export class ToolError extends Error {
+  code?: string;
+  params?: Record<string, string>;
+  constructor(message: string, code?: string, params?: Record<string, string>) {
+    super(message);
+    this.code = code;
+    this.params = params;
+  }
+}
+
 export type HeadlessSetting = "auto" | "always" | "never";
 
 export interface BrowserSettings {
@@ -92,23 +106,28 @@ export function isPrivateHost(hostname: string): boolean {
   return !h.includes(".");
 }
 
-/** Accepts "example.com", "localhost:3000", full http(s) URLs and about:blank. Throws a user-facing message. */
+/** Accepts "example.com", "localhost:3000", full http(s) URLs and about:blank. Throws a ToolError with a code for the pane. */
 export function normalizeUrl(input: string): URL {
   const s = String(input ?? "").trim();
-  if (!s) throw new Error("Пустой адрес");
+  if (!s) throw new ToolError("Empty URL.", "urlEmpty");
   if (s === "about:blank") return new URL(s);
   let candidate = s;
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
-    if (/^[a-z][a-z0-9+.-]*:/i.test(s) && !/^[\w.-]+:\d+(\/|$)/.test(s)) throw new Error(`Схема адреса не поддерживается: ${s.split(":")[0]}`);
+    if (/^[a-z][a-z0-9+.-]*:/i.test(s) && !/^[\w.-]+:\d+(\/|$)/.test(s)) {
+      const scheme = s.split(":")[0];
+      throw new ToolError(`Unsupported URL scheme: ${scheme}.`, "urlScheme", { scheme });
+    }
     candidate = (/^(localhost|[\d.]+|\[[\da-f:]+\])(:\d+)?(\/|$)/i.test(s) ? "http://" : "https://") + s;
   }
   let u: URL;
   try {
     u = new URL(candidate);
   } catch {
-    throw new Error(`Некорректный адрес: ${s}`);
+    throw new ToolError(`Invalid URL: ${s}`, "urlInvalid", { url: s });
   }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Можно открывать только http(s) адреса, а не ${u.protocol}`);
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new ToolError(`Only http(s) URLs can be opened, not ${u.protocol}`, "urlProtocol", { protocol: u.protocol });
+  }
   return u;
 }
 
@@ -170,9 +189,9 @@ export function filenameFromUrl(url: string): string | undefined {
 }
 
 export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export function cut(s: string, max: number): string {
@@ -208,7 +227,7 @@ function base32Decode(s: string): Buffer {
   const out: number[] = [];
   for (const ch of clean) {
     const idx = alphabet.indexOf(ch);
-    if (idx < 0) throw new Error("TOTP: секрет не в base32");
+    if (idx < 0) throw new Error("TOTP: the secret is not base32");
     value = (value << 5) | idx;
     bits += 5;
     if (bits >= 8) {

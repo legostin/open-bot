@@ -1,8 +1,8 @@
 {
   "id": "memory",
-  "name": "Память",
+  "name": "%name%",
   "version": "0.1.0",
-  "description": "Долговременная память о пользователе: markdown-факты с историей в git, полнотекстовый поиск и проверка фактов из недоверенных сессий",
+  "description": "%description%",
   "author": "open-bot",
   "builtin": true,
   "server": "./server/index.ts",
@@ -16,16 +16,16 @@
       "properties": {
         "promptMaxChars": {
           "type": "integer",
-          "title": "Объём памяти в системном промпте",
-          "description": "Сколько символов индекса памяти и профиля добавлять в начало каждой сессии",
+          "title": "%settings.promptMaxChars.title%",
+          "description": "%settings.promptMaxChars.description%",
           "default": 4000,
           "minimum": 500,
           "maximum": 20000
         },
         "git": {
           "type": "boolean",
-          "title": "История в git",
-          "description": "Коммитить каждое изменение памяти (если git установлен). Применяется после перезапуска плагина.",
+          "title": "%settings.git.title%",
+          "description": "%settings.git.description%",
           "default": true
         }
       }

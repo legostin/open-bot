@@ -1,7 +1,10 @@
 // HTTP API: authenticated routes for the UI, public webhooks for event triggers.
+// Errors shown by the UI carry the catalog message in the hub language plus the code and params;
+// webhook responses go to other programs and stay in English.
 
 import type { PluginHttpRequest, PluginHttpResponse } from "@openbot/plugin-sdk";
 import { NotFoundError, type TriggerEngine } from "./engine.ts";
+import type { TriggerError } from "./errors.ts";
 import { describeSchedule } from "./schedule.ts";
 import type { Trigger, TriggerInput } from "./types.ts";
 import { ValidationError } from "./validate.ts";
@@ -11,6 +14,8 @@ export function view(e: TriggerEngine, t: Trigger) {
 }
 
 const ok = (body: unknown, status = 200): PluginHttpResponse => ({ status, body });
+const failure = (e: TriggerEngine, err: TriggerError, status: number): PluginHttpResponse =>
+  ok({ error: e.ctx.i18n.t(`error.${err.code}`, err.params), code: err.code, params: err.params }, status);
 const body = (req: PluginHttpRequest): TriggerInput => (req.body && typeof req.body === "object" ? (req.body as TriggerInput) : {});
 
 export async function handleHttp(e: TriggerEngine, req: PluginHttpRequest): Promise<PluginHttpResponse> {
@@ -40,8 +45,8 @@ export async function handleHttp(e: TriggerEngine, req: PluginHttpRequest): Prom
     }
     return ok({ error: "not found" }, 404);
   } catch (err: any) {
-    if (err instanceof ValidationError) return ok({ error: err.message }, 400);
-    if (err instanceof NotFoundError) return ok({ error: err.message }, 404);
+    if (err instanceof ValidationError) return failure(e, err, 400);
+    if (err instanceof NotFoundError) return failure(e, err, 404);
     return ok({ error: err?.message ?? String(err) }, 500);
   }
 }

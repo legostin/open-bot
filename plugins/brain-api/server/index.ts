@@ -40,7 +40,11 @@ const plugin: PluginModule = {
       const s = settings;
       const v = variantOf(variantId);
       if (!v) {
-        return { available: false, authenticated: false, detail: `Неизвестный вариант «${variantId}». Доступны: ${Object.keys(VARIANTS).join(", ")}` };
+        return {
+          available: false,
+          authenticated: false,
+          detail: ctx.i18n.t("probe.unknownVariant", { variant: String(variantId), variants: Object.keys(VARIANTS).join(", ") }),
+        };
       }
       const def = v.defaultModel(s);
       const models = v.protocol === "anthropic" ? [...new Set([...ANTHROPIC_MODELS, def])] : [def];
@@ -51,8 +55,8 @@ const plugin: PluginModule = {
 
     async function createSession(opts: BrainSessionOptions): Promise<ApiBrainSession> {
       const v = variantOf(opts.variant);
-      if (!v) throw new Error(`Неизвестный вариант API-мозга: ${opts.variant}`);
-      if (!isSafeSessionId(opts.sessionId)) throw new Error(`недопустимый идентификатор сессии: ${opts.sessionId}`);
+      if (!v) throw new Error(ctx.i18n.t("error.unknownVariant", { variant: String(opts.variant) }));
+      if (!isSafeSessionId(opts.sessionId)) throw new Error(`invalid session id: ${opts.sessionId}`);
       let history: HistoryMessage[] = [];
       let prefixHash: string | undefined;
       if (opts.resume) {
@@ -61,9 +65,9 @@ const plugin: PluginModule = {
           if (saved) {
             history = saved.messages;
             prefixHash = saved.prefixHash;
-          } else ctx.log.warn(`нет сохранённой истории для ${opts.resume}, начинаю заново`);
+          } else ctx.log.warn(`no saved history for ${opts.resume}, starting over`);
         } catch (e: any) {
-          ctx.log.warn(`не удалось загрузить историю ${opts.resume}: ${e?.message ?? e}`);
+          ctx.log.warn(`could not load the history of ${opts.resume}: ${e?.message ?? e}`);
         }
       }
       return new ApiBrainSession({ ctx, opts, variant: v, settings: () => settings, history, prefixHash });

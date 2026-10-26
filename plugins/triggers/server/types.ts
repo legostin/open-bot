@@ -1,3 +1,5 @@
+import type { ErrorParams } from "./errors.ts";
+
 export const TRIGGER_KINDS = ["schedule", "once", "watch", "event", "heartbeat"] as const;
 export type TriggerKind = (typeof TRIGGER_KINDS)[number];
 
@@ -8,7 +10,10 @@ export interface TriggerState {
   nextRunAt?: string;
   lastRunAt?: string;
   lastStatus?: "ok" | "error" | "skipped";
+  /** English text (tools, logs); the UI shows "error.<lastErrorCode>" from the catalog when there is a code. */
   lastError?: string;
+  lastErrorCode?: string;
+  lastErrorParams?: ErrorParams;
   lastTaskId?: string;
   /** Runs started today (local date in the user's timezone). */
   runsToday?: { date: string; count: number };
@@ -56,7 +61,10 @@ export interface TriggerRun {
   reason: RunReason;
   status: "started" | "skipped" | "error";
   taskId?: string;
+  /** English text (tools, webhook responses); the UI shows "error.<code>" from the catalog when there is a code. */
   detail?: string;
+  code?: string;
+  params?: ErrorParams;
 }
 
 /** Fields accepted from tools and the UI for create / update. */

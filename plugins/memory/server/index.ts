@@ -3,9 +3,9 @@
 
 import type { PluginContext, PluginHttpRequest, PluginHttpResponse, PluginModule } from "@openbot/plugin-sdk";
 import type { ToolCallContext, ToolResult } from "@openbot/shared";
-import { Memory } from "./memory.ts";
+import { factNotFound, Memory } from "./memory.ts";
 import { INDEX_FILE, type Fact } from "./store.ts";
-import { NotFoundError, PathError } from "./paths.ts";
+import { NotFoundError, PathError, type MemoryError } from "./paths.ts";
 
 function text(t: string, isError = false): ToolResult {
   return { content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) };
@@ -17,9 +17,16 @@ function factMeta(f: Fact): string {
     .join(" · ");
 }
 
+/** Error for the memory UI: the English message plus a code it translates ("ui.error.<code>"). */
+function errorBody(e: MemoryError): { error: string; code: string; params: Record<string, string | number> } {
+  return { error: e.message, code: e.code, params: e.params };
+}
+
+const NOT_FOUND: PluginHttpResponse = { status: 404, body: { error: "Not found", code: "notFound", params: {} } };
+
 function fail(e: any): PluginHttpResponse {
-  if (e instanceof PathError) return { status: 400, body: { error: e.message } };
-  if (e instanceof NotFoundError) return { status: 404, body: { error: e.message } };
+  if (e instanceof PathError) return { status: 400, body: errorBody(e) };
+  if (e instanceof NotFoundError) return { status: 404, body: errorBody(e) };
   return { status: 500, body: { error: e?.message ?? String(e) } };
 }
 
@@ -128,7 +135,7 @@ const plugin: PluginModule = {
         "so include everything that should stay (read it first). Folders: profile.md (who the user is, key preferences), people/, projects/, notes/. " +
         "Never store passwords, tokens or other secrets.",
       effect: "local-write",
-      approvalSummary: "Запомнить: {title}",
+      approvalSummary: "%approval.write%",
       inputSchema: {
         type: "object",
         properties: {
@@ -160,7 +167,7 @@ const plugin: PluginModule = {
       name: "forget",
       description: "Delete a fact from memory by path (the deletion is recorded in the memory's history).",
       effect: "local-write",
-      approvalSummary: "Забыть: {path}",
+      approvalSummary: "%approval.forget%",
       inputSchema: {
         type: "object",
         properties: { path: { type: "string", description: "Fact path, e.g. notes/old-plan.md." } },
@@ -187,7 +194,7 @@ const plugin: PluginModule = {
     // ---------- HTTP for the UI ----------
 
     ctx.http.handle(async (req: PluginHttpRequest): Promise<PluginHttpResponse> => {
-      if (req.public) return { status: 404, body: { error: "Не найдено" } };
+      if (req.public) return NOT_FOUND;
       const body = (req.body ?? {}) as Record<string, any>;
       const route = `${req.method.toUpperCase()} ${req.path.replace(/\/+$/, "") || "/"}`;
       try {
@@ -196,10 +203,10 @@ const plugin: PluginModule = {
             return { status: 200, body: mem.tree() };
           case "GET /file": {
             const p = String(req.query.path ?? "");
-            if (p === INDEX_FILE) return { status: 200, body: { path: INDEX_FILE, title: "Индекс памяти", raw: mem.store.raw(INDEX_FILE) ?? "", body: mem.store.raw(INDEX_FILE) ?? "", generated: true } };
+            if (p === INDEX_FILE) return { status: 200, body: { path: INDEX_FILE, title: "Memory index", raw: mem.store.raw(INDEX_FILE) ?? "", body: mem.store.raw(INDEX_FILE) ?? "", generated: true } };
             const { path, fact, review } = mem.get(p);
             const f = req.query.review === "1" ? review : (fact ?? review);
-            if (!f) return { status: 404, body: { error: `Факт не найден: ${path}` } };
+            if (!f) return fail(factNotFound(path));
             return { status: 200, body: { ...f, raw: mem.serialize(f), pendingReview: !!review } };
           }
           case "PUT /file": {
@@ -225,7 +232,7 @@ const plugin: PluginModule = {
           case "POST /review/reject":
             return { status: 200, body: await mem.reject(String(body.path ?? "")) };
           default:
-            return { status: 404, body: { error: "Не найдено" } };
+            return NOT_FOUND;
         }
       } catch (e) {
         return fail(e);

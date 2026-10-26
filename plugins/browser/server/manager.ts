@@ -19,13 +19,13 @@ import {
   readSettings,
   sanitizeFilename,
   sleep,
+  ToolError,
   uniquePath,
   withTimeout,
   type BrowserSettings,
 } from "./util.ts";
 
-/** An error whose message is meant for the model / user as is. */
-export class ToolError extends Error {}
+export { ToolError };
 
 export const VIEWPORT = { width: 1280, height: 800 };
 const WATCH_TTL_MS = 30_000;
@@ -171,14 +171,15 @@ export class BrowserManager {
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       if (/Executable doesn't exist|browserType\.launch.*install/i.test(msg)) {
-        throw new ToolError("Chromium не установлен. Выполните на сервере: npx playwright install chromium");
+        throw new ToolError("Chromium is not installed. On the server, run: npx playwright install chromium", "noChromium");
       }
       if (!headless) {
         this.ctx.log.warn(`headed launch failed (${msg.split("\n")[0]}), falling back to headless`);
         context = await open(true);
         this.headlessMode = true;
       } else {
-        throw new ToolError(`Не удалось запустить браузер: ${msg.split("\n")[0]}`);
+        const detail = msg.split("\n")[0];
+        throw new ToolError(`Could not start the browser: ${detail}`, "launch", { detail });
       }
     }
     this.ctx.log.info(`browser started (${this.headlessMode ? "headless" : "headed"}${proxy ? ", via egress proxy" : ""})`);
@@ -186,7 +187,7 @@ export class BrowserManager {
     context.on("page", (p) => {
       this.trackPage(p);
       if (this.context === context) {
-        if (this.active && !this.active.isClosed() && this.busy && this.busy !== "tabs") this.note("Открылась новая вкладка, она стала активной.");
+        if (this.active && !this.active.isClosed() && this.busy && this.busy !== "tabs") this.note("A new tab opened and became active.");
         this.setActive(p);
       }
     });
@@ -288,10 +289,10 @@ export class BrowserManager {
       if (type === "beforeunload") await d.accept();
       else if (this.acceptDialogs && type === "confirm") {
         await d.accept();
-        this.note(`Страница спросила «${msg}» — подтверждено в рамках одобренного действия.`);
+        this.note(`The page asked "${msg}": confirmed as part of the approved action.`);
       } else {
         await d.dismiss();
-        this.note(type === "alert" ? `Страница показала сообщение: «${msg}».` : `Страница показала диалог (${type}): «${msg}» — отменён автоматически.`);
+        this.note(type === "alert" ? `The page showed a message: "${msg}".` : `The page showed a ${type} dialog: "${msg}"; it was dismissed automatically.`);
       }
     } catch {
       /* dialog already handled */
@@ -307,8 +308,8 @@ export class BrowserManager {
       return;
     }
     done.then(
-      (r) => this.note(`Скачан файл: ${r.path} (${formatSize(r.size)}).`),
-      (e) => this.note(`Не удалось скачать файл: ${e.message}`),
+      (r) => this.note(`Downloaded a file: ${r.path} (${formatSize(r.size)}).`),
+      (e) => this.note(`Could not download a file: ${e.message}`),
     );
   }
 
@@ -323,7 +324,7 @@ export class BrowserManager {
     const max = this.settings.maxDownloadMb * 1024 * 1024;
     if (size > max) {
       rmSync(path, { force: true });
-      throw new Error(`файл больше ${this.settings.maxDownloadMb} МБ`);
+      throw new Error(`the file is larger than ${this.settings.maxDownloadMb} MB`);
     }
     return { path, name, size, url: d.url() };
   }
@@ -340,7 +341,7 @@ export class BrowserManager {
         const i = this.downloadWaiters.indexOf(resolveFn);
         if (i >= 0) {
           this.downloadWaiters.splice(i, 1);
-          reject(new ToolError("Скачивание не началось."));
+          reject(new ToolError("The download did not start."));
         }
       }, ms).unref();
     });
@@ -376,7 +377,7 @@ export class BrowserManager {
           content: [
             {
               type: "text",
-              text: "Пользователь управляет браузером. Дождитесь, пока он вернёт управление (кнопка в панели «Браузер»), и повторите действие; при необходимости спросите пользователя.",
+              text: "The user is controlling the browser. Wait until they hand control back (a button in the Browser panel) and retry; ask the user if needed.",
             },
           ],
           isError: true,
@@ -420,11 +421,11 @@ export class BrowserManager {
 
   async pageLine(): Promise<string> {
     const p = this.activePage();
-    if (!p) return this.context ? "Открытых вкладок нет." : "Браузер закрыт.";
+    if (!p) return this.context ? "No open tabs." : "The browser is closed.";
     const title = await this.titleOf(p);
     const pages = this.pages();
-    const tab = pages.length > 1 ? ` (вкладка ${pages.indexOf(p) + 1} из ${pages.length})` : "";
-    return `Страница: ${cut(title, 120) || "(без заголовка)"} — ${cut(p.url(), 300)}${tab}`;
+    const tab = pages.length > 1 ? ` (tab ${pages.indexOf(p) + 1} of ${pages.length})` : "";
+    return `Page: ${cut(title, 120) || "(untitled)"} — ${cut(p.url(), 300)}${tab}`;
   }
 
   async titleOf(p: Page): Promise<string> {
@@ -448,8 +449,8 @@ export class BrowserManager {
     if (u.protocol === "about:") return;
     if (!this.settings.allowLocalNetwork && isPrivateHost(u.hostname)) {
       throw new ToolError(
-        `Адрес ${u.hostname} относится к локальной сети или этому серверу; агенту он закрыт. ` +
-          "Пользователь может разрешить это в настройках плагина «Браузер» (allowLocalNetwork) или открыть адрес сам в панели «Браузер».",
+        `${u.hostname} belongs to the local network or this server, so it is closed to the agent. ` +
+          "The user can allow such addresses in the Browser plugin settings (allowLocalNetwork) or open the address themselves in the Browser panel.",
       );
     }
   }
@@ -474,14 +475,14 @@ export class BrowserManager {
     if (!navigated) return null;
     if (p === before.page) await p.goto("about:blank").catch(() => {});
     else await p.close().catch(() => {});
-    return `Переход привёл на локальный адрес ${u.hostname}; агенту он закрыт, страница покинута. Пользователь может разрешить такие адреса в настройках плагина «Браузер» (allowLocalNetwork).`;
+    return `Navigation led to the local address ${u.hostname}, which is closed to the agent, so the page was left. The user can allow such addresses in the Browser plugin settings (allowLocalNetwork).`;
   }
 
   // ---------- page script helpers ----------
 
   async evalIn<T = any>(frame: Frame, op: string, args: Record<string, unknown> = {}, timeoutMs = 5000): Promise<T> {
     const full = { action: ACTION_LABEL_RE.source, linkAction: LINK_ACTION_LABEL_RE.source, seq: this.refSeq, ...args };
-    const r = (await withTimeout(frame.evaluate(pageCall(op, full)), timeoutMs, "страница не отвечает")) as any;
+    const r = (await withTimeout(frame.evaluate(pageCall(op, full)), timeoutMs, "the page is not responding")) as any;
     if (r && typeof r === "object" && typeof r.seq === "number" && r.seq > this.refSeq) this.refSeq = r.seq;
     return r as T;
   }
@@ -489,20 +490,20 @@ export class BrowserManager {
   /** Find an element by ref in any frame of the page. */
   async locate(page: Page, ref: string): Promise<{ frame: Frame; loc: Locator }> {
     const r = String(ref ?? "").trim();
-    if (!/^e\d+$/.test(r)) throw new ToolError(`Неверный ref «${cut(r, 40)}»: используйте ref из browser_snapshot, например e12.`);
+    if (!/^e\d+$/.test(r)) throw new ToolError(`Invalid ref "${cut(r, 40)}": use a ref from browser_snapshot, e.g. e12.`);
     for (const frame of page.frames()) {
       if (frame.isDetached()) continue;
       const loc = frame.locator(`[data-ob-ref="${r}"]`);
       const n = await loc.count().catch(() => 0);
-      if (n > 1) throw new ToolError(`Ссылка ${r} неоднозначна (страница скопировала элемент). Вызовите browser_snapshot и используйте новые ref.`);
+      if (n > 1) throw new ToolError(`Ref ${r} is ambiguous (the page duplicated the element). Call browser_snapshot and use the new refs.`);
       if (n === 1) return { frame, loc };
     }
-    throw new ToolError(`Элемент ${r} не найден на текущей странице (она могла измениться). Вызовите browser_snapshot и используйте новые ref.`);
+    throw new ToolError(`Element ${r} was not found on the current page (it may have changed). Call browser_snapshot and use the new refs.`);
   }
 
   async classify(frame: Frame, ref: string): Promise<Classified> {
     const c = await this.evalIn<Classified | null>(frame, "classify", { ref });
-    if (!c) throw new ToolError(`Элемент ${ref} не найден. Вызовите browser_snapshot.`);
+    if (!c) throw new ToolError(`Element ${ref} was not found. Call browser_snapshot.`);
     return c;
   }
 
@@ -529,7 +530,7 @@ export class BrowserManager {
     const run = (f: () => Promise<unknown>) =>
       void f().catch((e) => {
         this.ctx.log.warn(`ui ${m.type}: ${e?.message ?? e}`);
-        this.ctx.ui.emit("error", { message: friendlyError(e) });
+        this.ctx.ui.emit("error", describeError(e));
       });
     switch (m.type) {
       case "watch": {
@@ -812,16 +813,29 @@ export function keyEventParams(m: any, modifiers: number): any | null {
   return { ...base, type: text ? "keyDown" : "rawKeyDown", text, unmodifiedText: text, autoRepeat: !!m.repeat };
 }
 
-/** Playwright errors are long (call logs); keep the first line and translate the common cases. */
-export function friendlyError(e: any): string {
-  if (e instanceof ToolError) return e.message;
+/**
+ * An error for the model (`message`, English) and for the browser pane (`code` + `params`, shown as ui.error.<code>).
+ * Playwright errors are long (call logs): keep the first line and explain the common cases.
+ */
+export function describeError(e: any): { message: string; code: string; params: Record<string, string> } {
+  if (e instanceof ToolError) return { message: e.message, code: e.code ?? "other", params: e.params ?? { detail: e.message } };
   const msg = String(e?.message ?? e);
   const first = msg.split("\n")[0].replace(/^\w+\.\w+:\s*/, "");
-  if (/intercepts pointer events/.test(msg)) return "Элемент перекрыт другим элементом (баннер, всплывающее окно или диалог). Закройте его или прокрутите страницу и попробуйте снова.";
-  if (/Target page, context or browser has been closed|Target closed/i.test(msg)) return "Вкладка или браузер были закрыты.";
-  if (/Timeout \d+ms exceeded|timeout/i.test(first)) return `Время ожидания истекло: ${cut(first, 200)}`;
-  if (/net::ERR_NAME_NOT_RESOLVED/.test(msg)) return "Сайт не найден (ошибка DNS). Проверьте адрес.";
-  if (/net::ERR_TUNNEL_CONNECTION_FAILED|net::ERR_PROXY|407/.test(msg)) return "Прокси хаба не пропустил соединение (сайт закрыт для браузера или прокси недоступен).";
-  if (/net::ERR_/.test(msg)) return `Не удалось открыть страницу: ${cut(first, 200)}`;
-  return `Ошибка: ${cut(first, 300)}`;
+  const out = (code: string, message: string, params: Record<string, string> = {}) => ({ message, code, params });
+  if (/intercepts pointer events/.test(msg)) {
+    return out("covered", "The element is covered by another element (a banner, popup or dialog). Close it or scroll the page and try again.");
+  }
+  if (/Target page, context or browser has been closed|Target closed/i.test(msg)) return out("closed", "The tab or the browser was closed.");
+  if (/Timeout \d+ms exceeded|timeout/i.test(first)) return out("timeout", `Timed out: ${cut(first, 200)}`, { detail: cut(first, 200) });
+  if (/net::ERR_NAME_NOT_RESOLVED/.test(msg)) return out("dns", "Site not found (DNS error). Check the address.");
+  if (/net::ERR_TUNNEL_CONNECTION_FAILED|net::ERR_PROXY|407/.test(msg)) {
+    return out("proxy", "The hub's proxy refused the connection (the site is closed to the browser or the proxy is unavailable).");
+  }
+  if (/net::ERR_/.test(msg)) return out("net", `Could not open the page: ${cut(first, 200)}`, { detail: cut(first, 200) });
+  return out("other", `Error: ${cut(first, 300)}`, { detail: cut(first, 300) });
+}
+
+/** Error text for the model. */
+export function friendlyError(e: any): string {
+  return describeError(e).message;
 }

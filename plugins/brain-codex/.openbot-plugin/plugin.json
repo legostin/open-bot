@@ -1,8 +1,8 @@
 {
   "id": "brain-codex",
-  "name": "Codex",
+  "name": "%name%",
   "version": "0.1.0",
-  "description": "Мозг на подписке ChatGPT: запускает Codex CLI (codex exec) с инструментами open-bot.",
+  "description": "%description%",
   "builtin": true,
   "server": "./server/index.ts",
   "contributes": {
@@ -10,9 +10,9 @@
     "settings": {
       "type": "object",
       "properties": {
-        "command": { "type": "string", "title": "Команда CLI", "default": "codex" },
-        "apiKeyRef": { "type": "string", "title": "Ключ OpenAI (ссылка vault, необязательно)", "description": "Если пусто — используется `codex login` (подписка ChatGPT)." },
-        "sandbox": { "type": "string", "enum": ["danger-full-access", "workspace-write", "read-only"], "default": "danger-full-access", "title": "Песочница Codex", "description": "В Docker изоляцию обеспечивают пользователи Unix и egress-прокси." }
+        "command": { "type": "string", "title": "%settings.command.title%", "default": "codex" },
+        "apiKeyRef": { "type": "string", "title": "%settings.apiKeyRef.title%", "description": "%settings.apiKeyRef.description%" },
+        "sandbox": { "type": "string", "enum": ["danger-full-access", "workspace-write", "read-only"], "default": "danger-full-access", "title": "%settings.sandbox.title%", "description": "%settings.sandbox.description%" }
       }
     }
   },
