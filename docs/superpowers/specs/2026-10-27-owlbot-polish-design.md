@@ -15,6 +15,11 @@ chat, and OpenStreetMap maps. Builds on `2026-10-26-desktop-app-design.md`.
   desktop setup screens.
 - **Forms lock when done.** A secret request collapses once saved; a plugin's setup card that is done and a brain's
   sign-in card that is signed in fold into one locked line (the setup card keeps a Change button).
+- **Layout.** The settings panel sits next to the chat from 1280px; narrower, it is a sheet over the chat. The chat's
+  top bar is a container: its badges, plugin status items, brain picker and settings button show by the bar's own
+  width, so the agent's name stays readable next to the panel and on a phone.
+- **Installers.** The `.dmg` window has a background with an arrow to Applications (`packaging/assets/dmg-background.svg`,
+  rendered to a Retina TIFF). Tauri applies it through Finder, a step it skips with `CI=true`.
 
 ## Rich chat (images, carousels, maps)
 
@@ -31,16 +36,19 @@ chat, and OpenStreetMap maps. Builds on `2026-10-26-desktop-app-design.md`.
 
 ## Markdown in every channel
 
-The web renders markdown (react-markdown + GFM). Telegram converts it to its HTML; tables become aligned monospace
-blocks, task lists ☐/☑, images 🖼 links.
+The web renders markdown (react-markdown + GFM) in the agents' replies and in the user's own messages, where line breaks
+stay as typed and `vault://` references stay lock chips. Telegram converts it to its HTML; tables become aligned
+monospace blocks, task lists ☐/☑, images 🖼 links.
 
 ## Group chats
 
 A conversation kind `group` with `members` (2–8 agents, the first is the lead). A message without a mention goes to
 the lead; `@id` / `@name` picks agents, `@all` / `@все` asks everyone in turn; an agent that writes `@id` in its answer
 hands the floor on (three hand-offs at most per message). Before its turn each agent gets what it has not seen yet as
-`[Name]: text` lines, and its system prompt names the participants. The sidebar lists groups and creates them; the
-composer completes `@mentions`. Groups are not mirrored to channels.
+`[Name]: text` lines (pictures and maps as `[showed …]`), and its system prompt names the participants. Stop ends the
+current turn and drops the members still waiting. The sidebar lists groups and creates them; the header edits the
+title and members; the composer completes `@mentions` (`@все` in the Russian UI). Groups are not mirrored to channels.
+The sidebar previews a reply that only shows pictures or a map as 🖼 or 📍 with its caption or title.
 
 ## Reset
 
@@ -48,6 +56,10 @@ Tray → "Reset Owlbot…" asks in the setup window: what goes (chats, agents, m
 machine pairing, the start-at-login entry) and what stays (the user's Claude Code and Codex logins). Confirmed, the app
 stops the hub, clears the window's browsing data, deletes the data and starts at the first run again, or quits. On
 Windows the installer shares the data folder, so the app's own files there stay (`reset.rs`).
+
+The hub's settings page offers the same in the app's window ("This app": Quit and Reset Owlbot…). The hub window
+announces the app as `window.owlbotDesktop`; the page asks with a `<scheme>://reset` or `<scheme>://quit` link, which the
+window runs itself and the system never sees (`deeplink.rs`). Reset still asks in the app's own window.
 
 ## Test build
 
