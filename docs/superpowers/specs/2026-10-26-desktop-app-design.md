@@ -1,0 +1,219 @@
+# Owlbot desktop app (Tauri 2, macOS and Windows)
+
+Approved 2026-10-26. Replaces the installers of `2026-10-26-desktop-installers-design.md`: Inno Setup with a C# tray
+on Windows, a self-contained AppleScript app with a LaunchAgent on macOS. Docker stays the server install.
+Implementation plan: `docs/superpowers/plans/2026-10-26-desktop-app.md`.
+
+## Goal
+
+Owlbot on a computer is an app, not a link that opens in the browser. Its own window shows the hub's web UI with no
+browser tab or visible address, a menu bar / tray icon shows its state, and closing the window keeps it running in the
+background (Telegram, tasks, triggers). Quit stops it. Browser and phone access to the hub keep working.
+
+The first run asks what this computer is: a new hub, or a machine joining an existing hub.
+
+In the first version: the window with automatic sign-in, the tray, the hub or the machine in the background, the
+first-run choice, `owlbot://pair` links, the macOS `.dmg` and `.pkg`, the Windows installer and silent installs.
+Later: system notifications, auto-update, code signing and notarization.
+
+## Layout
+
+```
+packages/desktop/                    npm workspace @owlbot/desktop
+  ui/                                the app's own screens (first run, pairing, errors): TypeScript, esbuild
+  src-tauri/
+    tauri.conf.json, Cargo.toml, build.rs, capabilities/setup.json
+    src/main.rs                      plugins, commands, window events
+    src/app.rs                       state, paths, modes, what the tray, links and a second launch do
+    src/commands.rs                  commands of the setup screens
+    src/settings.rs                  <app config dir>/settings.json, the machine pairing in ~/.owlbot-node
+    src/supervisor.rs                runs and watches the hub or node process
+    src/window.rs                    the hub window and the setup window, navigation rules, close-to-tray
+    src/tray.rs                      menu and status
+    src/autostart.rs                 start at login (a LaunchAgent on macOS, HKCU Run on Windows)
+    src/login.rs                     one-time sign-in tickets
+    src/deeplink.rs                  owlbot://pair parsing
+    src/i18n.rs                      catalogs from packaging/desktop/locales (include_str!)
+    src/shellpath.rs                 macOS: the user's login-shell PATH
+    src/migration.rs                 macOS: the AppleScript build's LaunchAgent goes
+packaging/desktop/                   stage.mjs, launch.mjs, resolve.mjs, locales/{en,ru}.json, build.mjs (new)
+packaging/macos/                     the silent .pkg around the app: generate.mjs (Installer pages, distribution),
+                                     pkg.mjs, scripts/{preinstall,postinstall}, uninstall.sh
+packaging/windows/generate.mjs       NSIS hooks from the catalogs: start after a silent install, the data question
+```
+
+Removed: `packaging/windows/{owlbot.iss,build.mjs,tray/}`, `packaging/macos/{build.mjs,bin/}` and the AppleScript
+launcher in `generate.mjs`. `stage.mjs`, `launch.mjs` and `resolve.mjs` stay, except the stdin handling that moves
+into the core (see Sign-in). The stage leaves out `packages/desktop` (only its `package.json` stays, so `npm ci` finds
+the workspace) and drops dangling links and Node's `bin/npm`/`bin/npx` links: codesign refuses the former, the Tauri
+bundler would copy the latter as broken files (the hub runs npm through `npm-cli.js`).
+
+Changes outside the app, kept small: `packages/core` (`desktop-login.ts`, the stdin commands in `cli.ts start`,
+`POST /api/auth/desktop` in `server/main-app.ts`), `packages/node` (`run` stops on a `stop` line), `packages/web` (the
+`#desktop=` ticket, the Machines page link). Brain detection, the login-shell PATH in the core and the chat's setup
+card belong to another workstream and are not touched.
+
+The bundle identifier is `ai.owlbot.app`, the product and binary name `Owlbot`. The staged app tree
+(`dist/desktop/stage-<target>/app`) is a Tauri resource named `app`: `Owlbot.app/Contents/Resources/app` on macOS,
+`<install dir>\app` on Windows.
+
+## Modes and settings
+
+`<app config dir>/settings.json` (`~/Library/Application Support/ai.owlbot.app`, `%APPDATA%\ai.owlbot.app`):
+
+```json
+{ "mode": "hub", "autostart": true }    // mode "hub" | "node"; no file = first run
+```
+
+- **hub**: the hub runs here, with the data dir and ports of `launch.mjs`: `~/Library/Application Support/Owlbot` or
+  `%LOCALAPPDATA%\Owlbot`, ports from `<data>/desktop.json` (default 41780, console 41781, egress proxy 41789: away
+  from 8080, which servers and dev tools tend to hold, and from OpenClaw's 18789; Docker keeps 8080). Before a start
+  the app checks all three and reports the first busy one.
+- **node**: this computer is a machine of another hub. `packages/node` keeps its state in `~/.owlbot-node` (hub URL,
+  key, policy) as with the CLI.
+
+CLI arguments: `--background` (no window: start at login), `--mode hub|node` (makes the first-run choice when none
+was made; also through a second launch, for CI and silent installs), `--quit` (stops the running instance through
+single-instance).
+
+Environment for development and tests: `OWLBOT_DATA_DIR` marks a dev or test run: the app then writes no
+start-at-login entries, leaves the AppleScript build's agent alone and keeps its own settings and the node log in
+that data dir (`app/settings.json`, `logs/node.log`), away from an installed app's. `OWLBOT_APP_ROOT` points a dev run at a staged
+tree, `OWLBOT_NODE_HOME` moves the node state.
+
+## Process supervision (`supervisor.rs`)
+
+The app runs one child process on the bundled Node (`app/runtime/node.exe`, `app/runtime/<arm64|x64>/bin/node`):
+
+- hub: `node app/packaging/desktop/launch.mjs run` with `OWLBOT_DESKTOP=1`;
+- node: `node app/packages/node/dist/owlbot-node.mjs run` with `OWLBOT_DESKTOP=1` and `OWLBOT_LANG` from the app's
+  language.
+
+The child's stdin is a pipe only the app holds. stdout and stderr go to the log (`<data>/logs/hub.log` for the hub,
+`<app log dir>/node.log` for the node), rotated at 5 MB with one previous file kept. Before starting the hub the app
+checks its three ports: one taken → status "port busy" with that port and no start. A crash restarts the child after 2 s; five crashes within two
+minutes stop the retries (status "keeps stopping", Restart tries again). Quit and Restart write `stop` to stdin and
+kill after 15 s (Windows has no SIGTERM for a windowless child). The child also stops when its stdin closes, so it
+never outlives the app, even after a crash of the app. On Windows the child runs in a job object with kill-on-close,
+so plugins and brain CLIs end with it; on macOS the app kills the child's process group.
+
+On macOS a GUI app gets a bare PATH. The hub reads the user's login-shell PATH itself (`packages/core/src/user-path.ts`,
+with `OWLBOT_INSTALL_CLIS=1`); `owlbot-node` does not, so for the node (its `run` and `pair`) the app reads the login
+shell's PATH once (`$SHELL -ilc`, 5 s timeout, the usual Homebrew and `~/.local/bin` folders as the fallback) and
+passes it on.
+
+Migration on macOS: the AppleScript build (on `main` before this app) ran the hub from its own LaunchAgent
+`ai.owlbot.hub` with the same data dir and port. When `~/Library/LaunchAgents/ai.owlbot.hub.plist` exists, the app
+boots that agent out and deletes the plist before it starts its own hub. The pre-rename open-bot 0.1.0 is not migrated
+(the rename made a clean break); its hub keeps running on 8080 next to the app until it is uninstalled.
+
+## Windows (`window.rs`)
+
+Two windows:
+
+- **main** shows the hub's own web UI. Hub mode: the address `node launch.mjs url` prints once the hub answers; with
+  `#setup=<code>` the setup form opens as today, otherwise the app adds `#desktop=<ticket>` (see Sign-in). Node mode:
+  the hub URL from `~/.owlbot-node`; the user signs in with that hub's password.
+- **setup** shows the app's own screens (`ui/`): the first-run choice, pairing, a link to confirm, "starting…" and
+  "did not start".
+
+The hub page gets no app commands: `capabilities/setup.json` grants them to the setup window only. Navigation in the
+main window stays on the hub's origin; any other link and every new-window request opens in the system browser.
+Closing the main window hides it; on macOS the app then drops its Dock icon (accessory) until a window opens again.
+Closing the setup window before the first choice quits. The webview keeps its cookies, so a session survives restarts.
+Passkeys do not work in the macOS webview for these origins; WebView2 on Windows supports them.
+
+## Sign-in (hub mode)
+
+The app signs its own window in with one-time tickets, sent over the child's stdin:
+
+1. When it opens the main window, the app makes a 32-byte random ticket and writes `ticket <base64url>` to the hub's
+   stdin.
+2. The core reads stdin when `OWLBOT_DESKTOP=1` (`cli.ts start`): `stop` stops the hub (moved here from `launch.mjs`),
+   `ticket <t>` stores the SHA-256 of `t` with a 60 s expiry, in memory only (`packages/core/src/desktop-login.ts`).
+3. The window opens `<hub>/#desktop=<t>`. The web UI posts the ticket to `POST /api/auth/desktop` before it decides
+   between sign-in form and app (origin-checked like the other auth routes); a valid, unused ticket creates a normal
+   session cookie and an audit entry `auth.desktop`. Used, expired or unknown tickets get 401 and the page shows the
+   usual sign-in form.
+
+Only the process that started the hub holds that stdin, so other programs of the same user cannot mint tickets. The
+owner still sets a password at first run: browser, phone and the security console need it.
+
+## First run and pairing (`ui/`)
+
+With no settings the app opens the setup window, "How will you use this computer?":
+
+- **A new Owlbot on this computer** → mode hub, start the hub, open the main window (the setup form with the code
+  filled in), turn on start at login.
+- **Connect to my Owlbot** → a form: hub address, the code from the hub's Machines page, the machine name (default:
+  the computer's name). The app runs `node owlbot-node.mjs pair <url> <code> --name <name>` and shows the last lines
+  of its output on failure (the CLI's own localized text). On success: mode node, start the node, open the hub's UI.
+  When `~/.owlbot-node/config.json` already exists, the screen offers to use that connection.
+
+Tray "Set up again…" shows this screen again; what runs keeps running until a different choice is made, and nothing is
+deleted.
+
+`owlbot://pair?hub=<url>&code=<code>` (deep-link plugin; on Windows it arrives through single-instance) opens a
+confirmation with the hub address and the name field, then pairs as above. In hub mode the screen says this computer
+stops being a hub (its data stays; "Set up again…" goes back). The hub's Machines page shows a "Connect with the app"
+link next to the `owlbot-node pair` command (`packages/web/src/pages/Machines.tsx`).
+
+Commands of the setup screens: `get_state`, `choose_hub`, `pair`, `use_existing_node`, `open_log`, `retry`, `dismiss`.
+
+## Tray (`tray.rs`)
+
+Status line (starting, running, restarting, keeps stopping, port busy, stopped; node: "Machine of <hub>" while the
+node process runs), Open Owlbot, Start at login (checkbox), Show log, Restart, Set up again…, Quit. On Windows a click
+on the icon opens the window; on macOS it shows the menu. Texts come from `packaging/desktop/locales` (`tray.*` and
+`app.*` keys); the language follows the system, English as the fallback.
+
+## Start at login (`autostart.rs`)
+
+On by default after the first-run choice; the tray checkbox toggles `autostart` in the settings, and the app applies
+the setting at every start (which also repairs the entry after a move or an upgrade). The app then starts with
+`--background`.
+
+- macOS: the app's own LaunchAgent `~/Library/LaunchAgents/ai.owlbot.app.plist` (`AssociatedBundleIdentifiers`, so
+  System Settings names Owlbot). It runs a small `/bin/sh -c` guard: `<exe> --background` while the app is there, and
+  it deletes its own plist once the app was moved to the Trash. `SMAppService.mainApp` was the first idea, but a login
+  item started that way gets no arguments and would open the window at every login.
+- Windows: the HKCU Run value `Owlbot` = `"<exe>" --background`. The Tauri uninstaller removes that value by the
+  product name (not on an update).
+
+## Packaging
+
+`npm run package:desktop` (on the target OS) builds the UIs, stages the hub (`stage.mjs`), builds
+`packages/desktop/ui` and runs `tauri build` with the staged tree as a resource (`packaging/desktop/build.mjs` passes
+the target-specific paths through `--config`). `@tauri-apps/cli` is a dev dependency; Rust comes from rustup.
+
+- macOS: `--target universal-apple-darwin` (needs the `aarch64` and `x86_64` Rust targets). Bundles `app` and `dmg`
+  (drag to Applications), signed ad hoc. The bundler signs without `--deep`: Node keeps its own Developer ID signature
+  and notarization, which a quarantined copy needs. Outputs `dist/desktop/owlbot-<version>.dmg` and, through
+  `pkgbuild` + `productbuild`, `dist/desktop/owlbot-<version>.pkg` with the same app for silent installs
+  (`sudo installer -pkg … -target /`, SSH, MDM): the preinstall quits a running app, removes the previous copy and the
+  AppleScript build's agent; the postinstall opens the app for the user at the console. `uninstall.sh` (in the app's
+  Resources) removes it without the Finder. Uninstalling by hand: move the app to the Trash; the data stays.
+- Windows: the NSIS bundle, per user (no administrator rights), English and Russian,
+  `dist/desktop/owlbot-setup-<version>-x64.exe`. It installs into the template's default `%LOCALAPPDATA%\Owlbot`,
+  which also holds the hub's data: the uninstaller removes only the files it installed. `/S` installs silently and
+  starts the app in the background unless `/NOSTART` is given. On uninstall a hook asks (default No) before deleting
+  `%LOCALAPPDATA%\Owlbot`; a silent uninstall or an update keeps it.
+
+## Checks
+
+- `cargo test` in `packages/desktop/src-tauri`: settings, deep links, texts, tickets, the supervisor (with `node` as a
+  fake child), PATH parsing, the LaunchAgent, tray texts, origins, arguments.
+- vitest: `desktop-login.ts` and `POST /api/auth/desktop` (single use, expiry, origin), the node daemon's stdin,
+  `launch.mjs`, the stage filter, the web ticket and pairing link, the NSIS hooks, catalog parity.
+- `.github/workflows/desktop.yml`, clean runners:
+  - macOS: build universal; the image holds the app and an `/Applications` link; `codesign --verify --strict`; Node
+    keeps its Team ID; copy the app, run it with `--mode hub --background`, check `/api/auth/state`, the setup URL and
+    the LaunchAgent, `--quit`, the hub is gone; the `.pkg` installs silently, the app runs, `uninstall.sh` removes it,
+    the data stays.
+  - Windows: `/S /NOSTART`, run with `--mode hub --background`, check the hub and the Run value, `--quit`, `/S`
+    uninstall, the data stays, the Run value is gone.
+
+## Not covered
+
+System notifications, auto-update, code signing and notarization, Windows on ARM, Linux, a styled disk image window,
+migrating the pre-rename open-bot 0.1.0 install.

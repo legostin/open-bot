@@ -14,7 +14,9 @@ import { removeDanglingLinks, wanted } from "../../../packaging/desktop/stage.mj
 // @ts-ignore
 import { loadCatalogs } from "../../../packaging/desktop/locales.mjs";
 // @ts-ignore
-import { appleScriptText, distributionXml, installerPage, launcherScript } from "../../../packaging/macos/generate.mjs";
+import { distributionXml, installerPage } from "../../../packaging/macos/generate.mjs";
+// @ts-ignore
+import { nsisHooks, nsisString } from "../../../packaging/windows/generate.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
 const tmp = () => mkdtempSync(join(tmpdir(), "owl-desktop-"));
@@ -35,7 +37,7 @@ describe("desktop launcher", () => {
 
   it("reads ports from desktop.json and keeps one setup code", () => {
     const data = tmp();
-    expect(desktopPorts(data)).toEqual({ port: 8080, consolePort: 8081, egressPort: 8089 });
+    expect(desktopPorts(data)).toEqual({ port: 41780, consolePort: 41781, egressPort: 41789 });
     writeFileSync(join(data, "desktop.json"), JSON.stringify({ port: 18080 }));
     expect(desktopPorts(data)).toEqual({ port: 18080, consolePort: 18081, egressPort: 18089 });
     const code = setupCode(data);
@@ -48,7 +50,7 @@ describe("desktop launcher", () => {
     const env = hubEnv({ OWLBOT_PORT: "9999", NODE_OPTIONS: "--max-old-space-size=512" }, data);
     expect(env.OWLBOT_PORT).toBe("9999");
     expect(env.OWLBOT_DATA_DIR).toBe(data);
-    expect(env.OWLBOT_PUBLIC_URL).toBe("http://localhost:8080");
+    expect(env.OWLBOT_PUBLIC_URL).toBe("http://localhost:41780");
     expect(env.OWLBOT_INSTALL_CLIS).toBe("1");
     expect(env.OWLBOT_DESKTOP).toBe("1");
     expect(env.OWLBOT_SETUP_TOKEN).toBe(readFileSync(join(data, "setup-code"), "utf8").trim());
@@ -60,12 +62,12 @@ describe("desktop launcher", () => {
     const data = tmp();
     const code = setupCode(data);
     const answer = (hasPassword: boolean) => async () => new Response(JSON.stringify({ hasPassword }));
-    expect(await openUrl(data, { fetchImpl: answer(false) })).toEqual({ ready: true, url: `http://localhost:8080/#setup=${code}` });
-    expect(await openUrl(data, { fetchImpl: answer(true) })).toEqual({ ready: true, url: "http://localhost:8080/" });
+    expect(await openUrl(data, { fetchImpl: answer(false) })).toEqual({ ready: true, url: `http://localhost:41780/#setup=${code}` });
+    expect(await openUrl(data, { fetchImpl: answer(true) })).toEqual({ ready: true, url: "http://localhost:41780/" });
     const down = async () => {
       throw new Error("ECONNREFUSED");
     };
-    expect(await openUrl(data, { fetchImpl: down, timeoutMs: 600 })).toEqual({ ready: false, url: "http://localhost:8080/" });
+    expect(await openUrl(data, { fetchImpl: down, timeoutMs: 600 })).toEqual({ ready: false, url: "http://localhost:41780/" });
   });
 
   it("resolves @owlbot/* to the workspace folders without node_modules links", () => {
@@ -89,30 +91,21 @@ describe("desktop launcher", () => {
   });
 });
 
-describe("macOS installer text", () => {
+describe("installer text", () => {
   const catalogs = loadCatalogs();
 
-  it("writes AppleScript strings in ASCII", () => {
-    expect(appleScriptText('Say "hi"\\now')).toBe('"Say \\"hi\\"\\\\now"');
-    expect(appleScriptText("Log: {file}.\nOK")).toBe('"Log: " & p_file & "." & linefeed & "OK"');
-    expect(appleScriptText("Да")).toBe("(character id {1044, 1072})");
-    expect(appleScriptText("")).toBe('""');
+  it("writes NSIS strings", () => {
+    expect(nsisString('Say "hi"\nfor $5')).toBe('"Say $\\"hi$\\"$\\nfor $$5"');
   });
 
-  it("Owlbot.app: ASCII source, and every message it shows is defined", () => {
-    const src: string = launcherScript(catalogs);
-    expect(/^[\x09\x0a\x20-\x7e]*$/.test(src)).toBe(true);
-    const called = new Set([...src.matchAll(/my (T_\w+)\(/g)].map((m) => m[1]));
-    const defined = new Set([...src.matchAll(/^on (T_\w+)\(/gm)].map((m) => m[1]));
-    expect(called.size).toBeGreaterThan(1);
-    expect([...called].filter((h) => !defined.has(h))).toEqual([]);
-  });
-
-  it("Owlbot.app runs the scripts inside itself and asks to be moved out of the disk image", () => {
-    const src: string = launcherScript(catalogs);
-    expect(src).toContain('(POSIX path of (path to me)) & "Contents/Resources/bin/open.sh"');
-    expect(src).toMatch(/if errNum is 4 then\n\t+display dialog my T_mac_moveFirst\(\)/);
-    expect(src).not.toContain("/Library/Application Support/Owlbot/bin");
+  it("builds the NSIS hooks: the data question in both languages, a start after a silent install", () => {
+    const hooks: string = nsisHooks(catalogs);
+    expect(hooks).toContain("!macro NSIS_HOOK_POSTUNINSTALL");
+    expect(hooks).toContain("${If} $LANGUAGE == 1049");
+    expect(hooks).toContain("$LOCALAPPDATA\\Owlbot");
+    expect(hooks).toContain("Удалить и ваши данные Owlbot");
+    expect(hooks).toContain('Exec \'"$INSTDIR\\Owlbot.exe" --background\'');
+    expect(hooks).not.toContain("{dir}");
   });
 
   it("builds the Installer pages and distribution", () => {

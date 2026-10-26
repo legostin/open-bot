@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "setup",
+  "description": "The app's own setup screens. The hub's page in the main window gets no app commands.",
+  "windows": ["setup"],
+  "permissions": [
+    "allow-get-state",
+    "allow-choose-hub",
+    "allow-pair",
+    "allow-use-existing-node",
+    "allow-open-log",
+    "allow-retry",
+    "allow-dismiss"
+  ]
+}
