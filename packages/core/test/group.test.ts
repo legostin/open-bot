@@ -305,6 +305,14 @@ describe("group chats (routing)", () => {
     expect(second.tail).toBe("[System] It is your turn to reply to the user's message above.");
   });
 
+  it("tells the other members about pictures and maps a member showed", () => {
+    const shown = msg("2", "assistant", "Here it is.", "scout");
+    shown.parts.push({ type: "images", items: [{ src: "https://a.b/1.jpg", caption: "North side" }, { src: "https://a.b/2.jpg" }] });
+    shown.parts.push({ type: "map", lat: 48.8584, lon: 2.2945, title: "Eiffel Tower" });
+    const t = groupTurn({ messages: [msg("1", "user", "@scout show me"), shown], agentId: "assistant", name, prompt: "x", floorNote: "[System] Your turn." });
+    expect(t.lines[1]).toBe("[Scout]: Here it is. [showed 2 images: North side] [showed a map of Eiffel Tower at 48.8584, 2.2945]");
+  });
+
   it("tells the member who handed it the floor, and trims long messages", () => {
     const long = "x".repeat(5000);
     const messages = [msg("1", "user", "@scout go"), msg("2", "assistant", `${long} @assistant`, "scout")];

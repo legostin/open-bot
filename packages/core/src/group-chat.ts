@@ -43,13 +43,23 @@ export function handOff(queue: readonly string[], speaker: string, answer: strin
   return { queue: [...front, ...rest], added };
 }
 
-/** What a member said, as another member reads it: the words after its last tool call, attachments by name. */
+/** What a member said, as another member reads it: the words after its last tool call, attachments by name, pictures and maps it showed. */
 export function spokenText(m: Message): string {
   const lastTool = m.role === "assistant" ? m.parts.findLastIndex((p) => p.type === "tool_call" || p.type === "tool_result") : -1;
   const pick = (from: number) =>
     m.parts
       .slice(from)
-      .flatMap((p) => (p.type === "text" ? [p.text] : p.type === "attachment" ? [`[attachment: ${p.name}]`] : []))
+      .flatMap((p) =>
+        p.type === "text"
+          ? [p.text]
+          : p.type === "attachment"
+            ? [` [attachment: ${p.name}]`]
+            : p.type === "images"
+              ? [` [showed ${p.items.length === 1 ? "an image" : `${p.items.length} images`}${p.items.some((it) => it.caption) ? `: ${p.items.flatMap((it) => (it.caption ? [it.caption] : [])).join("; ")}` : ""}]`]
+              : p.type === "map"
+                ? [` [showed a map${p.title ? ` of ${p.title}` : ""} at ${p.lat}, ${p.lon}]`]
+                : [],
+      )
       .join("")
       .trim();
   return pick(lastTool + 1) || pick(0);

@@ -125,5 +125,9 @@ describe("team", () => {
     expect(previewText(msg("assistant", [{ type: "notification", level: "notify", title: "Rain at 5", body: "take an umbrella" }]))).toBe("Rain at 5");
     expect(previewText(msg("assistant", [{ type: "text", text: "# Plan\n\n- `one`\n- two" }]))).toBe("Plan - one - two");
     expect(previewText(msg("user", [{ type: "text", text: "x".repeat(400) }])).length).toBe(160);
+    expect(previewText(msg("assistant", [{ type: "images", items: [{ src: "https://a.b/1.jpg" }, { src: "https://a.b/2.jpg", caption: "Tower" }] }]))).toBe("🖼 Tower");
+    expect(previewText(msg("assistant", [{ type: "images", items: [{ src: "https://a.b/1.jpg" }] }]))).toBe("🖼");
+    expect(previewText(msg("assistant", [{ type: "map", lat: 48.85837, lon: 2.294481, title: "Eiffel Tower" }]))).toBe("📍 Eiffel Tower");
+    expect(previewText(msg("assistant", [{ type: "map", lat: 48.85837, lon: 2.294481 }]))).toBe("📍 48.8584, 2.2945");
   });
 });
