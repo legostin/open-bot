@@ -51,7 +51,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
         triggerId: task?.triggerId,
         conversationId: ctx.conversationId,
       });
-      return text(`Уведомление записано (уровень: ${n.effectiveLevel}${n.reason ? `, ${n.reason}` : ""}).`);
+      return text(`Notification recorded (level: ${n.effectiveLevel}${n.reason ? `, ${n.reason}` : ""}).`);
     },
   );
 
@@ -72,7 +72,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
     },
     (i, ctx) => {
       const agentId = i.agent ? String(i.agent) : ctx.agentId;
-      if (!d.agents.get(agentId)) return text(`Нет агента ${agentId}`, true);
+      if (!d.agents.get(agentId)) return text(`No agent ${agentId}`, true);
       const t = d.createTask({
         agentId,
         goal: String(i.goal),
@@ -82,7 +82,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
         background: ctx.background,
         createdBy: "agent",
       });
-      return text(`Задача создана: ${t.id} «${t.title}». Результат придёт сюда сообщением.`);
+      return text(`Task created: ${t.id} “${t.title}”. The result will arrive here as a message.`);
     },
   );
 
@@ -100,7 +100,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
     },
     (i) => {
       const t = d.store.getTask(String(i.taskId));
-      if (!t) return text("Задача не найдена", true);
+      if (!t) return text("Task not found", true);
       return text(JSON.stringify({ id: t.id, title: t.title, status: t.status, result: t.result, error: t.error }, null, 2));
     },
   );
@@ -114,7 +114,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
     },
     (i) => {
       const s = d.skills.load(String(i.name));
-      return s ? text(s) : text(`Скилл ${i.name} не найден`, true);
+      return s ? text(s) : text(`Skill ${i.name} not found`, true);
     },
   );
 
@@ -127,10 +127,10 @@ export function registerCoreTools(d: CoreToolDeps): void {
     },
     () => {
       const items = d.vault.list();
-      if (!items.length) return text("Vault пуст.");
+      if (!items.length) return text("The vault is empty.");
       return text(
         `Vault: ${d.vault.state()}\n` +
-          items.map((m) => `- vault://${m.id} (${m.type}) «${m.name}»${Object.keys(m.hints).length ? ` ${JSON.stringify(m.hints)}` : ""}${m.scope.revealToModel ? " [можно прочитать: vault_reveal]" : ""}`).join("\n"),
+          items.map((m) => `- vault://${m.id} (${m.type}) “${m.name}”${Object.keys(m.hints).length ? ` ${JSON.stringify(m.hints)}` : ""}${m.scope.revealToModel ? " [readable: vault_reveal]" : ""}`).join("\n"),
       );
     },
   );
@@ -145,8 +145,8 @@ export function registerCoreTools(d: CoreToolDeps): void {
     (i, ctx) => {
       const id = String(i.ref).replace(/^vault:\/\//, "");
       const meta = d.vault.getMeta(id);
-      if (!meta) return text(`Нет записи vault://${id}`, true);
-      if (!meta.scope.revealToModel) return text("Эту запись нельзя показывать модели. Используйте ссылку vault:// в инструментах.", true);
+      if (!meta) return text(`No vault item vault://${id}`, true);
+      if (!meta.scope.revealToModel) return text("This item may not be shown to the model. Pass the vault:// reference to tools instead.", true);
       const fields = d.vault.access(id, { actor: `agent:${ctx.agentId}`, agentId: ctx.agentId, tool: "vault_reveal" });
       return text(JSON.stringify(fields, null, 2));
     },

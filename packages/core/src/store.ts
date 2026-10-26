@@ -5,6 +5,7 @@ import type { Conversation, Message, MessagePart, Task, TaskStatus } from "@open
 import { newId, nowIso } from "@openbot/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
+import { t } from "./i18n.ts";
 
 export interface SessionRow {
   id: string;
@@ -109,7 +110,7 @@ export class Store {
   mainConversation(defaultAgent: string): Conversation {
     const r = this.db.prepare("select * from conversations where kind = 'main' order by created_at limit 1").get();
     if (r) return convFrom(r);
-    return this.createConversation({ kind: "main", title: "Главный", agentId: defaultAgent, id: "main" });
+    return this.createConversation({ kind: "main", title: t("conversation.mainTitle"), agentId: defaultAgent, id: "main" });
   }
 
   listConversations(limit = 100): Conversation[] {
@@ -166,7 +167,7 @@ export class Store {
   failStreamingMessages(): void {
     const rows = this.db.prepare("select * from messages where status = 'streaming'").all().map(msgFrom);
     for (const m of rows) {
-      this.updateMessage(m.id, { status: "error", parts: [...m.parts, { type: "error", message: "Прервано перезапуском хаба" }] }, false);
+      this.updateMessage(m.id, { status: "error", parts: [...m.parts, { type: "error", message: t("message.interruptedByRestart") }] }, false);
     }
   }
 

@@ -9,6 +9,7 @@ import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";
 import type { RuleStore } from "./policy/rules.ts";
 import { extractTargets, suggestRule } from "./policy/engine.ts";
+import { LocalizedError } from "./i18n.ts";
 
 const fromRow = (r: any): Approval => ({
   id: r.id,
@@ -120,8 +121,8 @@ export class ApprovalService {
 
   resolve(id: string, decision: Decision, opts: ResolveOptions): Approval {
     const a = this.get(id);
-    if (!a) throw new Error("Подтверждение не найдено");
-    if (a.status !== "pending") throw new Error(`Подтверждение уже обработано (${a.status})`);
+    if (!a) throw new LocalizedError("approval.notFound");
+    if (a.status !== "pending") throw new LocalizedError("approval.alreadyResolved", { status: a.status });
     const status: ApprovalStatus = decision === "approve" ? "approved" : "denied";
     this.db.prepare("update approvals set status = ?, resolved_at = ?, resolved_via = ? where id = ?").run(status, nowIso(), opts.via, id);
     if (decision === "approve") {
@@ -158,7 +159,7 @@ export class ApprovalService {
   }
 
   resolveByToken(id: string, action: Decision, token: string, via: "telegram"): Approval {
-    if (this.token(id, action) !== token) throw new Error("Неверная подпись кнопки");
+    if (this.token(id, action) !== token) throw new LocalizedError("approval.badSignature");
     return this.resolve(id, action, { via });
   }
 

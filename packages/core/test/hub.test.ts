@@ -134,7 +134,7 @@ describe("hub (integration)", () => {
 
   it("holds external actions for approval and runs them after the user approves", async () => {
     await web.req("POST", `/api/conversations/${conv}/messages`, { text: 'CALL fake_send {"text":"to bob"}' });
-    await lastReply(conv, /awaiting_approval|ожидает подтверждения/);
+    await lastReply(conv, /awaiting_approval|waiting for the user.s approval/);
 
     // The approval is only visible and resolvable in the isolated console.
     expect((await consoleClient.raw("GET", "/console-api/approvals")).status).toBe(401);
@@ -153,6 +153,20 @@ describe("hub (integration)", () => {
     const audit: any[] = await consoleClient.req("GET", "/console-api/audit?limit=200");
     expect(audit.some((e) => e.action === "tool.call" && e.target === "fake_send")).toBe(true);
     expect((await consoleClient.req("GET", "/console-api/audit/verify")).ok).toBe(true);
+  });
+
+  it("speaks the reader's language and keeps a hub language", async () => {
+    expect((await web.raw("GET", "/api/tasks/nope")).json.error).toBe("Task not found");
+    expect((await web.raw("GET", "/api/tasks/nope", undefined, { "x-openbot-locale": "ru" })).json.error).toBe("Задача не найдена");
+    expect((await web.raw("GET", "/api/tasks/nope", undefined, { "accept-language": "ru-RU,ru;q=0.9" })).json.error).toBe("Задача не найдена");
+    const state = (await web.raw("GET", "/api/auth/state")).json;
+    expect(state.locales).toEqual(["en", "ru"]);
+    expect((await web.raw("PATCH", "/api/settings", { language: "xx" })).status).toBe(400);
+    await web.req("PATCH", "/api/settings", { language: "ru-RU" });
+    expect((await web.req("GET", "/api/bootstrap")).language).toBe("ru");
+    const agents: any[] = await web.req("GET", "/api/agents");
+    expect(agents.find((a) => a.id === "assistant")).toBeTruthy();
+    await web.req("PATCH", "/api/settings", { language: "en" });
   });
 
   it("delivers plugin files into the session workspace", async () => {

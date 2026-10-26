@@ -10,7 +10,7 @@ export class Redactor {
     const list: Array<{ needle: string; label: string }> = [];
     for (const { id, value } of secrets) {
       if (!value || value.length < MIN_SECRET_LEN) continue;
-      const label = `[скрыто: vault://${id}]`;
+      const label = `[redacted: vault://${id}]`;
       const variants = new Set<string>([value, Buffer.from(value).toString("base64"), encodeURIComponent(value)]);
       try {
         variants.add(Buffer.from(value).toString("base64url"));

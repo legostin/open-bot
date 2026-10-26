@@ -9,6 +9,7 @@ import type { EventBus } from "./bus.ts";
 import type { BrainRegistry } from "./brains.ts";
 import type { AuditLog } from "./audit.ts";
 import type { ToolRegistry } from "./tools/registry.ts";
+import { LocalizedError } from "./i18n.ts";
 
 export const NODE_AUTH_PREFIX = "openbot-node-auth:";
 const PAIRING_TTL = 10 * 60_000;
@@ -48,9 +49,9 @@ export class MachineHub {
   /** Called by a node daemon with a one-time code. Registers its public key. */
   pair(p: { code: string; publicKey: string; name?: string; info?: MachineInfo }): Machine {
     const row = this.db.prepare("select * from pairing_codes where code = ?").get(String(p.code).trim().toUpperCase()) as any;
-    if (!row || row.used || Date.parse(row.expires_at) < Date.now()) throw new Error("Код привязки неверный или устарел");
+    if (!row || row.used || Date.parse(row.expires_at) < Date.now()) throw new LocalizedError("machine.badPairingCode");
     const pub = Buffer.from(p.publicKey, "base64url");
-    if (pub.length !== 32) throw new Error("Неверный публичный ключ");
+    if (pub.length !== 32) throw new LocalizedError("machine.badPublicKey");
     this.db.prepare("update pairing_codes set used = 1 where code = ?").run(row.code);
     const id = newId("mach_");
     const name = (row.name || p.name || p.info?.hostname || "machine").slice(0, 60);
@@ -168,9 +169,9 @@ export class MachineHub {
 
   async call<T>(machine: string, method: string, params: unknown, timeoutMs = 120_000): Promise<T> {
     const m = this.find(machine);
-    if (!m) throw new Error(`Машина ${machine} не найдена`);
+    if (!m) throw new Error(`Machine ${machine} not found`);
     const peer = this.peers.get(m.id);
-    if (!peer) throw new Error(`Машина ${m.name} не в сети`);
+    if (!peer) throw new Error(`Machine ${m.name} is offline`);
     return peer.request<T>(method, params, { timeoutMs });
   }
 
@@ -194,10 +195,10 @@ export class MachineHub {
       { name: "machine_list", owner: "core", effect: "read", description: "List the user's connected computers: status, OS, brains (subscriptions) and allowed directories.", inputSchema: { type: "object", properties: {} } },
       wrap(async () => {
         const ms = this.list();
-        if (!ms.length) return text("Машины не подключены. Пользователь может подключить компьютер в разделе «Машины».");
+        if (!ms.length) return text("No machines are paired. The user can connect a computer on the Machines page.");
         return text(
           ms
-            .map((m) => `- ${m.name} (${m.id}) — ${m.status}${m.info ? `, ${m.info.os}/${m.info.arch}, мозги: ${m.info.clis.filter((c) => c.available).map((c) => c.brainId).join(", ") || "нет"}, папки: ${m.info.allowedDirs.join(", ") || "—"}` : ""}`)
+            .map((m) => `- ${m.name} (${m.id}) — ${m.status}${m.info ? `, ${m.info.os}/${m.info.arch}, brains: ${m.info.clis.filter((c) => c.available).map((c) => c.brainId).join(", ") || "none"}, folders: ${m.info.allowedDirs.join(", ") || "—"}` : ""}`)
             .join("\n"),
         );
       }),
@@ -207,7 +208,7 @@ export class MachineHub {
         name: "machine_exec",
         owner: "core",
         effect: "external",
-        approvalSummary: "Выполнить на машине {machine}: {command}",
+        approvalSummary: "%machines.execApproval%",
         description: "Run a shell command on one of the user's computers (inside its allowed directories). Returns exit code, stdout and stderr.",
         inputSchema: {
           type: "object",
@@ -240,7 +241,7 @@ export class MachineHub {
       },
       wrap(async (i) => {
         const r = await this.call<{ entries: Array<{ name: string; type: string; size?: number }> }>(i.machine, "fs.list", { path: i.path });
-        return text(r.entries.map((e) => `${e.type === "dir" ? "📁" : "📄"} ${e.name}${e.size !== undefined ? ` (${e.size} B)` : ""}`).join("\n") || "(пусто)");
+        return text(r.entries.map((e) => `${e.type === "dir" ? "📁" : "📄"} ${e.name}${e.size !== undefined ? ` (${e.size} B)` : ""}`).join("\n") || "(empty)");
       }),
     );
     registry.register(
@@ -248,13 +249,13 @@ export class MachineHub {
         name: "machine_write_file",
         owner: "core",
         effect: "external",
-        approvalSummary: "Записать файл на машине {machine}: {path}",
+        approvalSummary: "%machines.writeApproval%",
         description: "Write a text file on one of the user's computers (inside allowed directories).",
         inputSchema: { type: "object", properties: { machine: machineProp, path: { type: "string" }, content: { type: "string" } }, required: ["machine", "path", "content"] },
       },
       wrap(async (i) => {
         const r = await this.call<{ bytes: number }>(i.machine, "fs.write", { path: i.path, content: i.content });
-        return text(`Записано ${r.bytes} байт в ${i.path}`);
+        return text(`Wrote ${r.bytes} bytes to ${i.path}`);
       }),
     );
   }

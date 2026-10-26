@@ -95,7 +95,7 @@ export function createCoreCall(hub: Hub) {
         // Plugins run as another unix user: files they fetch for an agent are copied into its workspace by the hub.
         const s = hub.store.getSession(String(p.sessionId ?? ""));
         if (!s) throw new Error("session not found");
-        if (parseBrainRef(s.brainRef).machineId !== "local") throw new Error("файлы передаются только в рабочую папку на хабе");
+        if (parseBrainRef(s.brainRef).machineId !== "local") throw new Error("files can only be delivered to a workspace on the hub");
         const data = Buffer.from(String(p.data ?? ""), "base64");
         const dir = join(hub.runner.workspacePath(s), "downloads");
         mkdirSync(dir, { recursive: true });

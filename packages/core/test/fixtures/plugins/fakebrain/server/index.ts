@@ -38,7 +38,7 @@ export default {
               return;
             }
             const m = /CALL (\S+) (\{.*\})/.exec(turn.text);
-            if (m && !turn.text.includes("[Система]")) {
+            if (m && !turn.text.includes("[System]")) {
               yield { type: "tool_call", id: "c1", name: m[1], input: JSON.parse(m[2]) };
               const r = await mcpCall(o, m[1], JSON.parse(m[2]));
               yield { type: "tool_result", id: "c1", output: r.text, isError: r.isError };

@@ -77,12 +77,12 @@ export class ToolGateway {
 
   async call(sessionId: string, name: string, rawInput: unknown, callId = newId("call_")): Promise<ToolResult> {
     const s = this.d.store.getSession(sessionId);
-    if (!s) return { content: [{ type: "text", text: "Сессия не найдена" }], isError: true };
+    if (!s) return { content: [{ type: "text", text: "Session not found" }], isError: true };
     const agent = this.agentFor(s);
     const entry = this.d.registry.get(name);
     if (!entry || !this.visible(entry.descriptor, agent, s)) {
       this.d.audit.append(`agent:${s.agentId}`, "tool.denied", name, { reason: "not available" });
-      return { content: [{ type: "text", text: `Инструмент ${name} недоступен этому агенту` }], isError: true };
+      return { content: [{ type: "text", text: `Tool ${name} is not available to this agent` }], isError: true };
     }
     const tool = entry.descriptor;
     const ctx = this.contextFor(s, callId);
@@ -93,7 +93,7 @@ export class ToolGateway {
     );
     if (hooked.blocked) {
       this.d.audit.append(`agent:${s.agentId}`, "tool.blocked", name, { reason: hooked.blocked });
-      return { content: [{ type: "text", text: `Заблокировано: ${hooked.blocked}` }], isError: true, _meta: { status: "denied" } };
+      return { content: [{ type: "text", text: `Blocked: ${hooked.blocked}` }], isError: true, _meta: { status: "denied" } };
     }
     const input = hooked.payload.input;
 
@@ -106,7 +106,7 @@ export class ToolGateway {
     this.d.audit.append(`agent:${s.agentId}`, "policy.decision", name, { decision: policy.decision, reason: policy.reason, ruleId: policy.ruleId });
 
     if (policy.decision === "deny") {
-      return { content: [{ type: "text", text: `Действие запрещено политикой: ${policy.reason}` }], isError: true, _meta: { status: "denied" } };
+      return { content: [{ type: "text", text: `Denied by policy: ${policy.reason}` }], isError: true, _meta: { status: "denied" } };
     }
 
     if (policy.decision === "ask") {
@@ -127,7 +127,7 @@ export class ToolGateway {
       const outcome = await this.d.approvals.wait(approval.id, settings.approvalInlineWaitSec * 1000);
       if (s.taskId) this.d.store.updateTask(s.taskId, { status: "running" });
       if (outcome === "denied") {
-        return { content: [{ type: "text", text: `Пользователь отклонил действие: ${summary}` }], isError: true, _meta: { status: "denied", approvalId: approval.id } };
+        return { content: [{ type: "text", text: `The user declined the action: ${summary}` }], isError: true, _meta: { status: "denied", approvalId: approval.id } };
       }
       if (outcome === "timeout") {
         return {
@@ -135,9 +135,9 @@ export class ToolGateway {
             {
               type: "text",
               text:
-                `Действие ожидает подтверждения пользователя (approvalId=${approval.id}): ${summary}. ` +
-                `Не повторяй вызов. Закончи ход и коротко сообщи пользователю, что ждёшь его подтверждения в пульте безопасности. ` +
-                `Когда пользователь ответит, система сама выполнит действие и пришлёт результат.`,
+                `The action is waiting for the user's approval (approvalId=${approval.id}): ${summary}. ` +
+                `Do not repeat the call. End your turn and briefly tell the user you are waiting for their approval in the security console. ` +
+                `When the user answers, the system carries out the action itself and sends you the result.`,
             },
           ],
           _meta: { status: "awaiting_approval", approvalId: approval.id },
@@ -155,7 +155,7 @@ export class ToolGateway {
   async executeApproved(a: Approval): Promise<ToolResult> {
     const s = this.d.store.getSession(a.sessionId);
     const entry = this.d.registry.get(a.tool);
-    if (!s || !entry) return { content: [{ type: "text", text: "Инструмент или сессия больше недоступны" }], isError: true };
+    if (!s || !entry) return { content: [{ type: "text", text: "The tool or session is no longer available" }], isError: true };
     const result = await this.execute(s, entry.descriptor, a.input, this.contextFor(s, newId("call_")));
     this.d.approvals.markExecuted(a.id, result);
     return result;
@@ -168,7 +168,7 @@ export class ToolGateway {
     try {
       result = await entry.invoke(input, ctx);
     } catch (e: any) {
-      result = { content: [{ type: "text", text: `Ошибка инструмента: ${e?.message ?? String(e)}` }], isError: true };
+      result = { content: [{ type: "text", text: `Tool error: ${e?.message ?? String(e)}` }], isError: true };
     }
     const after = await this.d.hooks.run("tool.after", { tool: tool.name, input, result, context: ctx }, (p, r) => (r.result ? { ...p, result: r.result } : p));
     result = after.payload.result;

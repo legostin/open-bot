@@ -2,6 +2,7 @@
 
 import type { PolicyDecision, Rule, RuleCondition, ToolDescriptor } from "@openbot/shared";
 import { globToRegExp, hostMatches, hostOf } from "@openbot/shared";
+import { t } from "../i18n.ts";
 
 export interface PolicyInput {
   tool: ToolDescriptor;
@@ -78,18 +79,18 @@ export function decide(p: PolicyInput, rules: Rule[], isKnownTarget: (t: string)
 
   for (const r of rules) {
     if (r.decision === "deny" && ruleMatches(r, tool.name, agentId, input)) {
-      return { decision: "deny", reason: `запрещено правилом${r.note ? `: ${r.note}` : ""}`, ruleId: r.id };
+      return { decision: "deny", reason: r.note ? t("policy.deniedByRuleNote", { note: r.note }) : t("policy.deniedByRule"), ruleId: r.id };
     }
   }
 
   if (p.background && p.initiative < 2 && tool.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(tool.name)) {
-    return { decision: "deny", reason: "фоновая задача с инициативой ниже 2 может только читать и уведомлять" };
+    return { decision: "deny", reason: t("policy.backgroundReadOnly") };
   }
 
-  if (tool.effect === "read") return { decision: "allow", reason: "чтение" };
+  if (tool.effect === "read") return { decision: "allow", reason: t("policy.read") };
   if (tool.effect === "local-write") {
-    if (p.profile === "strict") return { decision: "ask", reason: "строгий профиль: локальные изменения требуют подтверждения" };
-    return { decision: "allow", reason: "локальное изменение" };
+    if (p.profile === "strict") return { decision: "ask", reason: t("policy.strictLocalWrite") };
+    return { decision: "allow", reason: t("policy.localWrite") };
   }
 
   // external
@@ -98,13 +99,13 @@ export function decide(p: PolicyInput, rules: Rule[], isKnownTarget: (t: string)
       if (p.tainted) {
         const unknown = extractTargets(input).filter((t) => !isKnownTarget(t));
         if (unknown.length > 0) {
-          return { decision: "ask", reason: `сессия читала недоверенный контент, новые адресаты: ${unknown.join(", ")}`, ruleId: r.id };
+          return { decision: "ask", reason: t("policy.taintedNewTargets", { targets: unknown.join(", ") }), ruleId: r.id };
         }
       }
-      return { decision: "allow", reason: `разрешено правилом${r.note ? `: ${r.note}` : ""}`, ruleId: r.id };
+      return { decision: "allow", reason: r.note ? t("policy.allowedByRuleNote", { note: r.note }) : t("policy.allowedByRule"), ruleId: r.id };
     }
   }
-  return { decision: "ask", reason: "внешнее действие требует подтверждения" };
+  return { decision: "ask", reason: t("policy.externalNeedsApproval") };
 }
 
 /** Build a rule that would allow this exact kind of action next time ("always for this"). */

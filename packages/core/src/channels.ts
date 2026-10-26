@@ -1,6 +1,7 @@
 import type { OutboundMessage } from "@openbot/shared";
 import type { RpcPeer } from "@openbot/shared";
 import type { Redactor } from "./vault/redact.ts";
+import { t } from "./i18n.ts";
 
 export interface ChannelInfo {
   id: string;
@@ -49,7 +50,7 @@ export class ChannelRegistry {
 
   async status(id: string): Promise<{ connected: boolean; detail?: string }> {
     const c = this.channels.get(id);
-    if (!c) return { connected: false, detail: "не подключён" };
+    if (!c) return { connected: false, detail: t("channel.notConnected") };
     try {
       return await c.peer.request("channel.status", { channelId: id }, { timeoutMs: 10_000 });
     } catch (e: any) {

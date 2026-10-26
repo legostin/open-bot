@@ -22,6 +22,8 @@ import type { ApprovalService } from "./approvals.ts";
 import type { EgressProxy } from "./egress.ts";
 import { DEFAULT_BRAIN_EGRESS } from "./settings.ts";
 import { buildSystemPrompt } from "./prompt.ts";
+import { agentName } from "./agents.ts";
+import { hubLocale, LocalizedError, t } from "./i18n.ts";
 
 export interface RunnerDeps {
   config: Config;
@@ -90,7 +92,7 @@ export class SessionRunner {
       const s = this.d.settings.get();
       const { remind } = this.d.approvals.sweep(s.approvalExpireHours);
       for (const a of remind) {
-        void this.d.notifier.notify({ level: "notify", title: "Ждёт подтверждения", body: a.summary, agentId: a.agentId, taskId: a.taskId });
+        void this.d.notifier.notify({ level: "notify", title: t("notify.awaitingApproval"), body: a.summary, agentId: a.agentId, taskId: a.taskId });
       }
     }, 15_000);
     this.timer.unref();
@@ -115,13 +117,13 @@ export class SessionRunner {
   /** A user message arrived (web, Telegram, ...). Returns the stored user message. */
   async userMessage(conversationId: string, text: string, opts: { channel?: string } = {}): Promise<Message> {
     const conv = this.d.store.getConversation(conversationId);
-    if (!conv) throw new Error("Переписка не найдена");
+    if (!conv) throw new LocalizedError("conversation.notFound");
     const hooked = await this.d.hooks.run("message.in", { conversationId, text, channel: opts.channel }, (p, r) =>
       r.block ? { blocked: r.block } : r.text !== undefined ? { ...p, text: r.text } : p,
     );
     const msg = this.d.store.addMessage({ conversationId, role: "user", parts: [{ type: "text", text }], status: "complete", channel: opts.channel });
     if (hooked.blocked) {
-      this.d.store.addMessage({ conversationId, role: "system", parts: [{ type: "error", message: `Сообщение заблокировано: ${hooked.blocked}` }], status: "complete" });
+      this.d.store.addMessage({ conversationId, role: "system", parts: [{ type: "error", message: t("message.blocked", { reason: hooked.blocked }) }], status: "complete" });
       return msg;
     }
     const prompt = this.d.skills.expandCommand(hooked.payload.text) ?? hooked.payload.text;
@@ -218,12 +220,17 @@ export class SessionRunner {
     const agent = this.d.agents.get(fresh.agentId);
     const conv = this.d.store.getConversation(fresh.conversationId);
     if (!agent || !conv) {
-      this.d.store.updateTask(fresh.id, { status: "failed", error: "агент или переписка не найдены" });
+      this.d.store.updateTask(fresh.id, { status: "failed", error: t("task.missingAgent") });
       return;
     }
     if (fresh.background && !this.budgetOk(agent)) {
-      this.d.store.updateTask(fresh.id, { status: "failed", error: "дневной бюджет фоновых запусков исчерпан" });
-      await this.d.notifier.notify({ level: "digest", title: `Бюджет агента ${agent.name} исчерпан`, body: `Задача «${fresh.title}» не запущена.`, agentId: agent.id });
+      this.d.store.updateTask(fresh.id, { status: "failed", error: t("task.budgetExhausted") });
+      await this.d.notifier.notify({
+        level: "digest",
+        title: t("notify.budgetTitle", { agent: agentName(agent, hubLocale()) }),
+        body: t("notify.budgetBody", { title: fresh.title }),
+        agentId: agent.id,
+      });
       return;
     }
     if (fresh.background) this.countUsage(agent.id, "background_run");
@@ -231,15 +238,15 @@ export class SessionRunner {
 
     const resumed = fresh.status === "paused" || this.d.store.listMessages(conv.id, { limit: 3 }).some((m) => m.role === "assistant");
     const prompt = resumed
-      ? "Продолжи работу над задачей с того места, где остановился."
+      ? "Continue working on the task from where you stopped."
       : [
-          `Задача: ${fresh.title}`,
+          `Task: ${fresh.title}`,
           "",
           fresh.goal,
           "",
           fresh.background
-            ? "Когда закончишь, вызови notify (один раз) и кратко опиши итог."
-            : "Когда закончишь, кратко опиши результат — он будет передан тому, кто поставил задачу.",
+            ? "When you are done, call notify (once) with a short summary of the outcome."
+            : "When you are done, briefly describe the result — it will be passed to whoever created the task.",
         ].join("\n");
 
     const r = await this.runTurn(conv, prompt, { task: fresh });
@@ -250,14 +257,14 @@ export class SessionRunner {
       this.d.store.updateTask(fresh.id, {
         status: "paused",
         resumeAt: r.limited.resetAt ?? new Date(Date.now() + 30 * 60_000).toISOString(),
-        error: "лимит подписки — продолжу позже",
+        error: t("task.limitLater"),
       });
       return;
     }
     if (r.error && !r.text) {
       this.d.store.updateTask(fresh.id, { status: "failed", error: r.error });
       if (!fresh.background || fresh.createdBy !== "trigger") {
-        await this.d.notifier.notify({ level: "notify", title: `Задача не выполнена: ${fresh.title}`, body: r.error, agentId: agent.id, taskId: fresh.id });
+        await this.d.notifier.notify({ level: "notify", title: t("notify.taskFailed", { title: fresh.title }), body: r.error, agentId: agent.id, taskId: fresh.id });
       }
       return;
     }
@@ -274,14 +281,14 @@ export class SessionRunner {
     if (task.createdBy === "agent" && task.parentConversationId) {
       const parent = this.d.store.getConversation(task.parentConversationId);
       if (parent) {
-        const note = `[Система] Делегированная задача ${task.id} «${task.title}» завершена.\nРезультат:\n${result}`;
+        const note = `[System] Delegated task ${task.id} “${task.title}” is finished.\nResult:\n${result}`;
         this.d.store.addMessage({ conversationId: parent.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: task.id });
         void this.enqueue(parent.id, () => this.runTurn(parent, note, {}));
       }
       return;
     }
     if (task.createdBy === "user") {
-      await this.d.notifier.notify({ level: "notify", title: `Готово: ${task.title}`, body: result, agentId: task.agentId, taskId: task.id });
+      await this.d.notifier.notify({ level: "notify", title: t("notify.taskDone", { title: task.title }), body: result, agentId: task.agentId, taskId: task.id });
     }
     // Trigger tasks report through the agent's own notify() call.
   }
@@ -292,7 +299,7 @@ export class SessionRunner {
     const result = await this.d.gateway.executeApproved(a);
     const conv = this.d.store.getConversation(a.conversationId);
     if (!conv) return;
-    const note = `[Система] Пользователь одобрил действие «${a.summary}». Оно выполнено.\nРезультат${result.isError ? " (ошибка)" : ""}:\n${truncate(resultText(result), 4000)}`;
+    const note = `[System] The user approved the action “${a.summary}”. It has been carried out.\nResult${result.isError ? " (error)" : ""}:\n${truncate(resultText(result), 4000)}`;
     this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: a.taskId });
     const task = a.taskId ? this.d.store.getTask(a.taskId) : undefined;
     if (task && task.status === "waiting_approval") {
@@ -313,10 +320,10 @@ export class SessionRunner {
   private async onDeferredDenied(a: Approval): Promise<void> {
     const conv = this.d.store.getConversation(a.conversationId);
     if (!conv) return;
-    const note = `[Система] Пользователь отклонил действие «${a.summary}».`;
+    const note = `[System] The user declined the action “${a.summary}”.`;
     this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: a.taskId });
     const task = a.taskId ? this.d.store.getTask(a.taskId) : undefined;
-    if (task && task.status === "waiting_approval") this.d.store.updateTask(task.id, { status: "done", result: (task.result ?? "") + "\n\n(действие отклонено пользователем)" });
+    if (task && task.status === "waiting_approval") this.d.store.updateTask(task.id, { status: "done", result: (task.result ?? "") + `\n\n${t("task.declinedSuffix")}` });
   }
 
   private attachApprovalPart(a: Approval): void {
@@ -357,35 +364,48 @@ export class SessionRunner {
   }
 
   /** Brains of the agent in preference order that are connected, not rate-limited and not saturated. */
-  private async candidates(agent: AgentDef, preferred?: string): Promise<{ usable: string[]; earliestReset?: string; reasons: string[] }> {
+  /** Brains to try, in order; `reasons` explain the skipped ones and `hard` counts skips that waiting won't fix. */
+  private async candidates(agent: AgentDef, preferred?: string): Promise<{ usable: string[]; earliestReset?: string; reasons: string[]; hard: number }> {
     const ordered = preferred ? [preferred, ...agent.brains.filter((b) => formatBrainRef(parseBrainRef(b)) !== formatBrainRef(parseBrainRef(preferred)))] : agent.brains;
     const usable: string[] = [];
     const reasons: string[] = [];
+    let hard = 0;
     let earliestReset: string | undefined;
     const conc = this.d.settings.get().brainConcurrency;
     for (const ref of ordered) {
       if (!this.d.brains.has(ref)) {
-        reasons.push(`${ref}: не подключён`);
+        reasons.push(t("brain.reason.notConnected", { ref }));
         continue;
       }
       const lim = this.limitedUntil(ref);
       if (lim) {
-        reasons.push(`${ref}: лимит до ${lim}`);
+        reasons.push(t("brain.reason.limited", { ref, until: this.formatTime(lim) }));
         if (!earliestReset || lim < earliestReset) earliestReset = lim;
         continue;
       }
       if ((this.brainLoad.get(formatBrainRef(parseBrainRef(ref))) ?? 0) >= conc) {
-        reasons.push(`${ref}: занят`);
+        reasons.push(t("brain.reason.busy", { ref }));
         continue;
       }
       const p = await this.d.brains.probe(ref);
       if (!p.available || !p.authenticated) {
-        reasons.push(`${ref}: ${p.detail ?? (p.available ? "нет авторизации" : "недоступен")}`);
+        hard++;
+        reasons.push(p.detail ? t("brain.reason.detail", { ref, detail: p.detail }) : t(p.available ? "brain.reason.notSignedIn" : "brain.reason.unavailable", { ref }));
         continue;
       }
       usable.push(ref);
     }
-    return { usable, earliestReset, reasons };
+    return { usable, earliestReset, reasons, hard };
+  }
+
+  /** A moment in the hub's language and time zone, for messages people read. */
+  private formatTime(iso: string): string {
+    const d = new Date(iso);
+    try {
+      return d.toLocaleString(hubLocale(), { timeZone: this.d.settings.get().timezone, dateStyle: "short", timeStyle: "short" });
+    } catch {
+      return d.toLocaleString(hubLocale());
+    }
   }
 
   private async openSession(conv: Conversation, agent: AgentDef, brainRef: string, task: Task | undefined, prior?: SessionRow): Promise<{ row: SessionRow; handle: BrainHandle }> {
@@ -466,10 +486,10 @@ export class SessionRunner {
     const lines: string[] = [];
     for (const m of msgs) {
       const t = m.parts
-        .map((p) => (p.type === "text" ? p.text : p.type === "tool_call" ? `[вызов ${p.name}]` : p.type === "notification" ? `[уведомление: ${p.title}]` : ""))
+        .map((p) => (p.type === "text" ? p.text : p.type === "tool_call" ? `[called ${p.name}]` : p.type === "notification" ? `[notification: ${p.title}]` : ""))
         .filter(Boolean)
         .join(" ");
-      if (t) lines.push(`${m.role === "user" ? "Пользователь" : m.role === "assistant" ? "Ассистент" : "Система"}: ${truncate(t, 800)}`);
+      if (t) lines.push(`${m.role === "user" ? "User" : m.role === "assistant" ? "Assistant" : "System"}: ${truncate(t, 800)}`);
     }
     return this.d.redactor.text(lines.join("\n"));
   }
@@ -484,15 +504,15 @@ export class SessionRunner {
     let earliestReset: string | undefined;
 
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons } = await this.candidates(agent, prior?.brainRef);
+      const { usable, earliestReset: reset, reasons, hard } = await this.candidates(agent, prior?.brainRef);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
       if (!ref) {
-        const why = reasons.length ? reasons.join("; ") : lastError || "нет подходящих мозгов";
-        const allLimited = earliestReset && usable.length === 0 && reasons.every((r) => r.includes("лимит") || r.includes("не подключён") || r.includes("занят"));
+        const why = reasons.length ? reasons.join("; ") : lastError || t("chat.noSuitableBrains");
+        const allLimited = earliestReset && usable.length === 0 && hard === 0;
         const message = allLimited
-          ? `Все доступные мозги упёрлись в лимиты подписки. Продолжу после ${new Date(earliestReset!).toLocaleString("ru-RU")}.`
-          : `Не могу запустить агента «${agent.name}»: ${why}. Настройте мозг в разделе «Мозги» (Claude Code, Codex или API-ключ).`;
+          ? t("chat.allLimited", { time: this.formatTime(earliestReset!) })
+          : t("chat.cannotStart", { agent: agentName(agent, hubLocale()), reason: why });
         this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "error", message }], status: "complete", taskId: task?.id });
         return { text: "", error: message, limited: allLimited ? { resetAt: earliestReset } : undefined, awaitingApproval: false };
       }
@@ -518,7 +538,7 @@ export class SessionRunner {
 
       let text = prompt;
       if (handoff) {
-        text = `[Система] Переписка продолжается на другом мозге. Краткая история:\n${this.handoffSummary(conv.id)}\n\n---\n${prompt}`;
+        text = `[System] This conversation continues on a different brain. Recent history:\n${this.handoffSummary(conv.id)}\n\n---\n${prompt}`;
         handoff = false;
       }
 
@@ -536,7 +556,7 @@ export class SessionRunner {
         this.brainLoad.set(key, Math.max(0, (this.brainLoad.get(key) ?? 1) - 1));
       }
     }
-    return { text: "", error: lastError || "не удалось выполнить ход", awaitingApproval: false };
+    return { text: "", error: lastError || t("chat.turnFailed"), awaitingApproval: false };
   }
 
   private async streamTurn(
@@ -609,7 +629,7 @@ export class SessionRunner {
           break;
         case "limit_hit":
           limited = { resetAt: e.resetAt };
-          error = `лимит: ${e.detail}`;
+          error = t("brain.limitDetail", { detail: e.detail ?? "" });
           break;
         case "error":
           error = e.message;
@@ -645,7 +665,7 @@ export class SessionRunner {
 
     // Nothing produced and the brain failed or is limited: let the caller try the next brain.
     if (!produced && (limited || fatal)) {
-      this.d.store.updateMessage(msg.id, { parts: [{ type: "error", message: `${live.brainRef}: ${error ?? "ошибка"} — пробую другой мозг…` }], status: "error" });
+      this.d.store.updateMessage(msg.id, { parts: [{ type: "error", message: t("chat.tryingOtherBrain", { ref: live.brainRef, error: error ?? t("chat.error") }) }], status: "error" });
       if (fatal && !limited) this.d.brains.invalidate(live.brainRef);
       return { text: "", error, limited, awaitingApproval: false, retry: true };
     }

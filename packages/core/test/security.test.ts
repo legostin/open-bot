@@ -75,7 +75,7 @@ describe("redactor", () => {
     const out = r.text(`key=sk-secret-123 b64=${b64} short=abc`);
     expect(out).not.toContain("sk-secret-123");
     expect(out).not.toContain(b64);
-    expect(out).toContain("[скрыто: vault://tok]");
+    expect(out).toContain("[redacted: vault://tok]");
     expect(out).toContain("short=abc");
   });
 });

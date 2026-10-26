@@ -14,6 +14,7 @@ import type { VaultService } from "../vault/service.ts";
 import type { AuditLog } from "../audit.ts";
 import type { EgressProxy } from "../egress.ts";
 import { passEnv, scrubEnv } from "../plugins/host.ts";
+import { t } from "../i18n.ts";
 
 export interface McpServerConfig {
   type?: "stdio" | "http" | "streamable-http" | "sse";
@@ -191,7 +192,7 @@ export class McpClientManager {
       client.onclose = () => {
         if (this.conns.get(name) === conn) {
           conn.status = "error";
-          conn.error = "соединение закрыто";
+          conn.error = t("mcp.connectionClosed");
           this.registry.unregisterOwner(`mcp:${name}`);
           conn.tools = [];
           this.onChange?.();

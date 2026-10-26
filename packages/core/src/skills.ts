@@ -83,7 +83,7 @@ export class SkillIndex {
       }
     };
     walk(s.dir);
-    return `${body}\n\n---\nФайлы скилла (каталог ${s.dir}):\n${files.map((f) => `- ${f}`).join("\n") || "(нет)"}`;
+    return `${body}\n\n---\nSkill files (directory ${s.dir}):\n${files.map((f) => `- ${f}`).join("\n") || "(none)"}`;
   }
 
   /** Copy enabled skills into a workspace folder the harness reads (e.g. .claude/skills). */

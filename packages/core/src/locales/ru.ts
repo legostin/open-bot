@@ -95,6 +95,8 @@ export default {
   "plugin.warn.mcp": "Плагин добавляет MCP-серверы, они будут запущены как процессы.",
 
   // machines
+  "machines.execApproval": "Выполнить на машине {machine}: {command}",
+  "machines.writeApproval": "Записать файл на машине {machine}: {path}",
   "machine.badPairingCode": "Код привязки неверный или устарел",
   "machine.badPublicKey": "Неверный публичный ключ",
 

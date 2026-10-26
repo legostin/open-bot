@@ -37,7 +37,7 @@ export class HookRegistry {
       results.push(r);
       const next = merge(cur, r);
       if ("blocked" in next && typeof (next as any).blocked === "string" && Object.keys(next).length === 1) {
-        return { payload: cur, blocked: `${(next as any).blocked} (хук ${e.owner})`, results };
+        return { payload: cur, blocked: `${(next as any).blocked} (hook ${e.owner})`, results };
       }
       cur = next as T;
     }

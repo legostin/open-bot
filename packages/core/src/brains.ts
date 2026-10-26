@@ -3,6 +3,7 @@
 
 import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult, BrainRef } from "@openbot/shared";
 import { formatBrainRef, parseBrainRef, type RpcPeer } from "@openbot/shared";
+import { LocalizedError, t } from "./i18n.ts";
 
 export interface BrainHandle {
   ref: string;
@@ -107,7 +108,7 @@ export class BrainRegistry {
     const cached = this.probeCache.get(key);
     if (cached && Date.now() - Date.parse(cached.checkedAt) < maxAgeMs) return cached;
     const r = this.resolve(ref);
-    if (!r) return { available: false, authenticated: false, detail: "мозг не подключён" };
+    if (!r) return { available: false, authenticated: false, detail: t("brain.notConnected") };
     let result: ProbeResult;
     try {
       result = await r.peer.request<ProbeResult>("brain.probe", { brainId: ref.brainId, variant: ref.variant }, { timeoutMs: 20_000 });
@@ -125,7 +126,7 @@ export class BrainRegistry {
   async create(refStr: string, opts: BrainSessionOptions): Promise<BrainHandle> {
     const ref = parseBrainRef(refStr);
     const r = this.resolve(ref);
-    if (!r) throw new Error(`мозг ${refStr} не подключён`);
+    if (!r) throw new LocalizedError("brain.refNotConnected", { ref: refStr });
     const peer = r.peer;
     await peer.request("brain.create", { brainId: ref.brainId, opts: { ...opts, variant: ref.variant ?? opts.variant } }, { timeoutMs: 60_000 });
     const routes = this.eventRouters.get(peer)!;

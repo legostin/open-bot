@@ -4,13 +4,24 @@ import { cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { loadConfig } from "./config.ts";
-import { openDb } from "./db.ts";
+import { openDb, type Db } from "./db.ts";
+import { Settings } from "./settings.ts";
+import { tFor } from "./i18n.ts";
+import { DEFAULT_LOCALE, localeFromEnv, normalizeLocale, type Translate } from "@openbot/shared";
 import { AuditLog } from "./audit.ts";
 import { AuthService } from "./auth.ts";
 import { Hub } from "./app.ts";
 
 const [cmd = "start", ...args] = process.argv.slice(2);
 const config = loadConfig();
+
+/** CLI messages: the terminal's locale (OPENBOT_LANG, LC_ALL, LANG), else the hub language, else English. */
+function cliT(db?: Db): Translate {
+  const env = localeFromEnv(process.env);
+  if (env) return tFor(env);
+  const saved = db ? normalizeLocale(new Settings(db, config.timezone).get().language) : undefined;
+  return tFor(saved ?? DEFAULT_LOCALE);
+}
 
 async function main(): Promise<void> {
   switch (cmd) {
@@ -38,14 +49,14 @@ async function main(): Promise<void> {
       const db = openDb(join(config.dataDir, "openbot.db"));
       const auth = new AuthService(db, new AuditLog(db), { rpId: new URL(config.publicUrl).hostname, origins: [config.publicUrl] });
       auth.resetPassword(pass);
-      console.log("Пароль изменён, все сессии завершены.");
+      console.log(cliT(db)("cli.passwordChanged"));
       return;
     }
     case "pairing-code": {
       const db = openDb(join(config.dataDir, "openbot.db"));
       const code = Math.random().toString(36).slice(2, 10).toUpperCase();
       db.prepare("insert into pairing_codes(code, name, expires_at) values (?,?,?)").run(code, args[0] ?? null, new Date(Date.now() + 10 * 60_000).toISOString());
-      console.log(`Код привязки (10 минут): ${code}\nНа машине: npx openbot-node pair ${config.publicUrl} ${code}`);
+      console.log(cliT(db)("cli.pairingCode", { code, url: config.publicUrl }));
       return;
     }
     case "backup": {
@@ -63,13 +74,13 @@ async function main(): Promise<void> {
           /* missing dir */
         }
       }
-      console.log(`Резервная копия: ${target} (vault остаётся зашифрованным)`);
+      console.log(cliT()("cli.backupDone", { path: target }));
       return;
     }
     case "audit-verify": {
       const db = openDb(join(config.dataDir, "openbot.db"));
       const r = new AuditLog(db).verify();
-      console.log(r.ok ? `Журнал цел: ${r.count} записей` : `Цепочка нарушена на записи ${r.brokenAt}`);
+      console.log(r.ok ? cliT(db)("cli.auditOk", { count: r.count }) : cliT(db)("cli.auditBroken", { seq: r.brokenAt }));
       process.exitCode = r.ok ? 0 : 2;
       return;
     }

@@ -8,6 +8,7 @@ import type { Settings } from "./settings.ts";
 import type { ChannelRegistry } from "./channels.ts";
 import type { HookRegistry } from "./hooks.ts";
 import type { Store } from "./store.ts";
+import { LocalizedError, t } from "./i18n.ts";
 
 const fromRow = (r: any): Notification => ({
   id: r.id,
@@ -89,7 +90,7 @@ export class Notifier {
       const off = this.db.prepare("select 1 from notifications where trigger_id = ? and feedback = 'off' limit 1").get(input.triggerId);
       if (off) {
         level = "silent";
-        reason = "триггер выключен пользователем";
+        reason = t("notify.reason.triggerOff");
       }
     }
 
@@ -99,7 +100,7 @@ export class Notifier {
       .get(input.title, input.body, new Date(Date.now() - 6 * 3600_000).toISOString());
     if (dup && level !== "ask") {
       level = "silent";
-      reason = "повтор";
+      reason = t("notify.reason.duplicate");
     }
 
     if (level === "notify") {
@@ -117,10 +118,10 @@ export class Notifier {
       const limit = Math.max(1, Math.floor(s.notifyRatePerHour / 2 ** Math.min(less, 3)));
       if (recent >= limit) {
         level = "digest";
-        reason = "лимит частоты — в сводку";
+        reason = t("notify.reason.rateLimited");
       } else if (inQuietHours(s.quietHours, localHHMM(s.timezone))) {
         level = "digest";
-        reason = "тихие часы — в сводку";
+        reason = t("notify.reason.quietHours");
       }
     }
 
@@ -172,10 +173,10 @@ export class Notifier {
   }
 
   feedback(id: string, value: "useful" | "less" | "off", token?: string): Notification {
-    if (token !== undefined && token !== this.feedbackToken(id, value)) throw new Error("Неверная подпись кнопки");
+    if (token !== undefined && token !== this.feedbackToken(id, value)) throw new LocalizedError("approval.badSignature");
     this.db.prepare("update notifications set feedback = ? where id = ?").run(value, id);
     const n = this.get(id);
-    if (!n) throw new Error("Уведомление не найдено");
+    if (!n) throw new LocalizedError("notification.notFound");
     this.bus.emit("notification.feedback", n);
     return n;
   }
@@ -190,10 +191,10 @@ export class Notifier {
     this.store.addMessage({
       conversationId: main.id,
       role: "assistant",
-      parts: [{ type: "notification", level: "digest", title: `Сводка (${rows.length})`, body }],
+      parts: [{ type: "notification", level: "digest", title: t("notify.digestTitle", { count: rows.length }), body }],
       status: "complete",
     });
-    await this.channels.broadcast({ kind: "digest", text: `Сводка (${rows.length})\n\n${truncate(body, 3800)}`, link: this.publicUrl });
+    await this.channels.broadcast({ kind: "digest", text: `${t("notify.digestTitle", { count: rows.length })}\n\n${truncate(body, 3800)}`, link: this.publicUrl });
     const st = this.db.prepare("update notifications set digested = 1, delivered_at = ? where id = ?");
     for (const n of rows) st.run(nowIso(), n.id);
     return rows.length;

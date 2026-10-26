@@ -96,6 +96,8 @@ export default {
   "plugin.warn.mcp": "The plugin adds MCP servers; they will run as processes.",
 
   // machines
+  "machines.execApproval": "Run on {machine}: {command}",
+  "machines.writeApproval": "Write a file on {machine}: {path}",
   "machine.badPairingCode": "The pairing code is wrong or has expired",
   "machine.badPublicKey": "Invalid public key",
 
