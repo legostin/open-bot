@@ -51,8 +51,8 @@ interface SetupState {
 type SetupStep = "telegram" | "backupBrain" | "machines" | "profile";
 ```
 
-`GET /api/setup` returns it (owner only). The hub emits `setup.updated` whenever `brains.updated`, vault, plugin or
-settings events change it.
+`GET /api/setup?agent=<id>` returns it (the default agent without `agent`). No new bus event: the web UI reloads it on
+`brains.updated`, `plugins.updated`, `vault.state` and a finished sign-in.
 
 ## Phase 1: the hub leads (no model)
 
@@ -66,9 +66,10 @@ settings events change it.
   with `%VAR%` expanded, so a CLI installed after login is found without logging out.
 
 Brain hosts get these directories after their own PATH and before `<data>/tools`, so a CLI the user installed wins over
-one the hub installed (the existing rule in `cli-tools.ts`). It is resolved at hub start and again on the card's
-**Check again**; when it changed, the brain plugins restart. Under user isolation (Docker) nothing changes: the image
-brings the CLIs.
+one the hub installed (the existing rule in `cli-tools.ts`). It is read on desktop installs only (`OPENBOT_INSTALL_CLIS=1`:
+a hub started from launchd or a tray app has a short PATH, a terminal's `npm start` does not), at hub start and again
+on the card's **Check again**; when it changed, the brain plugins restart. Under user isolation (Docker) nothing
+changes: the image brings the CLIs.
 
 ### The card
 
@@ -88,7 +89,8 @@ UI. The card reads `/api/setup` live; the stored part only marks where it sits i
 
 ### When it shows
 
-- **On open.** When the conversation shown has no usable brain, the web UI shows the card at its end (not stored).
+- **On open.** When the agent of the dialog shown has no usable brain and no stored card waits after its last answer,
+  the web UI shows the card at the end of the dialog (not stored). This holds for every agent's dialog.
 - **On a message.** In `runner.ts`, when no candidate is usable and the reasons are setup reasons (not installed, not
   signed in, no key) rather than limits or failures, the runner stores a system message with a `brain_setup` part
   instead of the `error` part, and does not add a second card while the last one is still there. All-limited and
@@ -96,18 +98,20 @@ UI. The card reads `/api/setup` live; the stored part only marks where it sits i
 
 ### Answering the waiting message
 
-When `setup.usable` turns true, the hub looks for conversations whose last messages are an unanswered user message and
-a `brain_setup` card added in the last 24 hours, and runs the agent on them once. "привет" gets its answer right after
-sign-in, with no resend.
+The runner hands the waiting message to `SetupGuide.hold`; more messages before a brain works join it. After every
+`brains.updated` the guide checks the held conversations and, once their agent has a usable brain, runs one turn with
+the held messages (blank line between them). Holds live in memory for 24 hours: after a hub restart the user writes
+again. "привет" gets its answer right after sign-in, with no resend.
 
 ## Phase 2: the agent leads
 
 ### Kickoff
 
-When the first brain becomes usable and no message was waiting, the hub starts one agent turn in the owner's most
-recently active web conversation with the default agent (a new one when there is none), with a system note: the hub has just connected its first brain; greet the user
-briefly and offer to continue setup. Settings flag `setup.kickoffDone` makes it happen once. When a message was
-waiting, the agent answers it and the prompt block below makes it offer setup at the end.
+When the default agent's first brain becomes usable after the hub had started without one, and no message was waiting,
+the hub runs one turn in the default agent's own dialog (only if it has no answer in it yet) with a system note: the
+hub has just connected its first brain; greet the user briefly and offer to continue setup. The settings key `setup`
+(`kickoffDone`) makes it happen once; a hub that works from the start only sets the flag. When a message was waiting,
+the agent answers it and the prompt block below makes it offer setup afterwards.
 
 ### Prompt block
 
@@ -129,8 +133,10 @@ continue setup").
 The vault is not a step of its own: it is created inside the first card that needs a secret, which `VaultGate`
 already does. A user who never needs a secret never has to invent a passphrase.
 
-One new tool, `setup_skip { step, skipped }`, writes `setup.skipped` in the hub settings (and clears a step when the
-user asks to resume it). `profile_update` on the default agent sets `setup.profileDone`, which is what `profile` reads.
+Two new hub tools: `hub_setup_status` (read) returns the state, and `hub_setup_update { step, status }` records a step
+as `done` (needed for `profile`; the others are detected), `skipped` ("not now") or `todo` (back on the list). Both live
+in the settings key `setup`. The block is built when a session opens; the agent checks `hub_setup_status` before it
+suggests the next step.
 
 ## Removed
 
@@ -148,7 +154,7 @@ The prompt block, system notes and tool descriptions are English. `packages/core
 - Unit: `userPath()` (shell output with banners, timeout, Windows values with `%VAR%`); `setupState()` from fake
   brains, vault, channels and settings; the runner stores `brain_setup` (not `error`) for setup reasons, once per
   conversation, and keeps the limit messages; the waiting message runs once after `usable`; kickoff runs once; the
-  prompt block appears and disappears; `setup_skip`.
-- Web: `BrainSetupCard` for installed / not installed / signed in / install running / error.
+  prompt block appears; `hub_setup_update` and `hub_setup_status`.
+- Web: the card's choices (`primaryRef`, `cliRows`, `showGate` in `packages/web/src/lib/setup.ts`).
 - Manual, on this Mac with a fresh data dir and Claude Code and Codex installed: both show as installed; signing in
   from the card works; "привет" is answered after sign-in; the agent offers Telegram, the backup brain and the profile.

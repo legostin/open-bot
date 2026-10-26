@@ -69,11 +69,11 @@ export async function readUserPath(o: { platform: NodeJS.Platform; env: Record<s
 export class UserPath { constructor(o?: Partial<{ platform; env; run }>); dirs(): string[]; refresh(): Promise<boolean /* changed */>; }
 ```
 
-- [ ] **Step 1:** tests for `parseShellPath` (banner lines before and after the mark; no mark → undefined), `parseRegPath` (REG_SZ and REG_EXPAND_SZ lines), `expandWinVars` (`%USERPROFILE%\x`, unknown var kept), `mergeDirs` (drops dirs already in PATH and duplicates), `readUserPath` with a fake `run` for darwin (`$SHELL -lic`, falls back to `/bin/zsh` when SHELL is unset) and win32 (HKCU + HKLM joined), and a run that rejects → `[]`.
-- [ ] **Step 2:** run `npx vitest run packages/core/test/user-path.test.ts` → fails (module missing).
-- [ ] **Step 3:** implement. darwin/linux: `run(shell, ["-l", "-i", "-c", `printf '\n${PATH_MARK}%s\n' "$PATH"`], 5000)`; win32: `run("reg", ["query", "HKCU\\Environment", "/v", "Path"])` and the HKLM Session Manager key, expand, split on `;`. Errors and timeouts give `[]`. `UserPath.refresh()` compares the joined list. Under isolation the hub never calls it.
-- [ ] **Step 4:** tests pass.
-- [ ] **Step 5:** `app.ts`: `userPath = new UserPath()`; `cliBinDirs: () => (this.config.isolation.users ? [] : [...this.userPath.dirs(), ...this.cliTools.binDirs()])`; in `start()` `await this.userPath.refresh()` before `plugins.startAll` unless isolated. Commit.
+- [x] **Step 1:** tests for `parseShellPath` (banner lines before and after the mark; no mark → undefined), `parseRegPath` (REG_SZ and REG_EXPAND_SZ lines), `expandWinVars` (`%USERPROFILE%\x`, unknown var kept), `mergeDirs` (drops dirs already in PATH and duplicates), `readUserPath` with a fake `run` for darwin (`$SHELL -lic`, falls back to `/bin/zsh` when SHELL is unset) and win32 (HKCU + HKLM joined), and a run that rejects → `[]`.
+- [x] **Step 2:** run `npx vitest run packages/core/test/user-path.test.ts` → fails (module missing).
+- [x] **Step 3:** implement. darwin/linux: `run(shell, ["-l", "-i", "-c", `printf '\n${PATH_MARK}%s\n' "$PATH"`], 5000)`; win32: `run("reg", ["query", "HKCU\\Environment", "/v", "Path"])` and the HKLM Session Manager key, expand, split on `;`. Errors and timeouts give `[]`. `UserPath.refresh()` compares the joined list. Under isolation the hub never calls it.
+- [x] **Step 4:** tests pass.
+- [x] **Step 5:** `app.ts`: `userPath = new UserPath()`; `cliBinDirs: () => (this.config.isolation.users ? [] : [...this.userPath.dirs(), ...this.cliTools.binDirs()])`; in `start()` `await this.userPath.refresh()` before `plugins.startAll` unless isolated. Commit.
 
 ### Task 2: Setup state and API
 
@@ -94,10 +94,10 @@ Settings key `setup` holds `{ kickoffDone?: boolean; done?: SetupStep[]; skipped
 
 Rules: brains = the agent's local refs (`machineId === "local"`), `kind: "cli"` when the registry lists it with `login: true`; `installed = probe.available`, `signedIn = probe.authenticated`, `canInstall = !!cliTools.forBrain(brainId)`; `usable` = any of the agent's refs (local or remote) connected and authenticated (limits are not setup). `telegram` = the `telegram` channel's status is connected. Done: telegram when connected; backupBrain when two CLI brains are signed in or no second CLI is installed; machines when ≥ 1 paired; profile when marked done. `remaining` = all steps minus done minus skipped.
 
-- [ ] **Step 1:** fixture `fakegated`: brain `gated` whose probe is `{ available: true, authenticated: existsSync(join(process.env.HOME!, ".gated-ok")), detail }` and whose session echoes `gated heard: <last line>`, and answers `SETUP?` with whether the system prompt has `## Hub setup`. Agent fixture: `brains: [gated@local, codex@local]`, `tools: ["*"]`.
-- [ ] **Step 2:** test: `GET /api/setup` → `usable: false`, gated and codex listed (codex `kind: "cli"`, `installed: true`, `signedIn: false`), `remaining` contains `telegram`, `profile`. After writing `.gated-ok` and `POST /api/setup/refresh` → `usable: true`.
-- [ ] **Step 3:** implement `setup.ts` state + routes (`GET /api/setup?agent=`, `POST /api/setup/refresh` → `userPath.refresh()`; if changed restart builtin brain plugins; `brains.invalidateAll()`; emit `brains.updated`; return state).
-- [ ] **Step 4:** tests pass. Commit.
+- [x] **Step 1:** fixture `fakegated`: brain `gated` whose probe is `{ available: true, authenticated: existsSync(join(process.env.HOME!, ".gated-ok")), detail }` and whose session echoes `gated heard: <last line>`, and answers `SETUP?` with whether the system prompt has `## Hub setup`. Agent fixture: `brains: [gated@local, codex@local]`, `tools: ["*"]`.
+- [x] **Step 2:** test: `GET /api/setup` → `usable: false`, gated and codex listed (codex `kind: "cli"`, `installed: true`, `signedIn: false`), `remaining` contains `telegram`, `profile`. After writing `.gated-ok` and `POST /api/setup/refresh` → `usable: true`.
+- [x] **Step 3:** implement `setup.ts` state + routes (`GET /api/setup?agent=`, `POST /api/setup/refresh` → `userPath.refresh()`; if changed restart builtin brain plugins; `brains.invalidateAll()`; emit `brains.updated`; return state).
+- [x] **Step 4:** tests pass. Commit.
 
 ### Task 3: The card instead of the error, and the waiting message
 
@@ -109,8 +109,8 @@ Runner: `candidates()` also returns `setup: number` (skips for not connected / n
 
 SetupGuide listens to `brains.updated` (debounced 300 ms): for each held conversation whose agent is now usable, drop the hold and resume once with the held prompts joined by a blank line. Holds older than 24 h are dropped.
 
-- [ ] **Step 1:** test: say "привет" → a system message with a `brain_setup` part, no `error` part; say "ещё" → still one card; write `.gated-ok`, emit `brains.updated` → an assistant message `gated heard: ещё` (both prompts, last line) arrives once.
-- [ ] **Step 2:** fails. **Step 3:** implement. **Step 4:** passes; existing `hub.test.ts` limit tests still pass. Commit.
+- [x] **Step 1:** test: say "привет" → a system message with a `brain_setup` part, no `error` part; say "ещё" → still one card; write `.gated-ok`, emit `brains.updated` → an assistant message `gated heard: ещё` (both prompts, last line) arrives once.
+- [x] **Step 2:** fails. **Step 3:** implement. **Step 4:** passes; existing `hub.test.ts` limit tests still pass. Commit.
 
 ### Task 4: The agent leads: kickoff, prompt block, tools
 
@@ -124,8 +124,8 @@ Prompt block (English): heading `## Hub setup`, one line per remaining step with
 
 Tools: `hub_setup_status` (read) returns the state as JSON; `hub_setup_update { step, status }` (local-write) calls `setStep`.
 
-- [ ] **Step 1:** tests: `SETUP?` → block present while steps remain; `CALL hub_setup_update {"step":"telegram","status":"skipped"}` updates `/api/setup` `skipped`; kickoff: fresh guide with nothing held, sign in → one assistant message in the main conversation, and not again after the next `brains.updated`.
-- [ ] **Step 2–4:** fail, implement, pass. Commit.
+- [x] **Step 1:** tests: `SETUP?` → block present while steps remain; `CALL hub_setup_update {"step":"telegram","status":"skipped"}` updates `/api/setup` `skipped`; kickoff: fresh guide with nothing held, sign in → one assistant message in the main conversation, and not again after the next `brains.updated`.
+- [x] **Step 2–4:** fail, implement, pass. Commit.
 
 ### Task 5: Web card, checklist out
 
@@ -135,11 +135,11 @@ Tools: `hub_setup_status` (read) returns the state as JSON; `hub_setup_update { 
 
 Card: title `setup.title`, intro `setup.intro`, a compact `BrainLoginCard` per CLI brain (primary one first), a `details` "Use an API key" with `VaultGate` + `PluginSetupCard` `brain-claude-code` and `brain-api`, **Check again** (`POST /api/setup/refresh`). When usable: one line `setup.connected` with the signed-in brain's label. It loads `/api/setup?agent=` and reloads on `brains.updated`, `plugins.updated`, `vault.state`, `brain.login`.
 
-- [ ] **Step 1:** `lib/setup.test.ts` for `primaryRef` and `showGate`. **Step 2:** fails. **Step 3:** implement helpers, card, wiring, i18n keys (en + ru), remove checklist keys and file. **Step 4:** `npx vitest run packages/web` and `npm run typecheck` pass. Commit.
+- [x] **Step 1:** `lib/setup.test.ts` for `primaryRef` and `showGate`. **Step 2:** fails. **Step 3:** implement helpers, card, wiring, i18n keys (en + ru), remove checklist keys and file. **Step 4:** `npx vitest run packages/web` and `npm run typecheck` pass. Commit.
 
 ### Task 6: Docs, full checks, manual run
 
-- [ ] README.md / README.ru.md: the first-run paragraph says the chat shows the sign-in card and the assistant then guides the rest.
-- [ ] Spec: note `hub_setup_status` / `hub_setup_update`, no new bus event (the web reloads on existing ones), kickoff in the default agent's main dialog, held messages kept in memory.
-- [ ] `npm run typecheck`, `npm test`, `npm run build`.
-- [ ] Manual: `OPENBOT_DATA_DIR=<fresh> OPENBOT_INSTALL_CLIS=1 npm start` on alternate ports; set up the owner; the card lists Claude Code and Codex as installed and not signed in; say "привет" → card, no error. Commit.
+- [x] README.md / README.ru.md: the first-run paragraph says the chat shows the sign-in card and the assistant then guides the rest.
+- [x] Spec: note `hub_setup_status` / `hub_setup_update`, no new bus event (the web reloads on existing ones), kickoff in the default agent's main dialog, held messages kept in memory.
+- [x] `npm run typecheck`, `npm test`, `npm run build`.
+- [x] Manual: `OPENBOT_DATA_DIR=<fresh> OPENBOT_INSTALL_CLIS=1 npm start` on alternate ports; set up the owner; the card lists Claude Code and Codex as installed and not signed in; say "привет" → card, no error. Commit.

@@ -1,11 +1,12 @@
 import { useStore } from "../../lib/store";
-import { session } from "../../state/app";
+import { conversations, session } from "../../state/app";
+import { SetupGate } from "../../components/BrainSetupCard";
 import { ChatView } from "./ChatView";
-import { FirstRunChecklist } from "./Checklist";
 
 export function ChatPage({ conversationId }: { conversationId?: string }) {
   const s = useStore(session);
+  const agentId = useStore(conversations).find((c) => c.id === (conversationId ?? s?.mainConversationId))?.agentId;
   if (!s) return null;
   const id = conversationId ?? s.mainConversationId;
-  return <ChatView conversationId={id} top={id === s.mainConversationId ? <FirstRunChecklist /> : undefined} />;
+  return <ChatView conversationId={id} bottom={<SetupGate conversationId={id} agentId={agentId} />} />;
 }

@@ -60,12 +60,15 @@ function TitleEditor({ id, title }: { id: string; title: string }) {
 export function ChatView({
   conversationId,
   top,
+  bottom,
   header = true,
   emptyHint,
 }: {
   conversationId: string;
-  /** Rendered above the messages (e.g. first-run checklist, task summary). */
+  /** Rendered above the messages (e.g. a task summary). */
   top?: ReactNode;
+  /** Rendered after the messages (e.g. the setup card while no brain works). */
+  bottom?: ReactNode;
   header?: boolean;
   emptyHint?: ReactNode;
 }) {
@@ -156,6 +159,7 @@ export function ChatView({
               <MessageView key={m.id} message={m} agent={m.agentId ? agentById.get(m.agentId) : undefined} />
             ))}
           </LatestDraftCards.Provider>
+          {bottom}
         </div>
         {showDown && (
           <button

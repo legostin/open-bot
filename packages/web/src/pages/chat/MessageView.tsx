@@ -19,6 +19,7 @@ import { ToolCard } from "./ToolCard";
 import { PluginSetupCard, SecretRequestCard } from "../../components/SecretCards";
 import { AgentDraftCard } from "./AgentDraftCard";
 import { BrainLoginCard } from "../../components/BrainLoginCard";
+import { BrainSetupCard } from "../../components/BrainSetupCard";
 import { t, type MessageKey } from "../../i18n";
 
 const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
@@ -195,6 +196,8 @@ function Parts({ message }: { message: Message }) {
             return <AgentDraftCard key={it.key} draftId={p.draftId} messageId={message.id} />;
           case "brain_login":
             return <BrainLoginCard key={it.key} brainRef={p.ref} />;
+          case "brain_setup":
+            return <BrainSetupCard key={it.key} conversationId={message.conversationId} />;
           default:
             return null;
         }

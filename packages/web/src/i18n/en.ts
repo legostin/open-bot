@@ -242,19 +242,18 @@ export default {
   "tool.noResult": "no result",
   "tool.empty": "(empty)",
 
-  // first-run checklist
-  "checklist.title": "Let's get you set up 👋",
-  "checklist.intro": "Three steps, and the assistant can think, keep secrets and message your phone.",
-  "checklist.hide": "Hide",
-  "checklist.brain": "Connect a brain",
-  "checklist.brainHint": "Claude Code, Codex or an API key",
-  "checklist.vault": "Create the vault",
-  "checklist.vaultHint": "Encrypted storage for tokens and passwords",
-  "checklist.setUp": "Set up",
-  "checklist.collapse": "Collapse",
-  "checklist.apiKeys": "Or a token or an API key: Claude Code token, Anthropic, OpenAI, OpenRouter, your own server",
-  "checklist.telegram": "Connect Telegram",
-  "checklist.telegramHint": "Notifications and approvals on your phone",
+  // setup card: the hub's answer while no brain works
+  "brainSetup.title": "To answer you, I need a brain",
+  "brainSetup.intro": "Sign in to Claude Code or Codex with your subscription right here, or give an API key. Your message will be answered as soon as one works.",
+  "brainSetup.introKeys": "Give an API key or a token, and your message will be answered as soon as it works.",
+  "brainSetup.installAndSignIn": "Install and sign in",
+  "brainSetup.notInstalledBadge": "Not installed",
+  "brainSetup.notInstalled": "Not installed on this computer.",
+  "brainSetup.apiKeys": "Or a token or an API key: Claude Code token, Anthropic, OpenAI, OpenRouter, your own server",
+  "brainSetup.checkAgain": "Check again",
+  "brainSetup.checkAgainHint": "Installed something just now? The hub looks again.",
+  "brainSetup.connected": "Connected: {name}",
+  "brainSetup.ready": "A brain is connected.",
 
   // tasks
   "tasks.subtitle": "Everything agents are working on: your requests, delegated work and trigger runs.",

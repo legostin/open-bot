@@ -242,19 +242,18 @@ export default {
   "tool.noResult": "нет результата",
   "tool.empty": "(пусто)",
 
-  // first-run checklist
-  "checklist.title": "Давайте всё настроим 👋",
-  "checklist.intro": "Три шага — и ассистент сможет думать, хранить секреты и писать вам в телефон.",
-  "checklist.hide": "Скрыть",
-  "checklist.brain": "Подключите мозг",
-  "checklist.brainHint": "Claude Code, Codex или API-ключ",
-  "checklist.vault": "Создайте vault",
-  "checklist.vaultHint": "Шифрованное хранилище токенов и паролей",
-  "checklist.setUp": "Настроить",
-  "checklist.collapse": "Свернуть",
-  "checklist.apiKeys": "Или токен либо ключ API: токен Claude Code, Anthropic, OpenAI, OpenRouter, свой сервер",
-  "checklist.telegram": "Подключите Telegram",
-  "checklist.telegramHint": "Уведомления и подтверждения на телефоне",
+  // setup card: the hub's answer while no brain works
+  "brainSetup.title": "Чтобы я мог отвечать, подключите мозг",
+  "brainSetup.intro": "Войдите в Claude Code или Codex по своей подписке прямо здесь или дайте API-ключ. Как только мозг заработает, я отвечу на ваше сообщение.",
+  "brainSetup.introKeys": "Дайте API-ключ или токен, и как только он заработает, я отвечу на ваше сообщение.",
+  "brainSetup.installAndSignIn": "Установить и войти",
+  "brainSetup.notInstalledBadge": "Не установлен",
+  "brainSetup.notInstalled": "Не установлен на этом компьютере.",
+  "brainSetup.apiKeys": "Или токен или API-ключ: токен Claude Code, Anthropic, OpenAI, OpenRouter, свой сервер",
+  "brainSetup.checkAgain": "Проверить снова",
+  "brainSetup.checkAgainHint": "Только что что-то установили? Хаб поищет ещё раз.",
+  "brainSetup.connected": "Подключено: {name}",
+  "brainSetup.ready": "Мозг подключён.",
 
   // tasks
   "tasks.subtitle": "Всё, над чем работают агенты: ваши поручения, делегированные и запущенные триггерами.",

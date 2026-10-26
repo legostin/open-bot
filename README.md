@@ -44,8 +44,8 @@ docker compose logs openbot | grep -A1 "open-bot:"
 ```
 
 1. Open http://localhost:8080, enter the **setup code** from the logs and choose a password. Your browser's language becomes the hub language (see [Languages](#languages)).
-2. The chat opens with a short checklist: connect a brain (see below), create the vault (a passphrase of your own; tick "unlock automatically" so it opens after restarts) and connect Telegram. Everything happens right there in the chat.
-3. Say hello to the assistant. When something needs a key or a token, the assistant shows a secure field in the chat: the value goes straight into the encrypted vault and the model only ever sees `vault://id`. You can also just paste a token into a message: the hub recognises known formats, takes it out of the message and stores it.
+2. Until a brain works, the chat shows a setup card: sign Claude Code or Codex in with your subscription (on a desktop install the hub can install a missing CLI first), or give an API key (see below). Whatever you write meanwhile is answered as soon as a brain is connected.
+3. Then the assistant leads the rest of the setup in the chat, one step at a time and only when you agree: Telegram, a backup brain, other computers, and getting to know you. Say "not now" to skip a step, "let's continue the setup" to come back to it. When something needs a key or a token, the assistant shows a secure field in the chat: the value goes straight into the encrypted vault and the model only ever sees `vault://id`. You can also just paste a token into a message: the hub recognises known formats, takes it out of the message and stores it.
 
 Everything is stored in the `openbot-data` volume (`/data`): the database, the vault, workspaces, CLI logins and plugins.
 
@@ -57,7 +57,7 @@ Everything is stored in the `openbot-data` volume (`/data`): the database, the v
 
 ## Connecting brains
 
-**Claude Code (Claude Pro/Max subscription) and Codex (ChatGPT subscription)** sign in from the chat. Press **Sign in** next to the brain in the checklist's first step, or ask the assistant ("connect Codex"): a card shows the sign-in page to open.
+**Claude Code (Claude Pro/Max subscription) and Codex (ChatGPT subscription)** sign in from the chat. Press **Sign in** next to the brain on the setup card, or ask the assistant ("connect Codex"): a card shows the sign-in page to open.
 
 - **Codex:** enter the one-time code from the card on that page.
 - **Claude Code:** sign in, copy the code the page shows and paste it into the card (not into the chat).
@@ -83,7 +83,7 @@ The **Brains** page shows the state of every brain: installed, signed in, rate-l
 
 ## Telegram
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) and paste its token into the Telegram step of the checklist (or ask the assistant to connect Telegram). The bot connects by itself.
+1. Create a bot with [@BotFather](https://t.me/BotFather) and ask the assistant to connect Telegram: its card takes the token. The bot connects by itself.
 2. In the same card, tap **Open the bot in Telegram** and press Start: that links your chat. The bot only answers the private chat it was linked from.
 
 Telegram receives replies, notifications, the digest, and approval cards with buttons. Chat commands: `/help`, `/tasks`, `/stop`. The full details of an action are shown only in the console unless you turn on the `channelApprovalDetails` setting.

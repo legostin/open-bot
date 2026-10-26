@@ -13,10 +13,11 @@ import { t } from "../i18n";
 const RUNNING = new Set(["installing", "starting", "waiting", "verifying"]);
 
 /**
- * One brain's sign-in. `compact`: a row (name, state, button) for lists like the first-run checklist;
+ * One brain's sign-in. `compact`: a row (name, state, button) for lists like the setup card;
  * `bare`: no frame, for a card that already has one; otherwise a card in the conversation.
+ * `install`: the CLI is not on this computer yet and the hub installs it before the sign-in.
  */
-export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; bare?: boolean; compact?: boolean }) {
+export function BrainLoginCard({ brainRef, bare, compact, install }: { brainRef: string; bare?: boolean; compact?: boolean; install?: boolean }) {
   const [view, setView] = useState<BrainLoginView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,13 +65,21 @@ export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; 
     <Badge tone="info">{t("brainLogin.inProgress")}</Badge>
   ) : signedIn ? (
     <Badge tone="success">{t("brainLogin.signedIn")}</Badge>
+  ) : install ? (
+    <Badge tone="neutral">{t("brainSetup.notInstalledBadge")}</Badge>
   ) : (
     <Badge tone="warning">{t("brainLogin.notSignedIn")}</Badge>
   );
   const canStart = view.connected && view.supported && !running;
   const startButton = canStart && (!signedIn || !compact) && (
     <Button variant={signedIn ? "ghost" : "primary"} size="sm" icon={<LogIn className="size-3.5" />} loading={busy} onClick={() => void act("")}>
-      {signedIn ? t("brainLogin.signInAgain") : ended && ended.status !== "cancelled" && ended.status !== "succeeded" ? t("brainLogin.tryAgain") : t("brainLogin.signIn")}
+      {signedIn
+        ? t("brainLogin.signInAgain")
+        : ended && ended.status !== "cancelled" && ended.status !== "succeeded"
+          ? t("brainLogin.tryAgain")
+          : install
+            ? t("brainSetup.installAndSignIn")
+            : t("brainLogin.signIn")}
     </Button>
   );
 

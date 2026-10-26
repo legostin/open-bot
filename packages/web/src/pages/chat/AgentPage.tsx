@@ -10,7 +10,7 @@ import { t } from "../../i18n";
 import { AgentHeader } from "./AgentHeader";
 import { DetailsToggle } from "./DetailsToggle";
 import { ChatView } from "./ChatView";
-import { FirstRunChecklist } from "./Checklist";
+import { SetupGate } from "../../components/BrainSetupCard";
 
 /** While the dialog is on screen, tell the hub the user has seen it up to the newest finished message. */
 function useReadMarker(conversationId: string | undefined, unread: number): void {
@@ -92,7 +92,7 @@ export function AgentPage({ agentId }: { agentId?: string }) {
             key={conversationId}
             conversationId={conversationId}
             header={false}
-            top={isDefault ? <FirstRunChecklist /> : undefined}
+            bottom={<SetupGate conversationId={conversationId} agentId={id} />}
             emptyHint={agent && !isDefault ? t("agent.emptyHint", { name: agent.name }) : undefined}
           />
         ) : (
