@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { createRpcPeer, ndjsonTransport, DEFAULT_LOCALE, isLocale, translator } from "@openbot/shared";
 import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage, Catalog, Locale, Translate } from "@openbot/shared";
 import type {
+  BrainLoginImpl,
   BrainProviderImpl,
   BrainSessionImpl,
   ChannelImpl,
@@ -43,6 +44,7 @@ peer.onClose(() => process.exit(0));
 const toolHandlers = new Map<string, ToolHandler>();
 const brains = new Map<string, BrainProviderImpl>();
 const brainSessions = new Map<string, BrainSessionImpl>();
+const brainLogins = new Map<string, BrainLoginImpl>();
 const channels = new Map<string, ChannelImpl>();
 const hookHandlers = new Map<string, (p: any) => any>();
 const eventHandlers = new Map<string, Array<(p: any) => void>>();
@@ -92,7 +94,7 @@ peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pl
     brains: {
       register(provider) {
         brains.set(provider.id, provider);
-        void peer.request("register.brain", { id: provider.id, label: provider.label, variants: provider.variants });
+        void peer.request("register.brain", { id: provider.id, label: provider.label, variants: provider.variants, login: typeof provider.login === "function" });
       },
     },
     channels: {
@@ -255,6 +257,34 @@ peer.handle("brain.close", async (p: { sessionId: string }) => {
   const s = brainSessions.get(p.sessionId);
   brainSessions.delete(p.sessionId);
   await s?.close();
+  return {};
+});
+
+// Sign-in from the chat: updates go to the hub as "brain.login" notifications, the final one included.
+peer.handle("brain.login.start", async (p: { brainId: string; loginId: string; env?: Record<string, string> }) => {
+  const b = brains.get(p.brainId);
+  if (!b?.login) throw new Error(`brain ${p.brainId} cannot sign in from the chat`);
+  const notify = (update: unknown) => peer.notify("brain.login", { loginId: p.loginId, update });
+  const login = await b.login({ env: p.env ?? {}, onUpdate: notify });
+  brainLogins.set(p.loginId, login);
+  void login.done
+    .catch((e: any) => ({ status: "failed" as const, error: e?.message ?? String(e) }))
+    .then((final) => {
+      brainLogins.delete(p.loginId);
+      notify(final);
+    });
+  return {};
+});
+
+peer.handle("brain.login.code", async (p: { loginId: string; code: string }) => {
+  const login = brainLogins.get(p.loginId);
+  if (!login?.submitCode) throw new Error("this sign-in does not take a code");
+  await login.submitCode(String(p.code ?? ""));
+  return {};
+});
+
+peer.handle("brain.login.cancel", async (p: { loginId: string }) => {
+  brainLogins.get(p.loginId)?.cancel();
   return {};
 });
 

@@ -1,13 +1,13 @@
 // First-run checklist on the chat page: brain, vault, Telegram.
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRight, ChevronDown, CircleCheck, CircleDashed, X } from "lucide-react";
+import { ChevronDown, CircleCheck, CircleDashed, X } from "lucide-react";
 import { api } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import { hubEvents, session } from "../../state/app";
-import { openPanel } from "../../state/panel";
 import { cx } from "../../components/ui";
 import { PluginSetupCard, VaultGate } from "../../components/SecretCards";
+import { BrainLoginCard } from "../../components/BrainLoginCard";
 import { t } from "../../i18n";
 
 interface BrainRow {
@@ -75,23 +75,25 @@ export function FirstRunChecklist() {
       {/* Every step opens right here: nothing sends the user to another page or the console. */}
       <ol className="flex flex-col gap-1.5">
         <Step done={brainOk} title={t("checklist.brain")} hint={t("checklist.brainHint")} open={open === "brain"} onToggle={() => toggle("brain")}>
-          {/* One gate for both cards, so an absent vault is offered once, not twice. */}
-          <VaultGate>
-            <div className="flex flex-col gap-3">
-              <PluginSetupCard pluginId="brain-claude-code" bare />
-              <details className="group">
-                <summary className="flex cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-accent-text">
-                  {t("checklist.apiKeys")} <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="mt-2">
-                  <PluginSetupCard pluginId="brain-api" bare />
-                </div>
-              </details>
-            </div>
-          </VaultGate>
-          <button type="button" onClick={() => openPanel("brains")} className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-accent-text">
-            {t("checklist.subscriptions")} {t("checklist.brainAction")} <ArrowRight className="size-3.5" />
-          </button>
+          {/* Subscriptions sign in right here (the CLI's own login runs on the server); tokens and keys need the vault. */}
+          <div className="flex flex-col gap-3">
+            <BrainLoginCard brainRef="claude-code@local" compact />
+            <BrainLoginCard brainRef="codex@local" compact />
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-accent-text">
+                {t("checklist.apiKeys")} <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+              </summary>
+              {/* One gate for both cards, so an absent vault is offered once, not twice. */}
+              <div className="mt-2">
+                <VaultGate>
+                  <div className="flex flex-col gap-3">
+                    <PluginSetupCard pluginId="brain-claude-code" bare />
+                    <PluginSetupCard pluginId="brain-api" bare />
+                  </div>
+                </VaultGate>
+              </div>
+            </details>
+          </div>
         </Step>
         <Step done={vaultOk} title={t("checklist.vault")} hint={t("checklist.vaultHint")} open={open === "vault"} onToggle={() => toggle("vault")}>
           <VaultGate>{null}</VaultGate>

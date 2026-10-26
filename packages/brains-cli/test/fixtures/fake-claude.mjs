@@ -1,17 +1,41 @@
-// Fake `claude` CLI for tests: emits stream-json like Claude Code 2.x.
+// Fake `claude` CLI for tests: emits stream-json like Claude Code 2.x. `auth login` behaves like Claude Code without a
+// terminal: prints the sign-in page, then reads the code from stdin ("good-code#xyz" signs in, HOME/.claude/.credentials.json).
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 const args = process.argv.slice(2);
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+const credentials = join(process.env.HOME || homedir(), ".claude", ".credentials.json");
+const login = args[0] === "auth" && args[1] === "login";
 if (args[0] === "--version") {
   console.log("9.9.9 (Claude Code)");
   process.exit(0);
 }
-if (args[0] === "auth") {
-  console.log(JSON.stringify({ loggedIn: process.env.FAKE_LOGGED_IN === "1", authMethod: "claude.ai" }));
+if (login) {
+  console.log("Opening browser to sign in…");
+  console.log("If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&client_id=fake&response_type=code&state=xyz");
+  process.stdout.write("Paste code here if prompted > ");
+  let line = "";
+  process.stdin.on("data", (c) => {
+    line += c;
+    if (!line.includes("\n")) return;
+    if (line.trim() === "good-code#xyz") {
+      mkdirSync(join(credentials, ".."), { recursive: true });
+      writeFileSync(credentials, "{}");
+      console.log("Login successful.");
+      process.exit(0);
+    }
+    console.log("Login failed: Request failed with status code 400");
+    process.exit(1);
+  });
+} else if (args[0] === "auth") {
+  console.log(JSON.stringify({ loggedIn: process.env.FAKE_LOGGED_IN === "1" || existsSync(credentials), authMethod: "claude.ai" }));
   process.exit(0);
 }
 let input = "";
-process.stdin.on("data", (c) => (input += c));
-process.stdin.on("end", () => {
+if (!login) process.stdin.on("data", (c) => (input += c));
+if (!login) process.stdin.on("end", () => {
   const resume = args.includes("--resume") ? args[args.indexOf("--resume") + 1] : undefined;
   if (resume === "missing") {
     process.stderr.write("No conversation found with session ID: missing\n");

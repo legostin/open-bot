@@ -35,7 +35,7 @@ export interface PluginRecord {
 }
 
 export interface BrainSink {
-  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer, variants?: string[]): void;
+  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer, variants?: string[], login?: boolean): void;
   unregisterPlugin(pluginId: string): void;
 }
 
@@ -392,10 +392,10 @@ export class PluginHost {
       return {};
     });
 
-    peer.handle("register.brain", (p: { id: string; label: string; variants?: string[] }) => {
+    peer.handle("register.brain", (p: { id: string; label: string; variants?: string[]; login?: boolean }) => {
       if (!m.contributes.brains.includes(p.id)) deny(`brain ${p.id} not declared in contributes.brains`);
       const variants = Array.isArray(p.variants) ? p.variants.filter((v) => typeof v === "string" && /^[\w.-]{1,64}$/.test(v)).slice(0, 32) : [];
-      this.d.brains.registerPluginBrain(p.id, p.label, id, peer, variants);
+      this.d.brains.registerPluginBrain(p.id, p.label, id, peer, variants, p.login === true);
       this.d.bus.emit("brains.updated", {});
       return {};
     });

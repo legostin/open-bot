@@ -3,6 +3,7 @@
 
 import type {
   BrainEvent,
+  BrainLoginUpdate,
   BrainSessionOptions,
   BrainTurn,
   CoreMethod,
@@ -30,6 +31,15 @@ export interface BrainSessionImpl {
   close(): Promise<void> | void;
 }
 
+/** A running sign-in (see BrainProviderImpl.login). */
+export interface BrainLoginImpl {
+  /** The code the user pasted from the sign-in page (browser flows that report needsCode). */
+  submitCode?(code: string): Promise<void> | void;
+  cancel(): void;
+  /** Resolves with the final update (succeeded, failed, cancelled or expired). */
+  done: Promise<BrainLoginUpdate>;
+}
+
 export interface BrainProviderImpl {
   id: string;
   label: string;
@@ -37,6 +47,11 @@ export interface BrainProviderImpl {
   variants?: string[];
   probe(variant?: string): Promise<ProbeResult>;
   createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl>;
+  /**
+   * Sign the CLI in without a terminal: start its device or browser login and report the page and code the user
+   * needs through `onUpdate`. `env` carries the egress proxy the login may use. Only brains that can do it have it.
+   */
+  login?(opts: { env: Record<string, string>; onUpdate: (u: BrainLoginUpdate) => void }): BrainLoginImpl | Promise<BrainLoginImpl>;
 }
 
 export interface ChannelImpl {

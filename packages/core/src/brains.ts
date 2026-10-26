@@ -1,7 +1,7 @@
 // Brain registry: brains contributed by plugins (local) and by paired machines (remote).
 // Gives the session runner one interface regardless of where the brain runs.
 
-import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult, BrainRef } from "@openbot/shared";
+import type { BrainEvent, BrainLoginUpdate, BrainSessionOptions, BrainTurn, ProbeResult, BrainRef } from "@openbot/shared";
 import { formatBrainRef, parseBrainRef, type RpcPeer } from "@openbot/shared";
 import { LocalizedError, t } from "./i18n.ts";
 
@@ -25,20 +25,32 @@ export interface BrainListing {
   machineId: string;
   label: string;
   host: string; // "plugin:<id>" or "machine:<id>"
+  /** The brain can sign in from the chat (a CLI brain in a plugin on the hub). */
+  login: boolean;
   probe?: ProbeResult & { checkedAt: string };
 }
 
+/** Where a brain's sign-in runs: the plugin process that hosts it. */
+export interface BrainLoginTarget {
+  peer: RpcPeer;
+  brainId: string;
+  label: string;
+  /** Updates of one sign-in (`brain.login` notifications); returns the unsubscribe. */
+  onUpdate(loginId: string, cb: (u: BrainLoginUpdate) => void): () => void;
+}
+
 export class BrainRegistry {
-  private pluginBrains = new Map<string, { label: string; pluginId: string; peer: RpcPeer; variants: string[] }>();
+  private pluginBrains = new Map<string, { label: string; pluginId: string; peer: RpcPeer; variants: string[]; login: boolean }>();
   private machineHosts = new Map<string, { name: string; peer: RpcPeer; brains: Map<string, string> }>();
   private probeCache = new Map<string, ProbeResult & { checkedAt: string }>();
   private eventRouters = new Map<RpcPeer, Map<string, (e: BrainEvent) => void>>();
+  private loginRouters = new Map<RpcPeer, Map<string, (u: BrainLoginUpdate) => void>>();
   onChange?: () => void;
 
   // ---------- registration ----------
 
-  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer, variants: string[] = []): void {
-    this.pluginBrains.set(brainId, { label, pluginId, peer, variants });
+  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer, variants: string[] = [], login = false): void {
+    this.pluginBrains.set(brainId, { label, pluginId, peer, variants, login });
     this.attachRouter(peer);
     this.onChange?.();
   }
@@ -65,7 +77,13 @@ export class BrainRegistry {
     const routes = new Map<string, (e: BrainEvent) => void>();
     this.eventRouters.set(peer, routes);
     peer.onNotification("brain.event", (p: { sessionId: string; event: BrainEvent }) => routes.get(p.sessionId)?.(p.event));
-    peer.onClose(() => this.eventRouters.delete(peer));
+    const logins = new Map<string, (u: BrainLoginUpdate) => void>();
+    this.loginRouters.set(peer, logins);
+    peer.onNotification("brain.login", (p: { loginId: string; update: BrainLoginUpdate }) => logins.get(p.loginId)?.(p.update));
+    peer.onClose(() => {
+      this.eventRouters.delete(peer);
+      this.loginRouters.delete(peer);
+    });
   }
 
   // ---------- lookup ----------
@@ -84,19 +102,36 @@ export class BrainRegistry {
     return !!this.resolve(parseBrainRef(refStr));
   }
 
+  /** The plugin that signs this brain in, if it can (machines sign in on their own computer). */
+  loginTarget(refStr: string): BrainLoginTarget | undefined {
+    const ref = parseBrainRef(refStr);
+    const b = ref.machineId === "local" ? this.pluginBrains.get(ref.brainId) : undefined;
+    if (!b?.login || b.peer.closed) return undefined;
+    const routes = this.loginRouters.get(b.peer);
+    return {
+      peer: b.peer,
+      brainId: ref.brainId,
+      label: b.label,
+      onUpdate(loginId, cb) {
+        routes?.set(loginId, cb);
+        return () => routes?.delete(loginId);
+      },
+    };
+  }
+
   list(variants: Record<string, string[]> = {}): BrainListing[] {
     const out: BrainListing[] = [];
     for (const [id, b] of this.pluginBrains) {
       const vs = variants[id]?.length ? variants[id] : b.variants.length ? b.variants : [undefined];
       for (const v of vs) {
         const ref = formatBrainRef({ brainId: id, variant: v, machineId: "local" });
-        out.push({ ref, brainId: id, machineId: "local", label: v ? `${b.label} (${v})` : b.label, host: `plugin:${b.pluginId}`, probe: this.probeCache.get(ref) });
+        out.push({ ref, brainId: id, machineId: "local", label: v ? `${b.label} (${v})` : b.label, host: `plugin:${b.pluginId}`, login: b.login, probe: this.probeCache.get(ref) });
       }
     }
     for (const [mid, m] of this.machineHosts) {
       for (const [id, label] of m.brains) {
         const ref = formatBrainRef({ brainId: id, machineId: mid });
-        out.push({ ref, brainId: id, machineId: mid, label: `${label} @ ${m.name}`, host: `machine:${mid}`, probe: this.probeCache.get(ref) });
+        out.push({ ref, brainId: id, machineId: mid, label: `${label} @ ${m.name}`, host: `machine:${mid}`, login: false, probe: this.probeCache.get(ref) });
       }
     }
     return out;

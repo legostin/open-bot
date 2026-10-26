@@ -299,8 +299,8 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.get("/api/brains", async (req) => {
       const fresh = (req.query as any).probe === "1";
       const listed = hub.brains.list();
-      const refs = new Map<string, { ref: string; label: string; host?: string }>();
-      for (const b of listed) refs.set(b.ref, { ref: b.ref, label: b.label, host: b.host });
+      const refs = new Map<string, { ref: string; label: string; host?: string; login?: boolean }>();
+      for (const b of listed) refs.set(b.ref, { ref: b.ref, label: b.label, host: b.host, login: b.login });
       for (const a of hub.agents.list()) for (const r of a.brains) {
         const key = formatBrainRef(parseBrainRef(r));
         if (!refs.has(key)) refs.set(key, { ref: key, label: key });
@@ -324,6 +324,29 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       hub.db.prepare("delete from brain_limits where brain_ref = ?").run(decodeURIComponent((req.params as any).ref));
       hub.bus.emit("brains.updated", {});
       return { ok: true };
+    });
+
+    // ----- signing CLI brains in from the chat: the sign-in card -----
+    const loginRef = (req: FastifyRequest) => {
+      const ref = String((req.query as any)?.ref ?? (req.body as any)?.ref ?? "");
+      if (!/^[\w.:@-]{1,200}$/.test(ref)) throw new HttpError(400, "brain.refNotConnected", { ref: ref.slice(0, 80) });
+      return ref;
+    };
+    api.get("/api/brains/login", async (req) => hub.brainLogins.view(loginRef(req)));
+    api.post("/api/brains/login", async (req) => {
+      const ref = loginRef(req);
+      await hub.brainLogins.start(ref, { actor: "user" });
+      return hub.brainLogins.view(ref);
+    });
+    api.post("/api/brains/login/code", async (req) => {
+      const ref = loginRef(req);
+      await hub.brainLogins.submitCode(ref, String((req.body as any)?.code ?? ""));
+      return hub.brainLogins.view(ref);
+    });
+    api.post("/api/brains/login/cancel", async (req) => {
+      const ref = loginRef(req);
+      await hub.brainLogins.cancel(ref, "user");
+      return hub.brainLogins.view(ref);
     });
 
     // ----- plugins -----

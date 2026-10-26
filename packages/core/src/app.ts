@@ -34,6 +34,7 @@ import { createCoreCall } from "./core-call.ts";
 import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, LocalizedError, t } from "./i18n.ts";
 import { registerHubTools } from "./tools/hub-tools.ts";
 import { SecretIntake } from "./secrets.ts";
+import { BrainLogins } from "./brain-login.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -65,6 +66,7 @@ export class Hub {
   auth: AuthService;
   machines: MachineHub;
   secrets: SecretIntake;
+  brainLogins: BrainLogins;
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -116,6 +118,7 @@ export class Hub {
     });
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit });
     this.secrets = new SecretIntake({ db: this.db, bus: this.bus, audit: this.audit, vault: this.vault, plugins: () => this.plugins });
+    this.brainLogins = new BrainLogins({ brains: this.brains, bus: this.bus, egress: this.egress, audit: this.audit, egressPort: () => this.config.egressPort });
     this.runner = new SessionRunner({
       config,
       store: this.store,
@@ -170,6 +173,9 @@ export class Hub {
     });
     this.machines.registerTools(this.tools);
     registerHubTools(this);
+    // A brain signed in from a card the assistant showed: the assistant hears it and carries on.
+    this.brainLogins.onSignedIn = (s, label, conversationId) =>
+      this.runner.tellAgent(conversationId, `[System] The user signed ${label} (${s.ref}) in from the chat card; it is ready now. Carry on with what it was needed for.`);
     this.brains.onChange = () => this.bus.emit("brains.updated", {});
     // A key or token saved from the chat may sign a brain in: check again now, not in five minutes.
     this.bus.on("vault.updated", () => {

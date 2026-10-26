@@ -16,6 +16,7 @@ import { pickMessageRenderer, pickToolRenderer } from "../../plugins/registry";
 import { usePluginRegistry } from "../../plugins/slots";
 import { ToolCard } from "./ToolCard";
 import { PluginSetupCard, SecretRequestCard } from "../../components/SecretCards";
+import { BrainLoginCard } from "../../components/BrainLoginCard";
 import { t, type MessageKey } from "../../i18n";
 
 const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
@@ -175,6 +176,8 @@ function Parts({ message }: { message: Message }) {
             return <SecretRequestCard key={it.key} part={p} />;
           case "plugin_setup":
             return <PluginSetupCard key={it.key} pluginId={p.pluginId} />;
+          case "brain_login":
+            return <BrainLoginCard key={it.key} brainRef={p.ref} />;
           default:
             return null;
         }
