@@ -2,6 +2,8 @@
 
 Approved 2026-10-26. Docker stays the server install; desktop users get a normal installer.
 
+Superseded by `2026-10-26-desktop-app-design.md` (a Tauri app). The launcher, data dir and stage below still apply.
+
 ## Goal
 
 Double-click, done: the hub runs in the background, starts at login and the browser opens the web UI for first-run

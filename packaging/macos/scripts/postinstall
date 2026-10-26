@@ -2,10 +2,10 @@
 # Runs as root once the files are in place: sets open-bot up for the user at the console (their LaunchAgent starts the
 # hub) and opens it in their browser. With nobody at the console (an install over SSH), open-bot.app does this on its
 # first open.
-BIN="/Library/Application Support/open-bot/bin"
+APP="/Applications/open-bot.app"
 USER_NAME="$(stat -f %Su /dev/console)"
 if [ -z "$USER_NAME" ] || [ "$USER_NAME" = root ] || [ "$USER_NAME" = loginwindow ]; then exit 0; fi
 USER_ID="$(id -u "$USER_NAME")"
-launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H /bin/sh "$BIN/agent.sh" install
-launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H open "/Applications/open-bot/open-bot.app"
+launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H /bin/sh "$APP/Contents/Resources/bin/agent.sh" install
+launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H open "$APP"
 exit 0

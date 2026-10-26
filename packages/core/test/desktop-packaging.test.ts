@@ -1,6 +1,7 @@
-// The desktop installers' shared launcher (packaging/desktop) and the text the macOS build generates (packaging/macos).
+// The desktop installers' shared launcher and stage (packaging/desktop) and the text the macOS build generates
+// (packaging/macos).
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,9 +10,11 @@ import { RESOLVE_HOOK, defaultDataDir, desktopPorts, hubEnv, openUrl, setupCode 
 // @ts-ignore
 import { resolveWorkspace, workspaces } from "../../../packaging/desktop/resolve.mjs";
 // @ts-ignore
+import { removeDanglingLinks } from "../../../packaging/desktop/stage.mjs";
+// @ts-ignore
 import { loadCatalogs } from "../../../packaging/desktop/locales.mjs";
 // @ts-ignore
-import { appleScriptText, distributionXml, installerPage, launcherScript, uninstallerScript } from "../../../packaging/macos/generate.mjs";
+import { appleScriptText, distributionXml, installerPage, launcherScript } from "../../../packaging/macos/generate.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
 const tmp = () => mkdtempSync(join(tmpdir(), "ob-desktop-"));
@@ -63,6 +66,18 @@ describe("desktop launcher", () => {
     expect(resolveWorkspace("@openbot/no-such-package", table)).toBeUndefined();
     expect(resolveWorkspace("react", table)).toBeUndefined();
   });
+
+  // Windows creates links only with developer mode on.
+  it.skipIf(process.platform === "win32")("drops links whose target is gone, keeps the others", () => {
+    const app = tmp();
+    mkdirSync(join(app, "runtime", "bin"), { recursive: true });
+    writeFileSync(join(app, "runtime", "npm-cli.js"), "");
+    symlinkSync("../npm-cli.js", join(app, "runtime", "bin", "npm"));
+    symlinkSync("../lib/node_modules/corepack/dist/corepack.js", join(app, "runtime", "bin", "corepack"));
+    expect(removeDanglingLinks(app)).toBe(1);
+    expect(lstatSync(join(app, "runtime", "bin", "npm")).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(app, "runtime", "bin", "corepack"))).toBe(false);
+  });
 });
 
 describe("macOS installer text", () => {
@@ -75,19 +90,21 @@ describe("macOS installer text", () => {
     expect(appleScriptText("")).toBe('""');
   });
 
-  for (const [name, script] of [
-    ["open-bot.app", () => launcherScript(catalogs)],
-    ["Uninstall open-bot.app", () => uninstallerScript(catalogs)],
-  ] as const) {
-    it(`${name}: ASCII source, and every message it shows is defined`, () => {
-      const src: string = script();
-      expect(/^[\x09\x0a\x20-\x7e]*$/.test(src)).toBe(true);
-      const called = new Set([...src.matchAll(/my (T_\w+)\(/g)].map((m) => m[1]));
-      const defined = new Set([...src.matchAll(/^on (T_\w+)\(/gm)].map((m) => m[1]));
-      expect(called.size).toBeGreaterThan(1);
-      expect([...called].filter((h) => !defined.has(h))).toEqual([]);
-    });
-  }
+  it("open-bot.app: ASCII source, and every message it shows is defined", () => {
+    const src: string = launcherScript(catalogs);
+    expect(/^[\x09\x0a\x20-\x7e]*$/.test(src)).toBe(true);
+    const called = new Set([...src.matchAll(/my (T_\w+)\(/g)].map((m) => m[1]));
+    const defined = new Set([...src.matchAll(/^on (T_\w+)\(/gm)].map((m) => m[1]));
+    expect(called.size).toBeGreaterThan(1);
+    expect([...called].filter((h) => !defined.has(h))).toEqual([]);
+  });
+
+  it("open-bot.app runs the scripts inside itself and asks to be moved out of the disk image", () => {
+    const src: string = launcherScript(catalogs);
+    expect(src).toContain('(POSIX path of (path to me)) & "Contents/Resources/bin/open.sh"');
+    expect(src).toMatch(/if errNum is 4 then\n\t+display dialog my T_mac_moveFirst\(\)/);
+    expect(src).not.toContain("/Library/Application Support/open-bot/bin");
+  });
 
   it("builds the Installer pages and distribution", () => {
     const page = installerPage(catalogs, "ru", "welcome");
