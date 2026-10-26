@@ -7,6 +7,7 @@ import { useStore } from "../lib/store";
 import { formatTime, type Tone } from "../lib/format";
 import { hubEvents } from "../state/app";
 import { toast } from "../state/toast";
+import { t, type MessageKey } from "../i18n";
 import { pluginLoad } from "../plugins/host";
 import { SchemaForm } from "../components/SchemaForm";
 import { Badge, Button, cx, EmptyState, ErrorNote, Field, Input, Loading, Modal, Page, Toggle } from "../components/ui";
@@ -48,32 +49,34 @@ interface InstallPreview {
   hasUi: boolean;
 }
 
-const STATUS: Record<string, { label: string; tone: Tone }> = {
-  running: { label: "работает", tone: "success" },
-  starting: { label: "запускается", tone: "info" },
-  stopped: { label: "остановлен", tone: "neutral" },
-  crashed: { label: "упал", tone: "danger" },
-  disabled: { label: "отключён", tone: "neutral" },
-  "no-server": { label: "без процесса", tone: "neutral" },
-  error: { label: "ошибка", tone: "danger" },
+const STATUS: Record<string, { key: MessageKey; tone: Tone }> = {
+  running: { key: "plugins.status.running", tone: "success" },
+  starting: { key: "plugins.status.starting", tone: "info" },
+  stopped: { key: "plugins.status.stopped", tone: "neutral" },
+  crashed: { key: "plugins.status.crashed", tone: "danger" },
+  disabled: { key: "plugins.status.disabled", tone: "neutral" },
+  "no-server": { key: "plugins.status.noServer", tone: "neutral" },
+  error: { key: "plugins.status.error", tone: "danger" },
 };
 
-const PERM_LABELS: Record<keyof Permissions, string> = {
-  network: "Сеть",
-  vault: "Vault",
-  core: "API ядра",
-  ui: "Интерфейс",
-  fs: "Файлы",
+const PERM_LABELS: Record<keyof Permissions, MessageKey> = {
+  network: "plugins.perm.network",
+  vault: "plugins.perm.vault",
+  core: "plugins.perm.core",
+  ui: "plugins.perm.ui",
+  fs: "plugins.perm.fs",
 };
+
+const UI_STATUS: Record<"loading" | "active" | "error", MessageKey> = { loading: "plugins.ui.loading", active: "plugins.ui.active", error: "plugins.ui.error" };
 
 function PermissionList({ p }: { p: Permissions }) {
   const rows = (Object.keys(PERM_LABELS) as Array<keyof Permissions>).filter((k) => p?.[k]?.length);
-  if (!rows.length) return <div className="text-xs text-muted">Особых прав не запрашивает</div>;
+  if (!rows.length) return <div className="text-xs text-muted">{t("plugins.perm.none")}</div>;
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
       {rows.map((k) => (
         <div key={k} className="contents">
-          <dt className="text-muted">{PERM_LABELS[k]}</dt>
+          <dt className="text-muted">{t(PERM_LABELS[k])}</dt>
           <dd className="flex flex-wrap gap-1">
             {p[k].map((v) => (
               <code key={v} className={cx("rounded bg-surface-2 px-1.5 py-0.5 font-mono", (v === "*" || v === "approvals.resolve") && "bg-warning-soft text-warning")}>
@@ -128,20 +131,21 @@ export function PluginsPage() {
 
   return (
     <Page
-      title="Плагины"
-      subtitle="Встроенные возможности тоже плагины. Совместимы с плагинами Claude Code и Codex."
+      title={t("nav.plugins")}
+      subtitle={t("plugins.subtitle")}
       actions={
         <Button variant="primary" icon={<Download className="size-4" />} onClick={() => setInstallOpen(true)}>
-          Установить
+          {t("plugins.install")}
         </Button>
       }
     >
       {error && <ErrorNote onRetry={() => void load()}>{error}</ErrorNote>}
       {!list && !error && <Loading />}
-      {list && list.length === 0 && <EmptyState icon="puzzle" title="Плагинов нет" hint="Установите плагин из git-репозитория или папки." />}
+      {list && list.length === 0 && <EmptyState icon="puzzle" title={t("plugins.empty")} hint={t("plugins.emptyHint")} />}
       <div className="flex flex-col gap-3">
         {list?.map((p) => {
-          const st = STATUS[p.status] ?? { label: p.status, tone: "neutral" as const };
+          const known = STATUS[p.status];
+          const st = known ? { label: t(known.key), tone: known.tone } : { label: p.status, tone: "neutral" as const };
           const ui = uiLoad[p.id];
           const hasSettings = !!p.contributes?.settings && Object.keys(p.contributes.settings).length > 0;
           return (
@@ -154,13 +158,13 @@ export function PluginsPage() {
                     <Badge tone={st.tone} dot>
                       {st.label}
                     </Badge>
-                    {p.source === "builtin" && <Badge>встроенный</Badge>}
+                    {p.source === "builtin" && <Badge>{t("plugins.builtin")}</Badge>}
                     {p.formats.map((f) => (
                       <Badge key={f} tone="info">
                         {f}
                       </Badge>
                     ))}
-                    {p.hasUi && ui && <Badge tone={ui.status === "error" ? "danger" : ui.status === "active" ? "success" : "neutral"}>UI: {ui.status === "error" ? "ошибка" : ui.status === "active" ? "загружен" : "загрузка"}</Badge>}
+                    {p.hasUi && ui && <Badge tone={ui.status === "error" ? "danger" : ui.status === "active" ? "success" : "neutral"}>{t(UI_STATUS[ui.status])}</Badge>}
                   </div>
                   <div className="mt-0.5 font-mono text-xs text-muted">
                     {p.id}
@@ -176,8 +180,8 @@ export function PluginsPage() {
                 <Toggle
                   checked={p.enabled}
                   disabled={busy === `en:${p.id}`}
-                  onChange={(v) => void run(`en:${p.id}`, () => api.post(`/api/plugins/${encodeURIComponent(p.id)}/enabled`, { enabled: v }), v ? "Плагин включён" : "Плагин отключён")}
-                  label={<span className="sr-only">Включён</span>}
+                  onChange={(v) => void run(`en:${p.id}`, () => api.post(`/api/plugins/${encodeURIComponent(p.id)}/enabled`, { enabled: v }), v ? t("plugins.enabled") : t("plugins.disabled"))}
+                  label={<span className="sr-only">{t("plugins.enabledLabel")}</span>}
                 />
               </div>
 
@@ -189,17 +193,17 @@ export function PluginsPage() {
               )}
 
               <details className="mt-3 group">
-                <summary className="cursor-pointer text-xs font-medium text-muted select-none hover:text-fg">Права и возможности</summary>
+                <summary className="cursor-pointer text-xs font-medium text-muted select-none hover:text-fg">{t("plugins.capabilities")}</summary>
                 <div className="mt-2 grid gap-3 sm:grid-cols-2">
                   <PermissionList p={p.permissions} />
                   <div className="flex flex-wrap content-start gap-1 text-xs">
-                    {p.contributes?.tools && <Badge>инструменты</Badge>}
+                    {p.contributes?.tools && <Badge>{t("plugins.cap.tools")}</Badge>}
                     {p.contributes?.http && <Badge>http</Badge>}
-                    {p.hasServer && <Badge>процесс</Badge>}
+                    {p.hasServer && <Badge>{t("plugins.cap.process")}</Badge>}
                     {p.hasUi && <Badge>UI</Badge>}
-                    {p.contributes?.brains?.map((b) => <Badge key={b}>мозг {b}</Badge>)}
-                    {p.contributes?.channels?.map((c) => <Badge key={c}>канал {c}</Badge>)}
-                    {p.contributes?.triggers?.map((t) => <Badge key={t}>триггер {t}</Badge>)}
+                    {p.contributes?.brains?.map((b) => <Badge key={b}>{t("plugins.cap.brain", { name: b })}</Badge>)}
+                    {p.contributes?.channels?.map((c) => <Badge key={c}>{t("plugins.cap.channel", { name: c })}</Badge>)}
+                    {p.contributes?.triggers?.map((tr) => <Badge key={tr}>{t("plugins.cap.trigger", { name: tr })}</Badge>)}
                   </div>
                 </div>
               </details>
@@ -207,12 +211,12 @@ export function PluginsPage() {
               <div className="mt-3 flex flex-wrap justify-end gap-1.5">
                 {hasSettings && (
                   <Button size="sm" icon={<Settings2 className="size-3.5" />} onClick={() => setSettingsFor(p)}>
-                    Настройки
+                    {t("plugins.settings")}
                   </Button>
                 )}
                 {p.hasServer && (
                   <Button size="sm" variant="ghost" icon={<FileText className="size-3.5" />} onClick={() => setLogsFor(p)}>
-                    Логи
+                    {t("plugins.logs")}
                   </Button>
                 )}
                 {p.hasServer && p.enabled && (
@@ -221,14 +225,14 @@ export function PluginsPage() {
                     variant="ghost"
                     icon={<RotateCw className="size-3.5" />}
                     loading={busy === `rs:${p.id}`}
-                    onClick={() => void run(`rs:${p.id}`, () => api.post(`/api/plugins/${encodeURIComponent(p.id)}/restart`, {}), "Плагин перезапущен")}
+                    onClick={() => void run(`rs:${p.id}`, () => api.post(`/api/plugins/${encodeURIComponent(p.id)}/restart`, {}), t("plugins.restarted"))}
                   >
-                    Перезапустить
+                    {t("plugins.restart")}
                   </Button>
                 )}
                 {p.source === "installed" && (
                   <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setRemoving(p)}>
-                    Удалить
+                    {t("common.delete")}
                   </Button>
                 )}
               </div>
@@ -239,13 +243,13 @@ export function PluginsPage() {
 
       {logsFor && <LogsModal plugin={logsFor} onClose={() => setLogsFor(null)} />}
       {settingsFor && (
-        <Modal open onClose={() => setSettingsFor(null)} title={`Настройки: ${settingsFor.name}`} wide>
+        <Modal open onClose={() => setSettingsFor(null)} title={t("plugins.settingsTitle", { name: settingsFor.name })} wide>
           <SchemaForm
             schema={settingsFor.contributes?.settings}
             value={settingsFor.settings}
             onSubmit={async (v) => {
               await api.put(`/api/plugins/${encodeURIComponent(settingsFor.id)}/settings`, v);
-              toast("Настройки сохранены", "success");
+              toast(t("common.settingsSaved"), "success");
               setSettingsFor(null);
               await load();
             }}
@@ -255,24 +259,24 @@ export function PluginsPage() {
       <Modal
         open={!!removing}
         onClose={() => setRemoving(null)}
-        title={`Удалить «${removing?.name}»?`}
+        title={t("plugins.removeTitle", { name: removing?.name })}
         footer={
           <>
-            <Button onClick={() => setRemoving(null)}>Отмена</Button>
+            <Button onClick={() => setRemoving(null)}>{t("common.cancel")}</Button>
             <Button
               variant="danger"
               onClick={() => {
                 const p = removing!;
                 setRemoving(null);
-                void run(`rm:${p.id}`, () => api.del(`/api/plugins/${encodeURIComponent(p.id)}`), "Плагин удалён");
+                void run(`rm:${p.id}`, () => api.del(`/api/plugins/${encodeURIComponent(p.id)}`), t("plugins.removed"));
               }}
             >
-              Удалить
+              {t("common.delete")}
             </Button>
           </>
         }
       >
-        <p className="text-sm">Файлы плагина и его данные будут удалены. Настройки и секреты в vault останутся.</p>
+        <p className="text-sm">{t("plugins.removeText")}</p>
       </Modal>
       {installOpen && (
         <InstallModal
@@ -299,16 +303,16 @@ function LogsModal({ plugin, onClose }: { plugin: PluginView; onClose: () => voi
       open
       wide
       onClose={onClose}
-      title={`Логи: ${plugin.name}`}
+      title={t("plugins.logsTitle", { name: plugin.name })}
       footer={
         <Button size="sm" icon={<RotateCw className="size-3.5" />} onClick={load}>
-          Обновить
+          {t("common.refresh")}
         </Button>
       }
     >
       {error && <ErrorNote>{error}</ErrorNote>}
       {!logs && !error && <Loading />}
-      {logs && logs.length === 0 && <div className="text-sm text-muted">Логов пока нет.</div>}
+      {logs && logs.length === 0 && <div className="text-sm text-muted">{t("plugins.noLogs")}</div>}
       {logs && logs.length > 0 && (
         <pre className="max-h-[60vh] overflow-auto rounded-xl bg-code-bg p-3 font-mono text-xs leading-relaxed">
           {logs.map((l, i) => (
@@ -331,7 +335,7 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
   const [agree, setAgree] = useState(false);
 
   const prepare = async () => {
-    if (!source.trim()) return setError("Укажите git-адрес или путь к папке");
+    if (!source.trim()) return setError(t("plugins.needSource"));
     setBusy(true);
     setError(undefined);
     try {
@@ -349,7 +353,7 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
     setError(undefined);
     try {
       await api.post("/api/plugins/install/confirm", { stagingId: preview.stagingId });
-      toast(`Плагин «${preview.manifest.name}» установлен`, "success");
+      toast(t("plugins.installed", { name: preview.manifest.name }), "success");
       onInstalled();
     } catch (e) {
       setError(errorText(e));
@@ -363,20 +367,20 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
       open
       wide
       onClose={onClose}
-      title={preview ? `Установить «${preview.manifest.name}»?` : "Установить плагин"}
+      title={preview ? t("plugins.installConfirmTitle", { name: preview.manifest.name }) : t("plugins.installTitle")}
       footer={
         preview ? (
           <>
-            <Button onClick={() => setPreview(null)}>Назад</Button>
+            <Button onClick={() => setPreview(null)}>{t("common.back")}</Button>
             <Button variant="primary" icon={<Power className="size-4" />} onClick={() => void confirm()} loading={busy} disabled={preview.warnings.length > 0 && !agree}>
-              Установить и включить
+              {t("plugins.installConfirm")}
             </Button>
           </>
         ) : (
           <>
-            <Button onClick={onClose}>Отмена</Button>
+            <Button onClick={onClose}>{t("common.cancel")}</Button>
             <Button variant="primary" onClick={() => void prepare()} loading={busy}>
-              Проверить
+              {t("common.check")}
             </Button>
           </>
         )
@@ -384,7 +388,7 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
     >
       {!preview ? (
         <div className="flex flex-col gap-4">
-          <Field label="Источник" hint="Git-репозиторий (https://…, git@…) или путь к папке на сервере хаба. Подходят плагины open-bot, Claude Code и Codex.">
+          <Field label={t("plugins.source")} hint={t("plugins.sourceHint")}>
             <Input
               autoFocus
               value={source}
@@ -396,7 +400,7 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
               }}
             />
           </Field>
-          <p className="text-xs text-muted">Сначала плагин скачивается во временную папку — вы увидите права, которые он просит, и решите, ставить ли его.</p>
+          <p className="text-xs text-muted">{t("plugins.stagingNote")}</p>
           {error && <ErrorNote>{error}</ErrorNote>}
         </div>
       ) : (
@@ -415,19 +419,19 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
             </div>
             {preview.manifest.description && <p className="mt-1 text-sm text-muted">{preview.manifest.description}</p>}
             <div className="mt-1 text-xs text-muted">
-              {preview.manifest.author && <>Автор: {preview.manifest.author} · </>}
-              {preview.hasServer ? "есть серверная часть" : "без серверной части"} · {preview.hasUi ? "есть UI" : "без UI"}
-              {preview.commitHash && <> · коммит {preview.commitHash.slice(0, 10)}</>}
+              {preview.manifest.author && <>{t("plugins.author", { name: preview.manifest.author })} · </>}
+              {preview.hasServer ? t("plugins.hasServer") : t("plugins.noServer")} · {preview.hasUi ? t("plugins.hasUi") : t("plugins.noUi")}
+              {preview.commitHash && <> · {t("plugins.commit", { hash: preview.commitHash.slice(0, 10) })}</>}
             </div>
           </div>
           <div>
-            <div className="mb-1.5 text-sm font-medium">Права</div>
+            <div className="mb-1.5 text-sm font-medium">{t("plugins.permissions")}</div>
             <PermissionList p={preview.permissions} />
           </div>
           {preview.warnings.length > 0 && (
             <div className="rounded-xl border border-warning/40 bg-warning-soft/60 p-3">
               <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-warning">
-                <ShieldAlert className="size-4" /> Обратите внимание
+                <ShieldAlert className="size-4" /> {t("plugins.attention")}
               </div>
               <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
                 {preview.warnings.map((w) => (
@@ -435,7 +439,7 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
                 ))}
               </ul>
               <div className="mt-3">
-                <Toggle checked={agree} onChange={setAgree} label="Я доверяю этому плагину" />
+                <Toggle checked={agree} onChange={setAgree} label={t("plugins.trust")} />
               </div>
             </div>
           )}

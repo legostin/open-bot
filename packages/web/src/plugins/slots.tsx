@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import { Icon } from "../components/icon";
 import { cx, IconButton } from "../components/ui";
+import { t } from "../i18n";
 import { PluginBoundary } from "./boundary";
 import { inSlot, registry } from "./registry";
 
@@ -109,29 +110,29 @@ export function SidebarPanels() {
 export function RightPane({ open, onClose }: { open: boolean; onClose: () => void }) {
   const tabs = useSlot("pane.right");
   const [active, setActive] = useState<string | undefined>();
-  const current = tabs.find((t) => t.key === active) ?? tabs[0];
+  const current = tabs.find((tab) => tab.key === active) ?? tabs[0];
   if (!open || !current) return null;
   const C = current.component;
   return (
     <aside className="fixed inset-0 z-40 flex flex-col bg-surface lg:static lg:z-auto lg:w-[420px] lg:shrink-0 lg:border-l lg:border-border xl:w-[480px]">
       <div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
         <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-          {tabs.map((t) => (
+          {tabs.map((tab) => (
             <button
-              key={t.key}
+              key={tab.key}
               type="button"
-              onClick={() => setActive(t.key)}
+              onClick={() => setActive(tab.key)}
               className={cx(
                 "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition",
-                t.key === current.key ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",
+                tab.key === current.key ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",
               )}
             >
-              <Icon name={t.icon} className="size-4" />
-              {t.title ?? t.id}
+              <Icon name={tab.icon} className="size-4" />
+              {tab.title ?? tab.id}
             </button>
           ))}
         </div>
-        <IconButton label="Закрыть панель" onClick={onClose}>
+        <IconButton label={t("layout.closePanel")} onClick={onClose}>
           <X className="size-4" />
         </IconButton>
       </div>

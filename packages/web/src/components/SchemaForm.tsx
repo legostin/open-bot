@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { coerceFormValues, initialFormValues, schemaFields, type FormField } from "../lib/schema-form";
+import { t } from "../i18n";
 import { Button, ErrorNote, Field, Input, Select, Textarea, Toggle } from "./ui";
 
 export function SchemaForm({
   schema,
   value,
   onSubmit,
-  submitLabel = "Сохранить",
+  submitLabel,
 }: {
   schema: unknown;
   value: Record<string, unknown> | undefined;
@@ -21,7 +22,7 @@ export function SchemaForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  if (!fields.length) return <div className="text-sm text-muted">У плагина нет настроек.</div>;
+  if (!fields.length) return <div className="text-sm text-muted">{t("form.noSettings")}</div>;
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -55,7 +56,7 @@ export function SchemaForm({
       {error && <ErrorNote>{error}</ErrorNote>}
       <div className="flex justify-end">
         <Button type="submit" variant="primary" loading={busy}>
-          {submitLabel}
+          {submitLabel ?? t("common.save")}
         </Button>
       </div>
     </form>
@@ -80,9 +81,9 @@ function FieldControl({ field: f, value, error, onChange }: { field: FormField; 
   const str = typeof value === "string" ? value : "";
   const hint =
     f.kind === "string-list"
-      ? `${f.description ? f.description + " · " : ""}по одному значению на строку`
+      ? `${f.description ? f.description + " · " : ""}${t("form.listHint")}`
       : f.kind === "secret"
-        ? `${f.description ? f.description + " · " : ""}секреты храните в vault и указывайте ссылку vault://<id>`
+        ? `${f.description ? f.description + " · " : ""}${t("form.secretHint")}`
         : f.description;
   return (
     <Field label={label} hint={hint} error={error}>

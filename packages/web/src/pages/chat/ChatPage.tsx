@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { session } from "../../state/app";
 import { IconButton } from "../../components/ui";
+import { t } from "../../i18n";
 import { ConversationList } from "./ConversationList";
 import { ChatView } from "./ChatView";
 import { FirstRunChecklist } from "./Checklist";
@@ -25,8 +26,8 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
           <div className="absolute inset-0 bg-black/40" onClick={() => setThreads(false)} />
           <div className="animate-in absolute inset-y-0 left-0 flex w-[85%] max-w-80 flex-col border-r border-border bg-surface shadow-card">
             <div className="flex items-center justify-between border-b border-border py-1.5 pr-2 pl-4">
-              <span className="font-semibold">Чаты</span>
-              <IconButton label="Закрыть" onClick={() => setThreads(false)}>
+              <span className="font-semibold">{t("chat.threads")}</span>
+              <IconButton label={t("common.close")} onClick={() => setThreads(false)}>
                 <X className="size-5" />
               </IconButton>
             </div>

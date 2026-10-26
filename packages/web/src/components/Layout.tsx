@@ -12,6 +12,7 @@ import { cx, IconButton } from "./ui";
 import { ApprovalsBadge, ConnectionBadge, VaultBadge } from "./StatusBadges";
 import { CommandPalette, openPalette } from "./CommandPalette";
 import { BOTTOM_NAV, isActive, NAV, titleFor } from "./nav";
+import { t } from "../i18n";
 
 function NavLink({ to, icon, label, active, onClick }: { to: string; icon: ReactNode; label: string; active: boolean; onClick?: () => void }) {
   return (
@@ -39,12 +40,12 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
     <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3">
       <div className="flex flex-col gap-0.5">
         {NAV.map((n) => (
-          <NavLink key={n.path} to={n.path} icon={<n.icon className="size-[18px]" />} label={n.label} active={isActive(n, loc)} onClick={onNavigate} />
+          <NavLink key={n.path} to={n.path} icon={<n.icon className="size-[18px]" />} label={t(n.label)} active={isActive(n, loc)} onClick={onNavigate} />
         ))}
       </div>
       {navRoutes.length > 0 && (
         <div className="flex flex-col gap-0.5">
-          <div className="px-3 pb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">Из плагинов</div>
+          <div className="px-3 pb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("nav.fromPlugins")}</div>
           {navRoutes.map((r) => (
             <NavLink
               key={r.key}
@@ -68,7 +69,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
             className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-muted transition hover:bg-surface-2 hover:text-fg"
           >
             <ShieldCheck className="size-[18px]" />
-            Пульт безопасности
+            {t("common.securityConsole")}
           </a>
         )}
         <button
@@ -77,7 +78,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium text-muted transition hover:bg-surface-2 hover:text-fg"
         >
           <LogOut className="size-[18px]" />
-          Выйти
+          {t("common.logout")}
         </button>
       </div>
     </nav>
@@ -133,7 +134,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <aside className="animate-in absolute inset-y-0 left-0 flex w-[82%] max-w-72 flex-col border-r border-border bg-surface shadow-card">
             <div className="flex items-center justify-between pr-2">
               <Brand />
-              <IconButton label="Закрыть меню" onClick={() => setDrawer(false)}>
+              <IconButton label={t("layout.closeMenu")} onClick={() => setDrawer(false)}>
                 <X className="size-5" />
               </IconButton>
             </div>
@@ -144,7 +145,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface/70 px-2 backdrop-blur sm:px-4">
-          <IconButton label="Меню" onClick={() => setDrawer(true)} className="md:hidden">
+          <IconButton label={t("layout.menu")} onClick={() => setDrawer(true)} className="md:hidden">
             <Menu className="size-5" />
           </IconButton>
           <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold">{title}</h1>
@@ -155,11 +156,11 @@ export function Layout({ children }: { children: ReactNode }) {
             <ConnectionBadge />
             <VaultBadge />
             <ApprovalsBadge />
-            <IconButton label="Команды (Ctrl+K)" onClick={openPalette}>
+            <IconButton label={t("layout.commands")} onClick={openPalette}>
               <Search className="size-[18px]" />
             </IconButton>
             {panes.length > 0 && (
-              <IconButton label="Боковая панель" onClick={() => setPane((v) => !v)} active={pane}>
+              <IconButton label={t("layout.sidePanel")} onClick={() => setPane((v) => !v)} active={pane}>
                 <PanelRight className="size-[18px]" />
               </IconButton>
             )}
@@ -182,20 +183,20 @@ function BottomNav({ loc, onMore }: { loc: string; onMore: () => void }) {
   const items = NAV.filter((n) => BOTTOM_NAV.includes(n.path));
   const onBottom = items.some((n) => isActive(n, loc));
   return (
-    <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur md:hidden" aria-label="Основная навигация">
+    <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur md:hidden" aria-label={t("nav.main")}>
       <div className="grid grid-cols-5">
         {items.map((n) => {
           const active = isActive(n, loc);
           return (
             <Link key={n.path} href={n.path} className={cx("flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium", active ? "text-accent-text" : "text-muted")}>
               <n.icon className="size-5" />
-              {n.label}
+              {t(n.label)}
             </Link>
           );
         })}
         <button type="button" onClick={onMore} className={cx("flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium", !onBottom ? "text-accent-text" : "text-muted")}>
           <Ellipsis className="size-5" />
-          Ещё
+          {t("nav.more")}
         </button>
       </div>
     </nav>

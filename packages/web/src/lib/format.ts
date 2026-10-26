@@ -1,84 +1,75 @@
-// Formatting helpers (Russian UI).
+// Formatting helpers: status labels, relative times and dates in the interface language.
 
 import type { NotifyLevel, TaskStatus } from "@openbot/shared";
+import { formatDate, formatRelative, t, type MessageKey } from "../i18n";
 
 export type Tone = "neutral" | "success" | "warning" | "danger" | "info";
 
-export const TASK_STATUS: Record<TaskStatus, { label: string; tone: Tone }> = {
-  queued: { label: "в очереди", tone: "neutral" },
-  running: { label: "выполняется", tone: "info" },
-  waiting_approval: { label: "ждёт подтверждения", tone: "warning" },
-  waiting_input: { label: "ждёт ответа", tone: "warning" },
-  interrupted: { label: "прервана", tone: "warning" },
-  paused: { label: "на паузе", tone: "neutral" },
-  done: { label: "готово", tone: "success" },
-  failed: { label: "ошибка", tone: "danger" },
-  cancelled: { label: "отменена", tone: "neutral" },
+const TASK_STATUS: Record<TaskStatus, { key: MessageKey; tone: Tone }> = {
+  queued: { key: "taskStatus.queued", tone: "neutral" },
+  running: { key: "taskStatus.running", tone: "info" },
+  waiting_approval: { key: "taskStatus.waitingApproval", tone: "warning" },
+  waiting_input: { key: "taskStatus.waitingInput", tone: "warning" },
+  interrupted: { key: "taskStatus.interrupted", tone: "warning" },
+  paused: { key: "taskStatus.paused", tone: "neutral" },
+  done: { key: "taskStatus.done", tone: "success" },
+  failed: { key: "taskStatus.failed", tone: "danger" },
+  cancelled: { key: "taskStatus.cancelled", tone: "neutral" },
 };
+
+/** Label and badge tone of a task status (unknown statuses are shown as they are). */
+export function taskStatus(s: string): { label: string; tone: Tone } {
+  const st = TASK_STATUS[s as TaskStatus];
+  return st ? { label: t(st.key), tone: st.tone } : { label: s, tone: "neutral" };
+}
 
 export const ACTIVE_STATUSES: TaskStatus[] = ["queued", "running", "waiting_approval", "waiting_input", "interrupted", "paused"];
 
-export const NOTIFY_LEVEL: Record<NotifyLevel, { label: string; tone: Tone }> = {
-  silent: { label: "тихо", tone: "neutral" },
-  digest: { label: "в сводку", tone: "info" },
-  notify: { label: "уведомление", tone: "success" },
-  ask: { label: "вопрос", tone: "warning" },
+const NOTIFY_LEVEL: Record<NotifyLevel, { key: MessageKey; tone: Tone }> = {
+  silent: { key: "notifyLevel.silent", tone: "neutral" },
+  digest: { key: "notifyLevel.digest", tone: "info" },
+  notify: { key: "notifyLevel.notify", tone: "success" },
+  ask: { key: "notifyLevel.ask", tone: "warning" },
 };
 
-export function plural(n: number, one: string, few: string, many: string): string {
-  const a = Math.abs(n) % 100;
-  const b = a % 10;
-  if (a > 10 && a < 20) return many;
-  if (b > 1 && b < 5) return few;
-  if (b === 1) return one;
-  return many;
+export function notifyLevel(level: string): { label: string; tone: Tone } {
+  const l = NOTIFY_LEVEL[level as NotifyLevel];
+  return l ? { label: t(l.key), tone: l.tone } : { label: level, tone: "neutral" };
 }
 
-const rtf = typeof Intl !== "undefined" ? new Intl.RelativeTimeFormat("ru", { numeric: "auto" }) : undefined;
-
-/** "только что", "5 минут назад", "через 2 часа", or a date for older values. */
+/** "just now", "5 minutes ago", "in 2 hours", or a date for older values. */
 export function relativeTime(iso: string | undefined, now = Date.now()): string {
   if (!iso) return "";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  const diff = t - now;
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return "";
+  const diff = ts - now;
   const abs = Math.abs(diff);
-  if (abs < 45_000) return diff <= 0 ? "только что" : "через минуту";
-  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-    ["minute", 60_000],
-    ["hour", 3_600_000],
-    ["day", 86_400_000],
-  ];
-  if (abs < 3_600_000) return rtf ? rtf.format(Math.round(diff / units[0][1]), "minute") : "";
-  if (abs < 86_400_000) return rtf ? rtf.format(Math.round(diff / units[1][1]), "hour") : "";
-  if (abs < 7 * 86_400_000) return rtf ? rtf.format(Math.round(diff / units[2][1]), "day") : "";
+  if (abs < 45_000) return diff <= 0 ? t("time.justNow") : t("time.inAMinute");
+  if (abs < 3_600_000) return formatRelative(Math.round(diff / 60_000), "minute");
+  if (abs < 86_400_000) return formatRelative(Math.round(diff / 3_600_000), "hour");
+  if (abs < 7 * 86_400_000) return formatRelative(Math.round(diff / 86_400_000), "day");
   return formatDateTime(iso);
 }
 
 export function formatDateTime(iso: string | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("ru", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return iso ? formatDate(iso, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
 }
 
 export function formatTime(iso: string | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+  return iso ? formatDate(iso, { hour: "2-digit", minute: "2-digit" }) : "";
 }
+
+// Transliteration for ids made from Cyrillic names: U+0430..U+044F in alphabet order, then U+0451 (yo).
+// Built from code points so the source stays ASCII (Cyrillic lives only in i18n/ru.ts).
+const CYRILLIC_LATIN = ["a", "b", "v", "g", "d", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "h", "c", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"];
+const TRANSLIT: Record<string, string> = Object.fromEntries([...CYRILLIC_LATIN.map((l, i) => [String.fromCharCode(0x430 + i), l]), [String.fromCharCode(0x451), "e"]]);
 
 /** Lowercase slug for ids: latin letters, digits, dashes. */
 export function slugify(s: string): string {
-  const map: Record<string, string> = {
-    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
-    с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
-  };
   return s
     .toLowerCase()
     .split("")
-    .map((c) => map[c] ?? c)
+    .map((c) => TRANSLIT[c] ?? c)
     .join("")
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "")

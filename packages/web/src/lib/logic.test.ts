@@ -4,7 +4,7 @@ import { backoffDelay } from "./backoff";
 import { applyCommand, filterCommands, slashQuery } from "./commands";
 import { groupParts, inputPreview, prettyJson } from "./parts";
 import { parseMcpConfig } from "./mcp-config";
-import { plural, slugify } from "./format";
+import { slugify } from "./format";
 import { mergeClasses } from "./classes";
 
 describe("glob", () => {
@@ -103,14 +103,10 @@ describe("parseMcpConfig", () => {
 });
 
 describe("format", () => {
-  it("pluralizes Russian nouns", () => {
-    expect(plural(1, "пункт", "пункта", "пунктов")).toBe("пункт");
-    expect(plural(3, "пункт", "пункта", "пунктов")).toBe("пункта");
-    expect(plural(11, "пункт", "пункта", "пунктов")).toBe("пунктов");
-    expect(plural(22, "пункт", "пункта", "пунктов")).toBe("пункта");
-  });
   it("slugifies names (with transliteration)", () => {
-    expect(slugify("Исследователь")).toBe("issledovatel");
+    // "Issledovatel'" (researcher) in Cyrillic, escaped to keep Cyrillic out of the source.
+    expect(slugify("\u0418\u0441\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u044c")).toBe("issledovatel");
+    expect(slugify("\u0401\u0436")).toBe("ezh");
     expect(slugify("Code Reviewer!")).toBe("code-reviewer");
   });
 });

@@ -4,6 +4,7 @@ import { memo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ImageIcon } from "lucide-react";
+import { t } from "../i18n";
 import { CopyButton, cx } from "./ui";
 
 type MdNode = { type: string; value?: string; children?: MdNode[] };
@@ -43,7 +44,7 @@ const components: Components = {
     return (
       <a href={s} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1">
         <ImageIcon className="inline size-4" />
-        {alt || "изображение"}
+        {alt || t("common.image")}
       </a>
     );
   },

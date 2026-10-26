@@ -7,6 +7,7 @@ import { errorText } from "../../lib/api";
 import { agents, conversations, ensureAgents, loadMessages, loadOlder, updateConversation, useConversationMessages } from "../../state/app";
 import { toast } from "../../state/toast";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Select, Spinner } from "../../components/ui";
+import { t } from "../../i18n";
 import { MessageView } from "./MessageView";
 import { Composer } from "./Composer";
 
@@ -16,12 +17,12 @@ function AgentPicker({ conversationId, agentId }: { conversationId: string; agen
   if (!list || !list.length) return null;
   return (
     <Select
-      aria-label="Агент"
+      aria-label={t("chat.agent")}
       value={agentId ?? ""}
       onChange={async (e) => {
         try {
           await updateConversation(conversationId, { agentId: e.target.value });
-          toast(`Агент: ${list.find((a) => a.id === e.target.value)?.name ?? e.target.value}`, "success");
+          toast(t("chat.agentChanged", { name: list.find((a) => a.id === e.target.value)?.name ?? e.target.value }), "success");
         } catch (err) {
           toast(errorText(err), "error");
         }
@@ -45,7 +46,7 @@ function TitleEditor({ id, title }: { id: string; title: string }) {
     return (
       <div className="flex min-w-0 items-center gap-1">
         <span className="truncate font-semibold">{title}</span>
-        <IconButton label="Переименовать" onClick={() => setEditing(true)} className="size-7 shrink-0">
+        <IconButton label={t("common.rename")} onClick={() => setEditing(true)} className="size-7 shrink-0">
           <Pencil className="size-3.5" />
         </IconButton>
       </div>
@@ -69,10 +70,10 @@ function TitleEditor({ id, title }: { id: string; title: string }) {
       }}
     >
       <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="h-8 min-w-0" maxLength={120} />
-      <IconButton label="Сохранить" onClick={() => void save()} className="size-8 shrink-0">
+      <IconButton label={t("common.save")} onClick={() => void save()} className="size-8 shrink-0">
         <Check className="size-4" />
       </IconButton>
-      <IconButton label="Отмена" onClick={() => setEditing(false)} className="size-8 shrink-0">
+      <IconButton label={t("common.cancel")} onClick={() => setEditing(false)} className="size-8 shrink-0">
         <X className="size-4" />
       </IconButton>
     </form>
@@ -137,7 +138,7 @@ export function ChatView({
     if (el.scrollTop < 60 && conv.hasMore && !conv.loadingOlder && prevHeight.current === null) older();
   };
 
-  const title = meta?.title || (meta?.kind === "main" ? "Главный" : "Чат");
+  const title = meta?.title || (meta?.kind === "main" ? t("chat.main") : t("chat.defaultTitle"));
   const editable = meta?.kind === "chat";
 
   return (
@@ -145,7 +146,7 @@ export function ChatView({
       {header && (
         <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3 sm:px-4">
           {onOpenThreads && (
-            <IconButton label="Все чаты" onClick={onOpenThreads} className="lg:hidden">
+            <IconButton label={t("chat.allChats")} onClick={onOpenThreads} className="lg:hidden">
               <MessagesSquare className="size-[18px]" />
             </IconButton>
           )}
@@ -160,7 +161,7 @@ export function ChatView({
           {conv.hasMore && (
             <div className="flex justify-center">
               <Button size="sm" variant="ghost" onClick={older} loading={conv.loadingOlder}>
-                Загрузить более ранние
+                {t("chat.loadOlder")}
               </Button>
             </div>
           )}
@@ -171,7 +172,7 @@ export function ChatView({
             </div>
           )}
           {conv.loaded && !conv.messages.length && !conv.error && (
-            <EmptyState icon="sparkles" title="Здесь пока пусто" hint={emptyHint ?? "Напишите, чем помочь: задача, вопрос, идея — ассистент разберётся."} />
+            <EmptyState icon="sparkles" title={t("chat.empty")} hint={emptyHint ?? t("chat.emptyHint")} />
           )}
           {conv.messages.map((m) => (
             <MessageView key={m.id} message={m} agentName={m.agentId ? agentNames.get(m.agentId) : undefined} />
@@ -184,7 +185,7 @@ export function ChatView({
               stick.current = true;
               scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
             }}
-            aria-label="Вниз"
+            aria-label={t("chat.scrollDown")}
             className="sticky bottom-3 left-full mr-4 ml-auto flex size-9 items-center justify-center rounded-full border border-border bg-surface shadow-card"
           >
             <ArrowDown className="size-4" />

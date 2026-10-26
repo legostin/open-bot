@@ -9,6 +9,7 @@ import { isStreaming } from "../../lib/messages";
 import { interrupt, sendMessage, useConversationMessages } from "../../state/app";
 import { toast } from "../../state/toast";
 import { cx } from "../../components/ui";
+import { t } from "../../i18n";
 import { PluginBoundary } from "../../plugins/boundary";
 import { pickOverride } from "../../plugins/registry";
 import { ComposerActions, usePluginRegistry } from "../../plugins/slots";
@@ -26,9 +27,9 @@ function loadCommands(): Promise<CommandInfo[]> {
 export function useSend(conversationId: string) {
   return useCallback(
     async (text: string) => {
-      const t = text.trim();
-      if (!t) return;
-      await sendMessage(conversationId, t);
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      await sendMessage(conversationId, trimmed);
     },
     [conversationId],
   );
@@ -96,7 +97,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
     setStopping(true);
     try {
       const ok = await interrupt(conversationId);
-      if (!ok) toast("Нечего останавливать", "info");
+      if (!ok) toast(t("composer.nothingToStop"), "info");
     } catch (e) {
       toast(errorText(e), "error");
       setStopping(false);
@@ -138,7 +139,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
   return (
     <div className="relative">
       {suggestions.length > 0 && (
-        <div className="absolute inset-x-0 bottom-full mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-card" role="listbox" aria-label="Команды">
+        <div className="absolute inset-x-0 bottom-full mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-card" role="listbox" aria-label={t("composer.commands")}>
           {suggestions.map((c, i) => (
             <button
               key={c.name}
@@ -166,8 +167,8 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Напишите сообщение…  / — команды"
-          aria-label="Сообщение"
+          placeholder={t("composer.placeholder")}
+          aria-label={t("composer.message")}
           className="max-h-[40vh] min-h-9 flex-1 resize-none overflow-hidden bg-transparent py-2 text-[15px] leading-relaxed outline-none focus-visible:outline-none placeholder:text-muted/80"
         />
         <div className="flex shrink-0 items-center gap-1 pb-0.5">
@@ -177,8 +178,8 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
               type="button"
               onClick={() => void stop()}
               disabled={stopping}
-              title="Остановить"
-              aria-label="Остановить"
+              title={t("composer.stop")}
+              aria-label={t("composer.stop")}
               className="inline-flex size-9 items-center justify-center rounded-xl bg-fg text-bg transition hover:opacity-90 disabled:opacity-50"
             >
               <Square className="size-3.5 fill-current" />
@@ -188,8 +189,8 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
               type="button"
               onClick={() => void submit()}
               disabled={!text.trim() || busy}
-              title="Отправить (Enter)"
-              aria-label="Отправить"
+              title={t("composer.sendTitle")}
+              aria-label={t("composer.send")}
               className="inline-flex size-9 items-center justify-center rounded-xl bg-accent text-accent-fg transition hover:brightness-110 disabled:opacity-40"
             >
               <ArrowUp className="size-[18px]" />
@@ -197,7 +198,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
           )}
         </div>
       </div>
-      <div className="mt-1.5 hidden px-1 text-[11px] text-muted sm:block">Enter — отправить, Shift+Enter — новая строка</div>
+      <div className="mt-1.5 hidden px-1 text-[11px] text-muted sm:block">{t("composer.hint")}</div>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { memo } from "react";
 import { Bell, Bot, CircleAlert, ExternalLink, FileText, ShieldAlert } from "lucide-react";
 import type { ApprovalStatus, Message, MessagePart } from "@openbot/shared";
 import { groupParts } from "../../lib/parts";
-import { formatTime, NOTIFY_LEVEL } from "../../lib/format";
+import { formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import { session } from "../../state/app";
 import { Markdown } from "../../components/markdown";
@@ -14,25 +14,27 @@ import { PluginBoundary } from "../../plugins/boundary";
 import { pickMessageRenderer, pickToolRenderer } from "../../plugins/registry";
 import { usePluginRegistry } from "../../plugins/slots";
 import { ToolCard } from "./ToolCard";
+import { t, type MessageKey } from "../../i18n";
 
-const APPROVAL: Record<ApprovalStatus, { label: string; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
-  pending: { label: "ожидает подтверждения", tone: "warning" },
-  approved: { label: "одобрено", tone: "success" },
-  denied: { label: "отклонено", tone: "danger" },
-  expired: { label: "истекло", tone: "neutral" },
-  executed: { label: "выполнено", tone: "success" },
-  failed: { label: "ошибка выполнения", tone: "danger" },
+const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
+  pending: { label: "approvalStatus.pending", tone: "warning" },
+  approved: { label: "approvalStatus.approved", tone: "success" },
+  denied: { label: "approvalStatus.denied", tone: "danger" },
+  expired: { label: "approvalStatus.expired", tone: "neutral" },
+  executed: { label: "approvalStatus.executed", tone: "success" },
+  failed: { label: "approvalStatus.failed", tone: "danger" },
 };
 
 function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" }> }) {
   const s = useStore(session);
-  const st = APPROVAL[part.status] ?? { label: part.status, tone: "neutral" as const };
+  const known = APPROVAL[part.status];
+  const st = known ? { label: t(known.label), tone: known.tone } : { label: part.status, tone: "neutral" as const };
   const pending = part.status === "pending";
   return (
     <div className={cx("my-2 rounded-xl border px-3 py-2.5", pending ? "border-warning/40 bg-warning-soft/60" : "border-border bg-surface-2/60")}>
       <div className="flex flex-wrap items-center gap-2">
         <ShieldAlert className={cx("size-4", pending ? "text-warning" : "text-muted")} />
-        <span className="text-sm font-semibold">{pending ? "Ожидает подтверждения" : "Подтверждение"}</span>
+        <span className="text-sm font-semibold">{pending ? t("message.approval.titlePending") : t("message.approval.title")}</span>
         <Badge tone={st.tone}>{st.label}</Badge>
       </div>
       <div className="mt-1.5 text-sm break-words">{part.summary}</div>
@@ -43,7 +45,7 @@ function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" 
           rel="noopener noreferrer"
           className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1.5 text-[13px] font-medium text-accent-text shadow-sm transition hover:bg-surface-2"
         >
-          {pending ? "Открыть в пульте" : "Подробнее в пульте"} <ExternalLink className="size-3.5" />
+          {pending ? t("message.approval.open") : t("message.approval.details")} <ExternalLink className="size-3.5" />
         </a>
       )}
     </div>
@@ -51,7 +53,7 @@ function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" 
 }
 
 function NotificationCard({ part }: { part: Extract<MessagePart, { type: "notification" }> }) {
-  const lvl = NOTIFY_LEVEL[part.level] ?? { label: part.level, tone: "neutral" as const };
+  const lvl = notifyLevel(part.level);
   return (
     <div className="my-2 rounded-xl border border-accent/25 bg-accent-soft/50 px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -99,7 +101,7 @@ function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" 
 
 function TypingDots() {
   return (
-    <span className="inline-flex items-center gap-1 py-2" aria-label="Агент печатает">
+    <span className="inline-flex items-center gap-1 py-2" aria-label={t("message.typing")}>
       <span className="typing-dot size-1.5 rounded-full bg-muted" />
       <span className="typing-dot size-1.5 rounded-full bg-muted" />
       <span className="typing-dot size-1.5 rounded-full bg-muted" />
@@ -186,7 +188,7 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName 
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-muted">
-          <span className="font-medium text-fg">{agentName ?? message.agentId ?? "Ассистент"}</span>
+          <span className="font-medium text-fg">{agentName ?? message.agentId ?? t("message.assistant")}</span>
           {message.brainRef && <span className="font-mono">{message.brainRef}</span>}
           <span>{formatTime(message.createdAt)}</span>
         </div>

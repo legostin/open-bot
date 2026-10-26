@@ -7,6 +7,7 @@ import { api, errorText } from "../lib/api";
 import { formatDateTime, relativeTime, type Tone } from "../lib/format";
 import { hubEvents, session } from "../state/app";
 import { toast } from "../state/toast";
+import { t, tRich } from "../i18n";
 import { Badge, Button, Card, CodeLine, EmptyState, ErrorNote, Loading, Page } from "../components/ui";
 
 interface BrainRow {
@@ -20,18 +21,18 @@ interface BrainRow {
 }
 
 function status(b: BrainRow): { label: string; tone: Tone } {
-  if (!b.connected) return { label: "не подключён", tone: "neutral" };
-  if (b.limitedUntil) return { label: `лимит до ${formatDateTime(b.limitedUntil)}`, tone: "warning" };
-  if (!b.probe) return { label: "не проверен", tone: "neutral" };
-  if (!b.probe.available) return { label: "недоступен", tone: "danger" };
-  if (!b.probe.authenticated) return { label: "нужен вход", tone: "warning" };
-  return { label: "готов", tone: "success" };
+  if (!b.connected) return { label: t("brains.status.notConnected"), tone: "neutral" };
+  if (b.limitedUntil) return { label: t("brains.status.limited", { time: formatDateTime(b.limitedUntil) }), tone: "warning" };
+  if (!b.probe) return { label: t("brains.status.unchecked"), tone: "neutral" };
+  if (!b.probe.available) return { label: t("brains.status.unavailable"), tone: "danger" };
+  if (!b.probe.authenticated) return { label: t("brains.status.needsLogin"), tone: "warning" };
+  return { label: t("brains.status.ready"), tone: "success" };
 }
 
 function hostLabel(host?: string): string | undefined {
   if (!host) return undefined;
-  if (host.startsWith("plugin:")) return `плагин ${host.slice(7)}`;
-  if (host.startsWith("machine:")) return `машина ${host.slice(8)}`;
+  if (host.startsWith("plugin:")) return t("brains.host.plugin", { id: host.slice(7) });
+  if (host.startsWith("machine:")) return t("brains.host.machine", { id: host.slice(8) });
   return host;
 }
 
@@ -79,7 +80,7 @@ export function BrainsPage() {
   const clearLimit = async (ref: string) => {
     try {
       await api.del(`/api/brains/limits/${encodeURIComponent(ref)}`);
-      toast("Лимит сброшен", "success");
+      toast(t("brains.limitCleared"), "success");
       await load();
     } catch (e) {
       toast(errorText(e), "error");
@@ -90,17 +91,17 @@ export function BrainsPage() {
 
   return (
     <Page
-      title="Мозги"
-      subtitle="Чем думают агенты: Claude Code и Codex по вашей подписке или API любых провайдеров."
+      title={t("nav.brains")}
+      subtitle={t("brains.subtitle")}
       actions={
         <Button icon={<RefreshCw className="size-4" />} onClick={() => void probeAll()} loading={probingAll}>
-          Проверить все
+          {t("brains.checkAll")}
         </Button>
       }
     >
       {error && <ErrorNote onRetry={() => void load()}>{error}</ErrorNote>}
-      {!list && !error && <Loading text="Проверяю мозги…" />}
-      {list && list.length === 0 && <EmptyState icon="brain" title="Мозгов пока нет" hint="Они появятся, когда запустится плагин мозгов или подключится машина." />}
+      {!list && !error && <Loading text={t("brains.checking")} />}
+      {list && list.length === 0 && <EmptyState icon="brain" title={t("brains.empty")} hint={t("brains.emptyHint")} />}
       {list && list.length > 0 && (
         <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
           {list.map((b, i) => {
@@ -121,8 +122,8 @@ export function BrainsPage() {
                     <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted">
                       {b.label !== b.ref && <span className="font-mono">{b.ref}</span>}
                       {hostLabel(b.host) && <span>{hostLabel(b.host)}</span>}
-                      {b.probe?.version && <span>версия {b.probe.version}</span>}
-                      {b.probe?.checkedAt && <span>проверен {relativeTime(b.probe.checkedAt)}</span>}
+                      {b.probe?.version && <span>{t("brains.version", { version: b.probe.version })}</span>}
+                      {b.probe?.checkedAt && <span>{t("brains.checked", { time: relativeTime(b.probe.checkedAt) })}</span>}
                     </div>
                     {(b.probe?.detail || b.limitDetail) && <div className="mt-1 text-xs break-words text-muted">{b.limitedUntil ? b.limitDetail : b.probe?.detail}</div>}
                   </div>
@@ -130,12 +131,12 @@ export function BrainsPage() {
                 <div className="flex shrink-0 gap-2 pl-12 sm:pl-0">
                   {b.limitedUntil && (
                     <Button size="sm" icon={<TimerReset className="size-3.5" />} onClick={() => void clearLimit(b.ref)}>
-                      Сбросить лимит
+                      {t("brains.clearLimit")}
                     </Button>
                   )}
                   {b.connected && (
                     <Button size="sm" icon={<RefreshCw className="size-3.5" />} onClick={() => void probe(b.ref)} loading={probing === b.ref}>
-                      Проверить
+                      {t("common.check")}
                     </Button>
                   )}
                 </div>
@@ -145,37 +146,33 @@ export function BrainsPage() {
         </div>
       )}
 
-      <h2 className="mb-3 text-lg font-semibold">Как подключить</h2>
+      <h2 className="mb-3 text-lg font-semibold">{t("brains.howTo")}</h2>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Card title="Claude Code">
           <Steps>
             <li>
-              На любой машине с Claude Code, где вы вошли в подписку, выполните:
+              {t("brains.claudeStep1")}
               <CodeLine>claude setup-token</CodeLine>
             </li>
-            <li>
-              Сохраните полученный токен в пульте безопасности как запись vault с id <Code>claude_code_token</Code>.
-            </li>
-            <li>Нажмите «Проверить» у <Code>claude-code@local</Code>.</li>
+            <li>{tRich("brains.claudeStep2", { id: <Code>claude_code_token</Code> })}</li>
+            <li>{tRich("brains.pressCheck", { ref: <Code>claude-code@local</Code> })}</li>
           </Steps>
           <ConsoleLink href={vaultLink} />
-          <p className="mt-3 text-xs text-muted">На подключённых машинах используется ваш обычный вход в Claude Code.</p>
+          <p className="mt-3 text-xs text-muted">{t("brains.claudeMachines")}</p>
         </Card>
         <Card title="Codex">
           <Steps>
             <li>
-              Войдите в ChatGPT внутри контейнера:
+              {t("brains.codexStep1")}
               <CodeLine>docker exec -it -u agent openbot codex login --device-auth</CodeLine>
             </li>
-            <li>Откройте ссылку, введите код и подтвердите вход.</li>
-            <li>Нажмите «Проверить» у <Code>codex@local</Code>.</li>
+            <li>{t("brains.codexStep2")}</li>
+            <li>{tRich("brains.pressCheck", { ref: <Code>codex@local</Code> })}</li>
           </Steps>
-          <p className="mt-3 text-xs text-muted">
-            Или используйте ключ: запись vault <Code>openai_api_key</Code>.
-          </p>
+          <p className="mt-3 text-xs text-muted">{tRich("brains.codexKey", { id: <Code>openai_api_key</Code> })}</p>
         </Card>
-        <Card title="API-ключи">
-          <p className="text-sm">Для собственной петли агента (мозг «api») сохраните ключ в vault под одним из id:</p>
+        <Card title={t("brains.apiKeys")}>
+          <p className="text-sm">{t("brains.apiKeysText")}</p>
           <ul className="mt-2 flex flex-col gap-1.5 text-sm">
             <KeyRow id="anthropic_api_key" label="Anthropic" />
             <KeyRow id="openai_api_key" label="OpenAI" />
@@ -209,7 +206,7 @@ function KeyRow({ id, label }: { id: string; label: string }) {
 function ConsoleLink({ href }: { href: string }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent-text hover:underline">
-      Открыть vault в пульте <ExternalLink className="size-3.5" />
+      {t("brains.openVault")} <ExternalLink className="size-3.5" />
     </a>
   );
 }

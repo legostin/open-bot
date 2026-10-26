@@ -5,7 +5,7 @@ const schema = {
   type: "object",
   required: ["token"],
   properties: {
-    token: { type: "string", title: "Токен", format: "password" },
+    token: { type: "string", title: "Token", format: "password" },
     chatName: { type: "string", default: "bot" },
     interval: { type: "integer", minimum: 1, maximum: 60, default: 5 },
     ratio: { type: "number" },
@@ -21,7 +21,7 @@ describe("schemaFields", () => {
   it("maps JSON schema types to field kinds", () => {
     const f = Object.fromEntries(schemaFields(schema).map((x) => [x.key, x]));
     expect(f.token.kind).toBe("secret");
-    expect(f.token.label).toBe("Токен");
+    expect(f.token.label).toBe("Token");
     expect(f.token.required).toBe(true);
     expect(f.chatName.kind).toBe("string");
     expect(f.interval.kind).toBe("integer");
