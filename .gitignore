@@ -14,3 +14,5 @@ packages/web/public/shared/
 plugins/*/ui/dist/
 .claude/worktrees/
 .claude/settings.local.json
+packages/desktop/src-tauri/target/
+packages/desktop/src-tauri/gen/
