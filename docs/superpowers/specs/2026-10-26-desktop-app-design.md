@@ -66,8 +66,9 @@ The bundle identifier is `ai.owlbot.app`, the product and binary name `Owlbot`. 
 ```
 
 - **hub**: the hub runs here, with the data dir and ports of `launch.mjs`: `~/Library/Application Support/Owlbot` or
-  `%LOCALAPPDATA%\Owlbot`, ports from `<data>/desktop.json` (default 18780, console 18781, egress proxy 18789: away
-  from 8080, which servers and dev tools tend to hold; Docker keeps 8080).
+  `%LOCALAPPDATA%\Owlbot`, ports from `<data>/desktop.json` (default 41780, console 41781, egress proxy 41789: away
+  from 8080, which servers and dev tools tend to hold, and from OpenClaw's 18789; Docker keeps 8080). Before a start
+  the app checks all three and reports the first busy one.
 - **node**: this computer is a machine of another hub. `packages/node` keeps its state in `~/.owlbot-node` (hub URL,
   key, policy) as with the CLI.
 
@@ -90,7 +91,7 @@ The app runs one child process on the bundled Node (`app/runtime/node.exe`, `app
 
 The child's stdin is a pipe only the app holds. stdout and stderr go to the log (`<data>/logs/hub.log` for the hub,
 `<app log dir>/node.log` for the node), rotated at 5 MB with one previous file kept. Before starting the hub the app
-checks the port: taken → status "port busy" and no start. A crash restarts the child after 2 s; five crashes within two
+checks its three ports: one taken → status "port busy" with that port and no start. A crash restarts the child after 2 s; five crashes within two
 minutes stop the retries (status "keeps stopping", Restart tries again). Quit and Restart write `stop` to stdin and
 kill after 15 s (Windows has no SIGTERM for a windowless child). The child also stops when its stdin closes, so it
 never outlives the app, even after a crash of the app. On Windows the child runs in a job object with kill-on-close,

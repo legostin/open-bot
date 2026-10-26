@@ -37,7 +37,7 @@ describe("desktop launcher", () => {
 
   it("reads ports from desktop.json and keeps one setup code", () => {
     const data = tmp();
-    expect(desktopPorts(data)).toEqual({ port: 18780, consolePort: 18781, egressPort: 18789 });
+    expect(desktopPorts(data)).toEqual({ port: 41780, consolePort: 41781, egressPort: 41789 });
     writeFileSync(join(data, "desktop.json"), JSON.stringify({ port: 18080 }));
     expect(desktopPorts(data)).toEqual({ port: 18080, consolePort: 18081, egressPort: 18089 });
     const code = setupCode(data);
@@ -50,7 +50,7 @@ describe("desktop launcher", () => {
     const env = hubEnv({ OWLBOT_PORT: "9999", NODE_OPTIONS: "--max-old-space-size=512" }, data);
     expect(env.OWLBOT_PORT).toBe("9999");
     expect(env.OWLBOT_DATA_DIR).toBe(data);
-    expect(env.OWLBOT_PUBLIC_URL).toBe("http://localhost:18780");
+    expect(env.OWLBOT_PUBLIC_URL).toBe("http://localhost:41780");
     expect(env.OWLBOT_INSTALL_CLIS).toBe("1");
     expect(env.OWLBOT_DESKTOP).toBe("1");
     expect(env.OWLBOT_SETUP_TOKEN).toBe(readFileSync(join(data, "setup-code"), "utf8").trim());
@@ -62,12 +62,12 @@ describe("desktop launcher", () => {
     const data = tmp();
     const code = setupCode(data);
     const answer = (hasPassword: boolean) => async () => new Response(JSON.stringify({ hasPassword }));
-    expect(await openUrl(data, { fetchImpl: answer(false) })).toEqual({ ready: true, url: `http://localhost:18780/#setup=${code}` });
-    expect(await openUrl(data, { fetchImpl: answer(true) })).toEqual({ ready: true, url: "http://localhost:18780/" });
+    expect(await openUrl(data, { fetchImpl: answer(false) })).toEqual({ ready: true, url: `http://localhost:41780/#setup=${code}` });
+    expect(await openUrl(data, { fetchImpl: answer(true) })).toEqual({ ready: true, url: "http://localhost:41780/" });
     const down = async () => {
       throw new Error("ECONNREFUSED");
     };
-    expect(await openUrl(data, { fetchImpl: down, timeoutMs: 600 })).toEqual({ ready: false, url: "http://localhost:18780/" });
+    expect(await openUrl(data, { fetchImpl: down, timeoutMs: 600 })).toEqual({ ready: false, url: "http://localhost:41780/" });
   });
 
   it("resolves @owlbot/* to the workspace folders without node_modules links", () => {

@@ -29,8 +29,8 @@ pub struct Spec {
   pub args: Vec<String>,
   pub env: Vec<(String, String)>,
   pub log: PathBuf,
-  /// The hub's port, checked before each start.
-  pub port: Option<u16>,
+  /// The hub's ports (web UI, console, egress proxy), checked before each start.
+  pub ports: Vec<u16>,
   pub restart_delay: Duration,
 }
 
@@ -171,11 +171,9 @@ impl Supervisor {
   fn watch(&self, spec: Spec, generation: u64) {
     let mut crashes = Crashes::new();
     loop {
-      if let Some(port) = spec.port {
-        if !port_free(port) {
-          self.emit(Status::PortBusy(port));
-          return;
-        }
+      if let Some(port) = spec.ports.iter().copied().find(|p| !port_free(*p)) {
+        self.emit(Status::PortBusy(port));
+        return;
       }
       self.emit(Status::Starting);
       let proc = match spawn(&spec) {
@@ -303,7 +301,7 @@ mod tests {
   }
 
   fn script(js: &str, log: PathBuf) -> Spec {
-    Spec { program: "node".into(), args: vec!["-e".into(), js.into()], env: vec![], log, port: None, restart_delay: Duration::from_millis(50) }
+    Spec { program: "node".into(), args: vec!["-e".into(), js.into()], env: vec![], log, ports: vec![], restart_delay: Duration::from_millis(50) }
   }
 
   fn recorder() -> (Supervisor, Arc<Mutex<Vec<Status>>>) {
@@ -356,7 +354,7 @@ mod tests {
     let port = taken.local_addr().unwrap().port();
     let (sup, seen) = recorder();
     let mut spec = script("setInterval(() => {}, 1000)", tmp("port").join("x.log"));
-    spec.port = Some(port);
+    spec.ports = vec![port];
     sup.start(spec);
     wait_for(&seen, Status::PortBusy(port));
   }

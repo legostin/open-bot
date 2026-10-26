@@ -78,14 +78,9 @@ impl Paths {
     })
   }
 
-  /// The hub's port from <data>/desktop.json, as launch.mjs reads it (DESKTOP_PORT there).
-  pub fn hub_port(&self) -> u16 {
-    std::fs::read_to_string(self.hub_data.join("desktop.json"))
-      .ok()
-      .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-      .and_then(|v| v.get("port")?.as_u64())
-      .and_then(|p| u16::try_from(p).ok())
-      .unwrap_or(18780)
+  /// The hub's ports (web UI, console, egress proxy) from <data>/desktop.json.
+  pub fn hub_ports(&self) -> Vec<u16> {
+    hub_ports(std::fs::read_to_string(self.hub_data.join("desktop.json")).ok().as_deref())
   }
 
   fn launch(&self) -> PathBuf {
@@ -95,6 +90,14 @@ impl Paths {
   fn node_cli(&self) -> PathBuf {
     self.app_root.join("packages").join("node").join("dist").join("owlbot-node.mjs")
   }
+}
+
+/// The ports launch.mjs gives the hub: `port` (DESKTOP_PORT there), `consolePort` (port+1), `egressPort` (port+9).
+pub fn hub_ports(desktop_json: Option<&str>) -> Vec<u16> {
+  let v: serde_json::Value = desktop_json.and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
+  let get = |k: &str| v.get(k).and_then(|p| p.as_u64()).and_then(|p| u16::try_from(p).ok()).filter(|p| *p > 0);
+  let port = get("port").unwrap_or(41780);
+  vec![port, get("consolePort").unwrap_or(port.wrapping_add(1)), get("egressPort").unwrap_or(port.wrapping_add(9))]
 }
 
 /// What the setup window shows instead of the choice: why nothing runs.
@@ -201,7 +204,7 @@ fn spec(st: &AppState, mode: Mode) -> Spec {
   match mode {
     Mode::Hub => {
       env.push(("OWLBOT_DATA_DIR".into(), arg(&p.hub_data)));
-      Spec { program: p.node.clone(), args: vec![arg(&p.launch()), "run".into()], env, log: p.hub_log.clone(), port: Some(p.hub_port()), restart_delay: delay }
+      Spec { program: p.node.clone(), args: vec![arg(&p.launch()), "run".into()], env, log: p.hub_log.clone(), ports: p.hub_ports(), restart_delay: delay }
     }
     Mode::Node => {
       env.push(("OWLBOT_LANG".into(), texts().lang().into()));
@@ -210,7 +213,7 @@ fn spec(st: &AppState, mode: Mode) -> Spec {
       if let Some(path) = &st.path_env {
         env.push(("PATH".into(), path.clone()));
       }
-      Spec { program: p.node.clone(), args: vec![arg(&p.node_cli()), "run".into()], env, log: p.node_log.clone(), port: None, restart_delay: delay }
+      Spec { program: p.node.clone(), args: vec![arg(&p.node_cli()), "run".into()], env, log: p.node_log.clone(), ports: vec![], restart_delay: delay }
     }
   }
 }
@@ -466,6 +469,14 @@ mod tests {
     assert!(args(&["--quit"]).quit);
     assert_eq!(args(&["--mode", "x"]).mode, None);
     assert_eq!(args(&["owlbot://pair?hub=x&code=y"]), Args::default());
+  }
+
+  #[test]
+  fn reads_the_hub_ports_like_launch_mjs() {
+    assert_eq!(hub_ports(None), vec![41780, 41781, 41789]);
+    assert_eq!(hub_ports(Some(r#"{"port":18080}"#)), vec![18080, 18081, 18089]);
+    assert_eq!(hub_ports(Some(r#"{"port":18080,"egressPort":19999}"#)), vec![18080, 18081, 19999]);
+    assert_eq!(hub_ports(Some("{nope")), vec![41780, 41781, 41789]);
   }
 
   #[test]

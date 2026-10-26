@@ -18,10 +18,10 @@ export function defaultDataDir(env = process.env, platform = process.platform, h
   return join(env.XDG_DATA_HOME || join(home, ".local", "share"), "owlbot");
 }
 
-/** The desktop hub's port: away from 8080, which servers and dev tools tend to hold. */
-export const DESKTOP_PORT = 18780;
+/** The desktop hub's port: away from 8080 (servers, dev tools) and 18789 (OpenClaw's gateway), with +1 and +9 free too. */
+export const DESKTOP_PORT = 41780;
 
-/** `<data>/desktop.json`: `{ "port": 18780 }` (console port+1, egress proxy port+9 unless given). */
+/** `<data>/desktop.json`: `{ "port": 41780 }` (console port+1, egress proxy port+9 unless given). */
 export function desktopPorts(dataDir) {
   let s = {};
   try {
