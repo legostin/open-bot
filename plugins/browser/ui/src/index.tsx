@@ -1,11 +1,13 @@
-// UI of the browser plugin: live view with takeover (right pane tab "Browser") and a compact renderer for browser_* calls.
+// UI of the browser plugin: the browser's live view (with takeover) for the host's floating live-view window, and a
+// compact renderer for browser_* calls. The backend's "activity" event tells the host when an agent drives the
+// browser, so the window opens on its own.
 // React and @openbot/ui come from the host (import map); this file is bundled by scripts/build-ui-plugins.mjs.
 // Texts come from .openbot-plugin/locales (ui.* keys) through ui.i18n.t.
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { Badge, Button, EmptyState, Spinner, definePluginUI } from "@openbot/ui";
-import type { OpenBotUI, ToolResultProps } from "@openbot/ui";
+import type { LiveViewActivity, LiveViewProps, OpenBotUI, ToolResultProps } from "@openbot/ui";
 
 interface Tab {
   index: number;
@@ -31,6 +33,16 @@ interface BrowserState {
   url: string;
   title: string;
   install?: InstallStatus;
+}
+
+/** The backend's "activity" event: sent on every change, whether or not anyone watches. */
+interface Activity {
+  running: boolean;
+  busy: string | null;
+  agentId: string | null;
+  url: string;
+  control: "agent" | "user";
+  attention: boolean;
 }
 
 let host: OpenBotUI;
@@ -59,38 +71,83 @@ const mods = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey
 
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
+function hostOf(u: string): string {
+  try {
+    const x = new URL(u);
+    return x.protocol === "http:" || x.protocol === "https:" ? x.host.replace(/^www\./, "") : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Tools with a label (ui.call.<name>). */
+const LABELED = new Set(["open", "snapshot", "get_text", "screenshot", "scroll", "back", "tabs", "wait", "click", "type", "press_key", "fill_secret", "download", "submit"]);
+
+const toolLabel = (name: string) => (LABELED.has(name) ? t(`ui.call.${name}`) : name);
+
+/** What the host shows in the live view's title bar and how it decides when to open the window. */
+function toLiveActivity(a: Activity): LiveViewActivity {
+  const status = a.attention ? t("ui.activity.captcha") : a.control === "user" ? t("ui.activity.user") : hostOf(a.url);
+  return { active: !!a.busy, attention: a.attention, userControl: a.control === "user", agentId: a.agentId ?? undefined, status };
+}
+
 // ---------- live view ----------
 
 const S: Record<string, CSSProperties> = {
   root: { display: "flex", flexDirection: "column", gap: 8, height: "100%", minHeight: 0, fontSize: 13 },
+  mini: { display: "flex", flexDirection: "column", height: "100%", minHeight: 0, fontSize: 12 },
   row: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
-  url: { flex: 1, minWidth: 120, padding: "5px 8px", borderRadius: 6, border: "1px solid rgba(127,127,127,.35)", background: "transparent", color: "inherit", font: "inherit" },
-  select: { maxWidth: 220, padding: "4px 6px", borderRadius: 6, border: "1px solid rgba(127,127,127,.35)", background: "transparent", color: "inherit", font: "inherit" },
-  screen: { position: "relative", borderRadius: 6, overflow: "hidden", border: "1px solid rgba(127,127,127,.25)", background: "rgba(127,127,127,.08)", outline: "none" },
-  img: { display: "block", width: "100%", height: "auto", userSelect: "none" },
-  placeholder: { display: "flex", alignItems: "center", justifyContent: "center", aspectRatio: "16 / 10" },
+  url: { flex: 1, minWidth: 140, padding: "5px 8px", borderRadius: 8, border: "1px solid rgba(127,127,127,.35)", background: "transparent", color: "inherit", font: "inherit" },
+  select: { maxWidth: 220, padding: "4px 6px", borderRadius: 8, border: "1px solid rgba(127,127,127,.35)", background: "transparent", color: "inherit", font: "inherit" },
+  area: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  screen: { position: "relative", borderRadius: 6, overflow: "hidden", background: "rgba(127,127,127,.08)", outline: "none" },
+  img: { display: "block", width: "100%", height: "100%", userSelect: "none" },
+  center: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, height: "100%", textAlign: "center", padding: 8 },
   hint: { opacity: 0.7, fontSize: 12 },
   error: { color: "#dc2626", fontSize: 12 },
 };
 
-function BrowserPane() {
+/** The size of `el` (kept up to date). */
+function useBoxSize(el: HTMLElement | null): { w: number; h: number } {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => {
+      const { width, height } = e.contentRect;
+      setSize((s) => (s.w === Math.floor(width) && s.h === Math.floor(height) ? s : { w: Math.floor(width), h: Math.floor(height) }));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return size;
+}
+
+function BrowserView({ mode }: LiveViewProps) {
+  const expanded = mode === "expanded";
   const [state, setState] = useState<BrowserState | null>(null);
   const [hasFrame, setHasFrame] = useState(false);
+  const [frameSize, setFrameSize] = useState({ w: 1280, h: 800 });
   const [draftUrl, setDraftUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [area, setArea] = useState<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  // The latest frame: a new <img> (the layout changes between the compact and the large view) shows it at once.
+  const lastFrame = useRef<string | null>(null);
   const screenRef = useRef<HTMLDivElement | null>(null);
   const controlRef = useRef(false);
   const lastMove = useRef(0);
-  const control = state?.control === "user";
+  const control = expanded && state?.control === "user";
   controlRef.current = control;
+  const box = useBoxSize(area);
 
   useEffect(() => {
     send({ type: "watch", on: true, id: viewerId, refresh: true });
     const renew = setInterval(() => send({ type: "watch", on: true, id: viewerId }), 20_000);
     const offs = [
-      host.plugin.on("frame", (f: { data: string }) => {
-        if (imgRef.current) imgRef.current.src = `data:image/jpeg;base64,${f.data}`;
+      host.plugin.on("frame", (f: { data: string; width?: number; height?: number }) => {
+        lastFrame.current = `data:image/jpeg;base64,${f.data}`;
+        if (imgRef.current) imgRef.current.src = lastFrame.current;
+        if (f.width && f.height) setFrameSize((s) => (s.w === f.width && s.h === f.height ? s : { w: f.width!, h: f.height! }));
         setHasFrame(true);
       }),
       host.plugin.on("state", (s: BrowserState) => {
@@ -107,13 +164,23 @@ function BrowserPane() {
     };
   }, []);
 
+  // The compact window takes no input: leaving the large view hands control back to the agent.
+  useEffect(() => {
+    if (!expanded && state?.control === "user") send({ type: "control", on: false });
+  }, [expanded]);
+
+  // Keys go to the browser as soon as the user takes control.
+  useEffect(() => {
+    if (control) screenRef.current?.focus();
+  }, [control]);
+
   useEffect(() => {
     if (!error) return;
     const timer = setTimeout(() => setError(null), 6000);
     return () => clearTimeout(timer);
   }, [error]);
 
-  // Wheel needs a non-passive native listener to prevent the pane from scrolling.
+  // Wheel needs a non-passive native listener to prevent the page from scrolling.
   useEffect(() => {
     const el = screenRef.current;
     if (!el) return;
@@ -159,6 +226,7 @@ function BrowserPane() {
     if (!control) return;
     // Let the browser fire "paste" so the user's clipboard text is sent with insertText.
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") return;
+    // Prevented keys (Escape included) go to the agent's browser and do not close the live view.
     e.preventDefault();
     send({ type: "input", event: "key", action, key: e.key, code: e.code, keyCode: e.keyCode, repeat: e.repeat, ...mods(e) });
   };
@@ -169,12 +237,75 @@ function BrowserPane() {
     setDraftUrl(null);
   };
 
+  // The picture keeps its aspect ratio and fits the area; input coordinates are taken from the image's own box.
+  const scale = box.w && box.h ? Math.min(box.w / frameSize.w, box.h / frameSize.h) : 0;
+  const fit = { width: Math.max(1, Math.floor(frameSize.w * scale)), height: Math.max(1, Math.floor(frameSize.h * scale)) };
+  const running = state?.running ?? true;
+  const installing = !!state && !state.running && !!state.install?.installing;
+
+  const picture = (
+    <div ref={setArea} style={S.area}>
+      <div
+        ref={screenRef}
+        tabIndex={expanded ? 0 : -1}
+        style={{ ...S.screen, ...(scale > 0 ? fit : { width: "100%", height: "100%" }), boxShadow: control ? "0 0 0 2px #f59e0b" : undefined, cursor: control ? "default" : expanded ? "not-allowed" : undefined }}
+        onMouseDown={mouse("down")}
+        onMouseUp={mouse("up")}
+        onMouseMove={mouse("move")}
+        onKeyDown={key("down")}
+        onKeyUp={key("up")}
+        onPaste={(e) => {
+          if (!control) return;
+          e.preventDefault();
+          const text = e.clipboardData.getData("text");
+          if (text) send({ type: "input", event: "text", text });
+        }}
+        onContextMenu={(e) => control && e.preventDefault()}
+        title={expanded && !control ? t("ui.screen.locked") : undefined}
+      >
+        <img
+          ref={(el) => {
+            imgRef.current = el;
+            if (el && lastFrame.current && el.src !== lastFrame.current) el.src = lastFrame.current;
+          }}
+          alt=""
+          draggable={false}
+          style={{ ...S.img, display: hasFrame ? "block" : "none" }}
+        />
+        {!hasFrame && (
+          <div style={S.center}>
+            <Spinner />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (!expanded) {
+    return (
+      <div style={S.mini}>
+        {installing ? (
+          <div style={S.center}>
+            <Spinner size={14} />
+            <span style={S.hint}>{t("ui.install.title")}</span>
+          </div>
+        ) : !running ? (
+          <div style={S.center}>
+            <span style={S.hint}>{t("ui.stopped.title")}</span>
+          </div>
+        ) : (
+          picture
+        )}
+      </div>
+    );
+  }
+
   const tabs = state?.tabs ?? [];
-  const active = tabs.find((t) => t.active);
+  const active = tabs.find((x) => x.active);
   const status = control ? (
     <Badge tone="warning">{t("ui.status.user")}</Badge>
   ) : state?.busy ? (
-    <Badge tone="info">{t("ui.status.busy", { tool: state.busy })}</Badge>
+    <Badge tone="info">{t("ui.status.busy", { tool: toolLabel(state.busy) })}</Badge>
   ) : (
     <Badge tone="neutral">{t("ui.status.agent")}</Badge>
   );
@@ -206,12 +337,13 @@ function BrowserPane() {
             if (e.key === "Enter") {
               navigate();
               e.currentTarget.blur();
-            } else if (e.key === "Escape") e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              // Leave the field, not the live view.
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
           }}
         />
-      </div>
-
-      <div style={S.row}>
         {tabs.length > 0 && (
           <select style={S.select} value={active?.index ?? ""} onChange={(e) => send({ type: "tab", action: "switch", index: Number(e.target.value) })}>
             {tabs.map((tab) => (
@@ -229,8 +361,6 @@ function BrowserPane() {
             ×
           </Button>
         )}
-        <span style={{ flex: 1 }} />
-        {state?.running && status}
         {state?.running && (
           <Button size="sm" variant={control ? "primary" : "secondary"} onClick={() => send({ type: "control", on: !control })}>
             {control ? t("ui.control.return") : t("ui.control.take")}
@@ -240,7 +370,7 @@ function BrowserPane() {
 
       {error && <div style={S.error}>{error}</div>}
 
-      {state && !state.running && state.install?.installing ? (
+      {installing && state?.install ? (
         <div>
           <EmptyState icon="globe" title={t("ui.install.title")} hint={t("ui.install.hint")} />
           <div style={{ ...S.row, justifyContent: "center" }}>
@@ -266,33 +396,10 @@ function BrowserPane() {
         </div>
       ) : (
         <>
-          <div
-            ref={screenRef}
-            tabIndex={0}
-            style={{ ...S.screen, boxShadow: control ? "0 0 0 2px #f59e0b" : undefined, cursor: control ? "default" : "not-allowed" }}
-            onMouseDown={mouse("down")}
-            onMouseUp={mouse("up")}
-            onMouseMove={mouse("move")}
-            onKeyDown={key("down")}
-            onKeyUp={key("up")}
-            onPaste={(e) => {
-              if (!control) return;
-              e.preventDefault();
-              const text = e.clipboardData.getData("text");
-              if (text) send({ type: "input", event: "text", text });
-            }}
-            onContextMenu={(e) => control && e.preventDefault()}
-            title={control ? undefined : t("ui.screen.locked")}
-          >
-            <img ref={imgRef} alt="" draggable={false} style={{ ...S.img, display: hasFrame ? "block" : "none" }} />
-            {!hasFrame && (
-              <div style={S.placeholder}>
-                <Spinner />
-              </div>
-            )}
-          </div>
-          <div style={S.hint}>
-            {control ? t("ui.hint.user") : t("ui.hint.agent")}
+          {picture}
+          <div style={{ ...S.row, ...S.hint }}>
+            {state?.running && status}
+            <span>{control ? t("ui.hint.user") : t("ui.hint.agent")}</span>
           </div>
         </>
       )}
@@ -301,9 +408,6 @@ function BrowserPane() {
 }
 
 // ---------- compact renderer for browser_* tool calls in the chat ----------
-
-/** Tools with a label (ui.call.<name>). */
-const LABELED = new Set(["open", "snapshot", "get_text", "screenshot", "scroll", "back", "tabs", "wait", "click", "type", "press_key", "fill_secret", "download", "submit"]);
 
 const C: Record<string, CSSProperties> = {
   box: { margin: "4px 0", fontSize: 13 },
@@ -356,9 +460,13 @@ function BrowserCall({ call, result }: ToolResultProps) {
 export default definePluginUI((ui) => {
   host = ui;
   t = (key, params) => ui.i18n.t(key, params);
+  const view = ui.liveView.register({ id: "browser", title: t("ui.view.title"), icon: "globe", component: BrowserView });
   const offs = [
-    ui.slots.register("pane.right", { id: "browser", title: t("ui.pane.title"), icon: "globe", component: BrowserPane }),
+    () => view.dispose(),
+    ui.plugin.on("activity", (a: Activity) => view.update(toLiveActivity(a))),
     ui.slots.register("chat.toolResult", { id: "browser-call", match: { tool: ["browser_*", "*__browser_*"] }, component: BrowserCall }),
   ];
+  // An agent may already be working in the browser when the page loads.
+  send({ type: "activity" });
   return () => offs.forEach((off) => off());
 });

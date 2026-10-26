@@ -9,6 +9,7 @@ import { agentPath } from "../lib/team";
 import { agents, ensureAgents, logout, session } from "../state/app";
 import { toast } from "../state/toast";
 import { usePluginRegistry } from "../plugins/slots";
+import { liveWindowActions } from "../plugins/liveview";
 import { Icon } from "./icon";
 import { cx } from "./ui";
 import { SECTIONS } from "./nav";
@@ -44,7 +45,7 @@ export function filterItems<T extends { title: string; group: string }>(items: T
 export function CommandPalette() {
   const isOpen = useStore(open);
   const [, navigate] = useLocation();
-  const { routes, commands } = usePluginRegistry();
+  const { routes, commands, liveViews } = usePluginRegistry();
   const s = useStore(session);
   const agentList = useStore(agents);
   const [q, setQ] = useState("");
@@ -79,6 +80,7 @@ export function CommandPalette() {
       { id: "add-agent", title: t("team.add"), group: actions, icon: "plus", run: addAgent },
       { id: "new-task", title: t("tasks.new"), group: actions, icon: "list-todo", run: () => navigate("/tasks?new=1") },
     ];
+    for (const v of liveViews) out.push({ id: `live:${v.key}`, title: t("liveView.command", { title: v.title }), group: actions, icon: v.icon, run: () => liveWindowActions.expand(v.key) });
     for (const a of agentList ?? []) out.push({ id: `agent:${a.id}`, title: a.name, group: t("palette.group.team"), icon: "bot", run: () => navigate(agentPath(a.id, s?.defaultAgent)) });
     out.push({ id: "settings", title: t("nav.settings"), group: goTo, icon: "settings", run: () => openPanel("home") });
     for (const n of SECTIONS) out.push({ id: `section:${n.id}`, title: t(n.label), group: goTo, run: () => openPanel(n.id), icon: undefined });
@@ -91,7 +93,7 @@ export function CommandPalette() {
     }
     out.push({ id: "logout", title: t("common.logout"), group: actions, icon: "power", run: () => logout() });
     return out;
-  }, [routes, commands, s, agentList, navigate]);
+  }, [routes, commands, liveViews, s, agentList, navigate]);
 
   const filtered = useMemo(() => filterItems(items, q), [items, q]);
 

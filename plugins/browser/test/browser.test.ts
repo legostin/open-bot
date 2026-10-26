@@ -361,6 +361,32 @@ describe("browser plugin (headless Chromium)", () => {
     expect(r).toContain("take control");
   });
 
+  it("reports activity for the live view: who drives the browser and when it needs the user", async () => {
+    const acts = () =>
+      h.coreCalls.filter((c) => c.method === "ui.emit" && (c.params as { channel: string }).channel === "activity").map((c) => (c.params as { payload: any }).payload);
+    const from = acts().length;
+    await ok("open", { url: base + "/captcha" });
+    const during = acts().slice(from);
+    expect(during.some((a) => a.busy === "open" && a.agentId === "assistant")).toBe(true);
+    expect(during.at(-1)).toMatchObject({ running: true, busy: null, agentId: "assistant", control: "agent", attention: true });
+
+    // Taking control answers the request; a page without a captcha clears it too.
+    h.uiMessage({ type: "control", on: true });
+    await until(() => acts().at(-1)?.control === "user" && acts().at(-1)?.attention === false);
+    h.uiMessage({ type: "control", on: false });
+    await until(() => acts().at(-1)?.control === "agent");
+    await ok("snapshot");
+    expect(acts().at(-1)).toMatchObject({ attention: true });
+    await ok("open", { url: base + "/about" });
+    expect(acts().at(-1)).toMatchObject({ busy: null, attention: false, url: base + "/about" });
+
+    // A UI that loads later asks for the current value.
+    const before = acts().length;
+    h.uiMessage({ type: "activity" });
+    await until(() => acts().length > before);
+    expect(acts().at(-1)).toMatchObject({ running: true, url: base + "/about" });
+  });
+
   it("keeps the agent away from local addresses unless allowed", async () => {
     h.setSettings({ headless: "always", takeoverWaitSec: 0 });
     const r = await call("open", { url: base + "/" });

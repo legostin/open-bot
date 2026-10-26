@@ -8,6 +8,7 @@ import { agents, conversations, ensureAgents, loadMessages, loadOlder, updateCon
 import { toast } from "../../state/toast";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
 import { TopBar } from "../../components/Layout";
+import { useComposerInsetRef } from "../../components/LiveViewWindow";
 import { AgentHeader } from "./AgentHeader";
 import { DetailsToggle } from "./DetailsToggle";
 import { t } from "../../i18n";
@@ -83,6 +84,7 @@ export function ChatView({
   const stick = useRef(true);
   const prevHeight = useRef<number | null>(null);
   const [showDown, setShowDown] = useState(false);
+  const composerArea = useComposerInsetRef();
 
   useEffect(() => {
     stick.current = true;
@@ -172,7 +174,7 @@ export function ChatView({
         )}
       </div>
 
-      <div className="shrink-0 px-3 pt-1 pb-3 sm:px-6">
+      <div ref={composerArea} className="shrink-0 px-3 pt-1 pb-3 sm:px-6">
         <div className="mx-auto w-full max-w-3xl">
           <Composer key={conversationId} conversationId={conversationId} />
         </div>

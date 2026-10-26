@@ -8,7 +8,7 @@ let manager: BrowserManager | null = null;
 
 const plugin: PluginModule = {
   async activate(ctx: PluginContext) {
-    // The browser itself starts lazily on the first tool call (or when the user opens it in the panel).
+    // The browser itself starts lazily on the first tool call (or when the user opens it in the live view).
     const mgr = new BrowserManager(ctx);
     manager = mgr;
     // Outside Docker Playwright's Chromium may be missing: download it now in the background, so the first

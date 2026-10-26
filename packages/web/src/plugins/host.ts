@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 import type { Catalog } from "@openbot/shared";
-import type { OpenBotUI, SlotContribution, SlotName, SlotProps } from "@openbot/ui";
+import type { LiveViewContribution, OpenBotUI, SlotContribution, SlotName, SlotProps } from "@openbot/ui";
 import { translator } from "@openbot/shared/i18n";
 import { navigate } from "wouter/use-browser-location";
 import { api, request, type Method } from "../lib/api";
@@ -10,7 +10,7 @@ import { createStore } from "../lib/store";
 import { hubEvents, sendToHub, type UiPluginEntry } from "../state/app";
 import { toast } from "../state/toast";
 import { formatDate, formatNumber, locale, t } from "../i18n";
-import { addCommand, addContribution, addRoute, addSettings, addStatus, normalizePath, removePlugin } from "./registry";
+import { addCommand, addContribution, addLiveView, addRoute, addSettings, addStatus, normalizePath, removePlugin } from "./registry";
 import { resolveActivate } from "./activate";
 
 export interface PluginLoadState {
@@ -41,6 +41,8 @@ export function createOpenBotUI(pluginId: string, messages: Catalog = {}): OpenB
         return addSettings(pluginId, { id: c.id, title: c.title ?? c.id, component: c.component as ComponentType<SlotProps> });
       case "layout.statusbar":
         return addStatus(pluginId, { id: c.id, render: c.component as ComponentType<SlotProps> });
+      case "live.view":
+        return addLiveView(pluginId, c as unknown as LiveViewContribution).dispose;
       default:
         return addContribution(pluginId, slot, c as SlotContribution);
     }
@@ -58,6 +60,7 @@ export function createOpenBotUI(pluginId: string, messages: Catalog = {}): OpenB
     statusbar: { add: (item) => addStatus(pluginId, item) },
     commands: { register: (c) => addCommand(pluginId, c) },
     settings: { section: (s) => addSettings(pluginId, s) },
+    liveView: { register: (c) => addLiveView(pluginId, c) },
     toast: (text, kind) => toast(text, kind ?? "info"),
     navigate: (path) => navigate(path),
     api,

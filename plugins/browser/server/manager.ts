@@ -1,6 +1,7 @@
 // Browser lifecycle: lazy Chromium launch with a persistent profile, active tab, serialized agent tool calls,
 // idle shutdown, dialogs and downloads, live view (CDP screencast) and user takeover (CDP input).
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { chromium } from "playwright";
 import type { BrowserContext, CDPSession, Dialog, Download, Frame, Locator, Page } from "playwright";
 import { mkdirSync, rmSync, statSync } from "node:fs";
@@ -89,6 +90,12 @@ export class BrowserManager {
   private titles = new WeakMap<Page, string>();
   userControl = false;
   busy: string | null = null;
+  /** The agent whose tool call is running (or ran last): tools.ts runs each handler inside `caller.run(agentId)`. */
+  readonly caller = new AsyncLocalStorage<string>();
+  private agentId: string | null = null;
+  /** The last open/snapshot found a captcha: the live view asks the user to take over. */
+  private captcha = false;
+  private lastActivity = "";
 
   constructor(ctx: PluginContext) {
     this.ctx = ctx;
@@ -227,6 +234,7 @@ export class BrowserManager {
     const c = this.context;
     this.context = null;
     this.active = null;
+    this.captcha = false;
     if (this.userControl) this.setControl(false);
     await this.stopCastNow();
     this.inputCdp = null;
@@ -247,6 +255,7 @@ export class BrowserManager {
     this.active = null;
     this.cast = null;
     this.inputCdp = null;
+    this.captcha = false;
     if (this.userControl) this.setControl(false);
     this.scheduleState();
   }
@@ -388,12 +397,13 @@ export class BrowserManager {
    * `fn` returns the main text (or a full ToolResult, e.g. with an image).
    */
   async tool(name: string, fn: (page: Page) => Promise<string | ToolResult>): Promise<ToolResult> {
-    const job = this.queue.then(() => this.runTool(name, fn));
+    const agentId = this.caller.getStore();
+    const job = this.queue.then(() => this.runTool(name, fn, agentId));
     this.queue = job.catch(() => {});
     return job;
   }
 
-  private async runTool(name: string, fn: (page: Page) => Promise<string | ToolResult>): Promise<ToolResult> {
+  private async runTool(name: string, fn: (page: Page) => Promise<string | ToolResult>, agentId: string | undefined): Promise<ToolResult> {
     if (this.userControl) {
       const until = Date.now() + this.settings.takeoverWaitSec * 1000;
       while (this.userControl && Date.now() < until) await sleep(200);
@@ -402,7 +412,7 @@ export class BrowserManager {
           content: [
             {
               type: "text",
-              text: "The user is controlling the browser. Wait until they hand control back (a button in the Browser panel) and retry; ask the user if needed.",
+              text: "The user is controlling the browser. Wait until they hand control back (a button in the browser's live view) and retry; ask the user if needed.",
             },
           ],
           isError: true,
@@ -410,6 +420,7 @@ export class BrowserManager {
       }
     }
     this.touch();
+    if (agentId) this.agentId = agentId;
     this.busy = name;
     this.scheduleState();
     let result: ToolResult;
@@ -475,7 +486,7 @@ export class BrowserManager {
     if (!this.settings.allowLocalNetwork && isPrivateHost(u.hostname)) {
       throw new ToolError(
         `${u.hostname} belongs to the local network or this server, so it is closed to the agent. ` +
-          "The user can allow such addresses in the Browser plugin settings (allowLocalNetwork) or open the address themselves in the Browser panel.",
+          "The user can allow such addresses in the Browser plugin settings (allowLocalNetwork) or open the address themselves in the browser's live view.",
       );
     }
   }
@@ -612,15 +623,28 @@ export class BrowserManager {
       case "state":
         void this.emitState();
         return;
+      case "activity":
+        this.emitActivity(true);
+        return;
     }
   }
 
   setControl(on: boolean): void {
     if (this.userControl === on) return;
     this.userControl = on;
+    // The user is on it: the request to take over is answered.
+    if (on) this.captcha = false;
     this.ctx.log.info(on ? "user took control of the browser" : "user returned control to the agent");
     this.ctx.ui.emit("control", { user: on });
+    this.emitActivity();
     void this.emitState();
+  }
+
+  /** open / snapshot report whether the page shows a captcha (the live view then asks the user for help). */
+  setCaptcha(on: boolean): void {
+    if (this.captcha === on) return;
+    this.captcha = on;
+    this.emitActivity();
   }
 
   private viewport(): { w: number; h: number } {
@@ -755,8 +779,28 @@ export class BrowserManager {
     await c.cdp.detach().catch(() => {});
   }
 
-  /** Debounced "state" event for the UI (only while someone watches). */
+  /**
+   * "activity" event for the live view (whether an agent works in the browser, who, where, whether it needs the user),
+   * sent on every change whether or not anyone watches: the UI opens the live view on it. Cheap and deduplicated.
+   */
+  emitActivity(force = false): void {
+    const activity = {
+      running: !!this.context,
+      busy: this.busy,
+      agentId: this.agentId,
+      url: this.activePage()?.url() ?? "",
+      control: this.userControl ? "user" : "agent",
+      attention: this.captcha && !!this.context,
+    };
+    const key = JSON.stringify(activity);
+    if (!force && key === this.lastActivity) return;
+    this.lastActivity = key;
+    this.ctx.ui.emit("activity", activity);
+  }
+
+  /** Debounced "state" event for the UI (only while someone watches); "activity" goes out at once. */
   scheduleState(): void {
+    this.emitActivity();
     if (!this.watching()) return;
     if (this.stateTimer) clearTimeout(this.stateTimer);
     this.stateTimer = setTimeout(() => {

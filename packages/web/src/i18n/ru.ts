@@ -57,6 +57,17 @@ export default {
   "layout.commands": "Команды (Ctrl+K)",
   "layout.sidePanel": "Боковая панель",
   "layout.closePanel": "Закрыть панель",
+  // live view: the floating window onto an agent's screen
+  "liveView.label": "Живой просмотр: {title}",
+  "liveView.expand": "Развернуть",
+  "liveView.collapse": "Вернуть в угол",
+  "liveView.minimize": "Свернуть",
+  "liveView.close": "Закрыть",
+  "liveView.drag": "Перетащите в другой угол",
+  "liveView.show": "Показать: {title}",
+  "liveView.needsYou": "Нужна ваша помощь",
+  "liveView.needsYouHint": "Агенту нужна ваша помощь",
+  "liveView.command": "Живой просмотр: {title}",
 
   // header badges
   "status.connection.open": "на связи",

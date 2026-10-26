@@ -62,7 +62,7 @@
       "files.deliver"
     ],
     "ui": [
-      "pane.right",
+      "live.view",
       "chat.toolResult"
     ]
   }
