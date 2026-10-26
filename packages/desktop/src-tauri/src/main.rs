@@ -19,11 +19,17 @@ mod window;
 
 fn main() {
   let args = app::Args::parse(std::env::args().skip(1));
-  tauri::Builder::default()
-    // First: a second launch (and a link on Windows) goes to the running app.
-    .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| app::second_instance(app, argv)))
+  let mut builder = tauri::Builder::default();
+  // First: a second launch (and a link on Windows) goes to the running app. Not for a dev or test run (OWLBOT_DATA_DIR
+  // set): it would hand its arguments to an installed app instead of starting.
+  if std::env::var_os("OWLBOT_DATA_DIR").is_none() {
+    builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| app::second_instance(app, argv)));
+  }
+  builder
     .plugin(tauri_plugin_deep_link::init())
-    .plugin(tauri_plugin_opener::init())
+    // Without its click script: that script sends target=_blank links over IPC, which the hub's page may not use, so
+    // they did nothing. The main window's own new-window handler opens them in the browser (window.rs).
+    .plugin(tauri_plugin_opener::Builder::new().open_js_links_on_click(false).build())
     .invoke_handler(tauri::generate_handler![
       commands::get_state,
       commands::choose_hub,
