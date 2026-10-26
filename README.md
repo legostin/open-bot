@@ -39,20 +39,14 @@ Everything is stored in the `openbot-data` volume (`/data`): the database, the v
 
 ## Connecting brains
 
-**Claude Code (Claude Pro/Max subscription).** There are two ways:
+**Claude Code (Claude Pro/Max subscription) and Codex (ChatGPT subscription)** sign in from the chat. Press **Sign in** next to the brain in the checklist's first step, or ask the assistant ("connect Codex"): a card shows the sign-in page to open.
 
-- Sign in inside the container (the login is kept in `/data/home/agent`):
-  ```bash
-  docker exec -it -u agent openbot claude
-  ```
-  Run `/login`, then `/exit`.
-- Or run `claude setup-token` on your own computer and paste the token into the chat: it is stored in the vault as **`claude_code_token`** and the Claude Code brain picks it up.
+- **Codex:** enter the one-time code from the card on that page.
+- **Claude Code:** sign in, copy the code the page shows and paste it into the card (not into the chat).
 
-**Codex (ChatGPT subscription).**
+The card turns green once the brain is signed in. The login is kept on the server in `/data/home/agent`, so there is nothing to run in a terminal. The **Brains** page has the same buttons.
 
-```bash
-docker exec -it -u agent openbot codex login --device-auth
-```
+Claude Code can also use a long-lived token instead: run `claude setup-token` on any computer with Claude Code and paste the token into the chat. It is stored in the vault as **`claude_code_token`** and the Claude Code brain picks it up.
 
 **API keys** (fallback brains, web search): ask the assistant ("connect Brave search") or paste the key into the chat. They are stored in the vault under these ids:
 

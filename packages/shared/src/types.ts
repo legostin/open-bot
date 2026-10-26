@@ -187,7 +187,9 @@ export type MessagePart =
   /** A plugin's setup card: its secrets and its own setup UI (e.g. Telegram pairing), live. */
   | { type: "plugin_setup"; pluginId: string }
   /** A new agent being put together in the chat: its look, description and proactivity, live, with a button that creates it. */
-  | { type: "agent_draft"; draftId: string };
+  | { type: "agent_draft"; draftId: string }
+  /** A CLI brain's sign-in card (device code or browser code), live. */
+  | { type: "brain_login"; ref: string };
 
 export interface Message {
   id: string;
@@ -299,6 +301,48 @@ export interface ProbeResult {
   version?: string;
   models?: string[];
   detail?: string;
+}
+
+// ---------- Brain sign-in from the chat ----------
+
+/**
+ * starting → waiting (the user signs in on the page) → verifying (a pasted code is being checked) → succeeded,
+ * or failed / cancelled / expired (the code ran out before the user finished).
+ */
+export type BrainLoginStatus = "starting" | "waiting" | "verifying" | "succeeded" | "failed" | "cancelled" | "expired";
+
+/** What a sign-in reports while it runs (from the brain's host to the hub). */
+export interface BrainLoginUpdate {
+  status: BrainLoginStatus;
+  /** Page the user opens to sign in. */
+  url?: string;
+  /** One-time code the user types on that page (device flow, e.g. Codex). */
+  userCode?: string;
+  /** The page shows a code the user pastes back into the card (browser flow, e.g. Claude Code). */
+  needsCode?: boolean;
+  expiresAt?: ISODate;
+  /** Why it failed, for people. */
+  error?: string;
+}
+
+/** A CLI brain signing in without a terminal, as the sign-in card shows it. */
+export interface BrainLoginState extends BrainLoginUpdate {
+  id: string;
+  ref: string;
+  startedAt: ISODate;
+  finishedAt?: ISODate;
+}
+
+/** Everything the sign-in card needs for one brain. */
+export interface BrainLoginView {
+  ref: string;
+  label: string;
+  connected: boolean;
+  /** The brain can sign in from the chat. */
+  supported: boolean;
+  probe?: ProbeResult;
+  /** The latest sign-in since the hub started, running or finished. */
+  login?: BrainLoginState;
 }
 
 export interface BrainSessionOptions {
@@ -460,4 +504,5 @@ export type UiEvent =
   | { type: "vault.state"; data: { state: VaultState } }
   | { type: "secret.request"; data: SecretRequest }
   | { type: "agent_draft.updated"; data: AgentDraft }
+  | { type: "brain.login"; data: BrainLoginState }
   | { type: "plugin.event"; data: { pluginId: string; channel: string; payload: unknown } };

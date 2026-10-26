@@ -3,7 +3,7 @@
   "description": "Brain on a ChatGPT subscription: runs the Codex CLI (codex exec) with open-bot tools.",
   "settings.command.title": "CLI command",
   "settings.apiKeyRef.title": "OpenAI key (vault reference, optional)",
-  "settings.apiKeyRef.description": "If empty, `codex login` (ChatGPT subscription) is used.",
+  "settings.apiKeyRef.description": "If empty, the ChatGPT subscription is used: sign in from the chat.",
   "settings.sandbox.title": "Codex sandbox",
   "settings.sandbox.description": "In Docker, isolation comes from Unix users and the egress proxy."
 }

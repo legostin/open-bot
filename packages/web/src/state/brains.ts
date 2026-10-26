@@ -11,6 +11,8 @@ export interface BrainRow {
   ref: string;
   label: string;
   host?: string;
+  /** Can sign in from here (a CLI brain on the hub). */
+  login?: boolean;
   connected: boolean;
   probe?: { available: boolean; authenticated: boolean; version?: string; models?: string[]; detail?: string; checkedAt?: string };
   limitedUntil?: string;

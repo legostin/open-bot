@@ -1,15 +1,16 @@
-// Brains: probe status per brain ref, limits, and setup instructions.
+// Brains: probe status per brain ref, limits, and signing in (subscriptions sign in right here, keys go to the vault).
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Brain, ExternalLink, KeyRound, RefreshCw, TimerReset } from "lucide-react";
-import { useStore } from "../lib/store";
+import { Brain, ChevronDown, LogIn, RefreshCw, TimerReset } from "lucide-react";
 import { api, errorText } from "../lib/api";
 import { formatDateTime, relativeTime } from "../lib/format";
 import { hubEvents, session } from "../state/app";
 import { brainStatus, type BrainRow } from "../state/brains";
 import { toast } from "../state/toast";
 import { t, tRich } from "../i18n";
-import { Badge, Button, Card, CodeLine, EmptyState, ErrorNote, Loading, Page } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorNote, Loading, Page } from "../components/ui";
+import { BrainLoginCard } from "../components/BrainLoginCard";
+import { PluginSetupCard, VaultGate } from "../components/SecretCards";
 
 
 function hostLabel(host?: string): string | undefined {
@@ -20,7 +21,7 @@ function hostLabel(host?: string): string | undefined {
 }
 
 export function BrainsPage() {
-  const s = useStore(session);
+  const [signingIn, setSigningIn] = useState<string>();
   const [list, setList] = useState<BrainRow[] | null>(null);
   const [error, setError] = useState<string>();
   const [probingAll, setProbingAll] = useState(false);
@@ -70,8 +71,6 @@ export function BrainsPage() {
     }
   };
 
-  const vaultLink = s ? `${s.consoleUrl}/#/vault` : "#";
-
   return (
     <Page
       title={t("nav.brains")}
@@ -90,7 +89,7 @@ export function BrainsPage() {
           {list.map((b, i) => {
             const st = brainStatus(b);
             return (
-              <div key={b.ref} className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center ${i ? "border-t border-border" : ""}`}>
+              <div key={b.ref} className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center ${i ? "border-t border-border" : ""}`}>
                 <div className="flex min-w-0 flex-1 items-start gap-3">
                   <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
                     <Brain className="size-[18px]" />
@@ -112,6 +111,11 @@ export function BrainsPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2 pl-12 sm:pl-0">
+                  {b.login && b.connected && b.probe && !b.probe.authenticated && signingIn !== b.ref && (
+                    <Button size="sm" variant="primary" icon={<LogIn className="size-3.5" />} onClick={() => setSigningIn(b.ref)}>
+                      {t("brainLogin.signIn")}
+                    </Button>
+                  )}
                   {b.limitedUntil && (
                     <Button size="sm" icon={<TimerReset className="size-3.5" />} onClick={() => void clearLimit(b.ref)}>
                       {t("brains.clearLimit")}
@@ -123,6 +127,11 @@ export function BrainsPage() {
                     </Button>
                   )}
                 </div>
+                {signingIn === b.ref && (
+                  <div className="w-full pl-12 sm:basis-full">
+                    <BrainLoginCard brainRef={b.ref} bare />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -132,64 +141,33 @@ export function BrainsPage() {
       <h2 className="mb-3 text-lg font-semibold">{t("brains.howTo")}</h2>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Card title="Claude Code">
-          <Steps>
-            <li>
-              {t("brains.claudeStep1")}
-              <CodeLine>claude setup-token</CodeLine>
-            </li>
-            <li>{tRich("brains.claudeStep2", { id: <Code>claude_code_token</Code> })}</li>
-            <li>{tRich("brains.pressCheck", { ref: <Code>claude-code@local</Code> })}</li>
-          </Steps>
-          <ConsoleLink href={vaultLink} />
+          <BrainLoginCard brainRef="claude-code@local" bare />
+          <details className="group mt-3">
+            <summary className="flex cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-accent-text">
+              {t("brainLogin.claudeToken")} <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-2">
+              <VaultGate>
+                <PluginSetupCard pluginId="brain-claude-code" bare />
+              </VaultGate>
+            </div>
+          </details>
           <p className="mt-3 text-xs text-muted">{t("brains.claudeMachines")}</p>
         </Card>
         <Card title="Codex">
-          <Steps>
-            <li>
-              {t("brains.codexStep1")}
-              <CodeLine>docker exec -it -u agent openbot codex login --device-auth</CodeLine>
-            </li>
-            <li>{t("brains.codexStep2")}</li>
-            <li>{tRich("brains.pressCheck", { ref: <Code>codex@local</Code> })}</li>
-          </Steps>
+          <BrainLoginCard brainRef="codex@local" bare />
           <p className="mt-3 text-xs text-muted">{tRich("brains.codexKey", { id: <Code>openai_api_key</Code> })}</p>
         </Card>
         <Card title={t("brains.apiKeys")}>
-          <p className="text-sm">{t("brains.apiKeysText")}</p>
-          <ul className="mt-2 flex flex-col gap-1.5 text-sm">
-            <KeyRow id="anthropic_api_key" label="Anthropic" />
-            <KeyRow id="openai_api_key" label="OpenAI" />
-            <KeyRow id="openrouter_api_key" label="OpenRouter" />
-          </ul>
-          <ConsoleLink href={vaultLink} />
+          <VaultGate>
+            <PluginSetupCard pluginId="brain-api" bare />
+          </VaultGate>
         </Card>
       </div>
     </Page>
   );
 }
 
-function Steps({ children }: { children: ReactNode }) {
-  return <ol className="flex list-decimal flex-col gap-2.5 pl-5 text-sm leading-relaxed [&_li>div]:mt-1.5">{children}</ol>;
-}
-
 function Code({ children }: { children: ReactNode }) {
   return <code className="rounded-md border border-border bg-code-bg px-1.5 py-0.5 font-mono text-[12px]">{children}</code>;
-}
-
-function KeyRow({ id, label }: { id: string; label: string }) {
-  return (
-    <li className="flex items-center gap-2">
-      <KeyRound className="size-3.5 text-muted" />
-      <span className="w-24 text-muted">{label}</span>
-      <Code>{id}</Code>
-    </li>
-  );
-}
-
-function ConsoleLink({ href }: { href: string }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent-text hover:underline">
-      {t("brains.openVault")} <ExternalLink className="size-3.5" />
-    </a>
-  );
 }

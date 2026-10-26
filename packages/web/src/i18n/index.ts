@@ -96,7 +96,7 @@ const MARK = "\u0000";
 
 /**
  * Translate a message whose placeholders hold React nodes (links, <code>…), e.g.
- * tRich("brains.claudeStep2", { id: <Code>claude_code_token</Code> }).
+ * tRich("brains.codexKey", { id: <Code>openai_api_key</Code> }).
  */
 export function tRich(key: MessageKey, params: Record<string, ReactNode>): ReactNode {
   const nodes: ReactNode[] = [];

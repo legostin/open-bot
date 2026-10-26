@@ -1,5 +1,6 @@
 // Claude Code as a brain: one headless `claude -p` process per turn, `--resume` between turns.
-// Uses the user's subscription (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, or an existing login in HOME).
+// Uses the user's subscription (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, or a login in HOME, which the user
+// can make from the chat: `claude auth login` prints a sign-in page and reads the code that page shows from stdin).
 
 import { mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
 import type { Locale, Translate } from "@openbot/shared/i18n";
 import { capture, childEnv, runLines, textOfToolContent } from "./proc.ts";
 import { brainsT } from "./messages.ts";
+import { parseClaudeBrowserLogin, runCliLogin } from "./login.ts";
 
 const MCP_PREFIX = "mcp__openbot__";
 
@@ -41,6 +43,8 @@ export interface ClaudeCodeOptions {
   log?: (msg: string) => void;
   /** Language for messages people read (probe details, failures); English by default. */
   locale?: () => Locale;
+  /** How long a sign-in from the chat may wait for the user to paste the code. */
+  loginTimeoutMs?: number;
 }
 
 /** Turns Claude Code stream-json messages into BrainEvents. Pure: easy to test with recorded fixtures. */
@@ -309,6 +313,20 @@ export function createClaudeCodeProvider(p: ClaudeCodeOptions): BrainProviderImp
     },
     async createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl> {
       return new ClaudeCodeSession(opts, p);
+    },
+    // Browser sign-in to the subscription, kept in HOME like a terminal `/login`: the page shows a code to paste back.
+    login({ env, onUpdate }) {
+      const t = brainsT(p.locale?.());
+      return runCliLogin({
+        command: p.command?.() ?? "claude",
+        args: ["auth", "login"],
+        env: childEnv(process.env, { ...env, DISABLE_AUTOUPDATER: "1", NO_COLOR: "1" }),
+        onUpdate,
+        parse: parseClaudeBrowserLogin,
+        timeoutMs: p.loginTimeoutMs ?? 15 * 60_000,
+        t,
+        notInstalled: t("claude.notInstalledShort"),
+      });
     },
   };
 }

@@ -18,6 +18,7 @@ import { usePluginRegistry } from "../../plugins/slots";
 import { ToolCard } from "./ToolCard";
 import { PluginSetupCard, SecretRequestCard } from "../../components/SecretCards";
 import { AgentDraftCard } from "./AgentDraftCard";
+import { BrainLoginCard } from "../../components/BrainLoginCard";
 import { t, type MessageKey } from "../../i18n";
 
 const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
@@ -192,6 +193,8 @@ function Parts({ message }: { message: Message }) {
             return <PluginSetupCard key={it.key} pluginId={p.pluginId} />;
           case "agent_draft":
             return <AgentDraftCard key={it.key} draftId={p.draftId} messageId={message.id} />;
+          case "brain_login":
+            return <BrainLoginCard key={it.key} brainRef={p.ref} />;
           default:
             return null;
         }

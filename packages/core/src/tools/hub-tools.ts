@@ -23,7 +23,7 @@ export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHou
 const SECRET_KEY = /key|token|secret|password/i;
 
 /** Tools that only put a card in front of the user, who then decides: fine even after outside content was read. */
-const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft"]);
+const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft", "brain_login"]);
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 const json = (v: unknown): ToolResult => text(JSON.stringify(v, null, 2));
@@ -427,6 +427,52 @@ export function registerHubTools(hub: Hub): void {
         "Describe the state from these lines only; if something is wrong (e.g. a rejected token), say so and point at the card's Replace button.",
       ];
       return text(lines.filter(Boolean).join("\n"));
+    },
+  );
+
+  reg(
+    {
+      name: "brain_login",
+      effect: "local-write",
+      description:
+        "Sign a CLI brain (Claude Code, Codex) in to the user's subscription from this chat: shows a card with the sign-in page, the one-time code and live status, " +
+        "and runs the CLI's own login on the hub. Use it whenever the user wants to connect or re-connect Claude Code or Codex; never give them terminal commands for it. " +
+        "API brains use keys instead (hub_plugin_setup brain-api).",
+      inputSchema: obj(
+        {
+          ref: { type: "string", description: "Brain ref, e.g. codex@local or claude-code@local (see hub_brains_list)" },
+          again: { type: "boolean", description: "Sign in again even though the brain is already signed in" },
+        },
+        ["ref"],
+      ),
+    },
+    async (i, ctx) => {
+      const ref = formatBrainRef(parseBrainRef(String(i.ref ?? "")));
+      if (!hub.brains.has(ref)) return text(`Brain ${ref} is not connected. See hub_brains_list.`, true);
+      if (!hub.brainLogins.supported(ref)) return text(`${ref} cannot sign in from the chat (brains on the user's computers sign in there; API brains use keys: hub_plugin_setup brain-api).`, true);
+      hub.brains.invalidate(ref);
+      const probe = await hub.brains.probe(ref, 0);
+      hub.runner.attachPart(ctx.conversationId, { type: "brain_login", ref });
+      if (probe.authenticated && !i.again) {
+        return text(`${ref} is already signed in (${probe.detail ?? "ok"}). The card shows it and has a "Sign in again" button; pass again: true only if the user asks to switch accounts.`);
+      }
+      let s = await hub.brainLogins.start(ref, { actor: "agent", conversationId: ctx.conversationId });
+      // The CLI prints its page and code within a few seconds.
+      for (let n = 0; n < 150 && s.status === "starting"; n++) {
+        await new Promise((r) => setTimeout(r, 100));
+        s = hub.brainLogins.get(ref) ?? s;
+      }
+      if (s.status === "failed" || s.status === "expired") return text(`The sign-in for ${ref} could not start: ${s.error ?? s.status}. The card shows it with a "Try again" button.`, true);
+      if (s.status === "succeeded") return text(`${ref} is signed in now.`);
+      const what = s.needsCode
+        ? "the user opens the page, signs in, copies the code the page shows and pastes it into the card (not into the chat)"
+        : s.userCode
+          ? "the user opens the page and enters the one-time code shown on the card"
+          : "it is still starting; the page and the code appear on the card in a moment";
+      return text(
+        `A sign-in card for ${ref} is shown in the chat: ${what}. Do not repeat the link or the code; tell the user in a sentence what to do. ` +
+          "You will get a system note once the brain is signed in.",
+      );
     },
   );
 

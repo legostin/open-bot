@@ -8,6 +8,7 @@ import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
 import type { Locale } from "@openbot/shared/i18n";
 import { capture, childEnv, runLines } from "./proc.ts";
 import { brainsT } from "./messages.ts";
+import { parseCodexDeviceLogin, runCliLogin } from "./login.ts";
 
 export interface CodexOptions {
   command?: () => string;
@@ -18,6 +19,8 @@ export interface CodexOptions {
   log?: (msg: string) => void;
   /** Language for messages people read (probe details, failures); English by default. */
   locale?: () => Locale;
+  /** How long a sign-in from the chat may wait for the user (Codex device codes last 15 minutes). */
+  loginTimeoutMs?: number;
 }
 
 /** Turns `codex exec --json` events into BrainEvents. */
@@ -207,6 +210,20 @@ export function createCodexProvider(p: CodexOptions): BrainProviderImpl {
     async createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl> {
       mkdirSync(opts.workspace, { recursive: true });
       return new CodexSession(opts, p);
+    },
+    // Device code sign-in as the same user and HOME the sessions use: the user opens the page and types the code.
+    login({ env, onUpdate }) {
+      const t = brainsT(p.locale?.());
+      return runCliLogin({
+        command: p.command?.() ?? "codex",
+        args: ["login", "--device-auth"],
+        env: childEnv(process.env, { ...env, NO_COLOR: "1" }),
+        onUpdate,
+        parse: parseCodexDeviceLogin,
+        timeoutMs: p.loginTimeoutMs ?? 15 * 60_000,
+        t,
+        notInstalled: t("codex.notInstalled"),
+      });
     },
   };
 }

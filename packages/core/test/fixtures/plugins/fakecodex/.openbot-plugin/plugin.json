@@ -1,0 +1,7 @@
+{
+  "id": "fakecodex",
+  "name": "Fake Codex",
+  "server": "./server/index.ts",
+  "contributes": { "brains": ["codex"] },
+  "permissions": {}
+}
