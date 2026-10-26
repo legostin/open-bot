@@ -8,6 +8,7 @@ import { groupParts } from "../../lib/parts";
 import { formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import { session } from "../../state/app";
+import { showDetails } from "../../state/prefs";
 import { Markdown } from "../../components/markdown";
 import { Badge, cx } from "../../components/ui";
 import { AgentAvatar } from "../../components/AgentAvatar";
@@ -130,14 +131,27 @@ function TypingDots() {
   );
 }
 
+/**
+ * Without detailed mode the chat shows only what is meant for the person: answers, cards, errors, files.
+ * Tool calls and results, and text in system messages (notes for the model, "[System] …"), are service details.
+ */
+function partShown(p: MessagePart, role: Message["role"], details: boolean): boolean {
+  if (details) return true;
+  if (p.type === "tool_call" || p.type === "tool_result") return false;
+  return !(role === "system" && p.type === "text");
+}
+
 function Parts({ message }: { message: Message }) {
   const { contributions } = usePluginRegistry();
+  const details = useStore(showDetails);
   const items = groupParts(message.parts);
   const streaming = message.status === "streaming";
   const lastPart = message.parts[message.parts.length - 1];
   return (
     <>
       {items.map((it, idx) => {
+        if (!details && it.kind !== "part") return null;
+        if (it.kind === "part" && !partShown(it.part, message.role, details)) return null;
         if (it.kind === "tool") {
           const running = streaming && !it.result;
           const plugin = pickToolRenderer(contributions, it.call.name);
@@ -186,7 +200,10 @@ function Parts({ message }: { message: Message }) {
 
 /** Core rendering of a message (also passed to chat.message overrides as `Default`). */
 export const DefaultMessage = memo(function DefaultMessage({ message, agentName, agent }: { message: Message; agentName?: string; agent?: AgentDef }) {
+  const details = useStore(showDetails);
   const name = agentName ?? agent?.name ?? message.agentId ?? t("message.assistant");
+  // A finished message with nothing for the person (only tool calls, or a note for the model) is not shown at all.
+  if (message.status !== "streaming" && !message.parts.some((p) => partShown(p, message.role, details))) return null;
   if (message.role === "user") {
     return (
       <div className="animate-in flex justify-end">
@@ -213,7 +230,7 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName,
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-muted">
           <span className="font-medium text-fg">{name}</span>
-          {message.brainRef && <span className="font-mono">{message.brainRef}</span>}
+          {details && message.brainRef && <span className="font-mono">{message.brainRef}</span>}
           <span>{formatTime(message.createdAt)}</span>
         </div>
         <div className="text-[15px] leading-relaxed">

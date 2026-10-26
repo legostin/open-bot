@@ -9,6 +9,7 @@ import { toast } from "../../state/toast";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
 import { TopBar } from "../../components/Layout";
 import { AgentHeader } from "./AgentHeader";
+import { DetailsToggle } from "./DetailsToggle";
 import { t } from "../../i18n";
 import { MessageView } from "./MessageView";
 import { Composer } from "./Composer";
@@ -121,6 +122,7 @@ export function ChatView({
           {meta && <AgentHeader agentId={meta.agentId} settings={meta.kind !== "task"} />}
           <span className="hidden text-border sm:inline">/</span>
           <div className="hidden min-w-0 flex-1 text-sm text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
+          <DetailsToggle />
         </TopBar>
       )}
 

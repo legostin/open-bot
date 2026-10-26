@@ -8,6 +8,7 @@ import { TopBar } from "../../components/Layout";
 import { EmptyState, Spinner } from "../../components/ui";
 import { t } from "../../i18n";
 import { AgentHeader } from "./AgentHeader";
+import { DetailsToggle } from "./DetailsToggle";
 import { ChatView } from "./ChatView";
 import { FirstRunChecklist } from "./Checklist";
 
@@ -83,6 +84,7 @@ export function AgentPage({ agentId }: { agentId?: string }) {
     <div className="flex h-full flex-col">
       <TopBar>
         <AgentHeader agentId={id} />
+        <DetailsToggle />
       </TopBar>
       <div className="min-h-0 flex-1">
         {conversationId ? (

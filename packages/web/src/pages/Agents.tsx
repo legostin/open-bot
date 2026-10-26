@@ -10,6 +10,7 @@ import { api, errorText } from "../lib/api";
 import { slugify } from "../lib/format";
 import { agentForPath, agentPath } from "../lib/team";
 import { agents, refreshAgents, session } from "../state/app";
+import { activeBrain, brainName, brainReady, brains, brainStatus, ensureBrains, findBrain, normalizeBrainRef } from "../state/brains";
 import { clearPanelIntent, closePanel, panel } from "../state/panel";
 import { toast } from "../state/toast";
 import { t, tRich, type MessageKey } from "../i18n";
@@ -26,6 +27,8 @@ const SOURCE: Record<string, MessageKey> = { builtin: "agents.source.builtin", u
 
 export function AgentsPage() {
   const list = useStore(agents);
+  const brainList = useStore(brains);
+  useEffect(() => ensureBrains(), []);
   const p = useStore(panel);
   const s = useStore(session);
   const [loc, navigate] = useLocation();
@@ -91,12 +94,10 @@ export function AgentsPage() {
               <Badge tone="info">{t("agents.initiativeBadge", { level: a.initiative })}</Badge>
               <Badge>{SOURCE[a.source] ? t(SOURCE[a.source]) : a.source}</Badge>
               {a.model && <Badge>{a.model}</Badge>}
-              {a.brains.slice(0, 3).map((b) => (
-                <Badge key={b} className="font-mono">
-                  {b}
-                </Badge>
-              ))}
-              {a.brains.length > 3 && <Badge>+{a.brains.length - 3}</Badge>}
+              {(() => {
+                const on = activeBrain(a.brains, brainList);
+                return <Badge tone={on ? "success" : "warning"}>{on ? on.label : t("brainPicker.none")}</Badge>;
+              })()}
             </div>
             <div className="mt-auto flex justify-end gap-1 pt-3">
               {a.source === "user" && (
@@ -157,13 +158,10 @@ export function AgentsPage() {
   );
 }
 
-/** Mirrors parseBrainRef in @openbot/shared: a ref without "@machine" runs on the hub ("@local"). */
-function normalizeBrainRef(ref: string): string {
-  const r = ref.trim();
-  return r.includes("@") ? r : `${r}@local`;
-}
-
-function BrainsEditor({ value, onChange, suggestions }: { value: string[]; onChange: (v: string[]) => void; suggestions: string[] }) {
+function BrainsEditor({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const list = useStore(brains);
+  useEffect(() => ensureBrains(), []);
+  const suggestions = (list ?? []).map((b) => b.ref);
   const [draft, setDraft] = useState("");
   const move = (i: number, d: number) => {
     const next = value.slice();
@@ -185,7 +183,16 @@ function BrainsEditor({ value, onChange, suggestions }: { value: string[]; onCha
         {value.map((b, i) => (
           <li key={b} className="flex items-center gap-2 rounded-xl border border-border bg-surface-2/60 py-1 pr-1 pl-3">
             <span className="w-5 text-xs text-muted">{i + 1}.</span>
-            <span className="min-w-0 flex-1 truncate font-mono text-sm">{b}</span>
+            <span className="min-w-0 flex-1 truncate text-sm" title={b}>
+              {brainName(b, list)}
+            </span>
+            {(() => {
+              const row = findBrain(list, b);
+              if (!row) return <Badge>{t("brains.status.notConnected")}</Badge>;
+              if (brainReady(row)) return null;
+              const st = brainStatus(row);
+              return <Badge tone={st.tone}>{st.label}</Badge>;
+            })()}
             <IconButton label={t("agents.moveUp")} disabled={i === 0} onClick={() => move(i, -1)} className="size-7">
               <ArrowUp className="size-3.5" />
             </IconButton>
@@ -224,8 +231,8 @@ function BrainsEditor({ value, onChange, suggestions }: { value: string[]; onCha
       {free.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {free.slice(0, 8).map((s) => (
-            <button key={s} type="button" onClick={() => add(s)} className="rounded-lg border border-dashed border-border px-2 py-0.5 font-mono text-xs text-muted hover:border-accent hover:text-accent-text">
-              + {s}
+            <button key={s} type="button" onClick={() => add(s)} title={s} className="rounded-lg border border-dashed border-border px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-accent-text">
+              + {brainName(s, list)}
             </button>
           ))}
         </div>
@@ -303,7 +310,10 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent?: AgentDef; onC
   const [name, setName] = useState(agent?.name ?? "");
   const [avatar, setAvatar] = useState<AgentAvatarValue>(() => agent?.avatar ?? (agent ? defaultAvatar(agent.id) : randomAvatar()));
   const [description, setDescription] = useState(agent?.description ?? "");
-  const [brains, setBrains] = useState<string[]>(agent?.brains ?? ["claude-code@local", "codex@local", "api:anthropic"]);
+  // A new agent thinks with what the main agent was switched to, so it works on a hub with one brain signed in.
+  const [brains, setBrains] = useState<string[]>(
+    () => agent?.brains ?? agents.get()?.find((a) => a.id === session.get()?.defaultAgent)?.brains ?? ["claude-code@local", "codex@local", "api:anthropic"],
+  );
   const [model, setModel] = useState(agent?.model ?? "");
   const [initiative, setInitiative] = useState<0 | 1 | 2>(agent?.initiative ?? 1);
   const [tools, setTools] = useState<string[]>(agent?.tools ?? ["*"]);
@@ -312,16 +322,8 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent?: AgentDef; onC
   const [runs, setRuns] = useState(String(agent?.budget.backgroundRunsPerDay ?? 30));
   const [prompt, setPrompt] = useState(agent?.prompt ?? "");
   const [more, setMore] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-
-  useEffect(() => {
-    api.get<Array<{ ref: string }>>("/api/brains").then(
-      (l) => setSuggestions(l.map((b) => b.ref)),
-      () => {},
-    );
-  }, []);
 
   const effectiveId = isNew ? (idTouched ? id : slugify(name)) : agent.id;
 
@@ -456,7 +458,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent?: AgentDef; onC
               />
             </Field>
             <Field group label={t("agents.brains")} hint={t("agents.brainsHint")}>
-              <BrainsEditor value={brains} onChange={setBrains} suggestions={suggestions} />
+              <BrainsEditor value={brains} onChange={setBrains} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t("agents.model")} hint={t("agents.modelHint")}>

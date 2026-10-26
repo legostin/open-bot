@@ -4,30 +4,13 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Brain, ExternalLink, KeyRound, RefreshCw, TimerReset } from "lucide-react";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
-import { formatDateTime, relativeTime, type Tone } from "../lib/format";
+import { formatDateTime, relativeTime } from "../lib/format";
 import { hubEvents, session } from "../state/app";
+import { brainStatus, type BrainRow } from "../state/brains";
 import { toast } from "../state/toast";
 import { t, tRich } from "../i18n";
 import { Badge, Button, Card, CodeLine, EmptyState, ErrorNote, Loading, Page } from "../components/ui";
 
-interface BrainRow {
-  ref: string;
-  label: string;
-  host?: string;
-  connected: boolean;
-  probe?: { available: boolean; authenticated: boolean; version?: string; models?: string[]; detail?: string; checkedAt?: string };
-  limitedUntil?: string;
-  limitDetail?: string;
-}
-
-function status(b: BrainRow): { label: string; tone: Tone } {
-  if (!b.connected) return { label: t("brains.status.notConnected"), tone: "neutral" };
-  if (b.limitedUntil) return { label: t("brains.status.limited", { time: formatDateTime(b.limitedUntil) }), tone: "warning" };
-  if (!b.probe) return { label: t("brains.status.unchecked"), tone: "neutral" };
-  if (!b.probe.available) return { label: t("brains.status.unavailable"), tone: "danger" };
-  if (!b.probe.authenticated) return { label: t("brains.status.needsLogin"), tone: "warning" };
-  return { label: t("brains.status.ready"), tone: "success" };
-}
 
 function hostLabel(host?: string): string | undefined {
   if (!host) return undefined;
@@ -105,7 +88,7 @@ export function BrainsPage() {
       {list && list.length > 0 && (
         <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
           {list.map((b, i) => {
-            const st = status(b);
+            const st = brainStatus(b);
             return (
               <div key={b.ref} className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center ${i ? "border-t border-border" : ""}`}>
                 <div className="flex min-w-0 flex-1 items-start gap-3">
