@@ -171,6 +171,11 @@ export class Hub {
     this.machines.registerTools(this.tools);
     registerHubTools(this);
     this.brains.onChange = () => this.bus.emit("brains.updated", {});
+    // A key or token saved from the chat may sign a brain in: check again now, not in five minutes.
+    this.bus.on("vault.updated", () => {
+      this.brains.invalidateAll();
+      this.bus.emit("brains.updated", {});
+    });
     this.wireChannelsForApprovals();
   }
 

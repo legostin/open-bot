@@ -75,7 +75,13 @@ export function FirstRunChecklist() {
       {/* Every step opens right here: nothing sends the user to another page or the console. */}
       <ol className="flex flex-col gap-1.5">
         <Step done={brainOk} title={t("checklist.brain")} hint={t("checklist.brainHint")} open={open === "brain"} onToggle={() => toggle("brain")}>
-          <PluginSetupCard pluginId="brain-api" bare />
+          {/* One gate for both cards, so an absent vault is offered once, not twice. */}
+          <VaultGate>
+            <div className="flex flex-col gap-4">
+              <PluginSetupCard pluginId="brain-claude-code" bare />
+              <PluginSetupCard pluginId="brain-api" bare />
+            </div>
+          </VaultGate>
           <button type="button" onClick={() => openPanel("brains")} className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-accent-text">
             {t("checklist.subscriptions")} {t("checklist.brainAction")} <ArrowRight className="size-3.5" />
           </button>

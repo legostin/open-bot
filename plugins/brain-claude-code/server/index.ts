@@ -23,6 +23,9 @@ const plugin: PluginModule = {
       cached = { at: Date.now(), env };
       return env;
     };
+    // A token saved from the chat (or the vault opening) applies to the next probe and session right away.
+    ctx.events.on("vault.updated", () => (cached = undefined));
+    ctx.events.on("vault.state", () => (cached = undefined));
 
     ctx.brains.register(
       createClaudeCodeProvider({
