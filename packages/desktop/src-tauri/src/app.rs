@@ -10,7 +10,7 @@ use tauri::{AppHandle, Manager, RunEvent, Url};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::deeplink::{self, PairLink};
+use crate::deeplink::{self, PairLink, WindowAction};
 use crate::flavor::Flavor;
 use crate::i18n::texts;
 use crate::settings::{self, Mode, Settings};
@@ -377,16 +377,30 @@ pub fn last_lines(s: &str, n: usize) -> String {
 
 /// Remembers a pairing link and shows it in the setup window; false when it is not one.
 fn on_link(app: &AppHandle, url: &Url) -> bool {
-  let Some(link) = deeplink::parse(url) else { return false };
+  let Some(link) = deeplink::parse(url, app.state::<AppState>().paths.flavor.scheme()) else { return false };
   *app.state::<AppState>().link.lock().unwrap() = Some(link);
   let _ = window::open_setup(app);
   true
 }
 
+/// A link of the app's scheme the hub window navigated to: its "This app" settings ask to reset or quit (deeplink.rs).
+/// Runs off the navigation callback, which must not open windows itself.
+pub fn on_window_link(app: &AppHandle, url: &Url) {
+  let (app, url) = (app.clone(), url.clone());
+  std::thread::spawn(move || match deeplink::window_action(&url, app.state::<AppState>().paths.flavor.scheme()) {
+    Some(WindowAction::Reset) => on_menu(&app, "reset"),
+    Some(WindowAction::Quit) => app.exit(0),
+    None => {
+      on_link(&app, &url);
+    }
+  });
+}
+
 /// A second launch hands its arguments to this one: `--quit` stops the app, `--mode` makes the first-run choice when
 /// none was made, anything else shows the window. Links arrive through the deep-link plugin.
 pub fn second_instance(app: &AppHandle, argv: Vec<String>) {
-  let link = argv.iter().any(|a| a.starts_with("owlbot:"));
+  let scheme = format!("{}:", app.state::<AppState>().paths.flavor.scheme());
+  let link = argv.iter().any(|a| a.starts_with(&scheme));
   let args = Args::parse(argv.into_iter().skip(1));
   if args.quit {
     app.exit(0);

@@ -19,6 +19,15 @@ impl Flavor {
     Flavor { test, name: name.to_string(), id: identifier.to_string(), port: if test { 41790 } else { 41780 } }
   }
 
+  /// The deep-link scheme the bundle registers (build.mjs): `owlbot://pair?…` or `owlbot-test://pair?…`.
+  pub fn scheme(&self) -> &'static str {
+    if self.test {
+      "owlbot-test"
+    } else {
+      "owlbot"
+    }
+  }
+
   /// Where owlbot-node keeps its pairing (in the home dir).
   pub fn node_home_dir(&self) -> &'static str {
     if self.test {
@@ -39,5 +48,6 @@ mod tests {
     assert_eq!((app.test, app.port, app.node_home_dir()), (false, 41780, ".owlbot-node"));
     let test = Flavor::of("ai.owlbot.test", "Owlbot Test");
     assert_eq!((test.test, test.port, test.node_home_dir()), (true, 41790, ".owlbot-node-test"));
+    assert_eq!((app.scheme(), test.scheme()), ("owlbot", "owlbot-test"));
   }
 }

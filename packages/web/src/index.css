@@ -271,4 +271,20 @@
   .animate-in {
     animation: owl-in 0.18s ease-out;
   }
+
+  @keyframes owl-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  .animate-fade {
+    animation: owl-fade 0.18s ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-in,
+    .animate-fade {
+      animation: none;
+    }
+  }
 }

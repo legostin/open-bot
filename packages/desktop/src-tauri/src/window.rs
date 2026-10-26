@@ -36,13 +36,22 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
   let origin = url.clone();
   let browser = app.clone();
   let popups = app.clone();
+  let flavor = app.state::<AppState>().paths.flavor.clone();
+  let scheme = flavor.scheme();
+  // The hub's settings page offers "Quit" and "Reset Owlbot…" when it runs in this window (deeplink.rs).
+  let hello = format!("window.owlbotDesktop = Object.freeze({{ scheme: {scheme:?}, test: {} }});", flavor.test);
   WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
     .title(&app.package_info().name)
+    .initialization_script(hello)
     .inner_size(1200.0, 820.0)
     .min_inner_size(420.0, 520.0)
     .on_navigation(move |u| {
       if same_origin(u, &origin) || u.scheme() == "about" || u.scheme() == "blob" {
         return true;
+      }
+      if u.scheme() == scheme {
+        crate::app::on_window_link(&browser, u);
+        return false;
       }
       let _ = browser.opener().open_url(u.as_str(), None::<&str>);
       false

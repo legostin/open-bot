@@ -1,10 +1,11 @@
 // Core settings (GET/PATCH /api/settings) plus settings sections contributed by UI plugins.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, LogOut, Save } from "lucide-react";
+import { ExternalLink, LogOut, Power, RotateCcw, Save } from "lucide-react";
 import type { Locale } from "@owlbot/shared";
 import { LOCALE_NAMES } from "@owlbot/shared/i18n";
 import { api, errorText } from "../lib/api";
+import { desktopAction, desktopApp } from "../lib/desktop";
 import { useStore } from "../lib/store";
 import { agents, ensureAgents, hubEvents, logout, refreshBootstrap, session } from "../state/app";
 import { toast } from "../state/toast";
@@ -97,6 +98,7 @@ export function SettingsPage() {
     );
 
   const set = <K extends keyof CoreSettings>(k: K, v: CoreSettings[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
+  const app = desktopApp();
 
   const build = (): { next?: CoreSettings; error?: string } => {
     const next: CoreSettings = { ...form };
@@ -277,6 +279,20 @@ export function SettingsPage() {
             </Button>
           </div>
         </Card>
+
+        {app && (
+          <Card title={t("settings.app.title")}>
+            <p className="mb-3 text-sm text-muted">{t("settings.app.text")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button icon={<Power className="size-4" />} onClick={() => desktopAction(app, "quit")}>
+                {t("settings.app.quit")}
+              </Button>
+              <Button variant="danger" icon={<RotateCcw className="size-4" />} onClick={() => desktopAction(app, "reset")}>
+                {t("settings.app.reset")}
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <div className="flex justify-end pb-4">{saveBar}</div>
       </div>
