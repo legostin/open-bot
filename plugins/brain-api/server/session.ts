@@ -33,7 +33,7 @@ const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
-/** The hub's "No vault item" error (older hubs and the testkit say "Net zapisi" in Russian, matched as escapes). */
+/** The hub's "No vault item" error (hubs before i18n said "Net zapisi" in Russian, matched as escapes). */
 const VAULT_MISSING_RE = /No vault item|not.?found|\u041d\u0435\u0442 \u0437\u0430\u043f\u0438\u0441\u0438/i;
 
 /** The variant's API key from the vault; `error` is a message for people (probe detail, chat), in the hub language. */

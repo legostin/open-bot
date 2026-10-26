@@ -29,7 +29,7 @@ export interface ToolSpec {
   effect: ToolEffect;
   /** Results come from outside (web, email, external MCP): reading them taints the session. */
   source?: boolean;
-  /** Template for approval cards, e.g. "Отправить письмо {to}: {subject}". */
+  /** Template for approval cards, e.g. "Send an email to {to}: {subject}" or a "%key%" from the plugin's locales. */
   approvalSummary?: string;
   /** Only available to background tasks / interactive sessions. Default: both. */
   availability?: "all" | "interactive" | "background";

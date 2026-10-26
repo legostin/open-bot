@@ -119,7 +119,7 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
   peer.handle("vault.get", (p: { ref: string }) => {
     const id = p.ref.replace(/^vault:\/\//, "");
     const item = o.vault?.[id];
-    if (!item) throw new Error(`Нет записи vault://${id}`);
+    if (!item) throw new Error(`No vault item vault://${id}`);
     return item;
   });
   peer.handle("storage.get", (p: { key: string }) => kv.get(p.key) ?? null);
