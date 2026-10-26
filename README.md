@@ -31,7 +31,7 @@ Get the app: `owlbot-setup-<version>-x64.exe` for Windows 10 and 11, `owlbot-<ve
 
 Claude Code and Codex: if one is already installed on the computer, Owlbot uses it. If not, pressing **Sign in** on its card installs it for Owlbot (a one-time download of a few hundred MB), then the sign-in starts.
 
-Your data stays in `%LOCALAPPDATA%\Owlbot` (Windows) or `~/Library/Application Support/Owlbot` (macOS); upgrading keeps it. To upgrade on macOS, drag the new Owlbot to Applications and replace the old one. To uninstall, use **Settings → Apps** on Windows (it asks before deleting your data) or move Owlbot from Applications to the Trash on macOS (the data stays; delete `~/Library/Application Support/Owlbot` to remove it too). The hub listens on `http://localhost:41780` (console `:41781`, egress proxy `:41789`), away from ports other tools tend to hold (8080, OpenClaw's 18789); another port goes into `desktop.json` in the data folder as `{"port": 19000}`. It is reachable from this computer only; for your phone, see [Remote access](#remote-access).
+Your data stays in `%LOCALAPPDATA%\Owlbot` (Windows) or `~/Library/Application Support/Owlbot` (macOS); upgrading keeps it. To upgrade on macOS, drag the new Owlbot to Applications and replace the old one. To uninstall, use **Settings → Apps** on Windows (it asks before deleting your data) or move Owlbot from Applications to the Trash on macOS (the data stays; delete `~/Library/Application Support/Owlbot` to remove it too). The hub listens on `http://localhost:41780` (console `:41781`, egress proxy `:41789`), away from ports other tools tend to hold (8080, OpenClaw's 18789); another port goes into `desktop.json` in the data folder as `{"port": 19000}`. It is reachable from this computer only; for your phone, see [Phone](#phone).
 
 The desktop version runs the hub, plugins and CLI brains as your own user: the Docker image's separate Unix users and its kernel-level network block are not there. For the strongest isolation, run Owlbot in Docker.
 
@@ -105,7 +105,7 @@ Telegram receives replies, notifications, the digest, and approval cards with bu
 
 The Owlbot iOS app (repository `owlbot-ios`) is the hub in your pocket: your team of agents, the chats with every card, tasks, notifications, and approvals that need Face ID. The phone runs no brains; it connects to this hub.
 
-1. In **Settings → Devices**, turn on **Phones on the network**. Only the phones' own HTTPS port (8082, `OWLBOT_DEVICE_PORT`) opens to the network; the web UI stays where it was.
+1. In **Settings → Devices**, turn on **Phones on the network**. Only the phones' own HTTPS port opens to the network (the hub's port + 2: 41782 in the desktop app, 8082 on a server; `OWLBOT_DEVICE_PORT`); the web UI stays where it was.
 2. Press **Connect a phone** and scan the QR code with the app, or open its link on the phone. You can also ask the assistant to "connect my phone", or run `owlbot devices pair` on the server to get the QR in the terminal.
 3. Confirm on the phone with Face ID.
 
