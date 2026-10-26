@@ -153,6 +153,13 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     hub.machines.attach(socket as any, clientIp(req));
   });
 
+  // Single-file machine daemon (public code, no secrets): `node openbot-node.mjs pair <hub> <code>`.
+  app.get("/download/openbot-node.mjs", async (_req, reply) => {
+    const file = join(cfg.appRoot, "packages", "node", "dist", "openbot-node.mjs");
+    if (!existsSync(file)) throw new HttpError(404, "Сборка демона не найдена: выполните npm run build");
+    return sendFile(reply, file, { download: true });
+  });
+
   // ---------- public: plugin webhooks ----------
 
   app.all("/hooks/:pluginId/*", async (req, reply) => {

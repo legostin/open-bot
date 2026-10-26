@@ -15,12 +15,13 @@
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
     "start": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
-    "build": "npm run build:ui-plugins && npm run build -w @openbot/web && npm run build -w @openbot/console",
+    "build": "npm run build:ui-plugins && npm run build:node && npm run build -w @openbot/web && npm run build -w @openbot/console",
     "build:ui-plugins": "node scripts/build-ui-plugins.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:node": "node scripts/build-node-bundle.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

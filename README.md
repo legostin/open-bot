@@ -50,7 +50,7 @@ docker exec -it -u agent openbot codex login --device-auth
 | `anthropic_api_key` | мозг `api:anthropic` |
 | `openai_api_key` | мозг `api:openai`, Codex по ключу |
 | `openrouter_api_key` | мозг `api:openrouter` |
-| `brave_api_key` или `tavily_api_key` | `web_search` (без ключа используется DuckDuckGo) |
+| `brave_api_key` или `tavily_api_key` | `web_search`; без ключа укажите свой SearXNG в настройках плагина «Веб» (DuckDuckGo часто отвечает проверкой на бота) |
 | `telegram_bot_token` | канал Telegram |
 
 Состояние мозгов (установлен, вошёл, лимит до …) видно в интерфейсе: «Настройки → Мозги». Порядок мозгов задаётся у каждого агента.
@@ -65,12 +65,13 @@ docker exec -it -u agent openbot codex login --device-auth
 ## Другие компьютеры
 
 1. «Машины → Добавить» → получите одноразовый код.
-2. На другом компьютере (нужен Node.js 24+):
+2. На другом компьютере (нужен только Node.js 24+) скачайте демон с хаба и привяжите машину:
    ```bash
-   npx @openbot/node pair https://your-hub-url <код>
-   npx @openbot/node run
+   curl -fsSLo openbot-node.mjs https://your-hub-url/download/openbot-node.mjs
+   node openbot-node.mjs pair https://your-hub-url <код> --name ноутбук
+   node openbot-node.mjs run
    ```
-3. Узел появится в списке. Его локальные Claude Code и Codex станут мозгами `claude-code@<машина>` и `codex@<машина>`. Что агенту можно делать на машине, решает локальная политика узла (`~/.openbot-node/policy.json`).
+3. Узел появится в списке. Его локальные Claude Code и Codex станут мозгами `claude-code@<машина>` и `codex@<машина>`. Что агенту можно делать на машине (папки, команды, мозги), решает владелец машины в `~/.openbot-node/policy.json`. По умолчанию команды выключены. Автозапуск через systemd, launchd и Планировщик заданий описан в [packages/node/README.md](packages/node/README.md).
 
 ## Доступ извне
 
@@ -112,6 +113,7 @@ docker exec openbot openbot-entrypoint audit-verify
 | `OPENBOT_VAULT_PASSPHRASE_FILE` | — | автоматическая разблокировка vault |
 | `OPENBOT_EGRESS_ENFORCED` | `proxy` | `iptables` — жёсткий запрет прямого выхода (нужен `NET_ADMIN`) |
 | `OPENBOT_SETUP_TOKEN` | случайный | задать код установки заранее |
+| `egressPrivateAllow` (настройка в интерфейсе) | — | хосты локальной сети, к которым можно плагинам и мозгам (например, `searxng`, `nas.local`) |
 | `OPENBOT_TRUST_PROXY` | — | `1` — доверять `X-Forwarded-*` от обратного прокси |
 | `TZ` | `UTC` | часовой пояс напоминаний и дайджеста |
 

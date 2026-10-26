@@ -12,7 +12,16 @@
 
 ## Установка
 
-Нужны Node.js 24.5+ и git.
+**Проще всего — один файл с хаба.** Нужен только Node.js 24.5+:
+
+```sh
+curl -fsSLo openbot-node.mjs https://bot.example.com/download/openbot-node.mjs
+node openbot-node.mjs help
+```
+
+Дальше везде вместо `openbot-node` пишите `node openbot-node.mjs`.
+
+**Из исходников.** Нужны Node.js 24.5+ и git.
 
 ```sh
 git clone <адрес репозитория open-bot> open-bot

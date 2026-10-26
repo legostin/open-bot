@@ -147,6 +147,10 @@ async function main(): Promise<void> {
       return cmdStatus();
     case "policy":
       return cmdPolicy();
+    case "mcp-bridge":
+      // Internal: the stdio MCP bridge brain CLIs spawn (keeps the single-file download self-contained).
+      await import("@openbot/mcp-bridge");
+      return;
     default:
       throw new PairError(`Неизвестная команда «${cmd}».\n\n${HELP}`);
   }

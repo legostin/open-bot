@@ -38,6 +38,9 @@ if [ "${OPENBOT_EGRESS_ENFORCED:-proxy}" = "iptables" ]; then
   if iptables -w -N OPENBOT_EGRESS 2>/dev/null || iptables -w -F OPENBOT_EGRESS; then
     iptables -w -A OPENBOT_EGRESS -o lo -j ACCEPT
     iptables -w -A OPENBOT_EGRESS -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    # DNS stays open: plugins resolve names to refuse private addresses before asking the proxy.
+    iptables -w -A OPENBOT_EGRESS -p udp --dport 53 -j ACCEPT
+    iptables -w -A OPENBOT_EGRESS -p tcp --dport 53 -j ACCEPT
     iptables -w -A OPENBOT_EGRESS -m owner --uid-owner agent -j REJECT
     iptables -w -A OPENBOT_EGRESS -m owner --uid-owner plugin -j REJECT
     iptables -w -C OUTPUT -j OPENBOT_EGRESS 2>/dev/null || iptables -w -A OUTPUT -j OPENBOT_EGRESS

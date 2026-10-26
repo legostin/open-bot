@@ -58,14 +58,15 @@ export function shimTarget(cmdFile: string): string | undefined {
   }
 }
 
-/** Command that runs this checkout's stdio MCP bridge with the current Node binary. */
+/** Command that runs the stdio MCP bridge with the current Node binary: the checkout's bridge, or this file's `mcp-bridge` command when running as the single-file download. */
 export function defaultBridgeCommand(): string[] {
-  let entry: string;
+  let entry: string | undefined;
   try {
     entry = fileURLToPath(import.meta.resolve("@openbot/mcp-bridge"));
   } catch {
     entry = fileURLToPath(new URL("../../mcp-bridge/src/index.ts", import.meta.url));
   }
+  if (!existsSync(entry)) return [process.execPath, fileURLToPath(import.meta.url), "mcp-bridge"];
   return [process.execPath, "--disable-warning=ExperimentalWarning", entry];
 }
 

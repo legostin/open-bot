@@ -10,6 +10,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@openbot/mcp-bridge": "*",
     "@noble/curves": "^2.4.0",
     "ws": "^8.22.0"
   }
