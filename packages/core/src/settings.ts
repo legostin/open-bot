@@ -9,6 +9,8 @@ export interface CoreSettings {
   notifyRatePerHour: number;
   /** Extra egress hosts allowed for brains. */
   brainEgressAllow: string[];
+  /** Hosts plugins and brains may reach even though they resolve to private/LAN addresses (e.g. "searxng", "nas.local"). */
+  egressPrivateAllow: string[];
   /** Show approval details (full input) in channels like Telegram. */
   channelApprovalDetails: boolean;
   /** Concurrent sessions per brain@machine. */
@@ -50,6 +52,7 @@ export function defaultSettings(timezone: string): CoreSettings {
     digestTimes: ["09:00", "19:00"],
     notifyRatePerHour: 4,
     brainEgressAllow: [],
+    egressPrivateAllow: [],
     channelApprovalDetails: false,
     brainConcurrency: 2,
     approvalInlineWaitSec: 45,

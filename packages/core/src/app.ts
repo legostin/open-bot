@@ -75,6 +75,7 @@ export class Hub {
     this.audit = new AuditLog(this.db, this.vault.redactor);
     this.egress.audit = this.audit;
     this.egress.extraBrainAllow = () => this.settings.get().brainEgressAllow;
+    this.egress.privateAllow = () => this.settings.get().egressPrivateAllow;
     this.rules = new RuleStore(this.db);
     this.approvals = new ApprovalService(this.db, this.bus, this.audit, this.rules);
     this.agents = new AgentRegistry(config.builtinAgentsDir, join(config.dataDir, "agents"));
