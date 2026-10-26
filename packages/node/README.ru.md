@@ -86,9 +86,11 @@ openbot-node policy    # path and contents of policy.json
 
 ```
 [14:02:11] подключено к хабу https://bot.example.com как «laptop»
-[14:02:40] fs.write /home/me/openbot-workspace/report.md (2048 Б) → 2048 Б (3 мс)
-[14:03:05] exec.run npm test → отказ: Выполнение команд на этой машине запрещено (exec.enabled = false в policy.json)
+[14:02:40] fs.write /home/me/openbot-workspace/report.md (2048 B) → 2048 B (3 ms)
+[14:03:05] exec.run npm test → denied: Running commands is not allowed on this machine (exec.enabled = false in policy.json)
 ```
+
+Строки запросов и ошибки, которые уходят обратно агенту, всегда на английском: их читает модель, а пользователю она отвечает на его языке.
 
 ## Запуск как службы
 

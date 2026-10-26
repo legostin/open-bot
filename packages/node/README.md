@@ -83,9 +83,9 @@ openbot-node policy    # path and contents of policy.json
 `run` keeps reconnecting to the hub with a growing pause (up to 60 s), so a hub restart or a network outage needs no attention. Every request from the hub is logged on one line: what, where and the outcome, **without file contents or request text**. For example:
 
 ```
-[14:02:11] connected to hub https://bot.example.com as "laptop"
+[14:02:11] connected to the hub https://bot.example.com as “laptop”
 [14:02:40] fs.write /home/me/openbot-workspace/report.md (2048 B) → 2048 B (3 ms)
-[14:03:05] exec.run npm test → denied: running commands on this machine is disabled (exec.enabled = false in policy.json)
+[14:03:05] exec.run npm test → denied: Running commands is not allowed on this machine (exec.enabled = false in policy.json)
 ```
 
 ## Running as a service
