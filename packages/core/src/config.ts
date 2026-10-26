@@ -8,6 +8,14 @@ export interface Config {
   port: number;
   consolePort: number;
   egressPort: number;
+  /** The phones' HTTPS port (default port + 2), see server/device-app.ts. */
+  devicePort: number;
+  /** Where the device port listens: every interface by default, so phones reach it over Wi-Fi and Tailscale. */
+  deviceHost: string;
+  /** OWLBOT_DEVICES=1: the device port runs whatever the web UI switch says. */
+  devicesForced: boolean;
+  /** OWLBOT_DEVICE_URLS: addresses for the pairing QR ahead of the detected ones (Docker, reverse proxies). */
+  deviceUrls: string[];
   /** URL users and nodes use to reach the main UI / API. */
   publicUrl: string;
   /** URL of the isolated security console. */
@@ -39,6 +47,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
   const port = Number(env.OWLBOT_PORT ?? 8080);
   const consolePort = Number(env.OWLBOT_CONSOLE_PORT ?? port + 1);
   const egressPort = Number(env.OWLBOT_EGRESS_PORT ?? 8089);
+  const devicePort = Number(env.OWLBOT_DEVICE_PORT ?? port + 2);
   const displayHost = host === "0.0.0.0" || host === "::" ? "localhost" : host;
   const publicUrl = (env.OWLBOT_PUBLIC_URL ?? `http://${displayHost}:${port}`).replace(/\/$/, "");
   const consoleUrl = (env.OWLBOT_CONSOLE_URL ?? `http://${new URL(publicUrl).hostname}:${consolePort}`).replace(/\/$/, "");
@@ -56,6 +65,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     port,
     consolePort,
     egressPort,
+    devicePort,
+    deviceHost: env.OWLBOT_DEVICE_HOST ?? "0.0.0.0",
+    devicesForced: env.OWLBOT_DEVICES === "1",
+    deviceUrls: (env.OWLBOT_DEVICE_URLS ?? "")
+      .split(",")
+      .map((u) => u.trim().replace(/\/$/, ""))
+      .filter(Boolean),
     publicUrl,
     consoleUrl,
     internalUrl: `http://127.0.0.1:${port}`,

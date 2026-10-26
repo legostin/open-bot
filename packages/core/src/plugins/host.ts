@@ -16,6 +16,7 @@ import type { VaultService } from "../vault/service.ts";
 import type { AuditLog } from "../audit.ts";
 import type { EgressProxy } from "../egress.ts";
 import { npmEnv, npmInvocation, withPath } from "../cli-tools.ts";
+import { linkUserKeychains } from "./keychains.ts";
 
 export type PluginStatus = "stopped" | "starting" | "running" | "crashed" | "disabled" | "no-server" | "error";
 
@@ -220,6 +221,8 @@ export class PluginHost {
     } else {
       mkdirSync(dataDir, { recursive: true });
       mkdirSync(home, { recursive: true });
+      // Running as the user: CLIs that keep logins in the macOS keychain must find it from their own HOME.
+      if (isBrainHost) linkUserKeychains(home);
     }
     const env: Record<string, string> = {
       HOME: home,

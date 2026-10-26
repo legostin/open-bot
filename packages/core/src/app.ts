@@ -2,7 +2,7 @@
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, CoreMethod } from "@owlbot/shared";
+import type { AgentDef, CoreMethod, DeviceNetwork, DevicePairing } from "@owlbot/shared";
 import { DEFAULT_LOCALE, catalogLookup, localizeValue, normalizeLocale } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
@@ -31,6 +31,9 @@ import { McpClientManager } from "./mcp/client.ts";
 import { AuthService } from "./auth.ts";
 import { DesktopTickets } from "./desktop-login.ts";
 import { MachineHub } from "./machines.ts";
+import { DeviceRegistry } from "./devices.ts";
+import { deviceTls, type DeviceTls } from "./devices-tls.ts";
+import { deviceUrls, hubName, pairingLink, qrSvg } from "./pairing.ts";
 import { createCoreCall } from "./core-call.ts";
 import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, LocalizedError, t } from "./i18n.ts";
 import { registerHubTools, slug } from "./tools/hub-tools.ts";
@@ -42,6 +45,7 @@ import { UserPath } from "./user-path.ts";
 import { SetupGuide } from "./setup.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
+import { buildDeviceApp } from "./server/device-app.ts";
 import type { FastifyInstance } from "fastify";
 
 export class Hub {
@@ -72,6 +76,11 @@ export class Hub {
   /** One-time sign-in tickets from the desktop app (see desktop-login.ts). */
   desktopTickets = new DesktopTickets();
   machines: MachineHub;
+  /** Phones paired with the hub (the Owlbot app) and the device port they talk to. */
+  devices: DeviceRegistry;
+  deviceApp?: FastifyInstance;
+  private deviceError?: string;
+  private deviceSync: Promise<unknown> = Promise.resolve();
   secrets: SecretIntake;
   agentDrafts: AgentDrafts;
   brainLogins: BrainLogins;
@@ -129,6 +138,7 @@ export class Hub {
         owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),
     });
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit });
+    this.devices = new DeviceRegistry({ db: this.db, bus: this.bus, audit: this.audit });
     this.secrets = new SecretIntake({ db: this.db, bus: this.bus, audit: this.audit, vault: this.vault, plugins: () => this.plugins });
     this.agentDrafts = new AgentDrafts({ db: this.db, bus: this.bus });
     this.cliTools = new CliTools(config.dataDir, config.installClis);
@@ -233,7 +243,65 @@ export class Hub {
       this.brains.invalidateAll();
     }
     this.bus.emit("settings.updated", { keys: Object.keys(p) });
+    if ("devicesLan" in p && this.started) void this.syncDeviceServer();
     return next;
+  }
+
+  /** The device port's identity (made on first use) and state, for the web UI's switch and the pairing QR. */
+  deviceTls(): DeviceTls {
+    return deviceTls(this.config.dataDir);
+  }
+
+  deviceNetwork(): DeviceNetwork {
+    const enabled = this.config.devicesForced || this.settings.get().devicesLan;
+    return {
+      enabled,
+      forced: this.config.devicesForced,
+      listening: !!this.deviceApp,
+      port: this.config.devicePort,
+      urls: deviceUrls(this.config.devicePort, this.config.deviceUrls),
+      ...(this.deviceError ? { error: this.deviceError } : {}),
+    };
+  }
+
+  /** Start or stop the device port to match the switch (and OWLBOT_DEVICES); calls are serialized. */
+  syncDeviceServer(): Promise<DeviceNetwork> {
+    const run = async () => {
+      const want = this.config.devicesForced || this.settings.get().devicesLan;
+      if (want && !this.deviceApp) {
+        this.deviceError = undefined;
+        const app = await buildDeviceApp(this, this.deviceTls());
+        try {
+          await app.listen({ host: this.config.deviceHost, port: this.config.devicePort });
+          this.deviceApp = app;
+          console.log(`[owlbot] devices: https://${this.config.deviceHost}:${this.config.devicePort}`);
+        } catch (e: any) {
+          this.deviceError = e?.code === "EADDRINUSE" ? t("device.portInUse", { port: this.config.devicePort }) : String(e?.message ?? e);
+          await app.close().catch(() => {});
+        }
+      } else if (!want && this.deviceApp) {
+        const app = this.deviceApp;
+        this.deviceApp = undefined;
+        await app.close();
+      }
+      const state = this.deviceNetwork();
+      this.bus.emit("devices.network", state);
+      return state;
+    };
+    const next = this.deviceSync.then(run, run);
+    this.deviceSync = next.catch(() => {});
+    return next;
+  }
+
+  /** A one-time code and the QR for a phone; the device port must be on. */
+  devicePairing(): DevicePairing {
+    const network = this.deviceNetwork();
+    if (!network.listening) throw new LocalizedError("device.networkOff", undefined, 409);
+    if (!network.urls.length) throw new LocalizedError("device.noAddress", undefined, 409);
+    const { fingerprint } = this.deviceTls();
+    const { code, expiresAt } = this.devices.createPairingCode();
+    const link = pairingLink({ code, hubName: hubName(), fingerprint, urls: network.urls });
+    return { code, expiresAt, link, qrSvg: qrSvg(link), urls: network.urls, fingerprint };
   }
 
   /** Where "unlock automatically after restarts" keeps the vault passphrase (hub-only file, like a Docker secret). */
@@ -358,6 +426,7 @@ export class Hub {
       this.consoleApp = await buildConsoleApp(this);
       await this.mainApp.listen({ host: cfg.host, port: cfg.port });
       await this.consoleApp.listen({ host: cfg.host, port: cfg.consolePort });
+      await this.syncDeviceServer();
     }
 
     // Desktop installs run from launchd or a tray app; a terminal's `npm start` already has the user's PATH.
@@ -390,6 +459,8 @@ export class Hub {
     await this.mcpClients.closeAll();
     await this.mainApp?.close();
     await this.consoleApp?.close();
+    await this.deviceSync;
+    await this.deviceApp?.close();
     await this.egress.close();
     this.audit.append("core", "hub.stop");
     this.db.close();

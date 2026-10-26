@@ -139,7 +139,8 @@ export class ToolGateway {
               type: "text",
               text:
                 `The action is waiting for the user's approval (approvalId=${approval.id}): ${summary}. ` +
-                `Do not repeat the call. End your turn and briefly tell the user you are waiting for their approval in the security console. ` +
+                `Do not repeat the call. End your turn and briefly tell the user the action waits for their approval ` +
+                `(they answer on the approval card, in the phone app or in the security console). ` +
                 `When the user answers, the system carries out the action itself and sends you the result.`,
             },
           ],

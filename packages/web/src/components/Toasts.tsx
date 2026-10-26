@@ -8,7 +8,7 @@ export function Toasts() {
   const list = useStore(toasts);
   if (!list.length) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-16 z-[60] flex flex-col items-center gap-2 px-3 md:inset-x-auto md:top-auto md:right-4 md:bottom-4 md:items-end" aria-live="polite">
+    <div className="pointer-events-none fixed inset-x-0 top-16 z-[60] flex flex-col items-center gap-2 px-3 md:inset-x-auto md:top-auto md:right-4 md:bottom-4 md:items-end mobile:top-[calc(env(safe-area-inset-top)+0.5rem)]" aria-live="polite">
       {list.map((item) => {
         const I = item.kind === "error" ? CircleAlert : item.kind === "success" ? CircleCheck : Info;
         return (

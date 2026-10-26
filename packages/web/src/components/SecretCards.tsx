@@ -7,6 +7,7 @@ import { Eye, EyeOff, KeyRound, Lock, LockOpen, ShieldCheck, ExternalLink } from
 import type { MessagePart, PluginSetupView, SecretRequest, VaultState } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
+import { openOutside } from "../lib/native";
 import { hubEvents, session } from "../state/app";
 import { usePluginRegistry } from "../plugins/slots";
 import { PluginBoundary } from "../plugins/boundary";
@@ -156,7 +157,7 @@ function Hint({ hint, link }: { hint?: string; link?: string }) {
     <div className="text-sm text-muted">
       {hint && <Markdown text={hint} className="text-sm" />}
       {link && (
-        <a href={link} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-accent-text">
+        <a href={link} target="_blank" rel="noopener noreferrer" onClick={(e) => openOutside(e, link)} className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-accent-text">
           {t("secret.get")} <ExternalLink className="size-3.5" />
         </a>
       )}

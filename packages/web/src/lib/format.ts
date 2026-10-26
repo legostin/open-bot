@@ -70,6 +70,17 @@ export function shortTime(iso: string | undefined, now = new Date()): string {
   return formatDate(iso, { day: "numeric", month: "short" });
 }
 
+/** A one-time code in groups of four, easier to type: "ABCD-2345". */
+export function groupedCode(code: string): string {
+  return code.match(/.{1,4}/g)?.join("-") ?? code;
+}
+
+/** Seconds left as m:ss. */
+export function countdown(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 // Transliteration for ids made from Cyrillic names: U+0430..U+044F in alphabet order, then U+0451 (yo).
 // Built from code points so the source stays ASCII (Cyrillic lives only in i18n/ru.ts).
 const CYRILLIC_LATIN = ["a", "b", "v", "g", "d", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "h", "c", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"];

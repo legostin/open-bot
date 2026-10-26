@@ -4,8 +4,9 @@ import { backoffDelay } from "./backoff";
 import { applyCommand, filterCommands, slashQuery } from "./commands";
 import { groupParts, inputPreview, prettyJson } from "./parts";
 import { parseMcpConfig } from "./mcp-config";
-import { slugify } from "./format";
+import { countdown, groupedCode, slugify } from "./format";
 import { mergeClasses } from "./classes";
+import { stickAfterScroll } from "./stick";
 import { sectionForPath } from "../components/nav";
 import { agentForPath, agentPath, teamOrder } from "./team";
 import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, parseAvatar } from "@owlbot/shared/avatar";
@@ -112,6 +113,13 @@ describe("format", () => {
     expect(slugify("\u0401\u0436")).toBe("ezh");
     expect(slugify("Code Reviewer!")).toBe("code-reviewer");
   });
+  it("groups one-time codes and formats countdowns", () => {
+    expect(groupedCode("ABCD2345")).toBe("ABCD-2345");
+    expect(groupedCode("ABC")).toBe("ABC");
+    expect(countdown(599.7)).toBe("9:59");
+    expect(countdown(5)).toBe("0:05");
+    expect(countdown(-3)).toBe("0:00");
+  });
 });
 
 describe("mergeClasses", () => {
@@ -131,6 +139,7 @@ describe("settings panel sections", () => {
     expect(sectionForPath("/brains")).toBe("brains");
     expect(sectionForPath("/mcp-servers/")).toBe("mcp");
     expect(sectionForPath("/settings")).toBe("settings");
+    expect(sectionForPath("/devices")).toBe("devices");
     expect(sectionForPath("/chat/abc")).toBeUndefined();
     expect(sectionForPath("/tasks/t1")).toBeUndefined();
   });
@@ -175,5 +184,26 @@ describe("agent avatars", () => {
     expect(parseAvatar({ color: "pink", shape: "star" })).toEqual({ color: "pink", shape: "star" });
     expect(parseAvatar({ color: "pink", shape: "blob" })).toBeUndefined();
     expect(parseAvatar("pink")).toBeUndefined();
+  });
+});
+
+describe("stickAfterScroll", () => {
+  const view = (scrollTop: number, scrollHeight: number) => ({ scrollTop, scrollHeight, clientHeight: 600 });
+
+  it("pins the view near the bottom", () => {
+    expect(stickAfterScroll(false, 0, view(1350, 2000))).toBe(true);
+  });
+
+  it("stays pinned when content grew after the view was put at the bottom", () => {
+    // Put at the bottom of 2000px (scrollTop 1400), then cards rendered: 3000px before the scroll event came.
+    expect(stickAfterScroll(true, 1400, view(1400, 3000))).toBe(true);
+  });
+
+  it("unpins when the person scrolls up", () => {
+    expect(stickAfterScroll(true, 1400, view(900, 2000))).toBe(false);
+  });
+
+  it("stays unpinned while reading further up", () => {
+    expect(stickAfterScroll(false, 500, view(700, 3000))).toBe(false);
   });
 });

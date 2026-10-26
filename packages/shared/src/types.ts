@@ -108,7 +108,7 @@ export interface Approval {
   result?: ToolResult;
   createdAt: ISODate;
   resolvedAt?: ISODate;
-  resolvedVia?: "console" | "telegram" | "rule" | "timeout";
+  resolvedVia?: "console" | "telegram" | "device" | "rule" | "timeout";
 }
 
 // ---------- Secrets entered in the chat ----------
@@ -191,7 +191,9 @@ export type MessagePart =
   /** A CLI brain's sign-in card (device code or browser code), live. */
   | { type: "brain_login"; ref: string }
   /** No brain of the agent works yet: the hub's own setup card (sign in, install, API key), live. */
-  | { type: "brain_setup" };
+  | { type: "brain_setup" }
+  /** Connect a phone: the card makes a one-time QR and link when the user asks for it. */
+  | { type: "device_pairing" };
 
 export interface Message {
   id: string;
@@ -477,6 +479,43 @@ export interface Machine {
   createdAt: ISODate;
 }
 
+// ---------- Devices (phones running the Owlbot app) ----------
+
+export interface Device {
+  id: string;
+  name: string;
+  /** "ios" for now. */
+  platform: string;
+  /** Hardware model identifier, e.g. "iPhone18,1". */
+  model?: string;
+  createdAt: ISODate;
+  lastSeenAt?: ISODate;
+}
+
+/** What the web UI shows to pair a phone: the QR carries the link. */
+export interface DevicePairing {
+  code: string;
+  expiresAt: ISODate;
+  /** owlbot://pair?v=1&c=…&n=…&fp=…&u=…&u=… */
+  link: string;
+  qrSvg: string;
+  /** The device port's addresses, as the phone tries them. */
+  urls: string[];
+  /** base64url SHA-256 of the device port's certificate (DER). */
+  fingerprint: string;
+}
+
+/** The device port: whether phones can reach the hub, and where. */
+export interface DeviceNetwork {
+  enabled: boolean;
+  /** Turned on by OWLBOT_DEVICES=1: the switch in the web UI cannot turn it off. */
+  forced: boolean;
+  listening: boolean;
+  port: number;
+  urls: string[];
+  error?: string;
+}
+
 // ---------- Vault ----------
 
 export type VaultState = "uninitialized" | "sealed" | "unlocked";
@@ -536,6 +575,8 @@ export type UiEvent =
   | { type: "agents.updated"; data: Record<string, never> }
   | { type: "settings.updated"; data: Record<string, unknown> }
   | { type: "machine.updated"; data: Machine }
+  | { type: "device.updated"; data: { id: string } }
+  | { type: "devices.network"; data: DeviceNetwork }
   | { type: "vault.state"; data: { state: VaultState } }
   | { type: "secret.request"; data: SecretRequest }
   | { type: "agent_draft.updated"; data: AgentDraft }

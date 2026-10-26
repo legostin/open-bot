@@ -47,6 +47,13 @@ const MIGRATIONS: string[] = [
   // New agents put together in the chat: the card shows the live draft; the agent exists once it is created.
   `create table agent_drafts(id text primary key, conversation_id text not null, data text not null, status text not null, agent_id text,
     created_at text not null, updated_at text not null);`,
+  // Phones paired with the hub: a bearer token (hash only) and the phone's Secure Enclave key for approvals.
+  `
+  create table devices(id text primary key, name text not null, platform text not null, model text, token_hash text not null,
+    public_key text not null, created_at text not null, last_seen_at text, revoked integer not null default 0);
+  create index devices_token on devices(token_hash);
+  create table device_pairing_codes(code text primary key, expires_at text not null, used integer not null default 0);
+  `,
 ];
 
 export function openDb(file: string): Db {

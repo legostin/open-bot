@@ -22,6 +22,8 @@ export interface CoreSettings {
   approvalExpireHours: number;
   /** Hub language: notifications, channels, approval cards and the default for the UI. */
   language: Locale;
+  /** Phones may reach the hub: the device port listens on the network. */
+  devicesLan: boolean;
 }
 
 export const DEFAULT_BRAIN_EGRESS = [
@@ -63,6 +65,7 @@ export function defaultSettings(timezone: string, language: Locale = localeFromE
     approvalInlineWaitSec: 45,
     approvalExpireHours: 24,
     language,
+    devicesLan: false,
   };
 }
 
