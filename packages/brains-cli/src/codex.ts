@@ -5,7 +5,9 @@ import { mkdirSync, writeFileSync, chmodSync, existsSync, readFileSync } from "n
 import { join } from "node:path";
 import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@openbot/shared";
 import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
+import type { Locale } from "@openbot/shared/i18n";
 import { capture, childEnv, runLines } from "./proc.ts";
+import { brainsT } from "./messages.ts";
 
 export interface CodexOptions {
   command?: () => string;
@@ -14,6 +16,8 @@ export interface CodexOptions {
   sandbox?: () => "read-only" | "workspace-write" | "danger-full-access";
   stateDir: string;
   log?: (msg: string) => void;
+  /** Language for messages people read (probe details, failures); English by default. */
+  locale?: () => Locale;
 }
 
 /** Turns `codex exec --json` events into BrainEvents. */
@@ -154,14 +158,15 @@ class CodexSession implements BrainSessionImpl {
         const stderr = proc.stderr();
         const notInstalled = /ENOENT|not recognized|command not found/i.test(stderr);
         const auth = /not logged in|login|401|unauthorized|api key/i.test(`${parser.failed ?? ""}\n${stderr}`);
+        const t = brainsT(this.p.locale?.());
         yield {
           type: "error",
           fatal: !parser.completed,
           message: notInstalled
-            ? "Codex CLI не установлен"
+            ? t("codex.notInstalled")
             : auth
-              ? "Codex не авторизован: выполните `codex login --device-auth` от пользователя agent"
-              : (parser.failed ?? stderr.trim().split("\n").slice(-6).join("\n")) || "Codex завершился с ошибкой",
+              ? t("codex.notSignedIn")
+              : (parser.failed ?? stderr.trim().split("\n").slice(-6).join("\n")) || t("codex.failed"),
         };
       }
     }
@@ -186,17 +191,18 @@ class CodexSession implements BrainSessionImpl {
 export function createCodexProvider(p: CodexOptions): BrainProviderImpl {
   return {
     id: "codex",
-    label: "Codex (подписка ChatGPT)",
+    label: brainsT()("codex.label"),
     async probe(): Promise<ProbeResult> {
+      const t = brainsT(p.locale?.());
       const command = p.command?.() ?? "codex";
       const env = childEnv(process.env, { ...(await p.authEnv?.().catch(() => ({}))) });
       const v = await capture(command, ["--version"], env);
-      if (v.code !== 0) return { available: false, authenticated: false, detail: "Codex CLI не установлен" };
+      if (v.code !== 0) return { available: false, authenticated: false, detail: t("codex.notInstalled") };
       const version = v.stdout.trim().split(/\s+/).pop();
-      if (env.OPENAI_API_KEY || env.CODEX_API_KEY) return { available: true, authenticated: true, version, detail: "ключ API" };
+      if (env.OPENAI_API_KEY || env.CODEX_API_KEY) return { available: true, authenticated: true, version, detail: t("codex.apiKey") };
       const s = await capture(command, ["login", "status"], env);
       const ok = s.code === 0 && /logged in/i.test(s.stdout + s.stderr);
-      return { available: true, authenticated: ok, version, detail: ok ? (s.stdout + s.stderr).trim().split("\n")[0] : "нет входа: `codex login --device-auth`" };
+      return { available: true, authenticated: ok, version, detail: ok ? (s.stdout + s.stderr).trim().split("\n")[0] : t("codex.noLogin") };
     },
     async createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl> {
       mkdirSync(opts.workspace, { recursive: true });

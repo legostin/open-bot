@@ -5,7 +5,9 @@ import { mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@openbot/shared";
 import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
+import type { Locale, Translate } from "@openbot/shared/i18n";
 import { capture, childEnv, runLines, textOfToolContent } from "./proc.ts";
+import { brainsT } from "./messages.ts";
 
 const MCP_PREFIX = "mcp__openbot__";
 
@@ -37,6 +39,8 @@ export interface ClaudeCodeOptions {
   /** Where per-session private files (MCP config with the token, prompt) are written. */
   stateDir: string;
   log?: (msg: string) => void;
+  /** Language for messages people read (probe details, failures); English by default. */
+  locale?: () => Locale;
 }
 
 /** Turns Claude Code stream-json messages into BrainEvents. Pure: easy to test with recorded fixtures. */
@@ -47,6 +51,11 @@ export class ClaudeStreamParser {
   sawResult = false;
   resultError?: string;
   mcpFailed = false;
+  private t: Translate;
+
+  constructor(t: Translate = brainsT()) {
+    this.t = t;
+  }
 
   push(msg: any): BrainEvent[] {
     const out: BrainEvent[] = [];
@@ -59,7 +68,7 @@ export class ClaudeStreamParser {
           const ob = msg.mcp_servers.find((s: any) => s.name === "openbot");
           if (ob && ob.status !== "connected") {
             this.mcpFailed = true;
-            out.push({ type: "error", message: `Инструменты open-bot недоступны в Claude Code (MCP: ${ob.status})` });
+            out.push({ type: "error", message: this.t("claude.mcpUnavailable", { status: ob.status }) });
           }
         }
         break;
@@ -97,7 +106,7 @@ export class ClaudeStreamParser {
         if (info.status === "rejected") {
           this.limit = {
             resetAt: info.resetsAt ? new Date(Number(info.resetsAt) * 1000).toISOString() : undefined,
-            detail: `Claude: лимит подписки (${info.rateLimitType ?? "limit"})`,
+            detail: this.t("claude.limit", { kind: info.rateLimitType ?? "limit" }),
           };
         }
         break;
@@ -135,15 +144,19 @@ export function parseResetFromText(text: string): string | undefined {
   return undefined;
 }
 
-export function classifyClaudeFailure(stderr: string, resultError?: string): { message: string; fatal: boolean; auth: boolean; noSession: boolean } {
+export function classifyClaudeFailure(
+  stderr: string,
+  resultError?: string,
+  t: Translate = brainsT(),
+): { message: string; fatal: boolean; auth: boolean; noSession: boolean } {
   const text = `${resultError ?? ""}\n${stderr}`;
   const noSession = /No conversation found|session .* not found/i.test(text);
   const auth = /not logged in|please run .*login|invalid api key|authentication|OAuth token|401|\/login/i.test(text) && !noSession;
   const enoent = /ENOENT|not recognized|command not found/i.test(text);
-  if (enoent) return { message: "Claude Code не установлен (команда claude не найдена)", fatal: true, auth: false, noSession: false };
-  if (auth) return { message: "Claude Code не авторизован: выполните `claude setup-token` и сохраните токен в vault как claude_code_token", fatal: true, auth: true, noSession: false };
+  if (enoent) return { message: t("claude.notInstalled"), fatal: true, auth: false, noSession: false };
+  if (auth) return { message: t("claude.notSignedIn"), fatal: true, auth: true, noSession: false };
   const tail = text.trim().split("\n").slice(-6).join("\n").slice(0, 1500);
-  return { message: tail || "Claude Code завершился с ошибкой", fatal: true, auth: false, noSession };
+  return { message: tail || t("claude.failed"), fatal: true, auth: false, noSession };
 }
 
 class ClaudeCodeSession implements BrainSessionImpl {
@@ -203,7 +216,8 @@ class ClaudeCodeSession implements BrainSessionImpl {
         DISABLE_AUTOUPDATER: "1",
         CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "1",
       });
-      const parser = new ClaudeStreamParser();
+      const t = brainsT(this.p.locale?.());
+      const parser = new ClaudeStreamParser(t);
       const proc = runLines(this.p.command?.() ?? "claude", this.args(), { cwd: this.o.workspace, env, input: turn.text });
       this.child = proc;
       for await (const line of proc.lines) {
@@ -229,7 +243,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
         return;
       }
       if (exit.code !== 0 || parser.resultError || !parser.sawResult) {
-        const f = classifyClaudeFailure(proc.stderr(), parser.resultError);
+        const f = classifyClaudeFailure(proc.stderr(), parser.resultError, t);
         if (f.noSession && attempt === 0 && this.resumeId) {
           this.p.log?.(`resume ${this.resumeId} not found, starting a fresh Claude Code session`);
           this.resumeId = undefined;
@@ -275,20 +289,22 @@ function writePrivate(file: string, content: string): void {
 export function createClaudeCodeProvider(p: ClaudeCodeOptions): BrainProviderImpl {
   return {
     id: "claude-code",
-    label: "Claude Code (подписка)",
+    label: brainsT()("claude.label"),
     async probe(): Promise<ProbeResult> {
+      const t = brainsT(p.locale?.());
       const command = p.command?.() ?? "claude";
       const env = childEnv(process.env, { ...(await p.authEnv?.().catch(() => ({}))), DISABLE_AUTOUPDATER: "1" });
       const v = await capture(command, ["--version"], env);
-      if (v.code !== 0) return { available: false, authenticated: false, detail: "Claude Code не установлен" };
+      if (v.code !== 0) return { available: false, authenticated: false, detail: t("claude.notInstalledShort") };
       const version = v.stdout.trim().split(/\s+/)[0];
-      if (env.CLAUDE_CODE_OAUTH_TOKEN || env.ANTHROPIC_API_KEY) return { available: true, authenticated: true, version, detail: "токен из vault" };
+      if (env.CLAUDE_CODE_OAUTH_TOKEN || env.ANTHROPIC_API_KEY) return { available: true, authenticated: true, version, detail: t("claude.vaultToken") };
       const s = await capture(command, ["auth", "status", "--json"], env);
       try {
         const j = JSON.parse(s.stdout);
-        return { available: true, authenticated: !!j.loggedIn, version, detail: j.loggedIn ? `вход: ${j.authMethod ?? "ok"}${j.subscriptionType ? ` (${j.subscriptionType})` : ""}` : "нет входа: добавьте claude_code_token в vault" };
+        const method = `${j.authMethod ?? "ok"}${j.subscriptionType ? ` (${j.subscriptionType})` : ""}`;
+        return { available: true, authenticated: !!j.loggedIn, version, detail: j.loggedIn ? t("claude.signedIn", { method }) : t("claude.noLogin") };
       } catch {
-        return { available: true, authenticated: false, version, detail: "не удалось проверить вход: добавьте claude_code_token в vault" };
+        return { available: true, authenticated: false, version, detail: t("claude.loginUnknown") };
       }
     },
     async createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl> {

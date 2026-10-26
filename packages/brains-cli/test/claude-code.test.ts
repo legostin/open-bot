@@ -83,7 +83,7 @@ describe("Claude Code provider (fake CLI)", () => {
   it("reports limit_hit", async () => {
     const s = await provider.createSession(opts());
     const ev = await collect(s.send({ text: "LIMIT" }));
-    expect(ev).toContainEqual({ type: "limit_hit", resetAt: new Date(1893456000 * 1000).toISOString(), detail: "Claude: лимит подписки (five_hour)" });
+    expect(ev).toContainEqual({ type: "limit_hit", resetAt: new Date(1893456000 * 1000).toISOString(), detail: "Claude: subscription limit (five_hour)" });
   });
 
   it("reports a missing CLI as a fatal error", async () => {
@@ -92,6 +92,12 @@ describe("Claude Code provider (fake CLI)", () => {
     const s = await p.createSession(opts());
     const ev = await collect(s.send({ text: "x" }));
     expect(ev.find((e) => e.type === "error")).toMatchObject({ fatal: true });
+  });
+
+  it("speaks the language it is given", async () => {
+    const missing = { command: () => "definitely-not-a-claude-binary", stateDir };
+    expect((await createClaudeCodeProvider(missing).probe()).detail).toBe("Claude Code is not installed");
+    expect((await createClaudeCodeProvider({ ...missing, locale: () => "ru" }).probe()).detail).toBe("Claude Code не установлен");
   });
 });
 
