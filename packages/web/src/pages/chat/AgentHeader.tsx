@@ -24,7 +24,7 @@ export function AgentHeader({ agentId, settings = true }: { agentId?: string; se
         disabled={!canEdit}
         onClick={() => agent && editAgent(agent.id)}
         title={canEdit ? t("agent.settings") : undefined}
-        className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pr-2 pl-1 text-left transition enabled:hover:bg-surface-2"
+        className="flex min-w-10 items-center gap-2.5 rounded-xl py-1 pr-2 pl-1 text-left transition enabled:hover:bg-surface-2"
       >
         <AgentAvatar avatar={agent?.avatar} id={agentId} name={name} size={32} />
         <span className="min-w-0">

@@ -91,14 +91,15 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-/** Status badges, plugin status items, the plugin side pane toggle and the settings button. */
+/** Status badges, plugin status items, the plugin side pane toggle and the settings button. Plugin status items show
+ * only when the bar itself is wide enough (a container query: the settings panel may sit next to the chat). */
 export function HeaderActions() {
   const shell = useContext(ShellContext);
   const panes = useSlot("pane.right");
   const p = useStore(panel);
   return (
     <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-      <div className="hidden items-center gap-2 lg:flex">
+      <div className="hidden items-center gap-2 @3xl/top:flex">
         <PluginStatusItems />
       </div>
       <ConnectionBadge />
@@ -120,7 +121,7 @@ export function HeaderActions() {
 export function TopBar({ children }: { children?: ReactNode }) {
   const shell = useContext(ShellContext);
   return (
-    <header className="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface/70 px-2 backdrop-blur sm:px-3">
+    <header className="@container/top relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface/70 px-2 backdrop-blur sm:px-3">
       <IconButton label={t("layout.menu")} onClick={shell.openDrawer} className="md:hidden">
         <Menu className="size-5" />
       </IconButton>

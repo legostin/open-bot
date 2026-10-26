@@ -58,14 +58,15 @@ export function BrainPicker({ agent }: { agent: AgentDef }) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={t("brainPicker.label")}
+        title={`${t("brainPicker.label")}: ${active?.label ?? t("brainPicker.none")}`}
         className={cx(
           "flex max-w-[11rem] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition",
           active ? "border-border bg-surface-2/70 text-fg hover:bg-surface-2" : "border-warning/40 bg-warning-soft/60 text-warning",
         )}
       >
         <Brain className="size-3.5 shrink-0" />
-        <span className="truncate">{active?.label ?? t("brainPicker.none")}</span>
+        {/* A narrow bar (TopBar's container) keeps the icon; the title says which brain. */}
+        <span className="hidden truncate @lg/top:inline">{active?.label ?? t("brainPicker.none")}</span>
         <ChevronDown className={cx("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
