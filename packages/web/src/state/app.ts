@@ -1,0 +1,338 @@
+// Global client state: auth/bootstrap, realtime connection, conversations, messages, tasks, agents.
+
+import { useSyncExternalStore } from "react";
+import type { AgentDef, Conversation, Message, Task, UiEvent, VaultState } from "@openbot/shared";
+import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
+import { createStore, Emitter, type Store } from "../lib/store";
+import { HubSocket, type ConnectionState } from "../lib/socket";
+import { applyDelta, mergeFetched, prependOlder, upsertMessage } from "../lib/messages";
+import { toast } from "./toast";
+
+export interface UiPluginEntry {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export interface ChannelEntry {
+  id: string;
+  label: string;
+  pluginId: string;
+}
+
+export interface Bootstrap {
+  csrf: string;
+  version: string;
+  publicUrl: string;
+  consoleUrl: string;
+  mainConversationId: string;
+  defaultAgent: string;
+  timezone: string;
+  language: string;
+  vaultState: VaultState;
+  pendingApprovals: number;
+  uiPlugins: UiPluginEntry[];
+  channels: ChannelEntry[];
+}
+
+export interface AuthState {
+  hasPassword: boolean;
+  authenticated: boolean;
+  passkeys: number;
+  version: string;
+}
+
+export type Phase = { kind: "loading" } | { kind: "error"; message: string } | { kind: "setup" | "login"; auth: AuthState } | { kind: "ready" };
+
+export interface ConvMessages {
+  messages: Message[];
+  loaded: boolean;
+  loading: boolean;
+  loadingOlder: boolean;
+  hasMore: boolean;
+  error?: string;
+}
+
+const PAGE = 60;
+const EMPTY_CONV: ConvMessages = { messages: [], loaded: false, loading: false, loadingOlder: false, hasMore: false };
+
+export const phase = createStore<Phase>({ kind: "loading" });
+export const session = createStore<Bootstrap | null>(null);
+export const connection = createStore<ConnectionState>("connecting");
+export const conversations = createStore<Conversation[]>([]);
+export const tasks = createStore<Task[] | null>(null);
+export const agents = createStore<AgentDef[] | null>(null);
+export const messages = createStore<Record<string, ConvMessages>>({});
+
+/** Every realtime event from the hub. */
+export const hubEvents = new Emitter<UiEvent>();
+/** Fired after the socket reconnects (pages refetch their data). */
+export const reconnected = new Emitter<void>();
+
+export function useSelector<T, S>(store: Store<T>, select: (s: T) => S): S {
+  return useSyncExternalStore(
+    store.subscribe,
+    () => select(store.get()),
+    () => select(store.get()),
+  );
+}
+
+export function useConversationMessages(id: string | undefined): ConvMessages {
+  return useSelector(messages, (s) => (id ? (s[id] ?? EMPTY_CONV) : EMPTY_CONV));
+}
+
+// ---------- auth & bootstrap ----------
+
+let socket: HubSocket | undefined;
+
+export async function init(): Promise<void> {
+  phase.set({ kind: "loading" });
+  try {
+    const auth = await request<AuthState>("GET", "/api/auth/state");
+    if (!auth.hasPassword) return phase.set({ kind: "setup", auth });
+    if (!auth.authenticated) return phase.set({ kind: "login", auth });
+    await bootstrap();
+    phase.set({ kind: "ready" });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) return void showLogin();
+    phase.set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+async function showLogin(): Promise<void> {
+  stopSocket();
+  session.set(null);
+  try {
+    const auth = await request<AuthState>("GET", "/api/auth/state");
+    phase.set({ kind: auth.hasPassword ? "login" : "setup", auth });
+  } catch {
+    phase.set({ kind: "login", auth: { hasPassword: true, authenticated: false, passkeys: 0, version: "" } });
+  }
+}
+
+onUnauthorized(() => {
+  if (phase.get().kind === "ready") {
+    toast("Сессия истекла — войдите снова", "info");
+    void showLogin();
+  }
+});
+
+export async function bootstrap(): Promise<Bootstrap> {
+  const b = await request<Bootstrap>("GET", "/api/bootstrap");
+  setCsrf(b.csrf);
+  session.set(b);
+  startSocket();
+  void refreshConversations();
+  return b;
+}
+
+export async function refreshBootstrap(): Promise<void> {
+  try {
+    const b = await request<Bootstrap>("GET", "/api/bootstrap");
+    setCsrf(b.csrf);
+    session.set(b);
+  } catch {
+    /* handled by onUnauthorized */
+  }
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await request("POST", "/api/auth/logout", {});
+  } catch {
+    /* ignore */
+  }
+  stopSocket();
+  session.set(null);
+  messages.set({});
+  tasks.set(null);
+  agents.set(null);
+  conversations.set([]);
+  await showLogin();
+}
+
+// ---------- realtime ----------
+
+function startSocket(): void {
+  if (socket) return;
+  socket = new HubSocket({
+    onEvent: handleEvent,
+    onState: (s) => connection.set(s),
+    onReconnect: () => {
+      void refreshBootstrap();
+      void refreshConversations();
+      if (tasks.get()) void refreshTasks();
+      for (const id of Object.keys(messages.get())) if (messages.get()[id].loaded) void loadMessages(id, true);
+      reconnected.emit();
+    },
+    onRepeatedFailure: async () => {
+      // A failed upgrade may mean the session expired.
+      try {
+        const auth = await request<AuthState>("GET", "/api/auth/state");
+        if (!auth.authenticated && phase.get().kind === "ready") {
+          toast("Сессия истекла — войдите снова", "info");
+          void showLogin();
+        }
+      } catch {
+        /* hub offline */
+      }
+    },
+  });
+  socket.start();
+}
+
+function stopSocket(): void {
+  socket?.stop();
+  socket = undefined;
+  connection.set("connecting");
+}
+
+export function sendToHub(msg: unknown): void {
+  socket?.send(msg);
+}
+
+function patchConv(id: string, fn: (c: ConvMessages) => ConvMessages): void {
+  messages.set((all) => {
+    const cur = all[id];
+    if (!cur) return all;
+    return { ...all, [id]: fn(cur) };
+  });
+}
+
+function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
+  const i = list.findIndex((x) => x.id === item.id);
+  if (i < 0) return [item, ...list];
+  const next = list.slice();
+  next[i] = { ...list[i], ...item };
+  return next;
+}
+
+function sortConversations(list: Conversation[]): Conversation[] {
+  return list.slice().sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+}
+
+function handleEvent(e: UiEvent): void {
+  switch (e.type) {
+    case "message.created":
+      patchConv(e.data.conversationId, (c) => ({ ...c, messages: upsertMessage(c.messages, e.data) }));
+      conversations.set((list) => {
+        const i = list.findIndex((c) => c.id === e.data.conversationId);
+        if (i < 0) return list;
+        const next = list.slice();
+        next[i] = { ...list[i], updatedAt: e.data.createdAt };
+        return sortConversations(next);
+      });
+      break;
+    case "message.updated":
+      patchConv(e.data.conversationId, (c) => ({ ...c, messages: upsertMessage(c.messages, e.data) }));
+      break;
+    case "message.delta":
+      patchConv(e.data.conversationId, (c) => ({ ...c, messages: applyDelta(c.messages, e.data) }));
+      break;
+    case "conversation.updated":
+      conversations.set((list) => sortConversations(upsertById(list, e.data)));
+      break;
+    case "task.updated":
+      tasks.set((list) => (list ? upsertById(list, e.data) : list));
+      break;
+    case "approval.pending":
+      session.set((s) => (s ? { ...s, pendingApprovals: e.data.count } : s));
+      break;
+    case "vault.state":
+      session.set((s) => (s ? { ...s, vaultState: e.data.state } : s));
+      break;
+    case "notification.created":
+      if (e.data.level === "notify" || e.data.level === "ask") toast(e.data.title, "info");
+      break;
+    case "plugins.updated":
+      void refreshBootstrap();
+      break;
+  }
+  hubEvents.emit(e);
+}
+
+// ---------- conversations & messages ----------
+
+export async function refreshConversations(): Promise<void> {
+  try {
+    conversations.set(sortConversations(await api.get<Conversation[]>("/api/conversations")));
+  } catch {
+    /* keep previous */
+  }
+}
+
+export async function createChat(title?: string, agentId?: string): Promise<Conversation> {
+  const c = await api.post<Conversation>("/api/conversations", { title: title || "Новый чат", ...(agentId ? { agentId } : {}) });
+  conversations.set((list) => sortConversations(upsertById(list, c)));
+  return c;
+}
+
+export async function updateConversation(id: string, patch: { title?: string; agentId?: string }): Promise<Conversation> {
+  const c = await api.patch<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, patch);
+  conversations.set((list) => sortConversations(upsertById(list, c)));
+  return c;
+}
+
+export async function loadMessages(id: string, refresh = false): Promise<void> {
+  const cur = messages.get()[id];
+  if (cur && (cur.loading || (cur.loaded && !refresh))) return;
+  messages.set((all) => ({ ...all, [id]: { ...(all[id] ?? EMPTY_CONV), loading: true, error: undefined } }));
+  try {
+    const list = await api.get<Message[]>(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${PAGE}`);
+    messages.set((all) => {
+      const prev = all[id] ?? EMPTY_CONV;
+      return {
+        ...all,
+        [id]: { ...prev, messages: mergeFetched(prev.messages, list), loaded: true, loading: false, hasMore: refresh && prev.loaded ? prev.hasMore : list.length >= PAGE },
+      };
+    });
+  } catch (e) {
+    messages.set((all) => ({ ...all, [id]: { ...(all[id] ?? EMPTY_CONV), loading: false, loaded: true, error: e instanceof Error ? e.message : String(e) } }));
+  }
+}
+
+export async function loadOlder(id: string): Promise<void> {
+  const cur = messages.get()[id];
+  if (!cur || cur.loadingOlder || !cur.hasMore || !cur.messages.length) return;
+  patchConv(id, (c) => ({ ...c, loadingOlder: true }));
+  try {
+    const before = cur.messages[0].createdAt;
+    const list = await api.get<Message[]>(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${PAGE}&before=${encodeURIComponent(before)}`);
+    patchConv(id, (c) => ({ ...c, messages: prependOlder(c.messages, list), loadingOlder: false, hasMore: list.length >= PAGE }));
+  } catch (e) {
+    patchConv(id, (c) => ({ ...c, loadingOlder: false }));
+    toast(e instanceof Error ? e.message : String(e), "error");
+  }
+}
+
+export async function sendMessage(id: string, text: string): Promise<void> {
+  const m = await api.post<Message>(`/api/conversations/${encodeURIComponent(id)}/messages`, { text });
+  if (m && m.id) patchConv(id, (c) => ({ ...c, messages: upsertMessage(c.messages, m) }));
+}
+
+export async function interrupt(id: string): Promise<boolean> {
+  const r = await api.post<{ interrupted: boolean }>(`/api/conversations/${encodeURIComponent(id)}/interrupt`, {});
+  return !!r?.interrupted;
+}
+
+// ---------- tasks & agents ----------
+
+export async function refreshTasks(): Promise<Task[]> {
+  const list = await api.get<Task[]>("/api/tasks?limit=300");
+  tasks.set(list);
+  return list;
+}
+
+export function ensureTasks(): void {
+  if (!tasks.get()) void refreshTasks().catch(() => {});
+}
+
+export async function refreshAgents(): Promise<AgentDef[]> {
+  const list = await api.get<AgentDef[]>("/api/agents");
+  agents.set(list);
+  return list;
+}
+
+export function ensureAgents(): void {
+  if (!agents.get()) void refreshAgents().catch(() => {});
+}
