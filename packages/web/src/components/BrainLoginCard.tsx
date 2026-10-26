@@ -10,7 +10,7 @@ import { hubEvents } from "../state/app";
 import { Badge, Button, CopyButton, Input, Spinner, cx } from "./ui";
 import { t } from "../i18n";
 
-const RUNNING = new Set(["starting", "waiting", "verifying"]);
+const RUNNING = new Set(["installing", "starting", "waiting", "verifying"]);
 
 /**
  * One brain's sign-in. `compact`: a row (name, state, button) for lists like the first-run checklist;
@@ -78,7 +78,7 @@ export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; 
     <>
       {view.connected && !view.supported && <div className="text-sm text-muted">{t("brainLogin.unsupported")}</div>}
       {!compact && canStart && !signedIn && !ended && <div className="text-sm text-muted">{t("brainLogin.hint")}</div>}
-      {running && login && <Running login={login} busy={busy} onCode={(code) => act("/code", { code })} onCancel={() => void act("/cancel")} />}
+      {running && login && <Running login={login} label={view.label} busy={busy} onCode={(code) => act("/code", { code })} onCancel={() => void act("/cancel")} />}
       {ended?.status === "succeeded" && signedIn && <div className="text-sm text-success">{t("brainLogin.done")}</div>}
       {ended && (ended.status === "failed" || ended.status === "expired") && <div className="text-sm text-danger">{ended.error ?? t("brainLogin.failed")}</div>}
       {ended?.status === "cancelled" && !signedIn && <div className="text-sm text-muted">{t("brainLogin.cancelled")}</div>}
@@ -114,7 +114,22 @@ export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; 
   );
 }
 
-function Running({ login, busy, onCode, onCancel }: { login: NonNullable<BrainLoginView["login"]>; busy: boolean; onCode: (code: string) => Promise<boolean>; onCancel: () => void }) {
+function Running({ login, label, busy, onCode, onCancel }: { login: NonNullable<BrainLoginView["login"]>; label: string; busy: boolean; onCode: (code: string) => Promise<boolean>; onCancel: () => void }) {
+  if (login.status === "installing") {
+    // The hub installs the missing CLI first (desktop installs); the sign-in goes on by itself afterwards.
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <Spinner size={14} /> {t("brainLogin.installing", { name: label })}
+        </div>
+        <div>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            {t("brainLogin.cancel")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
   if (login.status === "starting" || !login.url) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted">

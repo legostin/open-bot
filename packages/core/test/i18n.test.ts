@@ -24,6 +24,12 @@ describe("i18n catalogs", () => {
     expect(catalogProblems(coreCatalog)).toEqual([]);
   });
 
+  it("installer translations match English", async () => {
+    // @ts-ignore: plain ESM helper without type declarations
+    const { loadCatalogs } = await import("../../../packaging/desktop/locales.mjs");
+    expect(catalogProblems(loadCatalogs())).toEqual([]);
+  });
+
   for (const dir of pluginDirs) {
     const id = dir.split(/[\\/]/).pop()!;
     it(`plugin ${id}: translations match English and cover the manifest`, () => {

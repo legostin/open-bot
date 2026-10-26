@@ -36,8 +36,19 @@ export function AuthScreen({ mode, auth }: { mode: "setup" | "login"; auth: Auth
   );
 }
 
+/** The desktop app opens the setup page as `/#setup=<code>`: the fragment never reaches the server or its logs. Read
+ *  once when the page loads, then dropped from the address bar. */
+const linkCode = (() => {
+  const m = /^#setup=([\w-]{6,64})$/.exec(window.location.hash);
+  if (!m) return "";
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+  return m[1];
+})();
+
 function SetupForm() {
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(linkCode);
+  // A code from the link needs no typing; the field comes back if the hub refuses it.
+  const [fromLink, setFromLink] = useState(!!linkCode);
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,6 +65,7 @@ function SetupForm() {
       await init();
     } catch (err) {
       setError(errorText(err));
+      setFromLink(false);
     } finally {
       setBusy(false);
     }
@@ -63,17 +75,21 @@ function SetupForm() {
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
         <h1 className="text-lg font-semibold">{t("auth.setup.title")}</h1>
-        <p className="mt-1 text-sm text-muted">{t("auth.setup.intro")}</p>
+        <p className="mt-1 text-sm text-muted">{t(fromLink ? "auth.setup.introDesktop" : "auth.setup.intro")}</p>
       </div>
-      <div className="flex gap-2.5 rounded-xl bg-surface-2 p-3 text-xs leading-relaxed text-muted">
-        <Terminal className="mt-0.5 size-4 shrink-0" />
-        <span>{tRich("auth.setup.codeHint", { command: <code className="font-mono">docker logs openbot</code> })}</span>
-      </div>
-      <Field label={t("auth.setup.code")}>
-        <Input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="one-time-code" autoFocus required spellCheck={false} className="font-mono" />
-      </Field>
+      {!fromLink && (
+        <>
+          <div className="flex gap-2.5 rounded-xl bg-surface-2 p-3 text-xs leading-relaxed text-muted">
+            <Terminal className="mt-0.5 size-4 shrink-0" />
+            <span>{tRich("auth.setup.codeHint", { command: <code className="font-mono">docker logs openbot</code> })}</span>
+          </div>
+          <Field label={t("auth.setup.code")}>
+            <Input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="one-time-code" autoFocus required spellCheck={false} className="font-mono" />
+          </Field>
+        </>
+      )}
       <Field label={t("auth.setup.password")} hint={t("auth.setup.passwordHint")}>
-        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required minLength={8} />
+        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" autoFocus={fromLink} required minLength={8} />
       </Field>
       <Field label={t("auth.setup.repeat")}>
         <Input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" required />

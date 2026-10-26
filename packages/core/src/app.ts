@@ -36,6 +36,7 @@ import { registerHubTools, slug } from "./tools/hub-tools.ts";
 import { SecretIntake } from "./secrets.ts";
 import { AgentDrafts } from "./agent-drafts.ts";
 import { BrainLogins } from "./brain-login.ts";
+import { CliTools } from "./cli-tools.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -69,6 +70,7 @@ export class Hub {
   secrets: SecretIntake;
   agentDrafts: AgentDrafts;
   brainLogins: BrainLogins;
+  cliTools: CliTools;
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -121,7 +123,8 @@ export class Hub {
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit });
     this.secrets = new SecretIntake({ db: this.db, bus: this.bus, audit: this.audit, vault: this.vault, plugins: () => this.plugins });
     this.agentDrafts = new AgentDrafts({ db: this.db, bus: this.bus });
-    this.brainLogins = new BrainLogins({ brains: this.brains, bus: this.bus, egress: this.egress, audit: this.audit, egressPort: () => this.config.egressPort });
+    this.cliTools = new CliTools(config.dataDir, config.installClis);
+    this.brainLogins = new BrainLogins({ brains: this.brains, bus: this.bus, egress: this.egress, audit: this.audit, egressPort: () => this.config.egressPort, tools: this.cliTools });
     this.runner = new SessionRunner({
       config,
       store: this.store,
@@ -157,6 +160,7 @@ export class Hub {
       channels: this.channels,
       coreCall: createCoreCall(this),
       onLayoutsChanged: () => this.reindex(),
+      cliBinDirs: () => this.cliTools.binDirs(),
     });
     this.mcp = new McpEndpoint(this.gateway, this.store, config.version);
     const rpId = new URL(config.publicUrl).hostname;

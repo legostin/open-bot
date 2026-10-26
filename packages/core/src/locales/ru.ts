@@ -86,6 +86,7 @@ export default {
   "brainLogin.expired": "Вход занял слишком много времени и был остановлен",
   "brainLogin.hostGone": "Плагин мозга остановился во время входа",
   "brainLogin.notSignedIn": "Вход завершился, но мозг всё ещё не авторизован",
+  "brainLogin.installFailed": "Не удалось установить {name}: {detail}",
   "chat.noSuitableBrains": "нет подходящих мозгов",
   "chat.allLimited": "Все доступные мозги упёрлись в лимиты подписки. Продолжу после {time}.",
   "chat.cannotStart": "Не могу запустить агента «{agent}»: {reason}. Настройте мозг в разделе «Мозги» (Claude Code, Codex или API-ключ).",

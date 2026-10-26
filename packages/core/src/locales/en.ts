@@ -87,6 +87,7 @@ export default {
   "brainLogin.expired": "The sign-in took too long and was stopped",
   "brainLogin.hostGone": "The brain's plugin stopped during the sign-in",
   "brainLogin.notSignedIn": "The sign-in finished, but the brain still is not signed in",
+  "brainLogin.installFailed": "Could not install {name}: {detail}",
   "chat.noSuitableBrains": "no suitable brains",
   "chat.allLimited": "All available brains have hit their subscription limits. I'll continue after {time}.",
   "chat.cannotStart": "Can't start the agent “{agent}”: {reason}. Set up a brain on the Brains page (Claude Code, Codex or an API key).",

@@ -21,7 +21,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "build:node": "node scripts/build-node-bundle.mjs"
+    "build:node": "node scripts/build-node-bundle.mjs",
+    "package:win": "node packaging/windows/build.mjs",
+    "package:mac": "node packaging/macos/build.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

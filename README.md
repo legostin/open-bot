@@ -2,7 +2,7 @@
 
 [Русский](README.ru.md)
 
-A friendly, proactive personal agent that lives on your own hardware. open-bot is an open-source alternative to Grok, Meta Muse and OpenAI Dots: one Docker image, the subscriptions you already pay for, your own computers, and security from day one. It speaks English and Russian.
+A friendly, proactive personal agent that lives on your own hardware. open-bot is an open-source alternative to Grok, Meta Muse and OpenAI Dots: an installer for your computer or one Docker image for a server, the subscriptions you already pay for, your own computers, and security from day one. It speaks English and Russian.
 
 ## Features
 
@@ -18,6 +18,24 @@ A friendly, proactive personal agent that lives on your own hardware. open-bot i
 - **Channels.** Web UI and Telegram. Mobile and desktop apps will come later.
 
 ## Quick start
+
+### On your computer (Windows, macOS)
+
+Use the installer: `open-bot-setup-<version>-x64.exe` for Windows 10 and 11, `open-bot-<version>.pkg` for macOS 13.5 or later (Apple silicon and Intel). It brings everything it needs: no Node.js, Docker or WSL. To build one yourself, see [Desktop installers](#desktop-installers).
+
+1. Run the installer. On Windows it installs for your user only and needs no administrator rights; on macOS it asks for your password, like any package.
+2. open-bot starts in the background and opens in your browser. Choose a password and you are in (no setup code to copy).
+3. From then on it starts when you sign in to your computer. On Windows it lives in the tray (Open, Start at login, Show log, Restart, Quit); on macOS open it from **Applications → open-bot**.
+
+Claude Code and Codex: if one is already installed on the computer, open-bot uses it. If not, pressing **Sign in** on its card installs it for open-bot (a one-time download of a few hundred MB), then the sign-in starts.
+
+Your data stays in `%LOCALAPPDATA%\open-bot` (Windows) or `~/Library/Application Support/open-bot` (macOS); upgrading keeps it. To uninstall, use **Settings → Apps** on Windows or **Applications → open-bot → Uninstall open-bot** on macOS: both ask before deleting your data. The hub is reachable from this computer only; for your phone, see [Remote access](#remote-access).
+
+The desktop version runs the hub, plugins and CLI brains as your own user: the Docker image's separate Unix users and its kernel-level network block are not there. For the strongest isolation, run open-bot in Docker.
+
+The installers are not signed yet. Windows SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**. If macOS blocks the package, Control-click it and choose **Open**, or allow it in **System Settings → Privacy & Security**.
+
+### On a server (Docker)
 
 ```bash
 git clone <repo> open-bot && cd open-bot
@@ -138,6 +156,7 @@ docker exec openbot openbot-entrypoint audit-verify
 | `OPENBOT_HOST` | `127.0.0.1` (`0.0.0.0` in the image) | listen address |
 | `OPENBOT_PORT`, `OPENBOT_CONSOLE_PORT`, `OPENBOT_EGRESS_PORT` | `8080`, `8081`, `8089` | ports of the chat UI, the console and the egress proxy |
 | `OPENBOT_DATA_DIR` | `.data/` (`/data` in the image) | data directory |
+| `OPENBOT_INSTALL_CLIS` | — (`1` in the desktop installers) | `1` lets **Sign in** install a missing Claude Code or Codex into `<data>/tools` |
 | `TZ` | system time zone (`UTC` in the image) | default time zone for reminders, quiet hours and the digest |
 
 Most behaviour is configured in **Settings** in the web UI: language, time zone, quiet hours, digest times, `channelApprovalDetails` (full action details in Telegram) and `brainEgressAllow` (extra hosts brains may reach). One hub setting has no field on that page yet: `egressPrivateAllow`, the local-network hosts plugins and brains may reach (for example `searxng` or `nas.local`); set it through `PATCH /api/settings`.
@@ -153,6 +172,17 @@ npm run typecheck
 ```
 
 You need Node.js 24.5+ (TypeScript runs without a build step). Outside Docker the browser plugin downloads Playwright's Chromium by itself the first time it starts without one (a one-time download into Playwright's cache, or `PLAYWRIGHT_BROWSERS_PATH`); browser calls made meanwhile wait for it. Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` to turn that off and install it yourself with `npx playwright install chromium`. The project layout and conventions are described in [CLAUDE.md](CLAUDE.md), the design in [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md) (in Russian). Core messages live in `packages/core/src/locales/{en,ru}.ts`, plugin messages in `.openbot-plugin/locales/{en,ru}.json`; `npm test` checks that every translation matches English.
+
+### Desktop installers
+
+```bash
+npm run package:win   # on Windows: dist/desktop/open-bot-setup-<version>-x64.exe
+npm run package:mac   # on macOS:   dist/desktop/open-bot-<version>.pkg
+```
+
+Both build the UIs, then stage the hub with its production `node_modules` and the official Node 24 build, checked against the release's SHA-256 (`packaging/desktop/stage.mjs`; `NODE_VERSION` picks another release). The Windows build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`) and compiles the tray app with the C# compiler that ships with Windows; the macOS build uses `pkgbuild`, `productbuild` and `osacompile` from macOS. Installer text lives in `packaging/desktop/locales/{en,ru}.json`.
+
+The Windows installer takes Inno Setup's `/VERYSILENT` plus `/PORT=18080` (another port, say for a second hub next to Docker) and `/NOSTART` (don't start after a silent install). `.github/workflows/desktop.yml` builds both installers on clean runners and checks that they install, start the hub and uninstall.
 
 ## License
 

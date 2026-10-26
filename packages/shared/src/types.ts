@@ -306,10 +306,10 @@ export interface ProbeResult {
 // ---------- Brain sign-in from the chat ----------
 
 /**
- * starting → waiting (the user signs in on the page) → verifying (a pasted code is being checked) → succeeded,
- * or failed / cancelled / expired (the code ran out before the user finished).
+ * [installing (the hub installs a missing CLI first)] → starting → waiting (the user signs in on the page) → verifying
+ * (a pasted code is being checked) → succeeded, or failed / cancelled / expired (the code ran out before the user finished).
  */
-export type BrainLoginStatus = "starting" | "waiting" | "verifying" | "succeeded" | "failed" | "cancelled" | "expired";
+export type BrainLoginStatus = "installing" | "starting" | "waiting" | "verifying" | "succeeded" | "failed" | "cancelled" | "expired";
 
 /** What a sign-in reports while it runs (from the brain's host to the hub). */
 export interface BrainLoginUpdate {

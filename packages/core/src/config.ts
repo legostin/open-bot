@@ -22,6 +22,8 @@ export interface Config {
   consoleDist: string;
   isolation: { users: boolean; hubUser: string; agentUser: string; pluginUser: string };
   egressEnforced: "iptables" | "proxy";
+  /** Install missing Claude Code / Codex CLIs into <data>/tools on sign-in (desktop installers; never under isolation). */
+  installClis: boolean;
   vaultPassphraseFile?: string;
   timezone: string;
   version: string;
@@ -70,6 +72,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
       pluginUser: env.OPENBOT_PLUGIN_USER ?? "plugin",
     },
     egressEnforced: env.OPENBOT_EGRESS_ENFORCED === "iptables" ? "iptables" : "proxy",
+    installClis: env.OPENBOT_INSTALL_CLIS === "1" && env.OPENBOT_ISOLATION !== "users",
     vaultPassphraseFile: env.OPENBOT_VAULT_PASSPHRASE_FILE && existsSync(env.OPENBOT_VAULT_PASSPHRASE_FILE) ? env.OPENBOT_VAULT_PASSPHRASE_FILE : undefined,
     timezone: env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     version: "0.1.0",

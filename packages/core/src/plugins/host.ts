@@ -15,6 +15,7 @@ import type { HookRegistry, HookName } from "../hooks.ts";
 import type { VaultService } from "../vault/service.ts";
 import type { AuditLog } from "../audit.ts";
 import type { EgressProxy } from "../egress.ts";
+import { npmEnv, npmInvocation, withPath } from "../cli-tools.ts";
 
 export type PluginStatus = "stopped" | "starting" | "running" | "crashed" | "disabled" | "no-server" | "error";
 
@@ -58,6 +59,8 @@ export interface HostDeps {
   coreCall: (pluginId: string, method: CoreMethod, params: any) => Promise<unknown>;
   /** Called after plugin set changes (skills/agents/mcp roots need re-indexing). */
   onLayoutsChanged: () => void;
+  /** Directories of CLIs the hub installed itself; brain hosts find them after the system PATH. */
+  cliBinDirs?: () => string[];
 }
 
 interface Running {
@@ -238,7 +241,8 @@ export class PluginHost {
       const s = sudoSpawn(runAs, { ...passEnv(), ...env }, process.execPath, nodeArgs);
       child = spawn(s.command, s.args, { cwd: rec.dir, env: s.env, stdio: ["pipe", "pipe", "pipe"] });
     } else {
-      child = spawn(process.execPath, nodeArgs, { cwd: rec.dir, env: { ...scrubEnv(process.env), ...env }, stdio: ["pipe", "pipe", "pipe"] });
+      const base = isBrainHost ? withPath(scrubEnv(process.env), [], this.d.cliBinDirs?.() ?? []) : scrubEnv(process.env);
+      child = spawn(process.execPath, nodeArgs, { cwd: rec.dir, env: { ...base, ...env }, stdio: ["pipe", "pipe", "pipe"] });
     }
 
     const peer = createRpcPeer(ndjsonTransport(child.stdout!, child.stdin!));
@@ -604,12 +608,8 @@ export class PluginHost {
     if (existsSync(pkg)) {
       const deps = JSON.parse(readFileSync(pkg, "utf8")).dependencies;
       if (deps && Object.keys(deps).length) {
-        execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], {
-          cwd: target,
-          stdio: "pipe",
-          timeout: 300_000,
-          shell: process.platform === "win32",
-        });
+        const npm = npmInvocation(["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"]);
+        execFileSync(npm.file, npm.args, { cwd: target, stdio: "pipe", timeout: 300_000, shell: npm.shell, env: npmEnv() });
       }
     }
     const perms = st.layout.manifest.permissions;
