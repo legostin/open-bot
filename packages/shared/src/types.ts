@@ -146,7 +146,8 @@ export interface PluginSetupView {
   status: string;
   lastError?: string;
   vaultState: VaultState;
-  secrets: Array<{ vaultId: string; title: string; hint?: string; link?: string; required: boolean; present: boolean; setting?: string }>;
+  /** pattern: the declared format, for a warning before saving something that does not match. */
+  secrets: Array<{ vaultId: string; title: string; hint?: string; link?: string; pattern?: string; required: boolean; present: boolean; setting?: string }>;
 }
 
 // ---------- Conversations, messages ----------

@@ -70,7 +70,7 @@
   "status.unknownError": "error",
   "status.waitingPairing": "{bot} is waiting to be linked: send it /start {code}",
   "status.linked": "{bot} is linked to the chat “{chat}”",
-  "status.tokenRejected": "Telegram rejected the bot token — check the vault item",
+  "status.tokenRejected": "Telegram rejected the bot token — replace it in the setup card",
   "status.tokenMissing": "No bot token ({ref}): {error}",
   "status.tokenEmpty": "The vault item {ref} has no value field with the bot token",
   "status.blocked": "The bot is blocked in the linked chat",

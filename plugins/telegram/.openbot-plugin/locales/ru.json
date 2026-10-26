@@ -70,7 +70,7 @@
   "status.unknownError": "ошибка",
   "status.waitingPairing": "{bot} ждёт привязки: отправьте ему /start {code}",
   "status.linked": "{bot} привязан к чату «{chat}»",
-  "status.tokenRejected": "Telegram не принял токен бота — проверьте запись в vault",
+  "status.tokenRejected": "Telegram не принял токен бота — замените его в настройке",
   "status.tokenMissing": "Нет токена бота ({ref}): {error}",
   "status.tokenEmpty": "В записи {ref} нет поля value с токеном бота",
   "status.blocked": "Бот заблокирован в привязанном чате",

@@ -266,6 +266,7 @@ export class SecretIntake {
         title: this.secretTitle(pluginId, s, locale),
         hint: s.hint ? localizePluginValue(rec.layout, s.hint, locale) : undefined,
         link: s.link,
+        pattern: s.pattern,
         required: s.required,
         present: !!this.d.vault.getMeta(s.vault),
         setting: s.setting,

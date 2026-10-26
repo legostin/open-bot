@@ -354,18 +354,30 @@ export function registerHubTools(hub: Hub): void {
         "(e.g. the Telegram pairing button). Use it whenever the user wants to connect or fix a plugin, instead of sending them to settings pages.",
       inputSchema: obj({ id: { type: "string", description: "Plugin id, see hub_plugins_list" } }, ["id"]),
     },
-    (i, ctx) => {
+    async (i, ctx) => {
       const view = hub.secrets.setupView(String(i.id), hubLocale());
       hub.runner.attachPart(ctx.conversationId, { type: "plugin_setup", pluginId: view.pluginId });
       const missing = view.secrets.filter((s) => !s.present);
+      // A stored secret can still be wrong (a revoked token): the channel's own status says whether it works.
+      const channels = await Promise.all(
+        hub.channels
+          .list()
+          .filter((c) => c.pluginId === view.pluginId)
+          .map(async (c) => {
+            const s = await hub.channels.status(c.id);
+            return `Channel ${c.label}: ${s.connected ? "connected" : "NOT connected"}${s.detail ? ` (${s.detail})` : ""}.`;
+          }),
+      );
       const lines = [
         `Setup card for ${view.name} is shown in the chat.`,
         `Plugin: ${view.enabled ? "enabled" : "disabled (the card has a switch)"}, status ${view.status}${view.lastError ? ` (${view.lastError})` : ""}.`,
+        ...channels,
         view.vaultState !== "unlocked" ? "The vault is locked: the card asks the user to unlock it first." : "",
         view.secrets.length
           ? `Secrets: ${view.secrets.map((s) => `${s.title} (vault://${s.vaultId}) ${s.present ? "present" : s.required ? "MISSING, required" : "missing, optional"}`).join("; ")}.`
           : "It needs no secrets.",
         missing.length ? "Tell the user in a sentence what to enter and where to get it; the card does the rest. Do not ask for values in messages." : "",
+        "Describe the state from these lines only; if something is wrong (e.g. a rejected token), say so and point at the card's Replace button.",
       ];
       return text(lines.filter(Boolean).join("\n"));
     },

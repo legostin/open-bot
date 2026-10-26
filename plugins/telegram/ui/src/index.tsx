@@ -88,7 +88,7 @@ function TelegramSettings({ ui }: { ui: OpenBotUI }) {
       <p style={muted}>{status.detail}</p>
 
       {/* No token yet: the setup card above this section has the token field (it goes straight into the vault). */}
-      {(status.state === "no-token" || status.state === "unauthorized") && <p style={muted}>{t("ui.setup.wait")}</p>}
+      {status.state === "no-token" && <p style={muted}>{t("ui.setup.wait")}</p>}
 
       {status.state === "polling" && !status.chat && status.pairingCode && (
         <div>

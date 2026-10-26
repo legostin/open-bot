@@ -16,14 +16,41 @@ import { t, type MessageKey } from "../i18n";
 import catalogEn from "../i18n/en";
 
 /** A password-style field for one secret. `onSave` gets the value; the field forgets it right after. */
-export function SecretInput({ vaultId, onSave, exists, compact }: { vaultId: string; onSave: (value: string) => Promise<void>; exists?: boolean; compact?: boolean }) {
+function matches(pattern: string | undefined, value: string): boolean {
+  if (!pattern) return true;
+  try {
+    return new RegExp(pattern).test(value);
+  } catch {
+    return true; // a broken pattern in a third-party manifest only disables the warning
+  }
+}
+
+export function SecretInput({
+  vaultId,
+  onSave,
+  exists,
+  compact,
+  pattern,
+}: {
+  vaultId: string;
+  onSave: (value: string) => Promise<void>;
+  exists?: boolean;
+  compact?: boolean;
+  /** The declared format: a value that does not match takes a second click (formats change, so it is not a hard rule). */
+  pattern?: string;
+}) {
   const [value, setValue] = useState("");
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warned, setWarned] = useState(false);
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
     if (!value.trim() || busy) return;
+    if (!warned && !matches(pattern, value.trim())) {
+      setWarned(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -42,7 +69,10 @@ export function SecretInput({ vaultId, onSave, exists, compact }: { vaultId: str
           <Input
             type={shown ? "text" : "password"}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setWarned(false);
+            }}
             placeholder={t("secret.placeholder")}
             autoComplete="off"
             spellCheck={false}
@@ -62,9 +92,10 @@ export function SecretInput({ vaultId, onSave, exists, compact }: { vaultId: str
           </button>
         </div>
         <Button type="submit" variant="primary" size={compact ? "sm" : "md"} loading={busy} disabled={!value.trim()} icon={<Lock className="size-4" />}>
-          {exists ? t("secret.replace") : t("secret.save")}
+          {warned ? t("secret.saveAnyway") : exists ? t("secret.replace") : t("secret.save")}
         </Button>
       </div>
+      {warned && <div className="text-xs text-warning">{t("secret.formatWarning")}</div>}
       {error && <div className="text-xs text-danger">{error}</div>}
       <div className="flex items-center gap-1.5 text-xs text-muted">
         <ShieldCheck className="size-3.5 shrink-0" /> {t("secret.privacy", { id: vaultId })}
@@ -203,6 +234,7 @@ function SetupSecretRow({ secret: s, onSave }: { secret: PluginSetupView["secret
           compact
           vaultId={s.vaultId}
           exists={s.present}
+          pattern={s.pattern}
           onSave={async (value) => {
             await onSave(value);
             setEditing(false);
@@ -242,7 +274,14 @@ export function PluginSetupCard({ pluginId, bare }: { pluginId: string; bare?: b
       {!bare && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold">{t("setup.title", { name: view.name })}</span>
-          {missing > 0 ? <Badge tone="warning">{t("setup.missing")}</Badge> : <Badge tone={view.status === "running" ? "success" : "neutral"}>{t("setup.status", { status: statusLabel(view.status) })}</Badge>}
+          {/* A running plugin with its own section (Telegram) shows its real state there; "running" here would contradict a rejected token. */}
+          {missing > 0 ? (
+            <Badge tone="warning">{t("setup.missing")}</Badge>
+          ) : (
+            (view.status !== "running" || own.length === 0) && (
+              <Badge tone={view.status === "running" ? "success" : "neutral"}>{t("setup.status", { status: statusLabel(view.status) })}</Badge>
+            )
+          )}
         </div>
       )}
       {!view.enabled && (

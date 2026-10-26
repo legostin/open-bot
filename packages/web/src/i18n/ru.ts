@@ -181,6 +181,8 @@ export default {
   "secret.optional": "необязательно",
   "secret.replaceHint": "В хранилище уже есть такой; сохранение заменит его.",
   "secret.stored": "🔒 {ref}",
+  "secret.formatWarning": "Не похоже на ожидаемый формат. Проверьте, что скопировали целиком.",
+  "secret.saveAnyway": "Сохранить всё равно",
   "vaultGate.createTitle": "Сначала создадим хранилище",
   "vaultGate.createHint": "Секреты шифруются паролем, который знаете только вы. Придумайте его (от 8 символов) и сохраните в надёжном месте.",
   "vaultGate.unlockTitle": "Хранилище заперто",

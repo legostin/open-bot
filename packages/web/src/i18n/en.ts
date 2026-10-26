@@ -181,6 +181,8 @@ export default {
   "secret.optional": "optional",
   "secret.replaceHint": "The vault already has this one; saving replaces it.",
   "secret.stored": "🔒 {ref}",
+  "secret.formatWarning": "This does not look like the expected format. Check that you copied all of it.",
+  "secret.saveAnyway": "Save anyway",
   "vaultGate.createTitle": "First, create the vault",
   "vaultGate.createHint": "Secrets are encrypted with a passphrase only you know. Pick one (8+ characters) and keep it somewhere safe.",
   "vaultGate.unlockTitle": "The vault is locked",
