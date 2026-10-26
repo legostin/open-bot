@@ -38,6 +38,11 @@ export function buildSystemPrompt(c: PromptContext): string {
     "- To do something later or on a schedule (reminders, monitoring), use `trigger_create`. To split big work or run things in parallel, use `task_delegate`.",
     "- Remember durable facts about the user and their preferences with `memory_write`; use `memory_search` before asking things they may have told you already.",
   );
+  if (!c.machineName) {
+    lines.push(
+      "- Internet: use `web_search`, `web_fetch` and the `browser_*` tools. Direct network access from your shell and built-in fetch tools is limited to model APIs, package registries and GitHub; if a job truly needs more, ask the user to add the host to `brainEgressAllow` in settings.",
+    );
+  }
   if (c.background) {
     lines.push(
       "- This is a BACKGROUND run: the user is not watching. When done, call `notify` exactly once with a level:",

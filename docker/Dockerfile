@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 COPY . .
 RUN npm ci --no-audit --no-fund && npm run build
 
-FROM node:24-bookworm-slim
+FROM node:24-bookworm-slim AS runtime-base
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git sudo ca-certificates curl tini xvfb iptables procps ripgrep jq less openssh-client \
@@ -22,13 +22,18 @@ RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code @openai/codex 
 RUN groupadd -r openbot && useradd -r -m -d /home/openbot -g openbot -s /bin/bash openbot \
     && groupadd -r agent && useradd -r -M -d /data/home/agent -g agent -G openbot -s /bin/bash agent \
     && groupadd -r plugin && useradd -r -M -d /data/home/plugin -g plugin -s /usr/sbin/nologin plugin
+# Chromium for the browser plugin; keep the version in sync with playwright in package-lock.json.
+ARG PLAYWRIGHT_VERSION=1.64.1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium && chmod -R a+rX /ms-playwright \
+    && npm cache clean --force && rm -rf /var/lib/apt/lists/*
+
 COPY docker/sudoers /etc/sudoers.d/openbot
 RUN chmod 0440 /etc/sudoers.d/openbot && visudo -c
 
+FROM runtime-base
 COPY --from=build --chown=root:root /app /app
 WORKDIR /app
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npx --yes playwright install --with-deps chromium && chmod -R a+rX /ms-playwright && rm -rf /var/lib/apt/lists/*
 COPY docker/entrypoint.sh /usr/local/bin/openbot-entrypoint
 RUN chmod 0755 /usr/local/bin/openbot-entrypoint
 
