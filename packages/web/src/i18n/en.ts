@@ -221,7 +221,8 @@ export default {
   "checklist.vaultHint": "Encrypted storage for tokens and passwords",
   "checklist.setUp": "Set up",
   "checklist.collapse": "Collapse",
-  "checklist.subscriptions": "Using a Claude Code or Codex subscription instead?",
+  "checklist.subscriptions": "Signing in with Claude Code or Codex?",
+  "checklist.apiKeys": "Or an API key: Anthropic, OpenAI, OpenRouter, your own server",
   "checklist.telegram": "Connect Telegram",
   "checklist.telegramHint": "Notifications and approvals on your phone",
 

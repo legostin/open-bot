@@ -221,7 +221,8 @@ export default {
   "checklist.vaultHint": "Шифрованное хранилище токенов и паролей",
   "checklist.setUp": "Настроить",
   "checklist.collapse": "Свернуть",
-  "checklist.subscriptions": "Есть подписка Claude Code или Codex?",
+  "checklist.subscriptions": "Вход через Claude Code или Codex?",
+  "checklist.apiKeys": "Или ключ API: Anthropic, OpenAI, OpenRouter, свой сервер",
   "checklist.telegram": "Подключите Telegram",
   "checklist.telegramHint": "Уведомления и подтверждения на телефоне",
 

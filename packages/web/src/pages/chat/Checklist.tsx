@@ -77,9 +77,16 @@ export function FirstRunChecklist() {
         <Step done={brainOk} title={t("checklist.brain")} hint={t("checklist.brainHint")} open={open === "brain"} onToggle={() => toggle("brain")}>
           {/* One gate for both cards, so an absent vault is offered once, not twice. */}
           <VaultGate>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
               <PluginSetupCard pluginId="brain-claude-code" bare />
-              <PluginSetupCard pluginId="brain-api" bare />
+              <details className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-accent-text">
+                  {t("checklist.apiKeys")} <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="mt-2">
+                  <PluginSetupCard pluginId="brain-api" bare />
+                </div>
+              </details>
             </div>
           </VaultGate>
           <button type="button" onClick={() => openPanel("brains")} className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-accent-text">
