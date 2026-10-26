@@ -37,6 +37,7 @@ import { SecretIntake } from "./secrets.ts";
 import { AgentDrafts } from "./agent-drafts.ts";
 import { BrainLogins } from "./brain-login.ts";
 import { CliTools } from "./cli-tools.ts";
+import { UserPath } from "./user-path.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -71,6 +72,8 @@ export class Hub {
   agentDrafts: AgentDrafts;
   brainLogins: BrainLogins;
   cliTools: CliTools;
+  /** Where the user's own CLIs live (their shell or account PATH): read on desktop installs, which start with a short PATH. */
+  userPath = new UserPath();
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -160,7 +163,8 @@ export class Hub {
       channels: this.channels,
       coreCall: createCoreCall(this),
       onLayoutsChanged: () => this.reindex(),
-      cliBinDirs: () => this.cliTools.binDirs(),
+      // The user's own CLIs first, then the ones the hub installed: a CLI the user installed wins.
+      cliBinDirs: () => [...this.userPath.dirs(), ...this.cliTools.binDirs()],
     });
     this.mcp = new McpEndpoint(this.gateway, this.store, config.version);
     const rpId = new URL(config.publicUrl).hostname;
@@ -326,6 +330,8 @@ export class Hub {
       await this.consoleApp.listen({ host: cfg.host, port: cfg.consolePort });
     }
 
+    // Desktop installs run from launchd or a tray app; a terminal's `npm start` already has the user's PATH.
+    if (cfg.installClis) await this.userPath.refresh();
     if (cfg.plugins !== "none") await this.plugins.startAll(cfg.plugins);
     await this.mcpClients.sync(this.pluginMcpFiles());
     this.mcpClients.onChange = () => this.bus.emit("plugins.updated", {});
