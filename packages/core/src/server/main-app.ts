@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
 import type { AgentDef, TaskStatus } from "@owlbot/shared";
-import { formatBrainRef, LOCALES, localeFromEnv, normalizeLocale, parseBrainRef, type Locale } from "@owlbot/shared";
+import { formatBrainRef, GROUP_MAX_MEMBERS, GROUP_MIN_MEMBERS, LOCALES, localeFromEnv, normalizeLocale, parseBrainRef, type Locale } from "@owlbot/shared";
 import { errorText, hubLocale, localizePluginValue, LocalizedError, requestLocale, tFor } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { toUiEvent } from "../bus.ts";
@@ -228,20 +228,47 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     });
 
     // ----- conversations -----
+    /** A group's members as given: agents on the team, 2–8 of them, each once; the lead first. */
+    const groupMembers = (raw: unknown): string[] => {
+      if (!Array.isArray(raw) || raw.some((x) => typeof x !== "string")) throw new HttpError(400, "group.memberCount", { min: GROUP_MIN_MEMBERS, max: GROUP_MAX_MEMBERS });
+      const ids = raw as string[];
+      if (new Set(ids).size !== ids.length) throw new HttpError(400, "group.duplicateMember");
+      if (ids.length < GROUP_MIN_MEMBERS || ids.length > GROUP_MAX_MEMBERS) throw new HttpError(400, "group.memberCount", { min: GROUP_MIN_MEMBERS, max: GROUP_MAX_MEMBERS });
+      const missing = ids.find((id) => !hub.agents.get(id));
+      if (missing) throw new HttpError(400, "group.unknownMember", { id: missing });
+      return ids;
+    };
+    const title = (v: unknown) => String(v ?? "").trim().slice(0, 120);
     api.get("/api/conversations", async () => hub.store.listConversations(200));
     api.post("/api/conversations", async (req) => {
-      const b = (req.body ?? {}) as { title?: string; agentId?: string };
+      const b = (req.body ?? {}) as { kind?: string; title?: string; agentId?: string; members?: unknown };
+      if (b.kind === "group") {
+        const members = groupMembers(b.members);
+        return hub.store.createConversation({ kind: "group", title: title(b.title) || tFor(requestLocale(req))("group.newTitle"), agentId: members[0], members });
+      }
       const agentId = b.agentId && hub.agents.get(b.agentId) ? b.agentId : hub.settings.get().defaultAgent;
       return hub.store.createConversation({ kind: "chat", title: String(b.title || tFor(requestLocale(req))("conversation.newTitle")), agentId });
     });
     api.patch("/api/conversations/:id", async (req) => {
-      const b = (req.body ?? {}) as { title?: string; agentId?: string };
+      const b = (req.body ?? {}) as { title?: string; agentId?: string; members?: unknown };
       if (b.agentId && !hub.agents.get(b.agentId)) throw new HttpError(400, "agent.notFound");
       const prev = hub.store.getConversation((req.params as any).id);
       if (!prev) throw new HttpError(404, "conversation.notFound");
+      if (b.members !== undefined && prev.kind !== "group") throw new HttpError(400, "group.notGroup");
+      if (prev.kind === "group") {
+        // A group's lead is its first member: a new lead (agentId) moves to the front.
+        const members =
+          b.members !== undefined
+            ? groupMembers(b.members)
+            : b.agentId !== undefined
+              ? groupMembers([b.agentId, ...(prev.members ?? []).filter((id) => id !== b.agentId)])
+              : undefined;
+        const name = b.title !== undefined ? title(b.title) : undefined;
+        return hub.store.updateConversation(prev.id, { ...(name ? { title: name } : {}), ...(members ? { members } : {}) });
+      }
       // An agent's dialog belongs to that agent.
       if (prev.kind === "main" && b.agentId !== undefined && b.agentId !== prev.agentId) throw new HttpError(400, "conversation.agentFixed");
-      return hub.store.updateConversation(prev.id, b);
+      return hub.store.updateConversation(prev.id, { title: b.title, agentId: b.agentId });
     });
     api.post("/api/conversations/:id/read", async (req) => {
       const id = (req.params as any).id as string;
@@ -262,8 +289,9 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     });
     api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
 
-    // ----- team: every agent with its long-lived dialog (created on first listing) -----
+    // ----- team: every agent with its long-lived dialog (created on first listing), and the group chats -----
     api.get("/api/team", async () => hub.team.list());
+    api.get("/api/groups", async () => hub.team.listGroups());
 
     // ----- tasks -----
     api.get("/api/tasks", async (req) => {

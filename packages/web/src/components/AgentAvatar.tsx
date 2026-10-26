@@ -110,3 +110,48 @@ export function AgentAvatar({
     </svg>
   );
 }
+
+type AvatarAgent = { id: string; name?: string; avatar?: Avatar };
+
+/** A group's members side by side, overlapping (the lead first); "+N" for the rest. `ring`: the background colour (ring and fill classes). */
+export function AvatarStack({ agents, size = 28, max = 3, className, ring = "bg-surface ring-surface" }: { agents: AvatarAgent[]; size?: number; max?: number; className?: string; ring?: string }) {
+  const shown = agents.slice(0, agents.length > max ? max - 1 : max);
+  const rest = agents.length - shown.length;
+  const overlap = Math.round(size * 0.34);
+  return (
+    <span className={cx("flex shrink-0 items-center", className)} aria-hidden="true">
+      {shown.map((a, i) => (
+        <span key={a.id} className={cx("flex rounded-full ring-2", ring)} style={{ marginLeft: i ? -overlap : 0, zIndex: shown.length - i }}>
+          <AgentAvatar avatar={a.avatar} id={a.id} name={a.name} size={size} />
+        </span>
+      ))}
+      {rest > 0 && (
+        <span className={cx("flex rounded-full ring-2", ring)} style={{ marginLeft: -overlap }}>
+          <span
+            className="flex items-center justify-center rounded-full bg-surface-3 font-semibold text-muted"
+            style={{ width: size, height: size, fontSize: Math.max(9, Math.round(size * 0.36)) }}
+          >
+            +{rest}
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** A group's picture in a square of `size`: the first two members, one behind the other. `ring`: the background colour (ring and fill classes). */
+export function AvatarPair({ agents, size = 36, className, ring = "bg-surface ring-surface" }: { agents: AvatarAgent[]; size?: number; className?: string; ring?: string }) {
+  const [a, b] = agents;
+  if (!b) return <AgentAvatar avatar={a?.avatar} id={a?.id} name={a?.name} size={size} className={className} />;
+  const inner = Math.round(size * 0.68);
+  return (
+    <span className={cx("relative block shrink-0", className)} style={{ width: size, height: size }} aria-hidden="true">
+      <span className="absolute top-0 left-0 flex">
+        <AgentAvatar avatar={a.avatar} id={a.id} name={a.name} size={inner} />
+      </span>
+      <span className={cx("absolute right-0 bottom-0 flex rounded-full ring-2", ring)}>
+        <AgentAvatar avatar={b.avatar} id={b.id} name={b.name} size={inner} />
+      </span>
+    </span>
+  );
+}

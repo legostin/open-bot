@@ -1,13 +1,17 @@
-// Message composer: Enter = send, Shift+Enter = newline, /command autocomplete, Stop while streaming.
-// Plugins may wrap/replace it (chat.composer) and add buttons (chat.composerActions).
+// Message composer: Enter = send, Shift+Enter = newline, /command autocomplete, @member autocomplete in group chats,
+// Stop while streaming (in a group: while members answer). Plugins may wrap/replace it (chat.composer) and add buttons
+// (chat.composerActions).
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowUp, Square } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowUp, Square, UsersRound } from "lucide-react";
 import { api, errorText } from "../../lib/api";
 import { applyCommand, filterCommands, slashQuery, type CommandInfo } from "../../lib/commands";
+import { applyMention, filterMentions, mentionQuery, type MentionOption } from "../../lib/mentions";
 import { isStreaming } from "../../lib/messages";
-import { interrupt, sendMessage, useConversationMessages } from "../../state/app";
+import { useStore } from "../../lib/store";
+import { agents, conversations, groups, interrupt, sendMessage, useConversationMessages, useSelector } from "../../state/app";
 import { toast } from "../../state/toast";
+import { AgentAvatar } from "../../components/AgentAvatar";
 import { cx } from "../../components/ui";
 import { t } from "../../i18n";
 import { PluginBoundary } from "../../plugins/boundary";
@@ -35,9 +39,21 @@ export function useSend(conversationId: string) {
   );
 }
 
+/** A group chat's members for @mentions (none in other conversations). */
+function useMentionable(conversationId: string) {
+  const meta = useSelector(conversations, (list) => list.find((c) => c.id === conversationId));
+  const agentList = useStore(agents);
+  const members = meta?.kind === "group" ? meta.members : undefined;
+  return useMemo(() => (members ?? []).map((id) => agentList?.find((a) => a.id === id) ?? { id, name: id, avatar: undefined }), [members, agentList]);
+}
+
 export function DefaultComposer({ conversationId }: { conversationId: string }) {
   const conv = useConversationMessages(conversationId);
-  const streaming = isStreaming(conv.messages);
+  const mentionable = useMentionable(conversationId);
+  const isGroup = mentionable.length > 0;
+  // Between two members' answers no message streams, but the round goes on.
+  const groupRunning = useSelector(groups, (list) => !!list?.find((g) => g.conversationId === conversationId)?.running);
+  const streaming = isStreaming(conv.messages) || groupRunning;
   const send = useSend(conversationId);
   const [text, setText] = useState(() => drafts.get(conversationId) ?? "");
   const [busy, setBusy] = useState(false);
@@ -45,6 +61,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
   const [commands, setCommands] = useState<CommandInfo[]>([]);
   const [sel, setSel] = useState(0);
   const [dismissed, setDismissed] = useState(false);
+  const [caret, setCaret] = useState(0);
   const ta = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -72,10 +89,15 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
     if (query !== null) void loadCommands().then(setCommands);
   }, [query !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   const suggestions = query !== null && !dismissed ? filterCommands(commands, query) : [];
+  const mention = isGroup ? mentionQuery(text, caret) : null;
+  const mentions = mention && !dismissed ? filterMentions(mentionable, mention.query) : [];
+  // One list at a time: "/command" only at the very start, "@member" anywhere.
+  const options = suggestions.length || mentions.length;
+  const active = Math.min(sel, Math.max(0, options - 1));
   useEffect(() => {
     setSel(0);
     setDismissed(false);
-  }, [query]);
+  }, [query, mention?.start, mention?.query]);
 
   const submit = async () => {
     if (!text.trim() || busy) return;
@@ -110,20 +132,33 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
     ta.current?.focus();
   };
 
+  const chooseMention = (o: MentionOption) => {
+    if (!mention) return;
+    const next = applyMention(text, caret, mention.start, o.id);
+    setText(next.text);
+    setCaret(next.caret);
+    requestAnimationFrame(() => {
+      ta.current?.focus();
+      ta.current?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
+  const pick = (i: number) => (suggestions.length ? choose(suggestions[i]) : chooseMention(mentions[i]));
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-    if (suggestions.length) {
+    if (options) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        return setSel((i) => (i + 1) % suggestions.length);
+        return setSel(() => (active + 1) % options);
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        return setSel((i) => (i - 1 + suggestions.length) % suggestions.length);
+        return setSel(() => (active - 1 + options) % options);
       }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
         e.preventDefault();
-        return choose(suggestions[sel]);
+        return pick(active);
       }
       if (e.key === "Escape") {
         e.preventDefault();
@@ -145,13 +180,13 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
               key={c.name}
               type="button"
               role="option"
-              aria-selected={i === sel}
+              aria-selected={i === active}
               onMouseDown={(e) => {
                 e.preventDefault();
                 choose(c);
               }}
               onMouseMove={() => setSel(i)}
-              className={cx("flex w-full items-baseline gap-3 px-3 py-2 text-left text-sm", i === sel ? "bg-accent-soft" : "")}
+              className={cx("flex w-full items-baseline gap-3 px-3 py-2 text-left text-sm", i === active ? "bg-accent-soft" : "")}
             >
               <span className="shrink-0 font-mono font-medium text-accent-text">/{c.name.replace(/^\//, "")}</span>
               <span className="min-w-0 flex-1 truncate text-muted">{c.description}</span>
@@ -160,14 +195,52 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
           ))}
         </div>
       )}
+      {mentions.length > 0 && (
+        <div className="animate-in absolute inset-x-0 bottom-full mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-card" role="listbox" aria-label={t("composer.mentions")}>
+          {mentions.map((o, i) => {
+            const a = mentionable.find((m) => m.id === o.id);
+            return (
+              <button
+                key={o.id}
+                type="button"
+                role="option"
+                aria-selected={i === active}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  chooseMention(o);
+                }}
+                onMouseMove={() => setSel(i)}
+                className={cx("flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm", i === active ? "bg-accent-soft" : "")}
+              >
+                {o.all ? (
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-muted">
+                    <UsersRound className="size-3.5" />
+                  </span>
+                ) : (
+                  <AgentAvatar avatar={a?.avatar} id={o.id} name={o.name} size={24} />
+                )}
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium">{o.all ? t("composer.everyone") : o.name}</span>
+                  {o.all && <span className="text-muted"> · {t("composer.everyoneHint")}</span>}
+                </span>
+                <span className="shrink-0 font-mono text-xs text-muted">@{o.id}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3 shadow-card transition focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20">
         <textarea
           ref={ta}
           rows={1}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setCaret(e.target.selectionStart ?? e.target.value.length);
+          }}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onKeyDown={onKeyDown}
-          placeholder={t("composer.placeholder")}
+          placeholder={isGroup ? t("composer.groupPlaceholder") : t("composer.placeholder")}
           aria-label={t("composer.message")}
           className="max-h-[40vh] min-h-9 flex-1 resize-none overflow-hidden bg-transparent py-2 text-[15px] leading-relaxed outline-none focus-visible:outline-none placeholder:text-muted/80"
         />

@@ -170,7 +170,13 @@ export class Hub {
       tellAgent: (id, note) => this.runner.tellAgent(id, note),
     });
     this.runner.d.setup = this.setup;
-    this.team = new Team({ store: this.store, agents: this.agents, bus: this.bus, isRunning: (id) => this.runner.isRunning(id) });
+    this.team = new Team({
+      store: this.store,
+      agents: this.agents,
+      bus: this.bus,
+      isRunning: (id) => this.runner.isRunning(id),
+      floor: (id) => this.runner.floor(id),
+    });
     this.mcpClients = new McpClientManager({ config, registry: this.tools, vault: this.vault, audit: this.audit, egress: this.egress });
     this.plugins = new PluginHost({
       config,

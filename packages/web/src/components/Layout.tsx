@@ -1,4 +1,4 @@
-// App shell, kept minimal: the team on the left (each agent with its dialog; a drawer on phones), the current view,
+// App shell, kept minimal: the team on the left (each agent with its dialog, then group chats; a drawer on phones), the current view,
 // and the settings panel beside it. Views put their own slim top bar (TopBar) with the shared header actions.
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
@@ -6,7 +6,7 @@ import { Link, useLocation } from "wouter";
 import { ListChecks, Menu, PanelRight, Settings, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import { ACTIVE_STATUSES } from "../lib/format";
-import { agentForPath } from "../lib/team";
+import { agentForPath, chatForPath } from "../lib/team";
 import { ensureTasks, session, tasks } from "../state/app";
 import { openPanel, panel, togglePanel } from "../state/panel";
 import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlot } from "../plugins/slots";
@@ -48,7 +48,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       <div className="min-h-0 flex-1">
-        <TeamList activeAgentId={agentForPath(loc, s?.defaultAgent)} onNavigate={onNavigate} />
+        <TeamList activeAgentId={agentForPath(loc, s?.defaultAgent)} activeConversationId={chatForPath(loc)} onNavigate={onNavigate} />
       </div>
       <div className="flex flex-col gap-2 px-3 empty:hidden">
         <PluginSidebarItems />

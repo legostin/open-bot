@@ -26,6 +26,7 @@ import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
 import { MAX_IMAGE_BYTES, readWorkspaceImage } from "./media.ts";
+import { firstSpeakers, groupTurn, groupTurnText, handOff, MAX_HANDOFFS, USER_LABEL } from "./group-chat.ts";
 
 export interface RunnerDeps {
   config: Config;
@@ -63,6 +64,10 @@ interface TurnOpts {
   replyChannel?: string;
   /** The user's words typed in the web UI, quoted when the reply is mirrored to the channels. */
   quote?: string;
+  /** The member who answers (group chats; default: the conversation's agent). */
+  agentId?: string;
+  /** Group chats: the user message this round answers, and why the member has the floor if not addressed by it. */
+  group?: { triggerId?: string; floorNote?: string };
 }
 
 interface Live {
@@ -100,6 +105,12 @@ export class SessionRunner {
   private kickoff?: NodeJS.Timeout;
   private streamingMessage = new Map<string, string>(); // conversationId -> messageId
   private turning = new Map<string, number>(); // conversationId -> turns in progress
+  /** Group chats: the member answering now, then the ones waiting (while a round runs). */
+  private floors = new Map<string, string[]>();
+  /** Group chats: bumped by Stop, so rounds started or queued before it end. */
+  private groupEpoch = new Map<string, number>();
+  /** Group chats: `${conversationId}|${agentId}` -> user messages up to this moment were shown to the member. */
+  private groupSeen = new Map<string, string>();
 
   constructor(deps: RunnerDeps) {
     this.d = deps;
@@ -170,8 +181,100 @@ export class SessionRunner {
     const prompt = note ? `${expanded}\n\n${note}` : expanded;
     // From the web UI: the user's words travel with a mirrored reply, so the phone shows the exchange.
     const fromWeb = !opts.channel || opts.channel === WEB_CHANNEL;
+    if (conv.kind === "group") {
+      this.startGroupRound(conv, hooked.payload.text, prompt, msg.id, { replyChannel: opts.channel });
+      return msg;
+    }
     void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { replyChannel: opts.channel, ...(fromWeb ? { quote: text } : {}) }));
     return msg;
+  }
+
+  // ---------- group chats ----------
+
+  /** A group's members that are still on the team, in order (the lead first), with their names. */
+  private groupMembers(conv: Conversation): Array<{ id: string; name: string }> {
+    const out: Array<{ id: string; name: string }> = [];
+    for (const id of conv.members ?? [conv.agentId]) {
+      const a = this.d.agents.get(id);
+      if (a) out.push({ id, name: agentName(a, hubLocale()) });
+    }
+    return out;
+  }
+
+  /** The member answering in a group chat right now, then the ones waiting for their turn. */
+  floor(conversationId: string): string[] {
+    return this.floors.get(conversationId) ?? [];
+  }
+
+  private setFloor(conversationId: string, queue: string[] | undefined): void {
+    if (queue?.length) this.floors.set(conversationId, queue);
+    else this.floors.delete(conversationId);
+    this.d.bus.emit("conversation.activity", { conversationId, running: this.isRunning(conversationId) });
+  }
+
+  /** The user wrote in a group: the members it mentions answer one after another (or the lead), in the conversation queue. */
+  private startGroupRound(conv: Conversation, text: string, prompt: string, triggerId: string, opts: { replyChannel?: string }): void {
+    const epoch = this.groupEpoch.get(conv.id) ?? 0;
+    const speakers = firstSpeakers(text, this.groupMembers(conv));
+    void this.enqueue(conv.id, () => this.runGroupRound(conv.id, epoch, speakers, prompt, triggerId, opts));
+  }
+
+  private async runGroupRound(conversationId: string, epoch: number, speakers: string[], prompt: string, triggerId: string, opts: { replyChannel?: string }): Promise<void> {
+    const stopped = () => (this.groupEpoch.get(conversationId) ?? 0) !== epoch;
+    if (stopped()) return;
+    const queue = [...speakers];
+    const handedBy = new Map<string, string>();
+    let handoffs = 0;
+    let prev: string | undefined;
+    // One "running" for the whole round: the sidebar and the composer do not flicker between members.
+    this.setTurning(conversationId, 1);
+    try {
+      while (queue.length && !stopped()) {
+        const conv = this.d.store.getConversation(conversationId);
+        if (!conv) break;
+        const members = this.groupMembers(conv);
+        const agentId = queue.shift()!;
+        // Left the group (or the team) meanwhile; and nobody speaks twice in a row unless the user named them.
+        if (!members.some((m) => m.id === agentId) || (agentId === prev && !speakers.includes(agentId))) continue;
+        this.setFloor(conversationId, [agentId, ...queue]);
+        const from = handedBy.get(agentId);
+        const fromName = from ? (members.find((m) => m.id === from)?.name ?? from) : undefined;
+        const r = await this.runTurn(conv, prompt, {
+          ...opts,
+          agentId,
+          group: { triggerId, floorNote: fromName ? `[System] ${fromName} handed the floor to you. It is your turn to reply in the group.` : undefined },
+        });
+        prev = agentId;
+        if (stopped() || (r.error && !r.text)) continue;
+        const next = handOff(queue, agentId, r.answer ?? r.text, members, MAX_HANDOFFS - handoffs);
+        handoffs += next.added.length;
+        for (const id of next.added) handedBy.set(id, agentId);
+        queue.splice(0, queue.length, ...next.queue);
+      }
+    } finally {
+      this.setFloor(conversationId, undefined);
+      this.setTurning(conversationId, -1);
+    }
+  }
+
+  /** A member's turn text: what it has not seen in the group yet, then the user's message or why it is its turn. */
+  private groupText(conv: Conversation, agent: AgentDef, prompt: string, opts: TurnOpts, newBrain: boolean): string {
+    const key = `${conv.id}|${agent.id}`;
+    const names = new Map(this.groupMembers(conv).map((m) => [m.id, m.name]));
+    const name = (id: string | undefined) => (id ? (names.get(id) ?? (this.d.agents.get(id) ? agentName(this.d.agents.get(id)!, hubLocale()) : id)) : USER_LABEL);
+    const turn = groupTurn({
+      messages: this.d.store.listMessages(conv.id, { limit: 60 }),
+      agentId: agent.id,
+      name,
+      prompt,
+      triggerId: opts.group?.triggerId,
+      floorNote: opts.group?.floorNote,
+      seenUserUpTo: this.groupSeen.get(key),
+    });
+    if (turn.seenUserUpTo) this.groupSeen.set(key, turn.seenUserUpTo);
+    // A new brain has none of the history: the recent transcript instead of just the unseen part.
+    if (newBrain) return `[System] This conversation continues on a different brain. Recent history:\n${this.handoffSummary(conv.id)}\n\n---\n${turn.tail}`;
+    return groupTurnText({ ...turn, lines: turn.lines.map((l) => this.d.redactor.text(l)) });
   }
 
   /** A card (secret request, plugin setup, images, a map) for the message the agent is writing right now in this conversation. */
@@ -232,11 +335,15 @@ export class SessionRunner {
     }
   }
 
+  /** Stop the turn in progress. In a group chat the members still waiting (this round and queued ones) do not answer either. */
   interrupt(conversationId: string): boolean {
+    const round = this.floors.has(conversationId);
+    if (round || this.d.store.getConversation(conversationId)?.kind === "group") {
+      this.groupEpoch.set(conversationId, (this.groupEpoch.get(conversationId) ?? 0) + 1);
+    }
     const a = this.activeTurns.get(conversationId);
-    if (!a) return false;
-    void a.handle.interrupt();
-    return true;
+    if (a) void a.handle.interrupt();
+    return !!a || round;
   }
 
   /** A turn (brain selection included) is in progress in the conversation. */
@@ -427,7 +534,8 @@ export class SessionRunner {
         } else this.d.store.updateTask(task.id, { status: "waiting_approval" });
       });
     } else {
-      void this.enqueue(conv.id, () => this.runTurn(conv, note, {}));
+      // In a group chat, the member whose action it was carries on.
+      void this.enqueue(conv.id, () => this.runTurn(conv, note, conv.kind === "group" ? { agentId: a.agentId } : {}));
     }
   }
 
@@ -575,6 +683,7 @@ export class SessionRunner {
       appended,
       machineName: local ? undefined : this.d.machineName(ref.machineId),
       setup: background || task ? undefined : await this.d.setup?.promptBlock(agent.id),
+      group: conv.kind === "group" ? { title: conv.title, members: this.groupMembers(conv) } : undefined,
     });
 
     const env: Record<string, string> = {};
@@ -603,7 +712,7 @@ export class SessionRunner {
       env,
       background,
     });
-    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: JSON.stringify(agent) });
+    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv) });
     if (!sameBrain) this.d.audit.append("core", "session.open", row.id, { agent: agent.id, brain: formatBrainRef(ref), conversation: conv.id, task: task?.id });
     return { row, handle };
   }
@@ -611,6 +720,13 @@ export class SessionRunner {
   /** Text transcript of recent messages for handing a conversation to a different brain. */
   private handoffSummary(conversationId: string): string {
     const msgs = this.d.store.listMessages(conversationId, { limit: 30 });
+    // In a group chat every member speaks under its own name.
+    const group = this.d.store.getConversation(conversationId)?.kind === "group";
+    const speaker = (m: Message) => {
+      if (m.role !== "assistant") return m.role === "user" ? "User" : "System";
+      const a = group && m.agentId ? this.d.agents.get(m.agentId) : undefined;
+      return a ? agentName(a, hubLocale()) : group && m.agentId ? m.agentId : "Assistant";
+    };
     const lines: string[] = [];
     for (const m of msgs) {
       const t = m.parts
@@ -629,7 +745,7 @@ export class SessionRunner {
         )
         .filter(Boolean)
         .join(" ");
-      if (t) lines.push(`${m.role === "user" ? "User" : m.role === "assistant" ? "Assistant" : "System"}: ${truncate(t, 800)}`);
+      if (t) lines.push(`${speaker(m)}: ${truncate(t, 800)}`);
     }
     return this.d.redactor.text(lines.join("\n"));
   }
@@ -687,7 +803,7 @@ export class SessionRunner {
   }
 
   private async turn(conv: Conversation, prompt: string, opts: TurnOpts): Promise<TurnResult> {
-    const agent = this.d.agents.get(conv.agentId) ?? this.d.agents.get(this.d.settings.get().defaultAgent)!;
+    const agent = this.d.agents.get(opts.agentId ?? conv.agentId) ?? this.d.agents.get(this.d.settings.get().defaultAgent)!;
     const task = opts.task ?? (conv.taskId ? this.d.store.getTask(conv.taskId) : undefined);
     const prior = this.d.store.activeSession(conv.id, agent.id);
     const tried = new Set<string>();
@@ -700,7 +816,8 @@ export class SessionRunner {
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
       // No brain of the agent is set up yet: the setup card instead of an error, and the message waits for a brain.
-      if (!ref && setupOnly && !tried.size && !task && this.d.setup) {
+      // (A group chat's round goes on with the next member instead.)
+      if (!ref && setupOnly && !tried.size && !task && this.d.setup && conv.kind !== "group") {
         this.d.setup.hold(conv.id, agent.id, prompt, { replyChannel: opts.replyChannel, quote: opts.quote });
         this.addSetupCard(conv.id);
         return { text: "", error: t("chat.needsBrain"), awaitingApproval: false };
@@ -721,7 +838,7 @@ export class SessionRunner {
       let live = curPrior ? this.live.get(curPrior.id) : undefined;
       let row = curPrior;
       try {
-        if (!live || live.brainRef !== key || live.stamp !== JSON.stringify(agent)) {
+        if (!live || live.brainRef !== key || live.stamp !== sessionStamp(agent, conv)) {
           // The same brain resumes the same conversation with the new instructions: let the old process finish first.
           if (live && curPrior) {
             if (live.brainRef === key) await this.closeLive(curPrior.id);
@@ -739,7 +856,10 @@ export class SessionRunner {
       }
 
       let text = prompt;
-      if (handoff) {
+      if (conv.kind === "group") {
+        text = this.groupText(conv, agent, prompt, opts, handoff);
+        handoff = false;
+      } else if (handoff) {
         text = `[System] This conversation continues on a different brain. Recent history:\n${this.handoffSummary(conv.id)}\n\n---\n${prompt}`;
         handoff = false;
       }
@@ -753,7 +873,8 @@ export class SessionRunner {
           void this.closeLive(row!.id);
           continue;
         }
-        await this.deliver(conv, r.answer ?? r.text, opts, r.messageId);
+        // Group chats live in the web UI only.
+        if (conv.kind !== "group") await this.deliver(conv, r.answer ?? r.text, opts, r.messageId);
         return r;
       } finally {
         this.brainLoad.set(key, Math.max(0, (this.brainLoad.get(key) ?? 1) - 1));
@@ -877,6 +998,12 @@ export class SessionRunner {
     this.d.store.updateMessage(msg.id, { parts, status: error && !produced ? "error" : "complete" });
     return { text: fullText.trim(), answer: finalAnswer(parts), error, limited, awaitingApproval, messageId: msg.id };
   }
+}
+
+/** What a live session was opened with: a changed agent, or a group's new members, get a fresh session (resumed). */
+function sessionStamp(agent: AgentDef, conv: Conversation): string {
+  const stamp = JSON.stringify(agent);
+  return conv.kind === "group" ? `${stamp}|${conv.title}|${(conv.members ?? []).join(",")}` : stamp;
 }
 
 /** Parts the hub adds to a message from outside the brain stream: cards (some with their own live status), images, maps. */

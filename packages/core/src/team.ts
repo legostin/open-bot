@@ -1,7 +1,8 @@
-// The user's team: every agent with its one long-lived dialog, as the web sidebar shows it.
-// Changes in a dialog (new or finished messages, turns starting and ending, the read marker) go out as "team.updated".
+// The user's team: every agent with its one long-lived dialog, and the group chats, as the web sidebar shows them.
+// Changes in a dialog (new or finished messages, turns starting and ending, the read marker) go out as "team.updated";
+// in a group chat (also its title and members) as "group.updated".
 
-import type { Conversation, Message, TeamMember } from "@owlbot/shared";
+import type { Conversation, GroupChat, Message, TeamMember } from "@owlbot/shared";
 import { truncate } from "@owlbot/shared";
 import type { Store } from "./store.ts";
 import type { EventBus } from "./bus.ts";
@@ -34,18 +35,31 @@ export class Team {
   private agents: { list(): Array<{ id: string }> };
   private bus: EventBus;
   private isRunning: (conversationId: string) => boolean;
+  private floor: (conversationId: string) => string[];
   private pending = new Set<string>();
 
-  constructor(d: { store: Store; agents: { list(): Array<{ id: string }> }; bus: EventBus; isRunning: (conversationId: string) => boolean }) {
+  constructor(d: {
+    store: Store;
+    agents: { list(): Array<{ id: string }> };
+    bus: EventBus;
+    isRunning: (conversationId: string) => boolean;
+    /** A group chat's member answering now, then the ones waiting for their turn. */
+    floor?: (conversationId: string) => string[];
+  }) {
     this.store = d.store;
     this.agents = d.agents;
     this.bus = d.bus;
     this.isRunning = d.isRunning;
+    this.floor = d.floor ?? (() => []);
     d.bus.on("message.created", (m: Message) => this.changed(m.conversationId));
     d.bus.on("message.updated", (m: Message) => {
       if (m.status !== "streaming") this.changed(m.conversationId);
     });
     d.bus.on("conversation.activity", (a) => this.changed(a.conversationId));
+    // A group renamed or with new members.
+    d.bus.on("conversation.updated", (c: Conversation) => {
+      if (c.kind === "group") this.changed(c.id);
+    });
   }
 
   /** Every agent with its dialog (created for agents that have none yet). */
@@ -63,21 +77,44 @@ export class Team {
     this.changed(conversationId);
   }
 
+  /** Every group chat, the latest activity first. */
+  listGroups(): GroupChat[] {
+    return this.store.listGroups().map((c) => this.groupOf(c));
+  }
+
   memberOf(conv: Conversation): TeamMember {
-    const recent = this.store.listMessages(conv.id, { limit: PREVIEW_LOOKBACK });
-    let lastMessage: TeamMember["lastMessage"];
-    for (let i = recent.length - 1; i >= 0 && !lastMessage; i--) {
-      const text = previewText(recent[i]);
-      if (text) lastMessage = { role: recent[i].role, text, createdAt: recent[i].createdAt };
-    }
+    const last = this.lastMessage(conv.id);
     return {
       agentId: conv.agentId,
       conversationId: conv.id,
-      lastMessage,
+      lastMessage: last && { role: last.role, text: last.text, createdAt: last.createdAt },
       lastActivityAt: conv.updatedAt,
       running: this.isRunning(conv.id),
       unread: this.store.unreadCount(conv.id),
     };
+  }
+
+  groupOf(conv: Conversation): GroupChat {
+    const running = this.isRunning(conv.id);
+    return {
+      conversationId: conv.id,
+      title: conv.title,
+      members: conv.members ?? [conv.agentId],
+      lastMessage: this.lastMessage(conv.id),
+      lastActivityAt: conv.updatedAt,
+      running,
+      speaking: running ? this.floor(conv.id) : [],
+      unread: this.store.unreadCount(conv.id),
+    };
+  }
+
+  private lastMessage(conversationId: string): GroupChat["lastMessage"] {
+    const recent = this.store.listMessages(conversationId, { limit: PREVIEW_LOOKBACK });
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const text = previewText(recent[i]);
+      if (text) return { role: recent[i].role, text, createdAt: recent[i].createdAt, ...(recent[i].agentId ? { agentId: recent[i].agentId } : {}) };
+    }
+    return undefined;
   }
 
   /** Push the dialog's new state after the events of this tick, so clients get the message itself first. */
@@ -93,6 +130,7 @@ export class Team {
       try {
         const conv = this.store.getConversation(id);
         if (conv?.kind === "main") this.bus.emit("team.updated", this.memberOf(conv));
+        else if (conv?.kind === "group") this.bus.emit("group.updated", this.groupOf(conv));
       } catch {
         /* the hub is stopping: the database is closed */
       }
