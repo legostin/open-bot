@@ -129,5 +129,6 @@ describe("team", () => {
     expect(previewText(msg("assistant", [{ type: "images", items: [{ src: "https://a.b/1.jpg" }] }]))).toBe("🖼");
     expect(previewText(msg("assistant", [{ type: "map", lat: 48.85837, lon: 2.294481, title: "Eiffel Tower" }]))).toBe("📍 Eiffel Tower");
     expect(previewText(msg("assistant", [{ type: "map", lat: 48.85837, lon: 2.294481 }]))).toBe("📍 48.8584, 2.2945");
+    expect(previewText(msg("assistant", [{ type: "map", lat: 1, lon: 2, title: "Here" }, { type: "text", text: "It stands here." }]))).toBe("It stands here.");
   });
 });

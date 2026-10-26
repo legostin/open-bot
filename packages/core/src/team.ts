@@ -14,17 +14,19 @@ const PREVIEW_LOOKBACK = 10;
 /** Short plain text of a message for the sidebar, or "" when it has nothing to show. */
 export function previewText(m: Message): string {
   const out: string[] = [];
+  const shown: string[] = [];
   for (const p of m.parts) {
     // Text in system messages is a note for the model ("[System] …"); errors in them are for the user.
     if (p.type === "text" && m.role !== "system") out.push(p.text);
     else if (p.type === "notification") out.push(p.title);
     else if (p.type === "error") out.push(p.message);
     else if (p.type === "attachment") out.push(p.name);
-    // Pictures and maps by their caption or title, marked without words (the sidebar's language is the viewer's).
-    else if (p.type === "images") out.push(`🖼 ${p.items.find((it) => it.caption)?.caption ?? ""}`.trim());
-    else if (p.type === "map") out.push(`📍 ${p.title ?? `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`}`);
+    // Pictures and maps by their caption or title, marked without words (the sidebar's language is the viewer's), when
+    // the message says nothing else.
+    else if (p.type === "images") shown.push(`🖼 ${p.items.find((it) => it.caption)?.caption ?? ""}`.trim());
+    else if (p.type === "map") shown.push(`📍 ${p.title ?? `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`}`);
   }
-  const text = out
+  const text = (out.some((x) => x.trim()) ? out : shown)
     .join("\n")
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/[*`]+|^#+\s*|^>\s*/gm, "")
