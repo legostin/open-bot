@@ -68,6 +68,20 @@ class Client {
     }
     return { status: r.status, json };
   }
+  /** Raw bytes, as the web's file upload sends them. */
+  async upload(path: string, data: Buffer, headers: Record<string, string> = {}): Promise<{ status: number; json: any }> {
+    const r = await fetch(this.base + path, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", origin: this.origin, cookie: this.cookie, "x-csrf": this.csrf, ...headers },
+      body: data,
+    });
+    const text = await r.text();
+    try {
+      return { status: r.status, json: JSON.parse(text) };
+    } catch {
+      return { status: r.status, json: text };
+    }
+  }
   async req(method: string, path: string, body?: unknown): Promise<any> {
     const r = await this.raw(method, path, body);
     if (r.status >= 400) throw new Error(`${method} ${path} → ${r.status} ${JSON.stringify(r.json)}`);
@@ -142,6 +156,50 @@ describe("hub (integration)", () => {
     await lastReply(c.id, /^fake time: \[Now: \w+day, \d{1,2} \w+ \d{4}, \d\d:\d\d \([^)]+\)\]$/);
     await web.req("POST", `/api/conversations/${c.id}/messages`, { text: "TIME?" });
     await lastReply(c.id, /^fake time: none$/);
+  });
+
+  it("takes files with a message and hands the brain their paths and a note", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "files" });
+    const up = await web.upload(`/api/conversations/${c.id}/attachments?name=${encodeURIComponent("чек.jpg")}&type=image/jpeg`, Buffer.from("jpeg bytes"));
+    expect(up.status).toBe(200);
+    expect(up.json).toEqual({ type: "attachment", path: `assistant/${c.id}/attachments/чек.jpg`, name: "чек.jpg", mimeType: "image/jpeg", size: 10 });
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { text: "what is this?", attachments: [up.json.path] });
+    const r = await lastReply(c.id, /fake files:/);
+    expect(r.parts.find((p: any) => p.type === "text").text).toBe(
+      "fake files: attachments/чек.jpg:here | note: [The user attached a file, saved in your working folder: / - attachments/чек.jpg (image/jpeg, 10 B) / Open it with your file tools when the request needs it.]",
+    );
+    const msgs: any[] = await web.req("GET", `/api/conversations/${c.id}/messages`);
+    expect(msgs.find((m) => m.role === "user").parts).toEqual([{ type: "text", text: "what is this?" }, up.json]);
+    expect((await web.raw("GET", `/api/files?path=${encodeURIComponent(up.json.path)}`)).json).toBe("jpeg bytes");
+  });
+
+  it("sends files without words, and refuses files that are not the conversation's, too many or too large", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "only files" });
+    const other = await web.req("POST", "/api/conversations", { title: "other" });
+    const a = (await web.upload(`/api/conversations/${c.id}/attachments?name=a.pdf`, Buffer.from("%PDF"))).json;
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { attachments: [a.path] });
+    await lastReply(c.id, /^fake files: attachments\/a\.pdf:here \| note: \[The user attached a file/);
+    const refused = async (id: string, body: unknown) => (await web.raw("POST", `/api/conversations/${id}/messages`, body)).json.error;
+    expect(await refused(other.id, { attachments: [a.path] })).toBe("This file is not an attachment of the conversation");
+    expect(await refused(c.id, { attachments: [`assistant/${c.id}/attachments/../../x`] })).toBe("This file is not an attachment of the conversation");
+    expect(await refused(c.id, { attachments: Array.from({ length: 11 }, (_, i) => `p${i}`) })).toBe("At most 10 files per message");
+    expect(await refused(c.id, { text: "  " })).toBe("The message is empty");
+    const big = await web.upload(`/api/conversations/${c.id}/attachments?name=big.bin`, Buffer.alloc(25 * 1024 * 1024 + 1));
+    expect(big).toEqual({ status: 413, json: { error: "The file is larger than 25 MB" } });
+    expect((await web.upload(`/api/conversations/${c.id}/attachments?name=x.txt`, Buffer.from("x"), { "x-csrf": "wrong" })).status).toBe(403);
+    expect((await web.upload(`/api/conversations/${c.id}/attachments?name=x.txt`, Buffer.alloc(0))).json.error).toBe("The file is empty");
+    expect((await web.upload("/api/conversations/nope/attachments?name=x.txt", Buffer.from("x"))).status).toBe(404);
+  });
+
+  it("takes a channel's files inline (a Telegram voice note)", async () => {
+    const call = createCoreCall(hub);
+    const voice = { data: Buffer.from("OggS voice").toString("base64"), mimeType: "audio/ogg", kind: "voice", durationSec: 12 };
+    const r = (await call("fakebrain", "channels.inbound", { channel: "test", text: "", files: [voice] })) as any;
+    const m = await lastReply(r.conversationId, /^fake files: attachments\/voice-\d{8}-\d{6}\.ogg:here \| note: .*\(audio\/ogg, 10 B, voice message 0:12\)/);
+    expect(m.channel).toBe("test");
+    const huge = { data: Buffer.alloc(25 * 1024 * 1024 + 1).toString("base64") };
+    await expect(call("fakebrain", "channels.inbound", { channel: "test", text: "x", files: [huge] })).rejects.toThrow(/too large/);
+    expect(await call("fakebrain", "channels.inbound", { channel: "test", text: " ", files: [] })).toEqual({ ignored: true });
   });
 
   it("routes channel messages to the default agent's dialog and shows it in the team", async () => {

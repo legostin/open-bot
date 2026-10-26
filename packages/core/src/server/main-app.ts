@@ -17,6 +17,7 @@ import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, safeFile, securityHeaders, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
+import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
 
 const COOKIE = "owlbot_session";
 
@@ -282,10 +283,41 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       return hub.store.listMessages((req.params as any).id, { before: q.before, limit: Math.min(Number(q.limit ?? 100), 500) });
     });
     api.post("/api/conversations/:id/messages", async (req) => {
-      const b = (req.body ?? {}) as { text?: string };
+      const id = (req.params as any).id;
+      const b = (req.body ?? {}) as { text?: string; attachments?: unknown };
       const text = String(b.text ?? "").trim();
-      if (!text) throw new HttpError(400, "message.empty");
-      return hub.runner.userMessage((req.params as any).id, text, { channel: "web" });
+      // Paths from POST .../attachments: only this conversation's own files.
+      const paths = Array.isArray(b.attachments) ? [...new Set(b.attachments)] : [];
+      if (paths.length > MAX_ATTACHMENTS) throw new HttpError(400, "attachment.tooMany", { max: MAX_ATTACHMENTS });
+      const attachments: AttachmentPart[] = [];
+      if (paths.length) {
+        const conv = hub.store.getConversation(id);
+        if (!conv) throw new HttpError(404, "conversation.notFound");
+        for (const p of paths) {
+          const part = attachmentFromPath(join(cfg.dataDir, "workspaces"), conv, p);
+          if (!part) throw new HttpError(400, "attachment.invalid");
+          attachments.push(part);
+        }
+      }
+      if (!text && !attachments.length) throw new HttpError(400, "message.empty");
+      return hub.runner.userMessage(id, text, { channel: "web", ...(attachments.length ? { attachments } : {}) });
+    });
+    // A file for the next message: raw bytes, saved in the conversation's workspace (attachments/).
+    await api.register(async (up) => {
+      // Signed in before a 25 MB body is read, not after.
+      up.addHook("onRequest", guard);
+      up.addContentTypeParser("application/octet-stream", { parseAs: "buffer", bodyLimit: MAX_ATTACHMENT_BYTES }, (_req, body, done) => done(null, body));
+      up.setErrorHandler((err: any) => {
+        throw err?.code === "FST_ERR_CTP_BODY_TOO_LARGE" ? new HttpError(413, "attachment.tooLarge", { max: formatSize(MAX_ATTACHMENT_BYTES) }) : err;
+      });
+      up.post("/api/conversations/:id/attachments", { bodyLimit: MAX_ATTACHMENT_BYTES }, async (req) => {
+        const conv = hub.store.getConversation((req.params as any).id);
+        if (!conv) throw new HttpError(404, "conversation.notFound");
+        if (!Buffer.isBuffer(req.body)) throw new HttpError(415, "attachment.notBytes");
+        if (!req.body.length) throw new HttpError(400, "attachment.empty");
+        const q = req.query as { name?: string; type?: string };
+        return saveAttachment(join(cfg.dataDir, "workspaces"), conv, { name: q.name, mimeType: q.type, data: req.body });
+      });
     });
     api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
 

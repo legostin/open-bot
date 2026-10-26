@@ -57,8 +57,8 @@ Voice transcription is the next step (its own spec). Here a voice note arrives a
 - `POST /api/conversations/:id/messages` takes `{ text, attachments?: string[] }` (paths from the upload); text may be
   empty when there are attachments.
 - `channels.inbound` (plugin RPC) takes `files?: { name?, mimeType?, data (base64), kind?, durationSec? }[]` next to
-  `text`; the hub saves them and checks the same limits. The NDJSON transport scans only the new chunk for line ends so
-  a 27 MB line (a 20 MB file in base64) is linear, not quadratic.
+  `text`; the hub saves them and checks the same limits. A 20 MB file is a 27 MB NDJSON line in base64; the transport
+  takes a 30 MB line in under a second (`packages/shared/test/rpc.test.ts`).
 
 ## The web
 

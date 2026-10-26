@@ -7,6 +7,7 @@
 import type { SetupBrain, SetupState, SetupStep, VaultState } from "@owlbot/shared";
 import { formatBrainRef, parseBrainRef } from "@owlbot/shared";
 import type { AgentRegistry } from "./agents.ts";
+import type { AttachmentPart } from "./attachments.ts";
 import type { BrainRegistry } from "./brains.ts";
 import type { EventBus } from "./bus.ts";
 import type { ChannelRegistry } from "./channels.ts";
@@ -34,6 +35,7 @@ interface Saved {
 interface ReplyOpts {
   replyChannel?: string;
   quote?: string;
+  attachments?: AttachmentPart[];
 }
 
 interface Held {
@@ -182,7 +184,10 @@ export class SetupGuide {
   hold(conversationId: string, agentId: string, prompt: string, opts: ReplyOpts): void {
     const prev = this.held.get(conversationId);
     const fresh = prev && Date.now() - prev.at < HOLD_MS ? prev : undefined;
-    this.held.set(conversationId, { agentId, prompts: [...(fresh?.prompts ?? []), prompt], opts: fresh?.opts ?? opts, at: Date.now() });
+    // The files of every waiting message go with the one turn that answers them.
+    const attachments = [...(fresh?.opts.attachments ?? []), ...(opts.attachments ?? [])];
+    const kept = { ...(fresh?.opts ?? opts), ...(attachments.length ? { attachments } : {}) };
+    this.held.set(conversationId, { agentId, prompts: [...(fresh?.prompts ?? []), prompt], opts: kept, at: Date.now() });
   }
 
   isHeld(conversationId: string): boolean {

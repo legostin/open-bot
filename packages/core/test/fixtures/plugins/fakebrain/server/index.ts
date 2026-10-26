@@ -2,7 +2,9 @@
 // "CALL <tool> <json>" calls a hub tool over MCP; "LIMIT" makes brain `fake` hit its limit; "PROMPT?" echoes the instructions.
 // Group chats: "HANDOFF <id>" on the last line replies "over to @<id>"; "ECHO?" anywhere echoes the turn's "[...]" lines;
 // "SLOW" at the end of the last line keeps the turn going until it is interrupted (or 5 s pass).
-// "TIME?" answers with the turn's "[Now: …]" line (or "none").
+// "TIME?" answers with the turn's "[Now: …]" line (or "none"); a turn with files answers with their paths and the note.
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { PluginContext } from "@owlbot/plugin-sdk";
 import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 
@@ -43,6 +45,14 @@ export default {
             const turn = { ...raw, text: clock ? raw.text.slice(clock.length + 1) : raw.text };
             if (turn.text.trim() === "TIME?") {
               yield { type: "text", delta: `${id} time: ${clock ?? "none"}` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
+            // Files with the message: where each one is in this session's workspace, and the hub's note.
+            const noteAt = turn.text.search(/(?<=^|\n)\[The user attached/);
+            if (noteAt >= 0) {
+              const files = (turn.attachments ?? []).map((a) => `${a}:${existsSync(join(o.workspace, a)) ? "here" : "missing"}`);
+              yield { type: "text", delta: `${id} files: ${files.join(", ") || "none"} | note: ${turn.text.slice(noteAt).split("\n").join(" / ")}` };
               yield { type: "done", resumeToken: `${id}-resume` };
               return;
             }
