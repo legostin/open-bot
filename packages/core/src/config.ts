@@ -24,6 +24,12 @@ export interface Config {
   egressEnforced: "iptables" | "proxy";
   /** Install missing Claude Code / Codex CLIs into <data>/tools on sign-in (desktop installers; never under isolation). */
   installClis: boolean;
+  /**
+   * HOME of the brain CLIs (claude, codex), where their logins live: <data>/home/agent, or OWLBOT_BRAIN_HOME. The
+   * desktop app sets that to the user's own home, so a CLI they already signed in to works as is, and Claude Code on
+   * macOS finds the login keychain (it looks for it through HOME). Never under user isolation.
+   */
+  brainHome: string;
   vaultPassphraseFile?: string;
   timezone: string;
   version: string;
@@ -73,12 +79,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     },
     egressEnforced: env.OWLBOT_EGRESS_ENFORCED === "iptables" ? "iptables" : "proxy",
     installClis: env.OWLBOT_INSTALL_CLIS === "1" && env.OWLBOT_ISOLATION !== "users",
+    brainHome: "",
     vaultPassphraseFile: env.OWLBOT_VAULT_PASSPHRASE_FILE && existsSync(env.OWLBOT_VAULT_PASSPHRASE_FILE) ? env.OWLBOT_VAULT_PASSPHRASE_FILE : undefined,
     timezone: env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     version: "0.1.0",
     plugins: (env.OWLBOT_PLUGINS ?? "all") === "all" ? "all" : env.OWLBOT_PLUGINS === "none" ? "none" : (env.OWLBOT_PLUGINS ?? "").split(","),
   };
-  return { ...cfg, ...overrides };
+  const merged = { ...cfg, ...overrides };
+  if (!overrides.brainHome) {
+    merged.brainHome = env.OWLBOT_BRAIN_HOME && env.OWLBOT_ISOLATION !== "users" ? resolve(env.OWLBOT_BRAIN_HOME) : join(merged.dataDir, "home", "agent");
+  }
+  return merged;
 }
 
 export function isLocalHost(host: string): boolean {

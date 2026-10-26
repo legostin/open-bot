@@ -209,10 +209,11 @@ export class PluginHost {
     const cfg = this.d.config;
     const proxyToken = this.d.egress.issueToken(`plugin:${id}`, rec.granted.network);
     const proxyUrl = `http://${proxyToken}:x@127.0.0.1:${cfg.egressPort}`;
-    // Builtin brain plugins run harness CLIs (claude, codex) as the "agent" user with a persistent home
-    // (CLI logins live there); everything else runs as the unprivileged "plugin" user.
+    // Builtin brain plugins run harness CLIs (claude, codex) as the "agent" user with a persistent home where the CLI
+    // logins live (config.brainHome: the user's own home in the desktop app); everything else runs as the
+    // unprivileged "plugin" user.
     const isBrainHost = rec.source === "builtin" && rec.layout.manifest.contributes.brains.length > 0;
-    const home = isBrainHost ? join(cfg.dataDir, "home", "agent") : dataDir;
+    const home = isBrainHost ? cfg.brainHome : dataDir;
     const runAs = isBrainHost ? cfg.isolation.agentUser : cfg.isolation.pluginUser;
     if (cfg.isolation.users) {
       // Directories must belong to the user the plugin runs as (plugins-data is sticky world-writable, like /tmp).

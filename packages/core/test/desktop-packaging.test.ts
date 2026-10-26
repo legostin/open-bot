@@ -2,7 +2,7 @@
 // (packaging/macos).
 import { describe, expect, it } from "vitest";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 // @ts-ignore: plain ESM helpers without type declarations
@@ -53,6 +53,7 @@ describe("desktop launcher", () => {
     expect(env.OWLBOT_PUBLIC_URL).toBe("http://localhost:41780");
     expect(env.OWLBOT_INSTALL_CLIS).toBe("1");
     expect(env.OWLBOT_DESKTOP).toBe("1");
+    expect(env.OWLBOT_BRAIN_HOME).toBe(homedir());
     expect(env.OWLBOT_SETUP_TOKEN).toBe(readFileSync(join(data, "setup-code"), "utf8").trim());
     expect(env.NODE_OPTIONS).toBe(`--max-old-space-size=512 --import=${RESOLVE_HOOK}`);
     expect(hubEnv(env, data).NODE_OPTIONS).toBe(env.NODE_OPTIONS);

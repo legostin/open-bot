@@ -63,6 +63,8 @@ export function hubEnv(env, dataDir) {
     OWLBOT_PUBLIC_URL: `http://localhost:${port}`,
     OWLBOT_INSTALL_CLIS: "1",
     OWLBOT_DESKTOP: "1",
+    // The user's own home for claude and codex: the logins they already have, and on macOS the login keychain.
+    OWLBOT_BRAIN_HOME: homedir(),
     NODE_ENV: "production",
     // The hub installs the brain CLIs; they must not try to update themselves in its folder.
     DISABLE_AUTOUPDATER: "1",
