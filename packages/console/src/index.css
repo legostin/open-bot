@@ -6,17 +6,17 @@
    so the user always notices they are in the security console.
    `static`: always emit these variables, they are referenced from the semantic tokens below. */
 @theme static {
-  --color-accent-50: oklch(98.4% 0.014 180.72);
-  --color-accent-100: oklch(95.3% 0.051 180.801);
-  --color-accent-200: oklch(91% 0.096 180.426);
-  --color-accent-300: oklch(85.5% 0.138 181.071);
-  --color-accent-400: oklch(77.7% 0.152 181.912);
-  --color-accent-500: oklch(70.4% 0.14 182.503);
-  --color-accent-600: oklch(60% 0.118 184.704);
-  --color-accent-700: oklch(51.1% 0.096 186.391);
-  --color-accent-800: oklch(43.7% 0.078 188.216);
-  --color-accent-900: oklch(38.6% 0.063 188.416);
-  --color-accent-950: oklch(27.7% 0.046 192.524);
+  --color-accent-50: oklch(98.4% 0 0);
+  --color-accent-100: oklch(95.3% 0 0);
+  --color-accent-200: oklch(91% 0 0);
+  --color-accent-300: oklch(85.5% 0 0);
+  --color-accent-400: oklch(77.7% 0 0);
+  --color-accent-500: oklch(70.4% 0 0);
+  --color-accent-600: oklch(60% 0 0);
+  --color-accent-700: oklch(51.1% 0 0);
+  --color-accent-800: oklch(43.7% 0 0);
+  --color-accent-900: oklch(38.6% 0 0);
+  --color-accent-950: oklch(27.7% 0 0);
 
   --font-mono: ui-monospace, "Cascadia Mono", "Cascadia Code", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
@@ -81,8 +81,8 @@
   --owl-faint: oklch(58% 0.014 240);
   --owl-brand: var(--color-accent-600);
   --owl-brand-fg: var(--color-accent-300);
-  --owl-brand-soft: oklch(26% 0.04 190);
-  --owl-brand-line: oklch(40% 0.07 188);
+  --owl-brand-soft: oklch(26% 0 0);
+  --owl-brand-line: oklch(40% 0 0);
   --owl-warn: oklch(83% 0.13 80);
   --owl-warn-soft: oklch(26% 0.045 70);
   --owl-warn-line: oklch(45% 0.09 70);

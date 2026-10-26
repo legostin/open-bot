@@ -3,7 +3,7 @@
 // Values are never shown again, put into messages or sent to the model; the model only learns vault://<id>.
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Eye, EyeOff, KeyRound, Lock, LockOpen, ShieldCheck, ExternalLink } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, KeyRound, Lock, LockOpen, ShieldCheck, ExternalLink } from "lucide-react";
 import type { MessagePart, PluginSetupView, SecretRequest, VaultState } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
@@ -249,6 +249,8 @@ function SetupSecretRow({ secret: s, onSave }: { secret: PluginSetupView["secret
 export function PluginSetupCard({ pluginId, bare }: { pluginId: string; bare?: boolean }) {
   const [view, setView] = useState<PluginSetupView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Done in the chat: the card folds into one locked line until the user asks to change something.
+  const [open, setOpen] = useState(false);
   const { settings: sections } = usePluginRegistry();
   const load = useCallback(() => {
     api.get<PluginSetupView>(`/api/plugins/${encodeURIComponent(pluginId)}/setup`).then(
@@ -269,6 +271,20 @@ export function PluginSetupCard({ pluginId, bare }: { pluginId: string; bare?: b
   if (!view) return <Spinner />;
   const own = sections.filter((s) => s.pluginId === pluginId);
   const missing = view.secrets.filter((s) => s.required && !s.present).length;
+  // A plugin with its own section (Telegram's pairing) shows its real state there, so it stays open.
+  const done = view.enabled && missing === 0 && view.status === "running" && own.length === 0;
+  if (!bare && done && !open) {
+    return (
+      <div className="animate-in my-2 flex items-center gap-2 rounded-xl border border-border bg-surface-2/60 px-3 py-2">
+        <CheckCircle2 className="size-4 text-success" />
+        <span className="text-sm font-medium">{t("setup.done", { name: view.name })}</span>
+        <span className="flex-1" />
+        <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+          {t("setup.change")}
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className={cx("flex flex-col gap-3", !bare && "my-2 rounded-xl border border-border bg-surface-2/50 px-3 py-2.5")}>
       {!bare && (

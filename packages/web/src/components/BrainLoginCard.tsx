@@ -2,7 +2,7 @@
 // for the code the page shows) and the live state from the hub. No terminal; the login stays on the server.
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ExternalLink, LogIn } from "lucide-react";
+import { ExternalLink, LogIn, CheckCircle2 } from "lucide-react";
 import type { BrainLoginView } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { formatTime } from "../lib/format";
@@ -106,6 +106,15 @@ export function BrainLoginCard({ brainRef, bare, compact, install }: { brainRef:
           {startButton}
         </div>
         {body}
+      </div>
+    );
+  }
+  // Signed in from the chat: one locked line, like any form that is done.
+  if (!bare && signedIn && !running) {
+    return (
+      <div className="animate-in my-2 flex items-center gap-2 rounded-xl border border-border bg-surface-2/60 px-3 py-2">
+        <CheckCircle2 className="size-4 text-success" />
+        <span className="text-sm font-medium">{t("brainLogin.locked", { name: view.label })}</span>
       </div>
     );
   }
