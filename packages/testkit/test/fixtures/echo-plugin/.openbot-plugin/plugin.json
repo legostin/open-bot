@@ -1,0 +1,7 @@
+{
+  "id": "echo",
+  "name": "Echo",
+  "server": "./server/index.ts",
+  "contributes": { "tools": true, "brains": ["echo"], "http": true },
+  "permissions": { "vault": ["demo"], "core": ["notify"] }
+}
