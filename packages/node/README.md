@@ -1,92 +1,98 @@
-# openbot-node — подключение компьютера к хабу open-bot
+# openbot-node: connect a computer to your open-bot hub
 
-`openbot-node` — небольшой демон, который подключает ваш компьютер (ноутбук, рабочую станцию, домашний сервер) к хабу open-bot. После подключения агенты хаба могут:
+[Русский](README.ru.md)
 
-- запускать **мозги на подписках этой машины** — Claude Code и Codex, в которые вы уже вошли здесь (`claude-code@<машина>`, `codex@<машина>`);
-- **читать, писать и просматривать файлы** в разрешённых папках (`machine_read_file`, `machine_write_file`, `machine_list_dir`);
-- **выполнять команды** (`machine_exec`) — только если вы это явно включили.
+`openbot-node` is a small daemon that connects your computer (a laptop, a workstation, a home server) to an open-bot hub. Once it is connected, the hub's agents can:
 
-Что разрешено, решает **владелец машины** в локальном файле `~/.openbot-node/policy.json`, а не хаб. Демон сам проверяет каждый запрос.
+- run **brains on this machine's subscriptions**: the Claude Code and Codex you are already signed in to here (`claude-code@<machine>`, `codex@<machine>`);
+- **read, write and list files** in the folders you allow (`machine_read_file`, `machine_write_file`, `machine_list_dir`);
+- **run commands** (`machine_exec`), but only if you explicitly turn that on.
 
-Демон работает на Windows, macOS и Linux. Он сам подключается к хабу исходящим WebSocket-соединением — открывать порты на этой машине не нужно.
+What is allowed is decided by the **machine's owner** in the local file `~/.openbot-node/policy.json`, not by the hub. The daemon checks every request itself.
 
-## Установка
+The daemon runs on Windows, macOS and Linux. It connects to the hub over an outgoing WebSocket, so you don't need to open any ports on this machine.
 
-**Проще всего — один файл с хаба.** Нужен только Node.js 24.5+:
+## Installation
+
+**The easiest way is a single file from the hub.** All you need is Node.js 24.5+:
 
 ```sh
 curl -fsSLo openbot-node.mjs https://bot.example.com/download/openbot-node.mjs
 node openbot-node.mjs help
 ```
 
-Дальше везде вместо `openbot-node` пишите `node openbot-node.mjs`.
+From then on, type `node openbot-node.mjs` wherever this guide says `openbot-node`.
 
-**Из исходников.** Нужны Node.js 24.5+ и git.
+**From source.** You need Node.js 24.5+ and git.
 
 ```sh
-git clone <адрес репозитория open-bot> open-bot
+git clone <repo> open-bot
 cd open-bot
 npm install
-npx openbot-node help        # запуск прямо из папки с исходниками
+npx openbot-node help        # run straight from the source folder
 ```
 
-Чтобы команда `openbot-node` была доступна из любой папки, установите пакет глобально **из этой же копии** (npm создаст ссылку на папку, поэтому не удаляйте её):
+To make `openbot-node` available in any folder, install the package globally **from this same checkout** (npm links to the folder, so don't delete it):
 
 ```sh
 npm install -g ./packages/node
 openbot-node help
 ```
 
-Мозги работают через CLI, установленные на этой машине, — поставьте те, что нужны, и войдите в них обычным способом:
+Brains run through the CLIs installed on this machine. Install the ones you need and sign in to them the usual way:
 
-- Claude Code: `claude` (вход по подписке Claude — `claude` → `/login`);
-- Codex: `npm i -g @openai/codex`, затем `codex login`.
+- Claude Code: `claude` (sign in with your Claude subscription: `claude`, then `/login`);
+- Codex: `npm i -g @openai/codex`, then `codex login`.
 
-Демон сообщает хабу только о тех CLI, что реально установлены (проверка при запуске и при каждом подключении).
+The daemon only reports the CLIs that are actually installed (it checks at startup and on every connection).
 
-## Привязка
+## Language
 
-1. В веб-интерфейсе хаба откройте «Машины» → «Подключить машину» и скопируйте одноразовый код (действует 10 минут). Можно и из консоли хаба: `node packages/core/src/cli.ts pairing-code`.
-2. На этой машине:
+The CLI and its log speak English or Russian. The language comes from `OPENBOT_LANG` (`en` or `ru`), then from `LC_ALL`, `LC_MESSAGES` and `LANG`; anything else means English. On Windows, where `LANG` is usually unset, set `OPENBOT_LANG=ru` to get Russian. A service picks the language up from its own environment.
+
+## Pairing
+
+1. In the hub's web UI, go to the **Machines** page, connect a new machine and copy the one-time code (valid for 10 minutes). You can also get one on the hub's command line: `node packages/core/src/cli.ts pairing-code`, or `docker exec openbot openbot-entrypoint pairing-code laptop` in Docker.
+2. On this machine:
 
 ```sh
-openbot-node pair https://bot.example.com AB12CD34 --name ноутбук
+openbot-node pair https://bot.example.com AB12CD34 --name laptop
 ```
 
-Демон создаёт ключ Ed25519, отправляет хабу **только публичный ключ** и сохраняет:
+The daemon creates an Ed25519 key, sends **only the public key** to the hub and saves:
 
-| Файл | Что внутри |
+| File | Contents |
 | --- | --- |
-| `~/.openbot-node/config.json` | адрес хаба, id и имя машины |
-| `~/.openbot-node/key.json` | закрытый ключ (права 0600; никому не передавайте) |
-| `~/.openbot-node/policy.json` | локальная политика (создаётся с безопасными настройками) |
-| `~/.openbot-node/brains/` | служебные файлы сессий мозгов |
+| `~/.openbot-node/config.json` | hub address, machine id and name |
+| `~/.openbot-node/key.json` | the private key (mode 0600; never share it) |
+| `~/.openbot-node/policy.json` | the local policy (created with safe defaults) |
+| `~/.openbot-node/brains/` | brain session bookkeeping |
 
-Папку можно переопределить переменной `OPENBOT_NODE_HOME`.
+You can move the folder with the `OPENBOT_NODE_HOME` variable.
 
-При каждом подключении хаб присылает случайную строку, демон подписывает её ключом — так хаб узнаёт машину. Отозвать машину можно в веб-интерфейсе одним кликом: демон получит отказ (код 4401), напишет об этом и завершится с кодом 1. Чтобы подключить машину снова, повторите `pair` с новым кодом.
+On every connection the hub sends a random string and the daemon signs it with the key; that is how the hub recognizes the machine. You can revoke the machine in the web UI with one click: the daemon gets a refusal (close code 4401), says so in the log and exits with code 1. To connect the machine again, repeat `pair` with a new code.
 
-## Запуск
+## Running
 
 ```sh
-openbot-node run       # в консоли, с логом; Ctrl+C — остановка
-openbot-node status    # привязка, политика, установленные CLI, доступность хаба
-openbot-node policy    # путь и содержимое policy.json
+openbot-node run       # in the terminal, with a log; Ctrl+C stops it
+openbot-node status    # pairing, policy, installed CLIs, hub reachability
+openbot-node policy    # path and contents of policy.json
 ```
 
-`run` переподключается к хабу бесконечно с растущей паузой (до 60 с), так что перезагрузка хаба или обрыв сети не требуют вмешательства. Каждый запрос хаба пишется в лог одной строкой — что, куда и результат, **без содержимого файлов и текстов запросов**:
+`run` keeps reconnecting to the hub with a growing pause (up to 60 s), so a hub restart or a network outage needs no attention. Every request from the hub is logged on one line: what, where and the outcome, **without file contents or request text**. For example:
 
 ```
-[14:02:11] подключено к хабу https://bot.example.com как «ноутбук»
-[14:02:40] fs.write /home/me/openbot-workspace/report.md (2048 Б) → 2048 Б (3 мс)
-[14:03:05] exec.run npm test → отказ: Выполнение команд на этой машине запрещено (exec.enabled = false в policy.json)
+[14:02:11] connected to hub https://bot.example.com as "laptop"
+[14:02:40] fs.write /home/me/openbot-workspace/report.md (2048 B) → 2048 B (3 ms)
+[14:03:05] exec.run npm test → denied: running commands on this machine is disabled (exec.enabled = false in policy.json)
 ```
 
-## Запуск как службы
+## Running as a service
 
-В примерах исходники лежат в `~/open-bot`; поправьте пути под себя. Служба должна видеть `claude`/`codex` в `PATH` и запускаться от **вашего** пользователя — тогда CLI используют ваш вход.
+The examples assume the source checkout is in `~/open-bot`; adjust the paths to match yours. The service must see `claude`/`codex` in its `PATH` and run as **your** user, so the CLIs use your sign-in.
 
-### Linux (systemd, пользовательская служба)
+### Linux (systemd user service)
 
 `~/.config/systemd/user/openbot-node.service`:
 
@@ -101,7 +107,7 @@ ExecStart=/usr/bin/node %h/open-bot/packages/node/src/cli.ts run
 Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
 Restart=always
 RestartSec=10
-# Код 1 — машина отозвана, не привязана или policy.json сломан: не перезапускать вслепую.
+# Exit code 1: the machine was revoked, is not paired, or policy.json is broken. Don't restart blindly.
 RestartPreventExitStatus=1
 
 [Install]
@@ -111,11 +117,11 @@ WantedBy=default.target
 ```sh
 systemctl --user daemon-reload
 systemctl --user enable --now openbot-node
-loginctl enable-linger "$USER"          # работать и без входа в систему
-journalctl --user -u openbot-node -f    # лог
+loginctl enable-linger "$USER"          # keep running without a login session
+journalctl --user -u openbot-node -f    # log
 ```
 
-Если Node установлен через nvm, укажите полный путь к `node` (`which node`).
+If Node is installed through nvm, use the full path to `node` (`which node`).
 
 ### macOS (launchd)
 
@@ -148,15 +154,15 @@ journalctl --user -u openbot-node -f    # лог
 
 ```sh
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.openbot.node.plist
-launchctl kickstart -k gui/$(id -u)/dev.openbot.node    # перезапуск
-launchctl bootout gui/$(id -u)/dev.openbot.node         # остановить (например, после отзыва машины)
+launchctl kickstart -k gui/$(id -u)/dev.openbot.node    # restart
+launchctl bootout gui/$(id -u)/dev.openbot.node         # stop (for example, after the machine was revoked)
 ```
 
-На Intel-маках `node` обычно лежит в `/usr/local/bin/node`.
+On Intel Macs, `node` usually lives in `/usr/local/bin/node`.
 
-### Windows (Планировщик заданий)
+### Windows (Task Scheduler)
 
-В PowerShell от своего пользователя:
+In PowerShell, as your own user:
 
 ```powershell
 $node = (Get-Command node).Source
@@ -170,26 +176,26 @@ Register-ScheduledTask -TaskName "openbot-node" -Action $action -Trigger $trigge
 Start-ScheduledTask -TaskName "openbot-node"
 ```
 
-Лог — в `%USERPROFILE%\.openbot-node\node.log`. Задача запускается при входе в систему; чтобы она работала без окна консоли и до входа, в свойствах задачи выберите «Выполнять для всех пользователей». Удалить: `Unregister-ScheduledTask -TaskName openbot-node`.
+The log goes to `%USERPROFILE%\.openbot-node\node.log`. The task starts when you sign in; to run it without a console window and before sign-in, choose "Run whether user is logged on or not" in the task's properties. To remove it: `Unregister-ScheduledTask -TaskName openbot-node`.
 
-## Машины в разных сетях: Tailscale
+## Machines on different networks: Tailscale
 
-Если хаб и эта машина в разных сетях, проще всего объединить их в [Tailscale](https://tailscale.com):
+If the hub and this machine are on different networks, the simplest fix is to join them with [Tailscale](https://tailscale.com):
 
-1. Установите Tailscale на машину с хабом и на эту машину, войдите в один tailnet (`tailscale up`).
-2. На хабе: пусть он слушает адрес в tailnet и знает своё имя, например
+1. Install Tailscale on the hub machine and on this one, and sign both in to the same tailnet (`tailscale up`).
+2. On the hub, make it listen on its tailnet address and know its name, for example
    `OPENBOT_HOST=0.0.0.0`, `OPENBOT_PUBLIC_URL=http://hub.tailnet-name.ts.net:8080`,
-   `OPENBOT_ALLOWED_HOSTS=hub.tailnet-name.ts.net` (для не-локального адреса хабу нужен заданный пароль).
-   Ещё удобнее — `tailscale serve --bg 8080` на машине хаба: получится `https://hub.tailnet-name.ts.net` с TLS.
-3. Привяжите машину по адресу из tailnet: `openbot-node pair https://hub.tailnet-name.ts.net <код>`.
+   `OPENBOT_ALLOWED_HOSTS=hub.tailnet-name.ts.net` (on a non-local address the hub needs a password to be set).
+   Even easier: run `tailscale serve --bg 8080` on the hub machine to get `https://hub.tailnet-name.ts.net` with TLS.
+3. Pair the machine using its tailnet address: `openbot-node pair https://hub.tailnet-name.ts.net <code>`.
 
-Наружу в интернет при этом ничего не открывается. Демон использует тот же адрес и для подключения инструментов open-bot к мозгам (MCP), так что отдельной настройки не нужно.
+Nothing is exposed to the internet this way. The daemon also uses the same address to connect open-bot's tools to the brains (MCP), so there is nothing else to configure.
 
-## Политика (`~/.openbot-node/policy.json`)
+## Policy (`~/.openbot-node/policy.json`)
 
-Файл создаётся при первом запуске; демон перечитывает его на лету (изменения подхватываются за пару секунд, перезапуск не нужен, хаб получает обновлённый список мозгов и папок). Если вы сохранили файл с ошибкой, демон пишет об этом в лог и продолжает работать с предыдущей версией.
+The file is created on first start. The daemon re-reads it on the fly: changes are picked up within a couple of seconds, no restart is needed, and the hub receives the updated list of brains and folders. If you save the file with a mistake, the daemon says so in the log and keeps working with the previous version.
 
-Настройки по умолчанию:
+Defaults:
 
 ```json
 {
@@ -207,32 +213,32 @@ Start-ScheduledTask -TaskName "openbot-node"
 }
 ```
 
-| Поле | Значение |
+| Field | Meaning |
 | --- | --- |
-| `allowedDirs` | Папки, доступные хабу. Пути абсолютные, можно с `~`. Любой путь из запроса раскрывается (включая символические ссылки) и должен оставаться внутри одной из этих папок; пути с `..` отклоняются. Относительные пути считаются от первой папки. |
-| `fs.read`, `fs.write` | Разрешить чтение/просмотр и запись файлов в этих папках. Читаются только текстовые файлы до 5 МБ. |
-| `exec.enabled` | Разрешить выполнение команд. **По умолчанию выключено.** |
-| `exec.allowCommands` | Шаблоны разрешённых команд (`*` — любые символы, `?` — один), например `["git status", "git log*", "npm test*"]`. Пустой список — любые команды. Когда список задан, в команде запрещены `; & | $ < > ^`, `` ` ``, `%VAR%` и переводы строк, чтобы к разрешённой команде нельзя было «приклеить» другую. |
-| `exec.shell` | Оболочка для команд (по умолчанию `/bin/sh`, на Windows — `cmd.exe`), например `"powershell.exe"`. |
-| `exec.maxTimeoutMs` | Предел времени одной команды (по умолчанию 30 минут). По таймауту завершается всё дерево процессов; вывод ограничен 1 МБ. |
-| `brains.claude-code.enabled` / `brains.codex.enabled` | Какие мозги этой машины можно использовать. |
-| `brains.claude-code.allowedTools` | Встроенные инструменты Claude Code, которые разрешены без вопросов (остальные запрещены). **`Bash` по умолчанию не включён.** Можно сужать правилами Claude Code, например `"Read(//home/me/openbot-workspace/**)"`. |
-| `brains.codex.sandbox` | Песочница Codex: `read-only`, `workspace-write` (по умолчанию: запись только в рабочую папку сессии) или `danger-full-access`. |
-| `brains.*.command` | Необязательно: своя команда или полный путь к CLI, если он не в `PATH`. |
-| `workspacesRoot` | Где создаются рабочие папки сессий мозгов: `<workspacesRoot>/<агент>/<задача>`. Хаб передаёт только относительный ключ; ключи с `..` и абсолютные пути отклоняются. |
+| `allowedDirs` | Folders the hub may access. Absolute paths; `~` is allowed. Every path in a request is resolved (symlinks included) and must stay inside one of these folders; paths with `..` are rejected. Relative paths start from the first folder. |
+| `fs.read`, `fs.write` | Allow reading/listing and writing files in those folders. Only text files are read, up to 5 MB; a single write is limited to 10 MB. |
+| `exec.enabled` | Allow running commands. **Off by default.** |
+| `exec.allowCommands` | Patterns of allowed commands (`*` is any run of characters, `?` a single one), for example `["git status", "git log*", "npm test*"]`. An empty list allows any command. When the list is set, commands may not contain `; & | $ < > ^`, `` ` ``, `%VAR%` or line breaks, so nothing can be "glued" onto an allowed command. |
+| `exec.shell` | Shell for commands (default `/bin/sh`, `cmd.exe` on Windows), for example `"powershell.exe"`. |
+| `exec.maxTimeoutMs` | Time limit for a single command (default 30 minutes). On timeout the whole process tree is killed; output is capped at 1 MB. |
+| `brains.claude-code.enabled` / `brains.codex.enabled` | Which of this machine's brains may be used. |
+| `brains.claude-code.allowedTools` | Built-in Claude Code tools allowed without asking (everything else is denied). **`Bash` is not included by default.** You can narrow them with Claude Code rules, for example `"Read(//home/me/openbot-workspace/**)"`. |
+| `brains.codex.sandbox` | Codex sandbox: `read-only`, `workspace-write` (default: writes only to the session's working folder) or `danger-full-access`. |
+| `brains.*.command` | Optional: a custom command or the full path to the CLI if it is not in `PATH`. |
+| `workspacesRoot` | Where brain session folders are created: `<workspacesRoot>/<agent>/<task>`. The hub only passes a relative key; keys with `..` and absolute paths are rejected. |
 
-Что важно понимать:
+Things to understand:
 
-- **Команды (`exec`) — это полный доступ к оболочке** с правами вашего пользователя. Ограничение папкой касается только рабочего каталога, не того, что делает команда. Включайте `exec` осознанно и по возможности со списком `allowCommands`. Хаб по умолчанию спрашивает подтверждение на каждый `machine_exec` и `machine_write_file`.
-- **Мозги работают с правами вашего пользователя** и вашими подписками. Что им можно, задают `allowedTools` (Claude Code) и `sandbox` (Codex). Переменные окружения от хаба (кроме `TZ`, `LANG`, `LC_*`) не передаются, а служебные пути хаба игнорируются.
-- **Папка `~/.openbot-node` недоступна** через файлы и команды хаба, даже если попадает в `allowedDirs`: хаб не может прочитать ключ или переписать политику.
-- Политику правит только владелец машины; хаб её не видит целиком — он получает лишь список разрешённых папок и установленных мозгов.
+- **Commands (`exec`) mean full shell access** with your user's rights. The folder restriction only applies to the working directory, not to what the command does. Turn `exec` on deliberately and, where possible, with an `allowCommands` list. By default the hub asks for approval on every `machine_exec` and `machine_write_file`.
+- **Brains run with your user's rights** and your subscriptions. What they may do is set by `allowedTools` (Claude Code) and `sandbox` (Codex). Environment variables from the hub are not passed on (except `TZ`, `LANG`, `LANGUAGE` and `LC_*`), and the hub's internal paths are ignored.
+- **The `~/.openbot-node` folder is off limits** to the hub's file and command tools, even if it falls inside `allowedDirs`: the hub cannot read the key or rewrite the policy.
+- Only the machine's owner edits the policy. The hub never sees all of it; it only receives the list of allowed folders and installed brains.
 
-## Неполадки
+## Troubleshooting
 
-- `Машина не привязана` — выполните `openbot-node pair <адрес-хаба> <код>`.
-- `Хаб отклонил привязку: Код привязки неверный или устарел` — код одноразовый и живёт 10 минут; получите новый.
-- `Не удалось связаться с хабом … соединение отклонено` — хаб не запущен, слушает только `127.0.0.1` или другой порт. Проверьте адрес в браузере на этой машине.
-- `Хаб не принимает адрес …` — добавьте имя хоста в `OPENBOT_ALLOWED_HOSTS` на хабе.
-- `Хаб отклонил подключение (unauthorized)` — машину отозвали или ключ заменён; привяжите заново.
-- Мозга нет в списке хаба — `openbot-node status` покажет, найден ли CLI и выполнен ли вход; проверьте `PATH` службы.
+- **The machine is not paired**: run `openbot-node pair <hub-url> <code>`.
+- **The hub rejected pairing because the code is wrong or expired**: codes are single-use and live for 10 minutes; get a new one.
+- **Could not reach the hub, connection refused**: the hub is not running, or it listens only on `127.0.0.1` or on another port. Open the address in a browser on this machine to check.
+- **The hub does not accept the address**: add the host name to `OPENBOT_ALLOWED_HOSTS` on the hub.
+- **The hub rejected the connection (unauthorized)**: the machine was revoked or its key was replaced; pair it again.
+- **A brain is missing from the hub's list**: `openbot-node status` shows whether the CLI was found and whether you are signed in; check the service's `PATH`.

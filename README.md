@@ -1,81 +1,102 @@
 # open-bot
 
-Дружелюбный и проактивный персональный агент, который живёт у вас. Это open-source альтернатива Grok, Meta Muse и OpenAI Dots: один Docker-образ, ваши подписки, ваши компьютеры и безопасность с первого дня.
+[Русский](README.ru.md)
 
-- **Ваши подписки как «мозги».** Claude Code (подписка Claude) и Codex (подписка ChatGPT) работают как харнессы, а API Anthropic, OpenAI и OpenRouter — как запасной вариант. Когда упираетесь в лимит подписки, агент сам переключается на следующий мозг и возвращается, когда лимит сбросится.
-- **Проактивность.** Напоминания, расписания и мониторинг страниц и лент. Фоновые задачи сами решают, стоит ли вас беспокоить: молча, в дайджест, уведомление или вопрос.
-- **Несколько агентов.** Задачи можно делегировать и выполнять параллельно. Агенты описываются markdown-файлами, у каждого свой список мозгов и инструментов.
-- **MCP и скиллы.** Подключаются любые MCP-серверы, скиллы и команды. Плагины Claude Code и Codex ставятся как есть.
-- **Встроенный браузер.** Chromium внутри контейнера: сайты, формы, скриншоты, вход по паролям из vault.
-- **Сеть машин.** Другие компьютеры подключаются как узлы. Агент запускает на них команды, работает с файлами и использует их подписки (Claude Code или Codex на ноутбуке).
-- **Безопасность.** Vault для паролей и личных данных: модель видит только ссылки `vault://`. Внешние действия требуют подтверждения в отдельном пульте. Плагины и CLI-мозги работают в песочнице под отдельными unix-пользователями, весь их трафик идёт через egress-фильтр. Журнал аудита защищён цепочкой хэшей.
-- **Всё — плагины, включая интерфейс.** Панели, вкладки, рендер результатов, композер, каналы, мозги, инструменты. Подробности — в [docs/plugins.md](docs/plugins.md).
-- **Каналы.** Веб-интерфейс и Telegram. Мобильное и десктопное приложение будут позже.
+A friendly, proactive personal agent that lives on your own hardware. open-bot is an open-source alternative to Grok, Meta Muse and OpenAI Dots: one Docker image, the subscriptions you already pay for, your own computers, and security from day one. It speaks English and Russian.
 
-## Быстрый старт
+## Features
+
+- **Your subscriptions are the brains.** Claude Code (Claude subscription) and Codex (ChatGPT subscription) run as harnesses; the Anthropic, OpenAI and OpenRouter APIs, or any OpenAI-compatible server, act as fallbacks. When a subscription hits its limit, the agent moves on to the next brain and switches back once the limit resets.
+- **Proactive.** Reminders, schedules, and watching pages and feeds. Background tasks decide for themselves whether something deserves your attention: stay silent, add it to the digest, send a notification, or ask you.
+- **Multiple agents.** Delegate work and run tasks in parallel. Agents are markdown files, each with its own list of brains and tools.
+- **Memory.** Long-term memory about you, kept as markdown facts with git history and full-text search. Facts picked up in untrusted sessions wait for your review.
+- **MCP and skills.** Connect any MCP server, skill or command. Claude Code and Codex plugins install as they are.
+- **Built-in browser.** Chromium inside the container: websites, forms, screenshots, sign-in with passwords from the vault, and a live view where you can take over.
+- **A network of machines.** Other computers join as nodes. The agent runs commands and works with files on them, and can use their subscriptions (Claude Code or Codex on your laptop).
+- **Security.** A vault for passwords and personal data: the model only ever sees `vault://` references. External actions need your approval in a separate console. Plugins and CLI brains run in a sandbox under dedicated Unix users, and all their traffic goes through an egress filter. The audit log is protected by a hash chain.
+- **Everything is a plugin, including the UI.** Panels, tabs, tool-result renderers, the composer, channels, brains, tools. See [docs/plugins.md](docs/plugins.md).
+- **Channels.** Web UI and Telegram. Mobile and desktop apps will come later.
+
+## Quick start
 
 ```bash
 git clone <repo> open-bot && cd open-bot
 docker compose up -d --build
-docker compose logs openbot | grep -A1 "код установки"
+docker compose logs openbot | grep -A1 "open-bot:"
 ```
 
-1. Откройте http://localhost:8080 и введите **код установки** из логов, затем придумайте пароль.
-2. Откройте **пульт безопасности** http://localhost:8081 (тот же пароль) → «Vault» → создайте vault со своей парольной фразой.
-3. Подключите хотя бы один мозг (см. ниже) и напишите ассистенту.
+1. Open http://localhost:8080, enter the **setup code** from the logs and choose a password. Your browser's language becomes the hub language (see [Languages](#languages)).
+2. Open the **security console** at http://localhost:8081 (same password), go to **Vault** and create a vault with a passphrase of your own.
+3. Connect at least one brain (see below) and say hello to the assistant.
 
-Данные лежат в томе `openbot-data` (`/data`): база, vault, рабочие папки, логины CLI, плагины.
+Everything is stored in the `openbot-data` volume (`/data`): the database, the vault, workspaces, CLI logins and plugins.
 
-## Подключение мозгов
+## Languages
 
-**Claude Code (подписка Claude Pro/Max).** Есть два способа:
+- The **hub language** is taken from the first user's browser during setup. You can pin it with `OPENBOT_LANG=en` or `OPENBOT_LANG=ru`, and change it later in **Settings**. It is used for notifications, Telegram, approval cards, and as the default language of the web UI.
+- Each browser can switch the interface language on its own; this does not change the hub language.
+- Agents reply in the language you write to them.
 
-- Войти прямо в контейнере (логин сохранится в `/data/home/agent`):
+## Connecting brains
+
+**Claude Code (Claude Pro/Max subscription).** There are two ways:
+
+- Sign in inside the container (the login is kept in `/data/home/agent`):
   ```bash
   docker exec -it -u agent openbot claude
   ```
-  Внутри выполните `/login`, затем `/exit`.
-- Или на своём компьютере выполнить `claude setup-token` и положить токен в пульт → Vault → запись с id **`claude_code_token`** (тип «секрет», поле `value`).
+  Run `/login`, then `/exit`.
+- Or run `claude setup-token` on your own computer and store the token in the console under Vault as an item with the id **`claude_code_token`** (type "secret", field `value`).
 
-**Codex (подписка ChatGPT).**
+**Codex (ChatGPT subscription).**
 
 ```bash
 docker exec -it -u agent openbot codex login --device-auth
 ```
 
-**API-ключи** (запасные мозги, веб-поиск) добавляются в Vault записями с такими id:
+**API keys** (fallback brains, web search) go into the vault as items with these ids:
 
-| id | Для чего |
+| id | Used for |
 |---|---|
-| `anthropic_api_key` | мозг `api:anthropic` |
-| `openai_api_key` | мозг `api:openai`, Codex по ключу |
-| `openrouter_api_key` | мозг `api:openrouter` |
-| `brave_api_key` или `tavily_api_key` | `web_search`; без ключа укажите свой SearXNG в настройках плагина «Веб» (DuckDuckGo часто отвечает проверкой на бота) |
-| `telegram_bot_token` | канал Telegram |
+| `anthropic_api_key` | the `api:anthropic` brain |
+| `openai_api_key` | the `api:openai` brain, Codex with an API key |
+| `openrouter_api_key` | the `api:openrouter` brain |
+| `custom_llm_api_key` | the `api:custom` brain (Ollama, LM Studio, vLLM or another OpenAI-compatible server), only if your server needs a key |
+| `brave_api_key` or `tavily_api_key` | `web_search`; without a key, point the Web plugin settings at your own SearXNG (DuckDuckGo often answers with a bot check) |
+| `telegram_bot_token` | the Telegram channel |
 
-Состояние мозгов (установлен, вошёл, лимит до …) видно в интерфейсе: «Настройки → Мозги». Порядок мозгов задаётся у каждого агента.
+The address and model of an OpenAI-compatible server are set in the API brain plugin settings. A server on your local network also has to be listed in the `brainEgressAllow` setting (localhost is always reachable).
+
+The **Brains** page shows the state of every brain: installed, signed in, rate-limited until a given time. The order in which brains are tried is set per agent.
 
 ## Telegram
 
-1. Создайте бота у [@BotFather](https://t.me/BotFather) и сохраните токен в Vault как `telegram_bot_token`.
-2. Включите плагин Telegram в «Плагины» и следуйте подсказке, чтобы привязать свой чат.
+1. Create a bot with [@BotFather](https://t.me/BotFather) and store its token in the vault as `telegram_bot_token` (type "secret", field `value`). The bot connects within a minute.
+2. In the web UI, open **Settings**, find the Telegram section and send the bot the `/start <code>` command shown there. The bot only answers the private chat the code came from.
 
-В Telegram приходят ответы, уведомления, дайджест и карточки подтверждения с кнопками. Подробности действия видны только в пульте, если не включить `channelApprovalDetails`.
+Telegram receives replies, notifications, the digest, and approval cards with buttons. Chat commands: `/help`, `/tasks`, `/stop`. The full details of an action are shown only in the console unless you turn on the `channelApprovalDetails` setting.
 
-## Другие компьютеры
+## Other computers
 
-1. «Машины → Добавить» → получите одноразовый код.
-2. На другом компьютере (нужен только Node.js 24+) скачайте демон с хаба и привяжите машину:
+1. On the **Machines** page, connect a new machine to get a one-time code (valid for 10 minutes).
+2. On the other computer (it only needs Node.js 24.5+), download the daemon from the hub and pair the machine:
    ```bash
    curl -fsSLo openbot-node.mjs https://your-hub-url/download/openbot-node.mjs
-   node openbot-node.mjs pair https://your-hub-url <код> --name ноутбук
+   node openbot-node.mjs pair https://your-hub-url <code> --name laptop
    node openbot-node.mjs run
    ```
-3. Узел появится в списке. Его локальные Claude Code и Codex станут мозгами `claude-code@<машина>` и `codex@<машина>`. Что агенту можно делать на машине (папки, команды, мозги), решает владелец машины в `~/.openbot-node/policy.json`. По умолчанию команды выключены. Автозапуск через systemd, launchd и Планировщик заданий описан в [packages/node/README.md](packages/node/README.md).
+3. The node appears in the list. Its local Claude Code and Codex become the brains `claude-code@<machine>` and `codex@<machine>`. What the agent may do on the machine (folders, commands, brains) is decided by the machine's owner in `~/.openbot-node/policy.json`; commands are off by default. Running the daemon as a service with systemd, launchd or Task Scheduler is covered in [packages/node/README.md](packages/node/README.md).
 
-## Доступ извне
+## Remote access
 
-Не публикуйте порты в интернет напрямую. Удобнее всего [Tailscale](https://tailscale.com): поставьте его на хост, затем укажите адрес хаба:
+Don't publish the ports to the internet directly. The easiest option is [Tailscale](https://tailscale.com): install it on the host and let `tailscale serve` put HTTPS in front of both ports (HTTPS certificates must be enabled for your tailnet):
+
+```bash
+tailscale serve --bg --https=8080 http://127.0.0.1:8080
+tailscale serve --bg --https=8081 http://127.0.0.1:8081
+```
+
+Then tell the hub its addresses:
 
 ```yaml
 environment:
@@ -83,52 +104,62 @@ environment:
   OPENBOT_CONSOLE_URL: https://my-box.tailnet.ts.net:8081
 ```
 
-Для passkeys (вход без пароля) нужен HTTPS или `localhost`. `tailscale serve` даёт HTTPS-сертификат автоматически.
+Passkeys (passwordless sign-in) need HTTPS or `localhost`; `tailscale serve` takes care of the certificate.
 
-## Модель безопасности
+## Security model
 
-- **Два origin.** Чат и плагины работают на `:8080`. Подтверждения, vault, правила и аудит — на `:8081`, с отдельной cookie, строгим CSP и `frame-ancestors 'none'`. Код плагинов в основной странице не может прочитать или нажать то, что в пульте.
-- **Vault.** Секреты шифруются: XChaCha20-Poly1305 с ключом данных, обёрнутым ключом из Argon2id. Модели видят только `vault://id`. Плагин получает запись, только если она объявлена в его правах **и** её область разрешает этот плагин, домен или агента. Значения секретов вырезаются из всего, что уходит модели, в каналы и в логи. После перезапуска vault запечатан. Для автоматической разблокировки передайте файл с паролем через `OPENBOT_VAULT_PASSPHRASE_FILE` (docker secret).
-- **Политика инструментов.** У каждого инструмента есть эффект: `read`, `local-write` или `external`. Внешние действия по умолчанию требуют подтверждения. «Всегда разрешать» создаёт узкое правило (получатель, домен). Если сессия читала недоверенный контент (веб, почта), новые адресаты снова требуют подтверждения. Фоновые задачи с инициативой ниже 2 могут только читать и уведомлять.
-- **Песочница.** Хаб работает от пользователя `openbot`, CLI-мозги — от `agent`, остальные плагины и MCP-серверы — от `plugin`. Трафик идёт через egress-прокси с белыми списками. С `cap_add: [NET_ADMIN]` и `OPENBOT_EGRESS_ENFORCED=iptables` прямой выход в сеть для `agent` и `plugin` закрыт на уровне ядра.
-- **Узлы.** Узлы аутентифицируются ключом Ed25519, полученным при одноразовом спаривании. Каждое действие на машине проходит политику хаба и локальную политику узла.
-- **Аудит.** Все вызовы инструментов, решения политики, доступ к vault и входы записываются в журнал с цепочкой хэшей. Проверить целостность можно командой `docker exec openbot openbot-entrypoint audit-verify` или в пульте.
+- **Two origins.** The chat and plugins live on `:8080`. Approvals, the vault, rules and the audit log live on `:8081`, with their own cookie, a strict CSP and `frame-ancestors 'none'`. Plugin code on the main page cannot read or click anything in the console.
+- **Vault.** Secrets are encrypted with XChaCha20-Poly1305 under a data key, which in turn is wrapped by a key derived with Argon2id. Models only ever see `vault://id`. A plugin gets an item only if the item is declared in its permissions **and** the item's scope allows that plugin, domain or agent. Secret values are stripped from everything that goes to models, channels and logs. After a restart the vault is sealed; to unlock it automatically, pass a passphrase file through `OPENBOT_VAULT_PASSPHRASE_FILE` (a Docker secret).
+- **Tool policy.** Every tool has an effect: `read`, `local-write` or `external`. External actions need approval by default. "Always allow" creates a narrow rule (one recipient, one domain). Once a session has read untrusted content (web, mail), new recipients need approval again. Background tasks of agents with an initiative below 2 can only read and notify.
+- **Sandbox.** The hub runs as the `openbot` user, CLI brains as `agent`, other plugins and MCP servers as `plugin`. Their traffic goes through an egress proxy with allowlists. With `cap_add: [NET_ADMIN]` and `OPENBOT_EGRESS_ENFORCED=iptables`, the kernel blocks direct network access for `agent` and `plugin`.
+- **Nodes.** Nodes authenticate with an Ed25519 key created during one-time pairing. Every action on a machine has to pass both the hub policy and the node's local policy.
+- **Audit.** Every tool call, policy decision, vault access and sign-in is recorded in a hash-chained log. Check its integrity with `docker exec openbot openbot-entrypoint audit-verify` or in the console.
 
-## Команды контейнера
+## Container commands
 
 ```bash
-docker exec openbot openbot-entrypoint reset-password 'новый-пароль'
+docker exec openbot openbot-entrypoint reset-password 'new-password'
 docker exec openbot openbot-entrypoint pairing-code laptop
 docker exec openbot openbot-entrypoint backup /data/backups
 docker exec openbot openbot-entrypoint audit-verify
 ```
 
-## Переменные окружения
+- `reset-password` sets a new password (at least 8 characters) and signs out every session.
+- `pairing-code [name]` issues a one-time code for connecting a machine.
+- `backup [dir]` copies the databases, agents, skills, commands and plugins with their data; the vault stays encrypted.
+- `audit-verify` checks the audit log's hash chain and exits with code 2 if it is broken.
 
-| Переменная | По умолчанию | |
+## Environment variables
+
+| Variable | Default | |
 |---|---|---|
-| `OPENBOT_PUBLIC_URL` | `http://localhost:8080` | адрес чата, нужен для ссылок и проверки Origin |
-| `OPENBOT_CONSOLE_URL` | тот же хост, порт 8081 | адрес пульта |
-| `OPENBOT_ALLOWED_HOSTS` | — | дополнительные имена хоста через запятую |
-| `OPENBOT_VAULT_PASSPHRASE_FILE` | — | автоматическая разблокировка vault |
-| `OPENBOT_EGRESS_ENFORCED` | `proxy` | `iptables` — жёсткий запрет прямого выхода (нужен `NET_ADMIN`) |
-| `OPENBOT_SETUP_TOKEN` | случайный | задать код установки заранее |
-| `egressPrivateAllow` (настройка в интерфейсе) | — | хосты локальной сети, к которым можно плагинам и мозгам (например, `searxng`, `nas.local`) |
-| `OPENBOT_TRUST_PROXY` | — | `1` — доверять `X-Forwarded-*` от обратного прокси |
-| `TZ` | `UTC` | часовой пояс напоминаний и дайджеста |
+| `OPENBOT_PUBLIC_URL` | `http://localhost:8080` | address of the chat UI, used for links and the Origin check |
+| `OPENBOT_CONSOLE_URL` | same host, port 8081 | address of the security console |
+| `OPENBOT_ALLOWED_HOSTS` | — | extra host names, comma-separated |
+| `OPENBOT_LANG` | — | pins the hub language: `en` or `ru` |
+| `OPENBOT_VAULT_PASSPHRASE_FILE` | — | unlocks the vault automatically |
+| `OPENBOT_EGRESS_ENFORCED` | `proxy` | `iptables` blocks direct network access outright (needs `NET_ADMIN`) |
+| `OPENBOT_SETUP_TOKEN` | random | sets the setup code in advance |
+| `OPENBOT_TRUST_PROXY` | — | `1` trusts `X-Forwarded-*` from a reverse proxy |
+| `OPENBOT_HOST` | `127.0.0.1` (`0.0.0.0` in the image) | listen address |
+| `OPENBOT_PORT`, `OPENBOT_CONSOLE_PORT`, `OPENBOT_EGRESS_PORT` | `8080`, `8081`, `8089` | ports of the chat UI, the console and the egress proxy |
+| `OPENBOT_DATA_DIR` | `.data/` (`/data` in the image) | data directory |
+| `TZ` | system time zone (`UTC` in the image) | default time zone for reminders, quiet hours and the digest |
 
-## Разработка
+Most behaviour is configured in **Settings** in the web UI: language, time zone, quiet hours, digest times, `channelApprovalDetails` (full action details in Telegram) and `brainEgressAllow` (extra hosts brains may reach). One hub setting has no field on that page yet: `egressPrivateAllow`, the local-network hosts plugins and brains may reach (for example `searxng` or `nas.local`); set it through `PATCH /api/settings`.
+
+## Development
 
 ```bash
 npm install
-npm run build        # веб-интерфейс, пульт, UI-плагины
-npm run dev          # хаб на :8080 / :8081 (данные в .data/)
-npm test             # unit и интеграционные тесты
+npm run build        # web UI, console, UI plugins, node daemon bundle
+npm run dev          # hub on :8080 / :8081, egress proxy on :8089 (data in .data/)
+npm test             # unit and integration tests
 npm run typecheck
 ```
 
-Нужен Node.js 24+ (TypeScript запускается без сборки). Устройство проекта и соглашения описаны в [CLAUDE.md](CLAUDE.md), дизайн — в [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md).
+You need Node.js 24.5+ (TypeScript runs without a build step). The project layout and conventions are described in [CLAUDE.md](CLAUDE.md), the design in [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md) (in Russian). Core messages live in `packages/core/src/locales/{en,ru}.ts`, plugin messages in `.openbot-plugin/locales/{en,ru}.json`; `npm test` checks that every translation matches English.
 
-## Лицензия
+## License
 
 Apache-2.0
