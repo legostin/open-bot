@@ -1,42 +1,17 @@
-// A conversation: header (title, agent picker), scrolling message list with history loading, composer.
+// A conversation: top bar (agent switcher, title), scrolling message list with history loading, composer.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, Check, MessagesSquare, Pencil, X } from "lucide-react";
+import { ArrowDown, Check, Pencil, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { errorText } from "../../lib/api";
 import { agents, conversations, ensureAgents, loadMessages, loadOlder, updateConversation, useConversationMessages } from "../../state/app";
 import { toast } from "../../state/toast";
-import { Button, EmptyState, ErrorNote, IconButton, Input, Select, Spinner } from "../../components/ui";
+import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
+import { TopBar } from "../../components/Layout";
+import { AgentSwitcher } from "./AgentSwitcher";
 import { t } from "../../i18n";
 import { MessageView } from "./MessageView";
 import { Composer } from "./Composer";
-
-function AgentPicker({ conversationId, agentId }: { conversationId: string; agentId?: string }) {
-  const list = useStore(agents);
-  useEffect(() => ensureAgents(), []);
-  if (!list || !list.length) return null;
-  return (
-    <Select
-      aria-label={t("chat.agent")}
-      value={agentId ?? ""}
-      onChange={async (e) => {
-        try {
-          await updateConversation(conversationId, { agentId: e.target.value });
-          toast(t("chat.agentChanged", { name: list.find((a) => a.id === e.target.value)?.name ?? e.target.value }), "success");
-        } catch (err) {
-          toast(errorText(err), "error");
-        }
-      }}
-      className="h-8 w-auto max-w-[44vw] rounded-lg py-0 pr-7 pl-2 text-[13px] sm:max-w-56"
-    >
-      {list.map((a) => (
-        <option key={a.id} value={a.id}>
-          {a.name}
-        </option>
-      ))}
-    </Select>
-  );
-}
 
 function TitleEditor({ id, title }: { id: string; title: string }) {
   const [editing, setEditing] = useState(false);
@@ -45,7 +20,7 @@ function TitleEditor({ id, title }: { id: string; title: string }) {
   if (!editing)
     return (
       <div className="flex min-w-0 items-center gap-1">
-        <span className="truncate font-semibold">{title}</span>
+        <span className="truncate">{title}</span>
         <IconButton label={t("common.rename")} onClick={() => setEditing(true)} className="size-7 shrink-0">
           <Pencil className="size-3.5" />
         </IconButton>
@@ -82,13 +57,11 @@ function TitleEditor({ id, title }: { id: string; title: string }) {
 
 export function ChatView({
   conversationId,
-  onOpenThreads,
   top,
   header = true,
   emptyHint,
 }: {
   conversationId: string;
-  onOpenThreads?: () => void;
   /** Rendered above the messages (e.g. first-run checklist, task summary). */
   top?: ReactNode;
   header?: boolean;
@@ -98,7 +71,7 @@ export function ChatView({
   const convList = useStore(conversations);
   const meta = convList.find((c) => c.id === conversationId);
   const agentList = useStore(agents);
-  const agentNames = useMemo(() => new Map((agentList ?? []).map((a) => [a.id, a.name])), [agentList]);
+  const agentById = useMemo(() => new Map((agentList ?? []).map((a) => [a.id, a])), [agentList]);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const prevHeight = useRef<number | null>(null);
@@ -144,15 +117,11 @@ export function ChatView({
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       {header && (
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3 sm:px-4">
-          {onOpenThreads && (
-            <IconButton label={t("chat.allChats")} onClick={onOpenThreads} className="lg:hidden">
-              <MessagesSquare className="size-[18px]" />
-            </IconButton>
-          )}
-          <div className="min-w-0 flex-1">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate font-semibold">{title}</span>}</div>
-          {meta && meta.kind !== "task" && <AgentPicker conversationId={conversationId} agentId={meta.agentId} />}
-        </div>
+        <TopBar>
+          {meta && <AgentSwitcher conversationId={conversationId} agentId={meta.agentId} readOnly={meta.kind === "task"} />}
+          <span className="hidden text-border sm:inline">/</span>
+          <div className="hidden min-w-0 flex-1 text-sm text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
+        </TopBar>
       )}
 
       <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto">
@@ -175,7 +144,7 @@ export function ChatView({
             <EmptyState icon="sparkles" title={t("chat.empty")} hint={emptyHint ?? t("chat.emptyHint")} />
           )}
           {conv.messages.map((m) => (
-            <MessageView key={m.id} message={m} agentName={m.agentId ? agentNames.get(m.agentId) : undefined} />
+            <MessageView key={m.id} message={m} agent={m.agentId ? agentById.get(m.agentId) : undefined} />
           ))}
         </div>
         {showDown && (

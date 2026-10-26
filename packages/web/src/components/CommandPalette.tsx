@@ -1,4 +1,4 @@
-// Ctrl/Cmd+K command palette: navigation, quick actions and plugin commands.
+// Ctrl/Cmd+K command palette: settings sections, quick actions and plugin commands.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -10,7 +10,8 @@ import { toast } from "../state/toast";
 import { usePluginRegistry } from "../plugins/slots";
 import { Icon } from "./icon";
 import { cx } from "./ui";
-import { NAV } from "./nav";
+import { SECTIONS } from "./nav";
+import { openPanel } from "../state/panel";
 import { t } from "../i18n";
 
 const open = createStore(false);
@@ -75,7 +76,8 @@ export function CommandPalette() {
       { id: "new-chat", title: t("chat.newChat"), group: actions, icon: "plus", run: async () => navigate(`/chat/${(await createChat()).id}`) },
       { id: "new-task", title: t("tasks.new"), group: actions, icon: "list-todo", run: () => navigate("/tasks?new=1") },
     ];
-    for (const n of NAV) out.push({ id: `nav:${n.path}`, title: t(n.label), group: goTo, run: () => navigate(n.path), icon: undefined });
+    out.push({ id: "settings", title: t("nav.settings"), group: goTo, icon: "settings", run: () => openPanel("home") });
+    for (const n of SECTIONS) out.push({ id: `section:${n.id}`, title: t(n.label), group: goTo, run: () => openPanel(n.id), icon: undefined });
     for (const r of routes)
       if (!r.path.includes(":")) out.push({ id: `route:${r.key}`, title: r.title, group: t("palette.group.plugins"), icon: r.icon, run: () => navigate(r.path.replace(/\/\*$/, "")) });
     for (const c of commands) out.push({ id: `cmd:${c.key}`, title: c.title, group: t("palette.group.command", { plugin: c.pluginId }), icon: "zap", run: c.run });

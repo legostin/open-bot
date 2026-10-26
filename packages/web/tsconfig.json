@@ -17,6 +17,7 @@
     "paths": {
       "@openbot/shared": ["./src/shared-types.ts"],
       "@openbot/shared/i18n": ["../shared/src/i18n.ts"],
+      "@openbot/shared/avatar": ["../shared/src/avatar.ts"],
       "@openbot/ui": ["../ui-sdk/src/index.ts"]
     }
   },

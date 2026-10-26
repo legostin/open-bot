@@ -6,6 +6,8 @@ import { groupParts, inputPreview, prettyJson } from "./parts";
 import { parseMcpConfig } from "./mcp-config";
 import { slugify } from "./format";
 import { mergeClasses } from "./classes";
+import { sectionForPath } from "../components/nav";
+import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, parseAvatar } from "@openbot/shared/avatar";
 
 describe("glob", () => {
   it("matches * and ? case-insensitively", () => {
@@ -120,5 +122,26 @@ describe("mergeClasses", () => {
     expect(mergeClasses(base, "sm:w-40 font-mono")).toBe(`${base} sm:w-40 font-mono`);
     expect(mergeClasses(base, "min-w-0")).toBe(`${base} min-w-0`);
     expect(mergeClasses(base)).toBe(base);
+  });
+});
+
+describe("settings panel sections", () => {
+  it("maps former page URLs to panel sections", () => {
+    expect(sectionForPath("/brains")).toBe("brains");
+    expect(sectionForPath("/mcp-servers/")).toBe("mcp");
+    expect(sectionForPath("/settings")).toBe("settings");
+    expect(sectionForPath("/chat/abc")).toBeUndefined();
+    expect(sectionForPath("/tasks/t1")).toBeUndefined();
+  });
+});
+
+describe("agent avatars", () => {
+  it("derives a stable avatar and validates picked ones", () => {
+    expect(defaultAvatar("researcher")).toEqual(defaultAvatar("researcher"));
+    expect(AVATAR_COLORS).toContain(defaultAvatar("x").color);
+    expect(AVATAR_SHAPES).toContain(defaultAvatar("x").shape);
+    expect(parseAvatar({ color: "pink", shape: "star" })).toEqual({ color: "pink", shape: "star" });
+    expect(parseAvatar({ color: "pink", shape: "blob" })).toBeUndefined();
+    expect(parseAvatar("pink")).toBeUndefined();
   });
 });

@@ -257,6 +257,13 @@ function handleEvent(e: UiEvent): void {
     case "plugins.updated":
       void refreshBootstrap();
       break;
+    case "settings.updated":
+      // The assistant may change settings from chat: keep hub language, default agent etc. current.
+      void refreshBootstrap();
+      break;
+    case "agents.updated":
+      if (agents.get()) void refreshAgents().catch(() => {});
+      break;
   }
   hubEvents.emit(e);
 }

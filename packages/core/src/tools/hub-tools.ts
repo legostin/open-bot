@@ -325,8 +325,8 @@ function validateSettings(p: Record<string, unknown>): string | undefined {
     if (!q || typeof q !== "object" || typeof q.enabled !== "boolean" || !hhmm(q.start) || !hhmm(q.end)) return 'quietHours must be {enabled: boolean, start: "HH:MM", end: "HH:MM"}.';
   }
   if ("digestTimes" in p && (!Array.isArray(p.digestTimes) || !p.digestTimes.every(hhmm))) return 'digestTimes must be a list of "HH:MM".';
-  for (const k of ["notifyRatePerHour", "brainConcurrency"]) {
-    if (k in p && (!Number.isInteger(p[k]) || (p[k] as number) < 1 || (p[k] as number) > 100)) return `${k} must be a whole number from 1 to 100.`;
+  for (const [k, min, max] of [["notifyRatePerHour", 0, 100], ["brainConcurrency", 1, 16]] as const) {
+    if (k in p && (!Number.isInteger(p[k]) || (p[k] as number) < min || (p[k] as number) > max)) return `${k} must be a whole number from ${min} to ${max}.`;
   }
   return undefined;
 }
@@ -343,9 +343,14 @@ function servesSession(hub: Hub, pluginId: string, ctx: ToolCallContext): boolea
   return hub.brains.list().some((b) => b.ref === ref && b.host === `plugin:${pluginId}`);
 }
 
+// Cyrillic → Latin for ids (U+0430..U+044F in order, then U+0451), kept ASCII like packages/web/src/lib/format.ts.
+const CYRILLIC_LATIN = ["a", "b", "v", "g", "d", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "h", "c", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"];
+const TRANSLIT: Record<string, string> = Object.fromEntries([...CYRILLIC_LATIN.map((l, i) => [String.fromCharCode(0x430 + i), l]), [String.fromCharCode(0x451), "e"]]);
+
 function slug(s: string): string {
-  const latin = s
-    .toLowerCase()
+  const latin = [...s.toLowerCase()]
+    .map((c) => TRANSLIT[c] ?? c)
+    .join("")
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")

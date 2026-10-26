@@ -1,38 +1,49 @@
-import type { ComponentType } from "react";
-import { Bell, Bot, Brain, Laptop, ListChecks, MessagesSquare, Puzzle, Server, Settings, Sparkles, type LucideProps } from "lucide-react";
-import { t, type MessageKey } from "../i18n";
+// Everything that is not the conversation itself lives in the settings panel next to the chat.
+// Old page URLs (/brains, /plugins, …) still work: they open the matching panel section over the chat.
 
-export interface NavItem {
+import type { ComponentType } from "react";
+import { Bell, Bot, Brain, Laptop, ListChecks, Puzzle, Server, SlidersHorizontal, Sparkles, type LucideProps } from "lucide-react";
+import type { MessageKey } from "../i18n";
+
+export type CoreSection = "settings" | "agents" | "brains" | "plugins" | "machines" | "mcp" | "skills" | "tasks" | "notifications";
+/** A core section, or "plugin:<route key>" for a page a UI plugin added to the navigation. */
+export type PanelSection = CoreSection | `plugin:${string}`;
+
+export interface SectionDef {
+  id: CoreSection;
+  /** Legacy page URL that opens this section. */
   path: string;
-  /** Catalog key of the label (translated while rendering). */
   label: MessageKey;
+  hint: MessageKey;
   icon: ComponentType<LucideProps>;
-  match?: (p: string) => boolean;
+  group: "assistant" | "activity" | "connections" | "general";
 }
 
-export const NAV: NavItem[] = [
-  { path: "/", label: "nav.chat", icon: MessagesSquare, match: (p) => p === "/" || p.startsWith("/chat") },
-  { path: "/tasks", label: "nav.tasks", icon: ListChecks },
-  { path: "/notifications", label: "nav.notifications", icon: Bell },
-  { path: "/agents", label: "nav.agents", icon: Bot },
-  { path: "/brains", label: "nav.brains", icon: Brain },
-  { path: "/plugins", label: "nav.plugins", icon: Puzzle, match: (p) => p === "/plugins" },
-  { path: "/machines", label: "nav.machines", icon: Laptop },
-  { path: "/mcp-servers", label: "nav.mcp", icon: Server },
-  { path: "/skills", label: "nav.skills", icon: Sparkles },
-  { path: "/settings", label: "nav.settings", icon: Settings },
+export const SECTIONS: SectionDef[] = [
+  { id: "agents", path: "/agents", label: "nav.agents", hint: "panel.hint.agents", icon: Bot, group: "assistant" },
+  { id: "skills", path: "/skills", label: "nav.skills", hint: "panel.hint.skills", icon: Sparkles, group: "assistant" },
+  { id: "tasks", path: "/tasks", label: "nav.tasks", hint: "panel.hint.tasks", icon: ListChecks, group: "activity" },
+  { id: "notifications", path: "/notifications", label: "nav.notifications", hint: "panel.hint.notifications", icon: Bell, group: "activity" },
+  { id: "brains", path: "/brains", label: "nav.brains", hint: "panel.hint.brains", icon: Brain, group: "connections" },
+  { id: "plugins", path: "/plugins", label: "nav.plugins", hint: "panel.hint.plugins", icon: Puzzle, group: "connections" },
+  { id: "machines", path: "/machines", label: "nav.machines", hint: "panel.hint.machines", icon: Laptop, group: "connections" },
+  { id: "mcp", path: "/mcp-servers", label: "nav.mcp", hint: "panel.hint.mcp", icon: Server, group: "connections" },
+  { id: "settings", path: "/settings", label: "nav.general", hint: "panel.hint.settings", icon: SlidersHorizontal, group: "general" },
 ];
 
-/** Shown in the phone bottom bar (plus "More"). */
-export const BOTTOM_NAV = ["/", "/tasks", "/notifications", "/agents"];
+export const GROUPS: Array<{ id: SectionDef["group"]; label: MessageKey }> = [
+  { id: "assistant", label: "panel.group.assistant" },
+  { id: "activity", label: "panel.group.activity" },
+  { id: "connections", label: "panel.group.connections" },
+  { id: "general", label: "panel.group.general" },
+];
 
-export function isActive(item: { path: string; match?: (p: string) => boolean }, loc: string): boolean {
-  return item.match ? item.match(loc) : loc === item.path || loc.startsWith(item.path + "/");
+/** The panel section a legacy page URL stands for, if any. */
+export function sectionForPath(path: string): CoreSection | undefined {
+  const p = path.replace(/\/+$/, "") || "/";
+  return SECTIONS.find((s) => s.path === p)?.id;
 }
 
-export function titleFor(loc: string, pluginRoutes: Array<{ path: string; title: string }>): string {
-  const pr = pluginRoutes.find((r) => r.path === loc || (r.path.endsWith("/*") && (loc === r.path.slice(0, -2) || loc.startsWith(r.path.slice(0, -1)))));
-  if (pr) return pr.title;
-  const item = NAV.find((n) => isActive(n, loc));
-  return item ? t(item.label) : "open-bot";
+export function sectionDef(id: PanelSection): SectionDef | undefined {
+  return SECTIONS.find((s) => s.id === id);
 }

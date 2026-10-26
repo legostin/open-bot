@@ -1,26 +1,19 @@
 import { useEffect } from "react";
-import { Route, Switch, useLocation } from "wouter";
+import { Route, Switch, useLocation, useSearch } from "wouter";
 import { useStore } from "./lib/store";
 import { init, phase, session } from "./state/app";
+import { openPanel } from "./state/panel";
 import { syncUiPlugins, unloadAllUiPlugins } from "./plugins/host";
 import { matchRoute } from "./plugins/registry";
 import { usePluginRegistry } from "./plugins/slots";
 import { PluginBoundary } from "./plugins/boundary";
 import { AuthScreen } from "./pages/Auth";
-import { Layout } from "./components/Layout";
+import { Layout, TopBar } from "./components/Layout";
 import { Toasts } from "./components/Toasts";
 import { Button, EmptyState, Loading } from "./components/ui";
+import { sectionForPath, type PanelSection } from "./components/nav";
 import { ChatPage } from "./pages/chat/ChatPage";
-import { TasksPage } from "./pages/Tasks";
 import { TaskDetailPage } from "./pages/TaskDetail";
-import { AgentsPage } from "./pages/Agents";
-import { BrainsPage } from "./pages/Brains";
-import { PluginsPage } from "./pages/Plugins";
-import { MachinesPage } from "./pages/Machines";
-import { McpPage } from "./pages/Mcp";
-import { NotificationsPage } from "./pages/Notifications";
-import { SkillsPage } from "./pages/Skills";
-import { SettingsPage } from "./pages/Settings";
 import { t } from "./i18n";
 
 export function App() {
@@ -68,36 +61,49 @@ function ReadyApp() {
   );
 }
 
+/** A former page URL: open its panel section over the main chat (keeping the query, e.g. /tasks?new=1). */
+function OpenSection({ section }: { section: PanelSection }) {
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  useEffect(() => {
+    openPanel(section);
+    navigate(search ? `/?${search}` : "/", { replace: true });
+  }, [section, search, navigate]);
+  return <ChatPage />;
+}
+
 function Routes() {
   const [location] = useLocation();
   const { routes } = usePluginRegistry();
   const pluginRoute = matchRoute(routes, location);
   if (pluginRoute) {
+    // Pages plugins put in the navigation open in the settings panel; other plugin routes are full views.
+    const navRoute = routes.find((r) => r.key === pluginRoute.key && r.nav && !r.path.includes(":"));
+    if (navRoute) return <OpenSection section={`plugin:${navRoute.key}`} />;
     const C = pluginRoute.component;
     return (
-      <div className="h-full overflow-y-auto">
-        <PluginBoundary key={pluginRoute.key} pluginId={pluginRoute.pluginId}>
-          <C pluginId={pluginRoute.pluginId} />
-        </PluginBoundary>
-      </div>
+      <>
+        <TopBar>
+          <span className="truncate text-[15px] font-semibold">{routes.find((r) => r.key === pluginRoute.key)?.title}</span>
+        </TopBar>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <PluginBoundary key={pluginRoute.key} pluginId={pluginRoute.pluginId}>
+            <C pluginId={pluginRoute.pluginId} />
+          </PluginBoundary>
+        </div>
+      </>
     );
   }
+  const section = sectionForPath(location);
+  if (section) return <OpenSection section={section} />;
   return (
     <Switch>
       <Route path="/">{() => <ChatPage />}</Route>
       <Route path="/chat/:id">{(params) => <ChatPage conversationId={params.id} />}</Route>
-      <Route path="/tasks">{() => <TasksPage />}</Route>
       <Route path="/tasks/:id">{(params) => <TaskDetailPage id={params.id} />}</Route>
-      <Route path="/agents">{() => <AgentsPage />}</Route>
-      <Route path="/brains">{() => <BrainsPage />}</Route>
-      <Route path="/plugins">{() => <PluginsPage />}</Route>
-      <Route path="/machines">{() => <MachinesPage />}</Route>
-      <Route path="/mcp-servers">{() => <McpPage />}</Route>
-      <Route path="/notifications">{() => <NotificationsPage />}</Route>
-      <Route path="/skills">{() => <SkillsPage />}</Route>
-      <Route path="/settings">{() => <SettingsPage />}</Route>
       <Route>
-        <div className="flex h-full items-center justify-center">
+        <TopBar />
+        <div className="flex min-h-0 flex-1 items-center justify-center">
           <EmptyState icon="compass" title={t("app.notFound")} hint={t("app.notFoundHint")} />
         </div>
       </Route>

@@ -1,11 +1,11 @@
 // First-run checklist on the chat page: brain, vault, Telegram.
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "wouter";
 import { ArrowRight, CircleCheck, CircleDashed, ExternalLink, X } from "lucide-react";
 import { api } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import { hubEvents, session } from "../../state/app";
+import { openPanel } from "../../state/panel";
 import { cx } from "../../components/ui";
 import { t } from "../../i18n";
 
@@ -75,9 +75,9 @@ export function FirstRunChecklist() {
           title={t("checklist.brain")}
           hint={t("checklist.brainHint")}
           action={
-            <Link href="/brains">
+            <button type="button" onClick={() => openPanel("brains")}>
               {t("checklist.brainAction")} <ArrowRight className="inline size-3.5" />
-            </Link>
+            </button>
           }
         />
         <Step
@@ -95,9 +95,9 @@ export function FirstRunChecklist() {
           title={t("checklist.telegram")}
           hint={t("checklist.telegramHint")}
           action={
-            <Link href="/plugins">
+            <button type="button" onClick={() => openPanel("plugins")}>
               {t("nav.plugins")} <ArrowRight className="inline size-3.5" />
-            </Link>
+            </button>
           }
         />
       </ol>
@@ -113,7 +113,7 @@ function Step({ done, title, hint, action }: { done: boolean; title: string; hin
         <div className={cx("text-sm font-medium", done && "line-through")}>{title}</div>
         <div className="text-xs text-muted">{hint}</div>
       </div>
-      {!done && <span className="shrink-0 text-[13px] font-medium text-accent-text [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1">{action}</span>}
+      {!done && <span className="shrink-0 text-[13px] font-medium text-accent-text [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_button]:inline-flex [&_button]:items-center [&_button]:gap-1">{action}</span>}
     </li>
   );
 }

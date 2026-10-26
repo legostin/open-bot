@@ -30,7 +30,10 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), devImportMap()],
   resolve: {
     // The browser-safe part of @openbot/shared, taken from this checkout (not whatever node_modules links to).
-    alias: { "@openbot/shared/i18n": resolve(import.meta.dirname, "../shared/src/i18n.ts") },
+    alias: {
+      "@openbot/shared/i18n": resolve(import.meta.dirname, "../shared/src/i18n.ts"),
+      "@openbot/shared/avatar": resolve(import.meta.dirname, "../shared/src/avatar.ts"),
+    },
   },
   build: {
     outDir: "dist",

@@ -2,14 +2,15 @@
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
 import { memo } from "react";
-import { Bell, Bot, CircleAlert, ExternalLink, FileText, ShieldAlert } from "lucide-react";
-import type { ApprovalStatus, Message, MessagePart } from "@openbot/shared";
+import { Bell, CircleAlert, ExternalLink, FileText, ShieldAlert } from "lucide-react";
+import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@openbot/shared";
 import { groupParts } from "../../lib/parts";
 import { formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import { session } from "../../state/app";
 import { Markdown } from "../../components/markdown";
 import { Badge, cx } from "../../components/ui";
+import { AgentAvatar } from "../../components/AgentAvatar";
 import { PluginBoundary } from "../../plugins/boundary";
 import { pickMessageRenderer, pickToolRenderer } from "../../plugins/registry";
 import { usePluginRegistry } from "../../plugins/slots";
@@ -160,7 +161,8 @@ function Parts({ message }: { message: Message }) {
 }
 
 /** Core rendering of a message (also passed to chat.message overrides as `Default`). */
-export const DefaultMessage = memo(function DefaultMessage({ message, agentName }: { message: Message; agentName?: string }) {
+export const DefaultMessage = memo(function DefaultMessage({ message, agentName, agent }: { message: Message; agentName?: string; agent?: AgentDef }) {
+  const name = agentName ?? agent?.name ?? message.agentId ?? t("message.assistant");
   if (message.role === "user") {
     return (
       <div className="animate-in flex justify-end">
@@ -183,12 +185,10 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName 
   }
   return (
     <div className="animate-in flex gap-2.5">
-      <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text">
-        <Bot className="size-4" />
-      </div>
+      <AgentAvatar avatar={agent?.avatar} id={message.agentId} name={name} size={28} className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-muted">
-          <span className="font-medium text-fg">{agentName ?? message.agentId ?? t("message.assistant")}</span>
+          <span className="font-medium text-fg">{name}</span>
           {message.brainRef && <span className="font-mono">{message.brainRef}</span>}
           <span>{formatTime(message.createdAt)}</span>
         </div>
@@ -204,10 +204,10 @@ function DefaultMessageForPlugins({ message }: { message: Message }) {
   return <DefaultMessage message={message} />;
 }
 
-export function MessageView({ message, agentName }: { message: Message; agentName?: string }) {
+export function MessageView({ message, agent }: { message: Message; agent?: AgentDef }) {
   const { contributions } = usePluginRegistry();
   const override = pickMessageRenderer(contributions, message);
-  const core = <DefaultMessage message={message} agentName={agentName} />;
+  const core = <DefaultMessage message={message} agentName={agent?.name} agent={agent} />;
   if (!override) return core;
   const C = override.component;
   return (

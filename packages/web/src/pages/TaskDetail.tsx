@@ -13,6 +13,7 @@ import { t, tRich } from "../i18n";
 import { Markdown } from "../components/markdown";
 import { Badge, Button, EmptyState, ErrorNote, Loading } from "../components/ui";
 import { ChatView } from "./chat/ChatView";
+import { TopBar } from "../components/Layout";
 
 export function TaskDetailPage({ id }: { id: string }) {
   const [task, setTask] = useState<Task | null>(null);
@@ -126,11 +127,11 @@ export function TaskDetailPage({ id }: { id: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-2 sm:px-4">
+      <TopBar>
         <Link href="/tasks" aria-label={t("task.toTasks")} className="inline-flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-fg">
           <ArrowLeft className="size-[18px]" />
         </Link>
-        <span className="min-w-0 flex-1 truncate font-semibold">{current.title || t("task.untitled")}</span>
+        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{current.title || t("task.untitled")}</span>
         {active && (
           <Button size="sm" variant="danger" icon={<Ban className="size-3.5" />} onClick={() => void act("cancel")} loading={busy === "cancel"}>
             {t("task.cancel")}
@@ -141,7 +142,7 @@ export function TaskDetailPage({ id }: { id: string }) {
             {t("common.retry")}
           </Button>
         )}
-      </div>
+      </TopBar>
       <div className="min-h-0 flex-1">
         <ChatView conversationId={current.conversationId} header={false} top={summary} emptyHint={t("task.notStarted")} />
       </div>

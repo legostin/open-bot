@@ -1,6 +1,6 @@
 // Shared UI primitives. Button, Card, Badge, EmptyState and Spinner are also exposed to UI plugins (@openbot/ui).
 
-import { useEffect, useId, useRef, useState, type ReactNode, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { Check, Copy, Loader2, X } from "lucide-react";
 import type { BadgeProps, ButtonProps, CardProps, EmptyStateProps } from "@openbot/ui";
@@ -334,7 +334,23 @@ export function CodeLine({ children }: { children: string }) {
 
 // ---------- page scaffolding ----------
 
+/** Pages rendered inside the settings panel drop their big title (the panel header shows it) and the wide margins. */
+export const EmbeddedPage = createContext(false);
+
 export function Page({ title, subtitle, actions, children, className }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {
+  const embedded = useContext(EmbeddedPage);
+  if (embedded)
+    return (
+      <div className={cx("px-4 py-4 sm:px-5", className)}>
+        {(subtitle || actions) && (
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            {subtitle ? <p className="min-w-0 flex-1 text-sm text-muted">{subtitle}</p> : <span />}
+            {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+          </div>
+        )}
+        {children}
+      </div>
+    );
   return (
     <div className="h-full overflow-y-auto">
       <div className={cx("mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-8", className)}>

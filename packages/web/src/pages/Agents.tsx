@@ -1,14 +1,16 @@
-// Agents: list, create/edit form, delete.
+// Agents: list, create (name + avatar first) / edit, delete.
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Bot, Pencil, Plus, Trash2, X } from "lucide-react";
-import type { AgentDef } from "@openbot/shared";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import type { AgentAvatar as AgentAvatarValue, AgentDef } from "@openbot/shared";
+import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar } from "@openbot/shared/avatar";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { slugify } from "../lib/format";
 import { agents, refreshAgents } from "../state/app";
 import { toast } from "../state/toast";
 import { t, tRich, type MessageKey } from "../i18n";
+import { AgentAvatar, AVATAR_HEX } from "../components/AgentAvatar";
 import { Badge, Button, cx, EmptyState, ErrorNote, Field, IconButton, Input, Loading, Modal, Page, TagInput, Textarea } from "../components/ui";
 
 const INITIATIVE: Array<{ value: 0 | 1 | 2; title: MessageKey; text: MessageKey }> = [
@@ -48,9 +50,7 @@ export function AgentsPage() {
         {list?.map((a) => (
           <div key={a.id} className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-card">
             <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-text">
-                <Bot className="size-5" />
-              </div>
+              <AgentAvatar avatar={a.avatar} id={a.id} name={a.name} size={40} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{a.name}</span>
@@ -84,7 +84,7 @@ export function AgentsPage() {
         ))}
       </div>
 
-      {editing && <AgentForm agent={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
+      {editing && <AgentEditor agent={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
       <Modal
         open={!!deleting}
         onClose={() => setDeleting(null)}
@@ -194,11 +194,74 @@ function BrainsEditor({ value, onChange, suggestions }: { value: string[]; onCha
   );
 }
 
-function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }) {
+/** Colour swatches and shape tiles; the big preview shows the result with the agent's initial. */
+export function AvatarPicker({ value, onChange, name }: { value: AgentAvatarValue; onChange: (v: AgentAvatarValue) => void; name: string }) {
+  return (
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+      <div className="flex size-32 shrink-0 items-center justify-center rounded-3xl bg-surface-2/70">
+        <AgentAvatar avatar={value} name={name || "?"} size={96} />
+      </div>
+      <div className="flex w-full min-w-0 flex-col gap-4">
+        <div>
+          <div className="mb-2 text-sm font-medium">{t("agents.avatarColor")}</div>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t("agents.avatarColor")}>
+            {AVATAR_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={value.color === c}
+                aria-label={t(`avatar.color.${c}` as MessageKey)}
+                title={t(`avatar.color.${c}` as MessageKey)}
+                onClick={() => onChange({ ...value, color: c })}
+                className={cx("size-8 rounded-full transition", value.color === c ? "ring-2 ring-fg ring-offset-2 ring-offset-surface" : "hover:scale-110")}
+                style={{ background: AVATAR_HEX[c] }}
+              />
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="mb-2 text-sm font-medium">{t("agents.avatarShape")}</div>
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t("agents.avatarShape")}>
+            {AVATAR_SHAPES.map((sh) => (
+              <button
+                key={sh}
+                type="button"
+                role="radio"
+                aria-checked={value.shape === sh}
+                aria-label={t(`avatar.shape.${sh}` as MessageKey)}
+                title={t(`avatar.shape.${sh}` as MessageKey)}
+                onClick={() => onChange({ ...value, shape: sh })}
+                className={cx(
+                  "flex size-11 items-center justify-center rounded-xl border transition",
+                  value.shape === sh ? "border-accent bg-accent-soft/60 ring-2 ring-accent/20" : "border-border hover:bg-surface-2",
+                )}
+              >
+                <AgentAvatar avatar={{ color: value.color, shape: sh }} size={28} initial={false} />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function randomAvatar(): AgentAvatarValue {
+  return { color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)], shape: AVATAR_SHAPES[Math.floor(Math.random() * AVATAR_SHAPES.length)] };
+}
+
+/**
+ * Create or edit an agent. Creating starts with who the agent is (name + avatar), then what it does;
+ * the technical knobs sit under "More settings".
+ */
+export function AgentEditor({ agent, onClose, onSaved }: { agent?: AgentDef; onClose: () => void; onSaved?: (a: AgentDef) => void }) {
   const isNew = !agent;
+  const [step, setStep] = useState<0 | 1>(isNew ? 0 : 1);
   const [id, setId] = useState(agent?.id ?? "");
   const [idTouched, setIdTouched] = useState(false);
   const [name, setName] = useState(agent?.name ?? "");
+  const [avatar, setAvatar] = useState<AgentAvatarValue>(() => agent?.avatar ?? (agent ? defaultAvatar(agent.id) : randomAvatar()));
   const [description, setDescription] = useState(agent?.description ?? "");
   const [brains, setBrains] = useState<string[]>(agent?.brains ?? ["claude-code@local", "codex@local", "api:anthropic"]);
   const [model, setModel] = useState(agent?.model ?? "");
@@ -208,6 +271,7 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
   const [policyProfile, setPolicyProfile] = useState(agent?.policyProfile ?? "default");
   const [runs, setRuns] = useState(String(agent?.budget.backgroundRunsPerDay ?? 30));
   const [prompt, setPrompt] = useState(agent?.prompt ?? "");
+  const [more, setMore] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -221,17 +285,33 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
 
   const effectiveId = isNew ? (idTouched ? id : slugify(name)) : agent.id;
 
+  const next = () => {
+    setError(undefined);
+    if (!name.trim()) return setError(t("agents.errorName"));
+    setStep(1);
+  };
+
   const save = async () => {
     setError(undefined);
     if (!name.trim()) return setError(t("agents.errorName"));
-    if (!/^[a-z0-9_-]{1,40}$/.test(effectiveId)) return setError(t("agents.errorId"));
+    if (!/^[a-z0-9_-]{1,40}$/.test(effectiveId)) {
+      setMore(true);
+      return setError(t("agents.errorId"));
+    }
     const n = Number(runs);
-    if (!Number.isInteger(n) || n < 0) return setError(t("agents.errorRuns"));
-    if (isNew && currentAgents().some((a) => a.id === effectiveId)) return setError(t("agents.errorExists", { id: effectiveId }));
+    if (!Number.isInteger(n) || n < 0) {
+      setMore(true);
+      return setError(t("agents.errorRuns"));
+    }
+    if (isNew && currentAgents().some((a) => a.id === effectiveId)) {
+      setMore(true);
+      return setError(t("agents.errorExists", { id: effectiveId }));
+    }
     setBusy(true);
     try {
-      await api.put(`/api/agents/${encodeURIComponent(effectiveId)}`, {
+      const saved = await api.put<AgentDef>(`/api/agents/${encodeURIComponent(effectiveId)}`, {
         name: name.trim(),
+        avatar,
         description: description.trim(),
         brains,
         model: model.trim() || undefined,
@@ -243,7 +323,8 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
         prompt,
       });
       toast(isNew ? t("agents.created") : t("agents.saved"), "success");
-      await refreshAgents();
+      const list = await refreshAgents();
+      onSaved?.(list.find((a) => a.id === effectiveId) ?? saved);
       onClose();
     } catch (e) {
       setError(errorText(e));
@@ -252,89 +333,160 @@ function AgentForm({ agent, onClose }: { agent?: AgentDef; onClose: () => void }
     }
   };
 
+  const identity = (
+    <div className="flex flex-col gap-5">
+      <Field label={t("agents.name")}>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={t("agents.namePlaceholder")}
+          autoFocus={isNew}
+          maxLength={60}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && isNew && step === 0) {
+              e.preventDefault();
+              next();
+            }
+          }}
+        />
+      </Field>
+      <AvatarPicker value={avatar} onChange={setAvatar} name={name} />
+    </div>
+  );
+
+  const details = (
+    <div className="flex flex-col gap-5">
+      {isNew ? (
+        <div className="flex items-center gap-3 rounded-2xl bg-surface-2/60 px-3 py-2.5">
+          <AgentAvatar avatar={avatar} name={name} size={40} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-semibold">{name}</div>
+            <button type="button" onClick={() => setStep(0)} className="text-xs text-accent-text hover:underline">
+              {t("agents.changeLook")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        identity
+      )}
+      <Field label={t("agents.description")} hint={t("agents.descriptionHint")}>
+        <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+      </Field>
+      <Field label={t("agents.prompt")} hint={t("agents.promptHint")}>
+        <Textarea rows={6} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="text-[14px]" placeholder={t("agents.promptPlaceholder")} />
+      </Field>
+      <Field group label={t("agents.initiative")}>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {INITIATIVE.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => setInitiative(o.value)}
+              aria-pressed={initiative === o.value}
+              className={cx(
+                "rounded-xl border p-3 text-left transition",
+                initiative === o.value ? "border-accent bg-accent-soft/60 ring-2 ring-accent/20" : "border-border hover:bg-surface-2",
+              )}
+            >
+              <div className="text-sm font-semibold">
+                {o.value} · {t(o.title)}
+              </div>
+              <div className="mt-1 text-xs leading-relaxed text-muted">{t(o.text)}</div>
+            </button>
+          ))}
+        </div>
+      </Field>
+      <div className="rounded-2xl border border-border">
+        <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium">
+          {more ? <ChevronDown className="size-4 text-muted" /> : <ChevronRight className="size-4 text-muted" />}
+          {t("agents.more")}
+          <span className="min-w-0 flex-1 truncate text-right text-xs font-normal text-muted">{t("agents.moreHint")}</span>
+        </button>
+        {more && (
+          <div className="flex flex-col gap-5 border-t border-border p-3">
+            <Field label={t("agents.id")} hint={isNew ? t("agents.idHint") : t("agents.idFixed")}>
+              <Input
+                value={effectiveId}
+                disabled={!isNew}
+                onChange={(e) => {
+                  setIdTouched(true);
+                  setId(e.target.value.toLowerCase());
+                }}
+                className="font-mono"
+              />
+            </Field>
+            <Field group label={t("agents.brains")} hint={t("agents.brainsHint")}>
+              <BrainsEditor value={brains} onChange={setBrains} suggestions={suggestions} />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("agents.model")} hint={t("agents.modelHint")}>
+                <Input value={model} onChange={(e) => setModel(e.target.value)} className="font-mono" />
+              </Field>
+              <Field label={t("agents.policy")}>
+                <Input value={policyProfile} onChange={(e) => setPolicyProfile(e.target.value)} className="font-mono" />
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field group label={t("agents.tools")} hint={t("agents.toolsHint")}>
+                <TagInput value={tools} onChange={setTools} placeholder="*" />
+              </Field>
+              <Field group label={t("agents.skills")} hint={t("agents.skillsHint")}>
+                <TagInput value={skills} onChange={setSkills} placeholder="*" />
+              </Field>
+            </div>
+            <Field label={t("agents.runs")} hint={t("agents.runsHint")}>
+              <Input type="number" min={0} value={runs} onChange={(e) => setRuns(e.target.value)} className="sm:w-40" />
+            </Field>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const footer =
+    isNew && step === 0 ? (
+      <>
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="primary" onClick={next} disabled={!name.trim()} icon={<ArrowRight className="size-4" />}>
+          {t("agents.next")}
+        </Button>
+      </>
+    ) : (
+      <>
+        {isNew ? (
+          <Button onClick={() => setStep(0)} icon={<ArrowLeft className="size-4" />}>
+            {t("common.back")}
+          </Button>
+        ) : (
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
+        )}
+        <Button variant="primary" onClick={() => void save()} loading={busy}>
+          {isNew ? t("agents.create") : t("common.save")}
+        </Button>
+      </>
+    );
+
   return (
     <Modal
       open
-      wide
+      wide={step === 1}
       onClose={onClose}
-      title={isNew ? t("agents.new") : t("agents.editTitle", { name: agent.name })}
-      footer={
-        <>
-          <Button onClick={onClose}>{t("common.cancel")}</Button>
-          <Button variant="primary" onClick={() => void save()} loading={busy}>
-            {t("common.save")}
-          </Button>
-        </>
-      }
+      title={isNew ? (step === 0 ? t("agents.stepIdentity") : t("agents.stepRole")) : t("agents.editTitle", { name: agent.name })}
+      footer={footer}
     >
-      <div className="flex flex-col gap-5">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("agents.name")}>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("agents.namePlaceholder")} autoFocus={isNew} />
-          </Field>
-          <Field label={t("agents.id")} hint={isNew ? t("agents.idHint") : t("agents.idFixed")}>
-            <Input
-              value={effectiveId}
-              disabled={!isNew}
-              onChange={(e) => {
-                setIdTouched(true);
-                setId(e.target.value.toLowerCase());
-              }}
-              className="font-mono"
-            />
-          </Field>
+      {isNew && (
+        <div className="mb-4 flex items-center gap-2 text-xs text-muted">
+          <span className={cx("h-1 flex-1 rounded-full", "bg-accent")} />
+          <span className={cx("h-1 flex-1 rounded-full", step === 1 ? "bg-accent" : "bg-surface-2")} />
+          <span className="shrink-0">{t("agents.stepOf", { step: step + 1, total: 2 })}</span>
         </div>
-        <Field label={t("agents.description")} hint={t("agents.descriptionHint")}>
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-        </Field>
-        <Field group label={t("agents.brains")} hint={t("agents.brainsHint")}>
-          <BrainsEditor value={brains} onChange={setBrains} suggestions={suggestions} />
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("agents.model")} hint={t("agents.modelHint")}>
-            <Input value={model} onChange={(e) => setModel(e.target.value)} className="font-mono" />
-          </Field>
-          <Field label={t("agents.policy")}>
-            <Input value={policyProfile} onChange={(e) => setPolicyProfile(e.target.value)} className="font-mono" />
-          </Field>
+      )}
+      {isNew && step === 0 ? identity : details}
+      {error && (
+        <div className="mt-4">
+          <ErrorNote>{error}</ErrorNote>
         </div>
-        <Field group label={t("agents.initiative")}>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {INITIATIVE.map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                onClick={() => setInitiative(o.value)}
-                aria-pressed={initiative === o.value}
-                className={cx(
-                  "rounded-xl border p-3 text-left transition",
-                  initiative === o.value ? "border-accent bg-accent-soft/60 ring-2 ring-accent/20" : "border-border hover:bg-surface-2",
-                )}
-              >
-                <div className="text-sm font-semibold">
-                  {o.value} · {t(o.title)}
-                </div>
-                <div className="mt-1 text-xs leading-relaxed text-muted">{t(o.text)}</div>
-              </button>
-            ))}
-          </div>
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field group label={t("agents.tools")} hint={t("agents.toolsHint")}>
-            <TagInput value={tools} onChange={setTools} placeholder="*" />
-          </Field>
-          <Field group label={t("agents.skills")} hint={t("agents.skillsHint")}>
-            <TagInput value={skills} onChange={setSkills} placeholder="*" />
-          </Field>
-        </div>
-        <Field label={t("agents.runs")} hint={t("agents.runsHint")}>
-          <Input type="number" min={0} value={runs} onChange={(e) => setRuns(e.target.value)} className="sm:w-40" />
-        </Field>
-        <Field label={t("agents.prompt")} hint={t("agents.promptHint")}>
-          <Textarea rows={8} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="font-mono text-[13px]" placeholder={t("agents.promptPlaceholder")} />
-        </Field>
-        {error && <ErrorNote>{error}</ErrorNote>}
-      </div>
+      )}
     </Modal>
   );
 }

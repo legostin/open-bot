@@ -1,12 +1,12 @@
 // Core settings (GET/PATCH /api/settings) plus settings sections contributed by UI plugins.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, LogOut, Save } from "lucide-react";
 import type { Locale } from "@openbot/shared";
 import { LOCALE_NAMES } from "@openbot/shared/i18n";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
-import { agents, ensureAgents, logout, refreshBootstrap, session } from "../state/app";
+import { agents, ensureAgents, hubEvents, logout, refreshBootstrap, session } from "../state/app";
 import { toast } from "../state/toast";
 import { explicitLocale, locale, LOCALES, t, type MessageKey } from "../i18n";
 import { usePluginRegistry } from "../plugins/slots";
@@ -64,9 +64,15 @@ export function SettingsPage() {
       setError(errorText(e));
     }
   };
+  // The assistant can change settings from chat: pick that up unless the user is in the middle of editing.
+  const dirty = useRef(false);
+  dirty.current = !!form && !!orig && changedKeys(orig as unknown as Record<string, unknown>, form as unknown as Record<string, unknown>).length > 0;
   useEffect(() => {
     void load();
     ensureAgents();
+    return hubEvents.on((e) => {
+      if (e.type === "settings.updated" && !dirty.current) void load();
+    });
   }, []);
 
   const zones = useMemo(() => {
