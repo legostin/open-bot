@@ -154,6 +154,17 @@ describe("hub (integration)", () => {
     expect((await consoleClient.req("GET", "/console-api/audit/verify")).ok).toBe(true);
   });
 
+  it("lets the security console grant a plugin extra vault items", async () => {
+    const r = await consoleClient.req("PUT", "/console-api/plugins/fakebrain/vault", { items: ["vault://my_key", "my_key", "other"] });
+    expect(r.extraVault).toEqual(["my_key", "other"]);
+    const list: any[] = await consoleClient.req("GET", "/console-api/plugins");
+    expect(list.find((p) => p.id === "fakebrain").extraVault).toEqual(["my_key", "other"]);
+    await expect(consoleClient.req("PUT", "/console-api/plugins/fakebrain/vault", { items: ["../x"] })).rejects.toThrow(/400/);
+    // The main UI origin cannot do this.
+    await expect(web.req("PUT", "/console-api/plugins/fakebrain/vault", { items: ["x"] })).rejects.toThrow();
+    await consoleClient.req("PUT", "/console-api/plugins/fakebrain/vault", { items: [] });
+  });
+
   it("falls back to the next brain when a subscription limit is hit", async () => {
     await web.req("POST", `/api/conversations/${conv}/messages`, { text: "LIMIT please" });
     const m = await lastReply(conv, /fake2 heard/);

@@ -32,6 +32,8 @@ const MIGRATIONS: string[] = [
   create table brain_limits(brain_ref text primary key, until text not null, detail text);
   create table usage(day text not null, agent_id text not null, kind text not null, count integer not null default 0, tokens integer not null default 0, primary key(day, agent_id, kind));
   `,
+  // Vault items the user granted a plugin beyond its manifest (security console only).
+  `alter table plugins add column extra_vault text not null default '[]';`,
 ];
 
 export function openDb(file: string): Db {

@@ -23,6 +23,8 @@ export interface PluginRecord {
   source: "builtin" | "installed";
   enabled: boolean;
   granted: PluginPermissions;
+  /** Vault items granted by the user in the security console, on top of the manifest. */
+  extraVault: string[];
   commitHash?: string;
   settings: Record<string, unknown>;
   layout?: PluginLayout;
@@ -137,6 +139,7 @@ export class PluginHost {
         source,
         enabled: !!r.enabled,
         granted: json<PluginPermissions>(r.granted, layout.manifest.permissions),
+        extraVault: json<string[]>(r.extra_vault, []),
         commitHash: r.commit_hash ?? undefined,
         settings: json(r.settings, {}),
         layout,
@@ -419,7 +422,7 @@ export class PluginHost {
     peer.handle("vault.get", (p: { ref: string; domain?: string; reason?: string }) => {
       const itemId = p.ref.replace(/^vault:\/\//, "");
       const meta = this.d.vault.getMeta(itemId);
-      const allowed = rec.granted.vault.some((g) => g === itemId || g === "*" || (meta && g === `${meta.type}:*`));
+      const allowed = [...rec.granted.vault, ...rec.extraVault].some((g) => g === itemId || g === "*" || (meta && g === `${meta.type}:*`));
       if (!allowed) deny(`vault item ${itemId} not in permissions.vault`);
       return this.d.vault.access(p.ref, { actor: `plugin:${id}`, pluginId: id, domain: p.domain });
     });
@@ -493,6 +496,17 @@ export class PluginHost {
     const r = this.running.get(id);
     if (r && !r.peer.closed) r.peer.notify("settings.changed", { settings });
     this.d.audit.append("user", "plugin.settings", id);
+  }
+
+  /** Grant a plugin extra vault items (e.g. the key a setting like customKeyRef points to). Takes effect on the next vault.get. */
+  setExtraVault(id: string, items: string[]): void {
+    const rec = this.records.get(id);
+    if (!rec) throw new Error(`unknown plugin ${id}`);
+    const clean = [...new Set(items.map((s) => String(s).replace(/^vault:\/\//, "").trim()).filter(Boolean))];
+    for (const it of clean) if (!/^[\w.:*-]{1,128}$/.test(it)) throw new Error(`invalid vault item ${it}`);
+    rec.extraVault = clean;
+    this.d.db.prepare("update plugins set extra_vault = ? where id = ?").run(JSON.stringify(clean), id);
+    this.d.audit.append("user", "plugin.vault", id, { items: clean });
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<void> {
