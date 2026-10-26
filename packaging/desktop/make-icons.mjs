@@ -1,6 +1,8 @@
-// Renders the web UI's favicon into the desktop icons: packaging/assets/owlbot.ico (Windows, PNG entries), owlbot.icns
-// (macOS) and png/ (the Tauri bundle icons). Run by hand when the logo changes; the outputs are committed so builds
-// need no browser.
+// Renders the 0_0 mark into the desktop icons. Run by hand when the logo changes; the outputs are committed so builds
+// need no browser:
+//   packages/web/public/favicon.svg (the mark)  -> packaging/assets/owlbot.ico (Windows, PNG entries), png/ (Tauri)
+//   packaging/assets/app-icon.svg (Apple grid)  -> packaging/assets/owlbot.icns (macOS)
+//   packaging/assets/tray.svg (the glyph)       -> packaging/assets/png/tray.png (the macOS menu bar, a template image)
 //   node packaging/desktop/make-icons.mjs
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -8,18 +10,26 @@ import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 
 const ROOT = resolve(import.meta.dirname, "..", "..");
-const svg = readFileSync(join(ROOT, "packages", "web", "public", "favicon.svg"), "utf8");
 const out = join(ROOT, "packaging", "assets");
 mkdirSync(out, { recursive: true });
+const sizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
-const png = {};
-for (const size of [16, 24, 32, 48, 64, 128, 256, 512, 1024]) {
-  await page.setViewportSize({ width: size, height: size });
-  await page.setContent(`<html><body style="margin:0;background:transparent">${svg.replace("<svg ", `<svg width="${size}" height="${size}" `)}</body></html>`);
-  png[size] = await page.screenshot({ omitBackground: true, clip: { x: 0, y: 0, width: size, height: size } });
+/** `{ size: PNG }` of an SVG file, on a transparent background. */
+async function render(file, list) {
+  const svg = readFileSync(file, "utf8");
+  const shots = {};
+  for (const size of list) {
+    await page.setViewportSize({ width: size, height: size });
+    await page.setContent(`<html><body style="margin:0;background:transparent">${svg.replace("<svg ", `<svg width="${size}" height="${size}" `)}</body></html>`);
+    shots[size] = await page.screenshot({ omitBackground: true, clip: { x: 0, y: 0, width: size, height: size } });
+  }
+  return shots;
 }
+const png = await render(join(ROOT, "packages", "web", "public", "favicon.svg"), sizes);
+const appIcon = await render(join(out, "app-icon.svg"), sizes);
+const tray = await render(join(out, "tray.svg"), [44]);
 await browser.close();
 
 // ICO: header, one directory entry per size, then the PNG images.
@@ -46,8 +56,8 @@ const icnsTypes = [["icp4", 16], ["icp5", 32], ["icp6", 64], ["ic07", 128], ["ic
 const chunks = icnsTypes.map(([type, s]) => {
   const head = Buffer.alloc(8);
   head.write(type, 0, "ascii");
-  head.writeUInt32BE(png[s].length + 8, 4);
-  return Buffer.concat([head, png[s]]);
+  head.writeUInt32BE(appIcon[s].length + 8, 4);
+  return Buffer.concat([head, appIcon[s]]);
 });
 const icnsHead = Buffer.alloc(8);
 icnsHead.write("icns", 0, "ascii");
@@ -56,4 +66,5 @@ writeFileSync(join(out, "owlbot.icns"), Buffer.concat([icnsHead, ...chunks]));
 // PNGs for the Tauri bundle (tauri.conf.json "bundle.icon"; the tray uses the app icon).
 mkdirSync(join(out, "png"), { recursive: true });
 for (const [file, size] of [["32x32.png", 32], ["128x128.png", 128], ["128x128@2x.png", 256], ["icon.png", 512]]) writeFileSync(join(out, "png", file), png[size]);
+writeFileSync(join(out, "png", "tray.png"), tray[44]);
 console.log(`icons written to ${out}`);

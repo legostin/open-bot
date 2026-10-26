@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
+  <!-- The 0_0 glyph alone for the macOS menu bar: a template image, so the system tints it for light and dark. -->
+  <rect x="5" y="9" width="13" height="21" rx="6.5" fill="none" stroke="#000" stroke-width="4"/>
+  <rect x="26" y="9" width="13" height="21" rx="6.5" fill="none" stroke="#000" stroke-width="4"/>
+  <rect x="17" y="31.5" width="10" height="4" rx="1.3" fill="#000"/>
+</svg>

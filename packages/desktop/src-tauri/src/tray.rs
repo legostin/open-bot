@@ -49,6 +49,12 @@ pub fn build(app: &AppHandle, flavor: &Flavor, autostart: bool) -> tauri::Result
         }
       }
     });
+  // macOS: the 0_0 glyph as a template image, which the menu bar tints for light and dark; elsewhere the app icon.
+  #[cfg(target_os = "macos")]
+  {
+    builder = builder.icon(tauri::image::Image::from_bytes(include_bytes!("../../../../packaging/assets/png/tray.png"))?).icon_as_template(true);
+  }
+  #[cfg(not(target_os = "macos"))]
   if let Some(icon) = app.default_window_icon() {
     builder = builder.icon(icon.clone());
   }

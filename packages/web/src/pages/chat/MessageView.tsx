@@ -216,7 +216,7 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName,
   if (message.role === "user") {
     return (
       <div className="animate-in flex justify-end">
-        <div className="max-w-[88%] rounded-2xl rounded-br-md bg-user-bubble px-3.5 py-2 text-[15px] leading-relaxed sm:max-w-[75%]">
+        <div className="max-w-[88%] rounded-2xl rounded-br-md bg-user-bubble px-3.5 py-2 text-user-bubble-fg text-[15px] leading-relaxed sm:max-w-[75%]">
           <Parts message={message} />
           <div className="mt-0.5 text-right text-[11px] text-muted">
             {message.channel && message.channel !== "web" ? `${message.channel} · ` : ""}

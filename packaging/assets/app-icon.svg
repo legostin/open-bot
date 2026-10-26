@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The 0_0 mark on Apple's icon grid (824 of 1024, radius 185), so it sits like other Dock icons. -->
+  <g transform="translate(6.25 6.25) scale(0.8047)">
+    <rect width="64" height="64" rx="14.4" fill="#000"/>
+    <rect x="11.5" y="17" width="15" height="24" rx="7.5" fill="none" stroke="#fff" stroke-width="4.5"/>
+    <rect x="37.5" y="17" width="15" height="24" rx="7.5" fill="none" stroke="#fff" stroke-width="4.5"/>
+    <rect x="26" y="42.5" width="12" height="4.5" rx="1.5" fill="#fff"/>
+  </g>
+</svg>
