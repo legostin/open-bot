@@ -5,16 +5,10 @@ import { join } from "node:path";
 import type { CoreMethod } from "@owlbot/shared";
 import { parseBrainRef } from "@owlbot/shared";
 import type { Hub } from "./app.ts";
+import { safeFileName } from "./attachments.ts";
 
 /** Largest file a plugin may hand to a workspace. */
 const MAX_DELIVER_BYTES = 1024 * 1024 * 1024;
-
-/** Plain file name: no path separators, control characters or leading dots. */
-export function safeFileName(name: string): string {
-  const base = String(name ?? "").split(/[\\/]/).pop() ?? "";
-  const clean = base.replace(/[\u0000-\u001f<>:"|?*]/g, "_").replace(/^[.\s]+/, "").trim().slice(0, 150);
-  return clean || "file";
-}
 
 export function createCoreCall(hub: Hub) {
   return async (pluginId: string, method: CoreMethod, p: any): Promise<unknown> => {
