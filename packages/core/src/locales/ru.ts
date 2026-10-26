@@ -89,6 +89,7 @@ export default {
   "brainLogin.installFailed": "Не удалось установить {name}: {detail}",
   "chat.noSuitableBrains": "нет подходящих мозгов",
   "chat.allLimited": "Все доступные мозги упёрлись в лимиты подписки. Продолжу после {time}.",
+  "chat.needsBrain": "Пока не работает ни один мозг: подключите его в карточке в чате, и я отвечу на сообщение.",
   "chat.cannotStart": "Не могу запустить агента «{agent}»: {reason}. Настройте мозг в разделе «Мозги» (Claude Code, Codex или API-ключ).",
   "chat.turnFailed": "не удалось выполнить ход",
   "chat.tryingOtherBrain": "{ref}: {error} — пробую другой мозг…",

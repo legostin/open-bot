@@ -46,6 +46,11 @@ export interface RunnerDeps {
   claudePluginDirs: () => string[];
   machineName: (machineId: string) => string | undefined;
   secrets: SecretIntake;
+  /** First-run setup (set by the hub): keeps messages written while no brain works and adds the prompt section. */
+  setup?: {
+    hold(conversationId: string, agentId: string, prompt: string, opts: { replyChannel?: string; quote?: string }): void;
+    promptBlock(agentId: string): Promise<string | undefined>;
+  };
 }
 
 /** What the web UI passes as the channel of a typed message (not a registered channel). */
@@ -204,6 +209,13 @@ export class SessionRunner {
     if (!conv) return;
     this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete" });
     void this.enqueue(conv.id, () => this.runTurn(conv, note, {}));
+  }
+
+  /** Messages kept while no brain worked: the agent answers them now. */
+  resume(conversationId: string, prompt: string, opts: { replyChannel?: string; quote?: string }): void {
+    const conv = this.d.store.getConversation(conversationId);
+    if (!conv) return;
+    void this.enqueue(conv.id, () => this.runTurn(conv, prompt, opts));
   }
 
   private updateSecretPart(r: SecretRequest): void {
@@ -462,15 +474,18 @@ export class SessionRunner {
 
   /** Brains of the agent in preference order that are connected, not rate-limited and not saturated. */
   /** Brains to try, in order; `reasons` explain the skipped ones and `hard` counts skips that waiting won't fix. */
-  private async candidates(agent: AgentDef, preferred?: string): Promise<{ usable: string[]; earliestReset?: string; reasons: string[]; hard: number }> {
+  private async candidates(agent: AgentDef, preferred?: string): Promise<{ usable: string[]; earliestReset?: string; reasons: string[]; hard: number; setupOnly: boolean }> {
     const ordered = preferred ? [preferred, ...agent.brains.filter((b) => formatBrainRef(parseBrainRef(b)) !== formatBrainRef(parseBrainRef(preferred)))] : agent.brains;
     const usable: string[] = [];
     const reasons: string[] = [];
     let hard = 0;
+    // Skips that setting up fixes (not connected, not installed, not signed in), as opposed to limits and load.
+    let setup = 0;
     let earliestReset: string | undefined;
     const conc = this.d.settings.get().brainConcurrency;
     for (const ref of ordered) {
       if (!this.d.brains.has(ref)) {
+        setup++;
         reasons.push(t("brain.reason.notConnected", { ref }));
         continue;
       }
@@ -487,12 +502,21 @@ export class SessionRunner {
       const p = await this.d.brains.probe(ref);
       if (!p.available || !p.authenticated) {
         hard++;
+        setup++;
         reasons.push(p.detail ? t("brain.reason.detail", { ref, detail: p.detail }) : t(p.available ? "brain.reason.notSignedIn" : "brain.reason.unavailable", { ref }));
         continue;
       }
       usable.push(ref);
     }
-    return { usable, earliestReset, reasons, hard };
+    return { usable, earliestReset, reasons, hard, setupOnly: ordered.length > 0 && setup === ordered.length };
+  }
+
+  /** One setup card per wait: none while the last one still has no answer after it. */
+  private addSetupCard(conversationId: string): void {
+    const recent = this.d.store.listMessages(conversationId, { limit: 10 });
+    const card = recent.findLastIndex((m) => m.parts.some((p) => p.type === "brain_setup"));
+    if (card >= 0 && card > recent.findLastIndex((m) => m.role === "assistant")) return;
+    this.d.store.addMessage({ conversationId, role: "system", parts: [{ type: "brain_setup" }], status: "complete" });
   }
 
   /** A moment in the hub's language and time zone, for messages people read. */
@@ -545,6 +569,7 @@ export class SessionRunner {
       nativeSkills: !!skillsDir,
       appended,
       machineName: local ? undefined : this.d.machineName(ref.machineId),
+      setup: background || task ? undefined : await this.d.setup?.promptBlock(agent.id),
     });
 
     const env: Record<string, string> = {};
@@ -631,9 +656,15 @@ export class SessionRunner {
     let earliestReset: string | undefined;
 
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons, hard } = await this.candidates(agent, prior?.brainRef);
+      const { usable, earliestReset: reset, reasons, hard, setupOnly } = await this.candidates(agent, prior?.brainRef);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
+      // No brain of the agent is set up yet: the setup card instead of an error, and the message waits for a brain.
+      if (!ref && setupOnly && !tried.size && !task && this.d.setup) {
+        this.d.setup.hold(conv.id, agent.id, prompt, { replyChannel: opts.replyChannel, quote: opts.quote });
+        this.addSetupCard(conv.id);
+        return { text: "", error: t("chat.needsBrain"), awaitingApproval: false };
+      }
       if (!ref) {
         const why = reasons.length ? reasons.join("; ") : lastError || t("chat.noSuitableBrains");
         const allLimited = earliestReset && usable.length === 0 && hard === 0;

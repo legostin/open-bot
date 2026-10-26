@@ -364,6 +364,17 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       return hub.brainLogins.view(ref);
     });
 
+    // ----- first-run setup: the setup card in the chat -----
+    const setupAgent = (req: FastifyRequest) => {
+      const id = String((req.query as any)?.agent ?? (req.body as any)?.agent ?? "");
+      return hub.agents.get(id) ? id : undefined;
+    };
+    api.get("/api/setup", async (req) => hub.setup.state(setupAgent(req)));
+    api.post("/api/setup/refresh", async (req) => {
+      await hub.refreshBrains();
+      return hub.setup.state(setupAgent(req));
+    });
+
     // ----- plugins -----
     const pluginView = (r: ReturnType<typeof hub.plugins.list>[number], locale: Locale) => ({
       id: r.id,

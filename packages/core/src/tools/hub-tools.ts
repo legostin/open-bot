@@ -16,6 +16,7 @@ import type { Hub } from "../app.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { hubLocale } from "../i18n.ts";
+import { isSetupStep, SETUP_STEPS } from "../setup.ts";
 
 export const HUB_TOOL_PREFIX = "hub_";
 
@@ -479,6 +480,45 @@ export function registerHubTools(hub: Hub): void {
         `A sign-in card for ${ref} is shown in the chat: ${what}. Do not repeat the link or the code; tell the user in a sentence what to do. ` +
           "You will get a system note once the brain is signed in.",
       );
+    },
+  );
+
+  // ---------- first-run setup (the "Hub setup" section of the default agent's prompt) ----------
+
+  reg(
+    {
+      name: "setup_status",
+      effect: "read",
+      description:
+        "What is left of the hub's first-run setup: the steps done, skipped and remaining (telegram, backupBrain, machines, profile), " +
+        "the brains with their sign-in state, whether the vault exists and Telegram is connected. Check it before suggesting the next setup step.",
+      inputSchema: obj({}),
+    },
+    async () => {
+      const s = await hub.setup.state();
+      return json({ ...s, brains: s.brains.map(({ ref, label, kind, installed, signedIn }) => ({ ref, label, kind, installed, signedIn })) });
+    },
+  );
+
+  reg(
+    {
+      name: "setup_update",
+      effect: "local-write",
+      description:
+        'Record a first-run setup step: "done" when you finished it with the user (needed for profile; the others are detected), ' +
+        '"skipped" when the user says not now (you will not be asked to offer it again), "todo" when they want a skipped step back.',
+      inputSchema: obj(
+        {
+          step: { type: "string", enum: [...SETUP_STEPS] },
+          status: { type: "string", enum: ["done", "skipped", "todo"] },
+        },
+        ["step", "status"],
+      ),
+    },
+    async (i) => {
+      if (!isSetupStep(i.step) || !["done", "skipped", "todo"].includes(String(i.status))) return text(`step must be one of ${SETUP_STEPS.join(", ")}; status done, skipped or todo.`, true);
+      hub.setup.setStep(i.step, i.status as "done" | "skipped" | "todo");
+      return json({ remaining: (await hub.setup.state()).remaining });
     },
   );
 

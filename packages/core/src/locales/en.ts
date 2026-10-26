@@ -90,6 +90,7 @@ export default {
   "brainLogin.installFailed": "Could not install {name}: {detail}",
   "chat.noSuitableBrains": "no suitable brains",
   "chat.allLimited": "All available brains have hit their subscription limits. I'll continue after {time}.",
+  "chat.needsBrain": "No brain works yet: sign one in from the card in the chat, and the message will be answered.",
   "chat.cannotStart": "Can't start the agent “{agent}”: {reason}. Set up a brain on the Brains page (Claude Code, Codex or an API key).",
   "chat.turnFailed": "the turn could not be completed",
   "chat.tryingOtherBrain": "{ref}: {error} — trying another brain…",

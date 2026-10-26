@@ -189,7 +189,9 @@ export type MessagePart =
   /** A new agent being put together in the chat: its look, description and proactivity, live, with a button that creates it. */
   | { type: "agent_draft"; draftId: string }
   /** A CLI brain's sign-in card (device code or browser code), live. */
-  | { type: "brain_login"; ref: string };
+  | { type: "brain_login"; ref: string }
+  /** No brain of the agent works yet: the hub's own setup card (sign in, install, API key), live. */
+  | { type: "brain_setup" };
 
 export interface Message {
   id: string;
@@ -343,6 +345,39 @@ export interface BrainLoginView {
   probe?: ProbeResult;
   /** The latest sign-in since the hub started, running or finished. */
   login?: BrainLoginState;
+}
+
+// ---------- First-run setup ----------
+
+/** What the default agent walks the user through once a brain works. */
+export type SetupStep = "telegram" | "backupBrain" | "machines" | "profile";
+
+/** One of the agent's brains on this hub, as the setup card shows it. */
+export interface SetupBrain {
+  ref: string;
+  label: string;
+  /** A CLI that signs in from the chat (Claude Code, Codex), or a brain that takes a key or token. */
+  kind: "cli" | "api";
+  /** The CLI starts on this computer (always true for api brains). */
+  installed: boolean;
+  signedIn: boolean;
+  /** The hub can install the missing CLI itself (desktop installs). */
+  canInstall: boolean;
+  detail?: string;
+}
+
+export interface SetupState {
+  agentId: string;
+  brains: SetupBrain[];
+  /** Some brain of the agent works now (rate limits aside). */
+  usable: boolean;
+  vault: "absent" | "locked" | "open";
+  telegram: boolean;
+  machines: number;
+  done: SetupStep[];
+  skipped: SetupStep[];
+  /** Steps neither done nor skipped, in the order the agent offers them. */
+  remaining: SetupStep[];
 }
 
 export interface BrainSessionOptions {

@@ -38,6 +38,7 @@ import { AgentDrafts } from "./agent-drafts.ts";
 import { BrainLogins } from "./brain-login.ts";
 import { CliTools } from "./cli-tools.ts";
 import { UserPath } from "./user-path.ts";
+import { SetupGuide } from "./setup.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -74,6 +75,7 @@ export class Hub {
   cliTools: CliTools;
   /** Where the user's own CLIs live (their shell or account PATH): read on desktop installs, which start with a short PATH. */
   userPath = new UserPath();
+  setup: SetupGuide;
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -148,6 +150,20 @@ export class Hub {
       machineName: (id) => this.machines.name(id),
       secrets: this.secrets,
     });
+    this.setup = new SetupGuide({
+      brains: this.brains,
+      agents: this.agents,
+      settings: this.settings,
+      store: this.store,
+      vault: this.vault,
+      channels: this.channels,
+      machines: this.machines,
+      cliTools: this.cliTools,
+      bus: this.bus,
+      resume: (id, prompt, opts) => this.runner.resume(id, prompt, opts),
+      tellAgent: (id, note) => this.runner.tellAgent(id, note),
+    });
+    this.runner.d.setup = this.setup;
     this.team = new Team({ store: this.store, agents: this.agents, bus: this.bus, isRunning: (id) => this.runner.isRunning(id) });
     this.mcpClients = new McpClientManager({ config, registry: this.tools, vault: this.vault, audit: this.audit, egress: this.egress });
     this.plugins = new PluginHost({
@@ -227,6 +243,17 @@ export class Hub {
     const file = this.rememberedPassphraseFile();
     if (passphrase === undefined) rmSync(file, { force: true });
     else writeFileSync(file, passphrase, { mode: 0o600 });
+  }
+
+  /** "Check again" on the setup card: look for the user's CLIs again (restarting the brain hosts when they moved) and re-probe. */
+  async refreshBrains(): Promise<void> {
+    if (this.config.installClis && (await this.userPath.refresh())) {
+      for (const r of this.plugins.list()) {
+        if (r.enabled && r.source === "builtin" && r.layout?.manifest.contributes.brains.length) await this.plugins.restart(r.id).catch(() => {});
+      }
+    }
+    this.brains.invalidateAll();
+    this.bus.emit("brains.updated", {});
   }
 
   saveAgent(agent: AgentDef, actor: string): AgentDef {
@@ -336,6 +363,7 @@ export class Hub {
     await this.mcpClients.sync(this.pluginMcpFiles());
     this.mcpClients.onChange = () => this.bus.emit("plugins.updated", {});
     this.runner.start();
+    this.setup.start();
     this.notifier.startDigestTimer();
     const sweep = setInterval(() => this.auth.sweep(), 3600_000);
     sweep.unref();
@@ -352,6 +380,7 @@ export class Hub {
   async stop(): Promise<void> {
     for (const t of this.timers) clearInterval(t);
     this.notifier.stop();
+    this.setup.stop();
     await this.runner.stop();
     this.machines.closeAll();
     await this.plugins.stopAll();

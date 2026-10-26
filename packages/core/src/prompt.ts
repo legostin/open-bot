@@ -18,6 +18,8 @@ export interface PromptContext {
   nativeSkills: boolean;
   appended: string[];
   machineName?: string;
+  /** What is left of the hub's first-run setup (the default agent, interactive sessions only). */
+  setup?: string;
 }
 
 export function buildSystemPrompt(c: PromptContext): string {
@@ -59,6 +61,7 @@ export function buildSystemPrompt(c: PromptContext): string {
     );
     if (c.agent.initiative < 2) lines.push("- Your initiative level only allows reading and suggesting in background runs: propose actions instead of taking them.");
   }
+  if (c.setup?.trim()) lines.push("", c.setup.trim());
   if (c.skills.length) {
     lines.push("", "## Skills", c.nativeSkills ? "Skills are installed for you natively; their names:" : "Load a skill's full instructions with `skill_load` when it is relevant:");
     for (const s of c.skills.slice(0, 80)) lines.push(`- ${s.name}: ${s.description}`);
