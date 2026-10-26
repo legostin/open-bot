@@ -167,7 +167,14 @@ const plugin: PluginModule = {
         required: ["path"],
         additionalProperties: false,
       },
-      handler: async (input: { path?: string }) => {
+      handler: async (input: { path?: string }, call: ToolCallContext) => {
+        // Untrusted content could ask the agent to wipe memories; only the user may delete from such a session.
+        if (call.tainted) {
+          return text(
+            "Not deleted: this session has read untrusted content (web pages, emails or external tools), so deleting memories is disabled here. " +
+              "If the user really wants it gone, tell them to delete it on the Memory page.",
+          );
+        }
         const r = await mem.forget(String(input.path ?? ""));
         return text(`Forgot ${r.path}.`);
       },

@@ -78,6 +78,8 @@ describe("memory plugin", () => {
     expect(index).toContain("- [Анна — сестра](people/anna.md) — family");
     expect(index).toContain("## notes");
 
+    expect(await h.invokeText("forget", { path: "notes/lyubimyy-kofe.md" }, { tainted: true })).toMatch(/^Not deleted/);
+    expect(existsSync(join(h.dataDir, "memory", "notes", "lyubimyy-kofe.md"))).toBe(true);
     expect(await h.invokeText("forget", { path: "notes/lyubimyy-kofe.md" })).toBe("Forgot notes/lyubimyy-kofe.md.");
     expect(existsSync(join(h.dataDir, "memory", "notes", "lyubimyy-kofe.md"))).toBe(false);
     expect(await h.invokeText("search", { query: "кофе" })).toBe('No facts match "кофе".');
