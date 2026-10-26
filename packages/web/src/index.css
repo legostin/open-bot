@@ -281,10 +281,103 @@
     animation: owl-fade 0.18s ease-out;
   }
 
+  @keyframes owl-zoom {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  .animate-zoom {
+    animation: owl-zoom 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  /* Horizontal strips (the image carousel) scroll by touch, trackpad and buttons, without a scrollbar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-in,
-    .animate-fade {
+    .animate-fade,
+    .animate-zoom {
       animation: none;
     }
   }
+}
+
+/* Maps in messages (pages/chat/MapCard.tsx). Unlayered, like leaflet.css, which loads with the first map: these rules
+   win by specificity. Tiles are toned down to the ink palette; in dark mode they are inverted. */
+.owl-map.leaflet-container {
+  background: var(--surface-2);
+  font-family: var(--font-sans);
+  outline: none;
+}
+.owl-map .leaflet-tile-pane {
+  filter: saturate(0.65) contrast(1.02);
+}
+@media (prefers-color-scheme: dark) {
+  .owl-map .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.55);
+  }
+}
+.owl-map .leaflet-bar {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.owl-map .leaflet-bar a {
+  background: var(--surface);
+  color: var(--fg);
+  border-bottom-color: var(--border);
+}
+.owl-map .leaflet-bar a:hover,
+.owl-map .leaflet-bar a:focus {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+.owl-map .leaflet-bar a.leaflet-disabled {
+  background: var(--surface);
+  color: var(--muted);
+}
+.owl-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  border-top-left-radius: 6px;
+}
+.owl-map .leaflet-control-attribution a {
+  color: var(--muted);
+}
+.owl-map .owl-pin {
+  background: none;
+  border: 0;
+}
+.owl-map .owl-pin-dot {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: var(--accent);
+  border: 4px solid var(--surface);
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease-out;
+}
+.owl-map .owl-pin:hover .owl-pin-dot {
+  transform: scale(1.12);
+}
+.owl-map .owl-map-label {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font: 500 12px/1.3 var(--font-sans);
+  padding: 3px 8px;
+}
+.owl-map .leaflet-tooltip-top.owl-map-label::before {
+  border-top-color: var(--border);
 }

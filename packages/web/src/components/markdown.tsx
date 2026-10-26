@@ -5,6 +5,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ImageIcon } from "lucide-react";
 import { t } from "../i18n";
+import { mediaSrc } from "../lib/media";
 import { CopyButton, cx } from "./ui";
 
 type MdNode = { type: string; value?: string; children?: MdNode[] };
@@ -20,10 +21,6 @@ function remarkHtmlAsText() {
   };
 }
 
-function isLocalSrc(src: string): boolean {
-  return src.startsWith("/") && !src.startsWith("//") ? true : src.startsWith("data:image/") || src.startsWith("blob:");
-}
-
 function textOf(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textOf).join("");
@@ -37,10 +34,12 @@ const components: Components = {
       {children}
     </a>
   ),
-  // External images would violate the page CSP (img-src 'self' data: blob:): show them as links.
+  // The page CSP loads images from the hub only (img-src 'self' data: blob:): web images come through its proxy.
+  // Anything else (another scheme, a relative path) stays a link.
   img: ({ src, alt }) => {
     const s = typeof src === "string" ? src : "";
-    if (s && isLocalSrc(s)) return <img src={s} alt={alt ?? ""} className="my-2 max-h-96 max-w-full rounded-lg border border-border" loading="lazy" />;
+    const shown = s ? mediaSrc(s) : undefined;
+    if (shown) return <img src={shown} alt={alt ?? ""} className="my-2 inline-block max-h-96 max-w-full rounded-xl border border-border" loading="lazy" decoding="async" />;
     return (
       <a href={s} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1">
         <ImageIcon className="inline size-4" />

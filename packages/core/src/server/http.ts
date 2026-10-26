@@ -18,6 +18,8 @@ export const MIME: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".bmp": "image/bmp",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
   ".woff": "font/woff",

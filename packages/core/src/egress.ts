@@ -18,7 +18,7 @@ for (const [a, p] of PRIVATE_V4) privateNets.addSubnet(a, p, "ipv4");
 for (const [a, p] of PRIVATE_V6) privateNets.addSubnet(a, p, "ipv6");
 
 /** dns.lookup replacement that only returns addresses we already checked (no second resolution). */
-function pinnedLookup(addrs: string[]): net.LookupFunction {
+export function pinnedLookup(addrs: string[]): net.LookupFunction {
   return ((_host: string, opts: { all?: boolean }, cb: (...a: any[]) => void) => {
     if (opts?.all) cb(null, addrs.map((address) => ({ address, family: net.isIP(address) })));
     else cb(null, addrs[0], net.isIP(addrs[0]));

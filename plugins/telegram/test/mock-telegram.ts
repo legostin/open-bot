@@ -5,7 +5,16 @@ import type { AddressInfo } from "node:net";
 
 export interface MockCall {
   method: string;
+  /** JSON params; for multipart calls the text fields (JSON fields parsed) and files as {file, name, type, size}. */
   params: any;
+}
+
+/** A file part of a multipart call. */
+export interface MockFile {
+  file: true;
+  name: string;
+  type: string;
+  size: number;
 }
 
 export interface MockTelegram {
@@ -65,6 +74,12 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
       }
       case "sendMessage":
         return ok({ message_id: nextMessage++, chat: { id: params.chat_id, type: "private" }, date: Math.floor(Date.now() / 1000), text: params.text });
+      case "sendPhoto":
+      case "sendDocument":
+      case "sendLocation":
+        return ok({ message_id: nextMessage++, chat: { id: Number(params.chat_id), type: "private" }, date: Math.floor(Date.now() / 1000) });
+      case "sendMediaGroup":
+        return ok((params.media as unknown[]).map(() => ({ message_id: nextMessage++, chat: { id: Number(params.chat_id), type: "private" }, date: Math.floor(Date.now() / 1000) })));
       case "editMessageText":
       case "editMessageReplyMarkup":
       case "answerCallbackQuery":
@@ -78,10 +93,11 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
   };
 
   const server: Server = createServer((req, res) => {
-    let raw = "";
-    req.setEncoding("utf8");
-    req.on("data", (c) => (raw += c));
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", async () => {
+      const raw = Buffer.concat(chunks);
+      const type = req.headers["content-type"] ?? "";
       const m = /^\/bot([^/]+)\/(\w+)$/.exec(req.url ?? "");
       let status = 404;
       let body: unknown = { ok: false, error_code: 404, description: "Not Found" };
@@ -89,7 +105,7 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
         status = 401;
         body = { ok: false, error_code: 401, description: "Unauthorized" };
       } else if (m) {
-        const params = raw ? JSON.parse(raw) : {};
+        const params = type.startsWith("multipart/form-data") ? await multipart(raw, type) : raw.length ? JSON.parse(raw.toString("utf8")) : {};
         calls.push({ method: m[2], params });
         notifyCalls();
         ({ status, body } = await handle(m[2], params));
@@ -139,6 +155,22 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
         server.close(() => r());
       }),
   };
+}
+
+/** Text fields as sent (JSON ones parsed back), files described. */
+async function multipart(raw: Buffer, type: string): Promise<Record<string, unknown>> {
+  const form = await new Response(new Uint8Array(raw), { headers: { "content-type": type } }).formData();
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of form.entries()) {
+    if (typeof v === "string") {
+      try {
+        out[k] = /^[[{]/.test(v) ? JSON.parse(v) : v;
+      } catch {
+        out[k] = v;
+      }
+    } else out[k] = { file: true, name: v.name, type: v.type, size: v.size } satisfies MockFile;
+  }
+  return out;
 }
 
 function ok(result: unknown) {
