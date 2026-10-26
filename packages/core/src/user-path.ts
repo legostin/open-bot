@@ -5,7 +5,7 @@
 
 import { execFile } from "node:child_process";
 
-export const PATH_MARK = "__OPENBOT_PATH__";
+export const PATH_MARK = "__OWLBOT_PATH__";
 const SHELL_TIMEOUT_MS = 5000;
 
 /** Runs a command and resolves with its stdout; rejects when it fails or takes longer than `timeoutMs`. */

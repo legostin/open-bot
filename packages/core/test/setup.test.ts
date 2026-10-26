@@ -39,7 +39,7 @@ async function startHub() {
   const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
   const dataDir = mkdtempSync(join(tmpdir(), "ob-setup-"));
   const config = loadConfig(
-    { OPENBOT_PORT: String(port), OPENBOT_CONSOLE_PORT: String(consolePort), OPENBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+    { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
     { dataDir, builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "setup-agents") },
   );
   const agentHome = join(dataDir, "home", "agent");

@@ -3,8 +3,8 @@
 // prompt has the hub setup section; anything else is echoed.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { PluginContext } from "@openbot/plugin-sdk";
-import type { BrainEvent, BrainSessionOptions } from "@openbot/shared";
+import type { PluginContext } from "@owlbot/plugin-sdk";
+import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 
 const signedIn = () => existsSync(join(process.env.HOME ?? "", ".gated-ok"));
 

@@ -52,7 +52,8 @@ export function shimTarget(cmdFile: string): string | undefined {
     const text = readFileSync(cmdFile, "utf8");
     const m = /"%~?dp0%?\\([^"]+?\.m?js)"/i.exec(text);
     if (!m) return undefined;
-    const target = join(dirname(cmdFile), m[1]);
+    // The shim spells the path with backslashes; split it so the join is right whatever platform reads the shim.
+    const target = join(dirname(cmdFile), ...m[1].split(/[\\/]/));
     return existsSync(target) ? target : undefined;
   } catch {
     return undefined;

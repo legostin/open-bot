@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, CircleCheck, RefreshCw } from "lucide-react";
-import type { SetupState } from "@openbot/shared";
+import type { SetupState } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
 import { cliRows, showGate } from "../lib/setup";

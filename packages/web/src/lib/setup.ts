@@ -1,6 +1,6 @@
 // The setup card's choices, kept apart from React so they are tested on their own.
 
-import type { Message, SetupBrain, SetupState } from "@openbot/shared";
+import type { Message, SetupBrain, SetupState } from "@owlbot/shared";
 
 /** The brain the card offers first: a CLI that only needs a sign-in, else one the hub can install. */
 export function primaryRef(s: SetupState): string | undefined {

@@ -4,8 +4,8 @@
 // the setup (Telegram, a backup brain, other computers, getting to know the user) from a short block in its system
 // prompt and two hub tools. Nothing here needs a model.
 
-import type { SetupBrain, SetupState, SetupStep, VaultState } from "@openbot/shared";
-import { formatBrainRef, parseBrainRef } from "@openbot/shared";
+import type { SetupBrain, SetupState, SetupStep, VaultState } from "@owlbot/shared";
+import { formatBrainRef, parseBrainRef } from "@owlbot/shared";
 import type { AgentRegistry } from "./agents.ts";
 import type { BrainRegistry } from "./brains.ts";
 import type { EventBus } from "./bus.ts";
