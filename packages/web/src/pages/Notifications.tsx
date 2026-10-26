@@ -129,12 +129,12 @@ export function NotificationsPage() {
                 ))}
                 <span className="flex-1" />
                 {n.taskId && (
-                  <Link href={`/tasks/${n.taskId}`} className="text-xs text-accent-text hover:underline">
+                  <Link href={`/tasks/${n.taskId}`} className="text-xs text-accent-text underline decoration-border underline-offset-2 hover:decoration-current">
                     {t("notifications.toTask")}
                   </Link>
                 )}
                 {!n.taskId && n.conversationId && (
-                  <Link href={`/chat/${n.conversationId}`} className="text-xs text-accent-text hover:underline">
+                  <Link href={`/chat/${n.conversationId}`} className="text-xs text-accent-text underline decoration-border underline-offset-2 hover:decoration-current">
                     {t("notifications.toChat")}
                   </Link>
                 )}

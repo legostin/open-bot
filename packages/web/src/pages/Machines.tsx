@@ -267,7 +267,7 @@ function PairModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <span className="text-muted">{t("machines.orApp")}</span>
-            <a className="font-medium text-accent-text hover:underline" href={pairLink(pairing.hubUrl, pairing.code)}>
+            <a className="font-medium text-accent-text underline decoration-border underline-offset-2 hover:decoration-current" href={pairLink(pairing.hubUrl, pairing.code)}>
               {t("machines.openInApp")}
             </a>
           </div>
