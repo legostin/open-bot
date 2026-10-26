@@ -9,6 +9,7 @@ import { pair, PairError, networkErrorText } from "./pair.ts";
 import { createNodeDaemon } from "./daemon.ts";
 import { consoleLogger, machineInfo, osName } from "./info.ts";
 import { t } from "./messages.ts";
+import { stopOnDesktopStdin } from "./desktop.ts";
 
 const help = () => t("cli.help", { home: nodeHome() });
 
@@ -82,6 +83,7 @@ async function cmdRun(): Promise<void> {
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGHUP", () => void shutdown("SIGHUP"));
+  if (process.env.OWLBOT_DESKTOP === "1") stopOnDesktopStdin(process.stdin, () => void shutdown("stop"));
   process.on("unhandledRejection", (e: any) => log(t("cli.unhandledRejection", { error: String(e?.stack ?? e) })));
   process.on("uncaughtException", (e: any) => log(t("cli.uncaughtException", { error: String(e?.stack ?? e) })));
   daemon.client.start();
