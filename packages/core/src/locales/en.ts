@@ -122,6 +122,7 @@ export default {
   "vault.scope.domain": "Access to vault://{id} denied: domain {domain} is not allowed for this item",
   "vault.itemFieldsRequired": "name, type and fields are required",
   "vault.minLength": "At least 8 characters",
+  "vault.badId": "Invalid vault item id “{id}”: use letters, digits, _ . - (up to 128 characters)",
   "rule.fieldsRequired": "tool and decision are required",
   "rule.notFound": "Rule not found",
 

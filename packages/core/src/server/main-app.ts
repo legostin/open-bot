@@ -46,7 +46,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
   });
 
   app.setErrorHandler((err: any, _req, reply) => {
-    const status = err instanceof AuthError || err instanceof HttpError ? err.status : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
+    const status = err instanceof LocalizedError && err.status ? err.status : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
     if (status >= 500) console.error("[http]", err);
     reply.code(status).send({ error: hub.vault.redactor.text(errorText(err, requestLocale(_req))) });
   });

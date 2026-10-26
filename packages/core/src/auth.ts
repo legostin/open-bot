@@ -31,10 +31,9 @@ const MAX_FAILURES = 10;
 const FAILURE_WINDOW = 15 * 60_000;
 
 export class AuthError extends LocalizedError {
-  status: number;
+  declare status: number;
   constructor(status: number, key: string) {
-    super(key);
-    this.status = status;
+    super(key, undefined, status);
   }
 }
 

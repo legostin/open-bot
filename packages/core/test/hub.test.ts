@@ -145,6 +145,10 @@ describe("hub (integration)", () => {
     expect(a.summary).toBe("Отправить to bob");
     expect((await consoleClient.raw("POST", `/console-api/approvals/${a.id}`, { decision: "approve" }, { "content-type": "text/plain" })).status).toBe(415);
     await consoleClient.req("POST", `/console-api/approvals/${a.id}`, { decision: "approve" });
+    expect((await consoleClient.raw("POST", `/console-api/approvals/${a.id}`, { decision: "approve" })).status).toBe(409);
+    expect((await consoleClient.raw("POST", "/console-api/approvals/nope", { decision: "approve" })).status).toBe(404);
+    expect((await consoleClient.raw("GET", "/console-api/auth/state")).json).toMatchObject({ language: "en", locales: ["en", "ru"] });
+    expect((await consoleClient.raw("PUT", "/console-api/vault/items", { id: "../x", name: "x", type: "note", fields: {} })).status).toBe(400);
 
     await until(async () => {
       const msgs: any[] = await web.req("GET", `/api/conversations/${conv}/messages`);

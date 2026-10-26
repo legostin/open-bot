@@ -49,10 +49,13 @@ export function t(key: string, params?: Params): string {
 export class LocalizedError extends Error {
   key: string;
   params?: Params;
-  constructor(key: string, params?: Params) {
+  /** HTTP status when the error reaches an API caller (500 when unset). */
+  status?: number;
+  constructor(key: string, params?: Params, status?: number) {
     super(tFor(DEFAULT_LOCALE)(key, params));
     this.key = key;
     this.params = params;
+    this.status = status;
   }
   localized(locale: Locale): string {
     return tFor(locale)(this.key, this.params);

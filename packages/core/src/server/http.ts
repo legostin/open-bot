@@ -95,9 +95,8 @@ export function securityHeaders(reply: FastifyReply, csp: string): void {
 
 /** HTTP error with a core message key (locales/en.ts); text that is not a key is shown as is. */
 export class HttpError extends LocalizedError {
-  status: number;
+  declare status: number;
   constructor(status: number, key: string, params?: Params) {
-    super(key, params);
-    this.status = status;
+    super(key, params, status);
   }
 }

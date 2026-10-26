@@ -121,15 +121,15 @@ export class ApprovalService {
 
   resolve(id: string, decision: Decision, opts: ResolveOptions): Approval {
     const a = this.get(id);
-    if (!a) throw new LocalizedError("approval.notFound");
-    if (a.status !== "pending") throw new LocalizedError("approval.alreadyResolved", { status: a.status });
+    if (!a) throw new LocalizedError("approval.notFound", undefined, 404);
+    if (a.status !== "pending") throw new LocalizedError("approval.alreadyResolved", { status: a.status }, 409);
     const status: ApprovalStatus = decision === "approve" ? "approved" : "denied";
     this.db.prepare("update approvals set status = ?, resolved_at = ?, resolved_via = ? where id = ?").run(status, nowIso(), opts.via, id);
     if (decision === "approve") {
       this.rules.addKnownTargets(extractTargets(a.input));
       if (opts.remember) {
         const base = opts.rule ?? suggestRule(a.tool, a.input, a.agentId);
-        const rule = this.rules.create({ ...base, createdVia: opts.via === "telegram" ? "telegram" : "console" });
+        const rule = this.rules.create({ ...base, createdVia: opts.via === "telegram" ? "telegram" : "approval" });
         this.audit.append("user", "rule.create", rule.tool, rule);
       }
     }

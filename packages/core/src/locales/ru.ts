@@ -120,6 +120,7 @@ export default {
   "vault.scope.tool": "Доступ к vault://{id} запрещён: инструмент {tool} не в области записи",
   "vault.scope.domain": "Доступ к vault://{id} запрещён: домен {domain} не разрешён для этой записи",
   "vault.itemFieldsRequired": "name, type и fields обязательны",
+  "vault.badId": "Недопустимый id записи «{id}»: используйте буквы, цифры, _ . - (до 128 символов)",
   "vault.minLength": "Минимум 8 символов",
   "rule.fieldsRequired": "tool и decision обязательны",
   "rule.notFound": "Правило не найдено",

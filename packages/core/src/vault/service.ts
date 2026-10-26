@@ -10,7 +10,7 @@ import { Redactor } from "./redact.ts";
 import { LocalizedError, tFor } from "../i18n.ts";
 
 export class VaultError extends LocalizedError {
-  code: "sealed" | "uninitialized" | "not_found" | "forbidden" | "bad_passphrase" | "exists";
+  code: "sealed" | "uninitialized" | "not_found" | "forbidden" | "bad_passphrase" | "exists" | "invalid";
   constructor(code: VaultError["code"], key: string, params?: Params) {
     super(key, params);
     this.code = code;
@@ -145,8 +145,9 @@ export class VaultService {
   }
 
   upsert(input: { id?: string; type: VaultItemType; name: string; fields: Record<string, string>; scope?: Partial<VaultScope>; hints?: Record<string, string> }): VaultItemMeta {
-    const key = this.requireKey();
     const id = input.id ?? (slugId(input.name) || newId("v_"));
+    if (!VAULT_ID.test(id)) throw new VaultError("invalid", "vault.badId", { id: id.slice(0, 80) });
+    const key = this.requireKey();
     const existing = this.db.prepare("select id, created_at from vault_items where id = ?").get(id) as { id: string; created_at: string } | undefined;
     const now = nowIso();
     const defaultScope: Partial<VaultScope> = input.type === "login" ? { plugins: ["browser"] } : {};
@@ -234,6 +235,9 @@ export class VaultService {
 export function refToId(ref: string): string {
   return ref.startsWith("vault://") ? ref.slice("vault://".length) : ref;
 }
+
+/** Ids people choose for vault items: they appear in vault://<id> references and grants. */
+export const VAULT_ID = /^[A-Za-z0-9][\w.-]{0,127}$/;
 
 function slugId(name: string): string {
   return name

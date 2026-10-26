@@ -6,9 +6,9 @@ import { join } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
-import type { ApprovalStatus, Rule, VaultScope } from "@openbot/shared";
+import { LOCALES, type ApprovalStatus, type Rule, type VaultScope } from "@openbot/shared";
 import type { Hub } from "../app.ts";
-import { AuthError, type AuthSession } from "../auth.ts";
+import type { AuthSession } from "../auth.ts";
 import { VaultError } from "../vault/service.ts";
 import { errorText, localizePluginValue, LocalizedError, requestLocale, tFor } from "../i18n.ts";
 import { suggestRule } from "../policy/engine.ts";
@@ -49,8 +49,8 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
   });
 
   app.setErrorHandler((err: any, req, reply) => {
-    let status = err instanceof AuthError || err instanceof HttpError ? err.status : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
-    if (err instanceof VaultError) status = err.code === "not_found" ? 404 : err.code === "bad_passphrase" ? 400 : err.code === "forbidden" ? 403 : 409;
+    let status = err instanceof LocalizedError && err.status ? err.status : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
+    if (err instanceof VaultError) status = err.code === "not_found" ? 404 : err.code === "bad_passphrase" || err.code === "invalid" ? 400 : err.code === "forbidden" ? 403 : 409;
     if (status >= 500) console.error("[console]", err);
     reply.code(status).send({ error: errorText(err, requestLocale(req)), code: err.code });
   });
@@ -82,7 +82,15 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
   app.get("/console-api/auth/state", async (req) => {
     sameOrigin(req);
     const s = hub.auth.session(req.cookies[COOKIE], "console");
-    return { hasPassword: hub.auth.hasPassword(), authenticated: !!s, csrf: s?.csrf, passkeys: hub.auth.listPasskeys().length, publicUrl: cfg.publicUrl };
+    return {
+      hasPassword: hub.auth.hasPassword(),
+      authenticated: !!s,
+      csrf: s?.csrf,
+      passkeys: hub.auth.listPasskeys().length,
+      publicUrl: cfg.publicUrl,
+      language: hub.settings.get().language,
+      locales: LOCALES,
+    };
   });
   app.post("/console-api/auth/login", async (req, reply) => {
     sameOrigin(req);
