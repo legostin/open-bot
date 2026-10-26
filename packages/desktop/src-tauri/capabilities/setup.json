@@ -10,6 +10,7 @@
     "allow-use-existing-node",
     "allow-open-log",
     "allow-retry",
-    "allow-dismiss"
+    "allow-dismiss",
+    "allow-reset-app"
   ]
 }

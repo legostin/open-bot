@@ -9,6 +9,7 @@ fn main() {
     "open_log",
     "retry",
     "dismiss",
+    "reset_app",
   ])))
   .expect("tauri-build failed");
 }

@@ -32,6 +32,7 @@ pub fn build(app: &AppHandle, flavor: &Flavor, autostart: bool) -> tauri::Result
       &MenuItem::with_id(app, "logs", t.t("tray.logs"), true, None::<&str>)?,
       &MenuItem::with_id(app, "restart", t.t("tray.restart"), true, None::<&str>)?,
       &MenuItem::with_id(app, "setup", t.t("tray.setupAgain"), true, None::<&str>)?,
+      &MenuItem::with_id(app, "reset", t.t("tray.reset"), true, None::<&str>)?,
       &PredefinedMenuItem::separator(app)?,
       &MenuItem::with_id(app, "quit", t.t("tray.quit"), true, None::<&str>)?,
     ],

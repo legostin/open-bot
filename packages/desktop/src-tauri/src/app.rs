@@ -52,6 +52,8 @@ pub struct Paths {
   pub hub_data: PathBuf,
   pub hub_log: PathBuf,
   pub node_home: PathBuf,
+  /// OWLBOT_NODE_HOME was given: a reset in a dev run may delete it (otherwise only when it is the app's own).
+  pub node_home_custom: bool,
   pub node_log: PathBuf,
   /// OWLBOT_DATA_DIR is set: a dev or test run, which leaves start at login and the AppleScript build's agent alone.
   pub dev: bool,
@@ -66,7 +68,9 @@ impl Paths {
     let data_override = std::env::var_os("OWLBOT_DATA_DIR").map(PathBuf::from);
     // "Owlbot", as launch.mjs has it; the test build's own "Owlbot Test".
     let hub_data = data_override.clone().unwrap_or(p.local_data_dir()?.join(&flavor.name));
-    let node_home = std::env::var_os("OWLBOT_NODE_HOME").map(PathBuf::from).unwrap_or(p.home_dir()?.join(flavor.node_home_dir()));
+    let node_home_override = std::env::var_os("OWLBOT_NODE_HOME").map(PathBuf::from);
+    let node_home_custom = node_home_override.is_some();
+    let node_home = node_home_override.unwrap_or(p.home_dir()?.join(flavor.node_home_dir()));
     // A dev or test run keeps the app's own settings and logs in its data dir too, away from an installed app's.
     let (config_dir, node_log) = match &data_override {
       Some(data) => (data.join("app"), data.join("logs").join("node.log")),
@@ -81,6 +85,7 @@ impl Paths {
       app_root,
       hub_data,
       node_home,
+      node_home_custom,
       dev: data_override.is_some(),
     })
   }
@@ -124,6 +129,8 @@ pub struct AppState {
   pub error: Mutex<Option<UiError>>,
   /// The hub window's address is being fetched: the setup window says "starting".
   pub starting: Mutex<bool>,
+  /// "Reset Owlbot…" was chosen: the setup window asks to confirm.
+  pub reset: Mutex<bool>,
   pub tray: Mutex<Option<tray::Tray>>,
   /// macOS: the login shell's PATH for owlbot-node (a GUI app gets a bare one; the hub reads it itself).
   pub path_env: Option<String>,
@@ -158,6 +165,7 @@ pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error:
     link: Mutex::new(None),
     error: Mutex::new(damaged.then_some(UiError { key: "app.error.noRuntime", port: None })),
     starting: Mutex::new(false),
+    reset: Mutex::new(false),
     tray: Mutex::new(None),
     path_env,
   });
@@ -394,6 +402,39 @@ pub fn second_instance(app: &AppHandle, argv: Vec<String>) {
   }
 }
 
+/// The confirmed reset (reset.rs): stops what runs, deletes everything the app and its hub keep, then shows the first
+/// run again or quits.
+pub fn reset(app: &AppHandle, quit: bool) -> Result<(), String> {
+  let st = app.state::<AppState>();
+  st.supervisor.stop();
+  if let Some(w) = app.get_webview_window(window::MAIN) {
+    let _ = w.clear_all_browsing_data();
+  }
+  window::close_main(app);
+  let p = &st.paths;
+  let exe = std::env::current_exe().ok();
+  let text = |e: std::io::Error| e.to_string();
+  crate::reset::delete_hub_data(&p.hub_data, exe.as_deref()).map_err(text)?;
+  crate::reset::remove(&p.config_dir).map_err(text)?;
+  crate::reset::remove(&p.node_log).map_err(text)?;
+  if !p.dev || p.node_home_custom {
+    crate::reset::remove(&p.node_home).map_err(text)?;
+  }
+  if !p.dev {
+    apply_autostart(&p.flavor, false);
+  }
+  *st.settings.lock().unwrap() = Settings::default();
+  *st.reset.lock().unwrap() = false;
+  *st.error.lock().unwrap() = None;
+  *st.link.lock().unwrap() = None;
+  if quit {
+    app.exit(0);
+  } else {
+    let _ = window::open_setup(app);
+  }
+  Ok(())
+}
+
 pub fn restart(app: &AppHandle) {
   let st = app.state::<AppState>();
   *st.error.lock().unwrap() = None;
@@ -437,6 +478,10 @@ pub fn on_menu(app: &AppHandle, id: &str) {
       std::thread::spawn(move || restart(&app));
     }
     "setup" => {
+      let _ = window::open_setup(app);
+    }
+    "reset" => {
+      *st.reset.lock().unwrap() = true;
       let _ = window::open_setup(app);
     }
     "quit" => app.exit(0),

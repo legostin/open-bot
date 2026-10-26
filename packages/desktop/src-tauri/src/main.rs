@@ -12,6 +12,7 @@ mod i18n;
 mod login;
 #[cfg(target_os = "macos")]
 mod migration;
+mod reset;
 mod settings;
 mod shellpath;
 mod supervisor;
@@ -38,7 +39,8 @@ fn main() {
       commands::use_existing_node,
       commands::open_log,
       commands::retry,
-      commands::dismiss
+      commands::dismiss,
+      commands::reset_app
     ])
     .on_window_event(window::on_event)
     .setup(move |app| app::setup(app, args))

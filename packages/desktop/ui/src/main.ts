@@ -10,6 +10,8 @@ interface UiState {
   lang: "en" | "ru";
   /** The test build ("Owlbot Test"): a strip on top says so. */
   test: boolean;
+  /** "Reset Owlbot…" from the tray waits for a confirmation here. */
+  reset: boolean;
   mode: Mode | null;
   starting: boolean;
   existing: { hub: string; name: string } | null;
@@ -130,12 +132,31 @@ function errorScreen(state: UiState, error: NonNullable<UiState["error"]>): void
   );
 }
 
+/** "Reset Owlbot…": what goes, what stays, and the two ways out. */
+function resetScreen(): void {
+  const note = h("p", { class: "error" });
+  show(
+    h("h1", {}, t("app.reset.title")),
+    h("p", {}, t("app.reset.body")),
+    h("p", { class: "muted" }, t("app.reset.keeps")),
+    note,
+    h(
+      "div",
+      { class: "row" },
+      button(t("app.link.cancel"), () => void invoke("dismiss")),
+      button(t("app.reset.quit"), () => void run(note, "reset_app", { quit: true }), "danger"),
+      button(t("app.reset.startOver"), () => void run(note, "reset_app", { quit: false }), "danger-primary"),
+    ),
+  );
+}
+
 async function render(): Promise<void> {
   const state = await invoke<UiState>("get_state");
   lang = state.lang;
   test = state.test;
   document.documentElement.lang = lang;
-  if (state.error) errorScreen(state, state.error);
+  if (state.reset) resetScreen();
+  else if (state.error) errorScreen(state, state.error);
   else if (state.link) pairForm(state, state.link);
   else if (state.starting) {
     show(h("h1", {}, t("tray.starting")));

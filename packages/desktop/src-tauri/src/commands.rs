@@ -14,6 +14,8 @@ pub struct UiState {
   lang: &'static str,
   /// The test build: the screens say so.
   test: bool,
+  /// "Reset Owlbot…" waits for a confirmation.
+  reset: bool,
   mode: Option<Mode>,
   starting: bool,
   existing: Option<Existing>,
@@ -28,6 +30,7 @@ pub fn get_state(app: AppHandle) -> UiState {
   let state = UiState {
     lang: texts().lang(),
     test: st.paths.flavor.test,
+    reset: *st.reset.lock().unwrap(),
     mode: st.settings.lock().unwrap().mode,
     starting: *st.starting.lock().unwrap(),
     existing: settings::existing_node(&st.paths.node_home),
@@ -73,8 +76,16 @@ pub async fn retry(app: AppHandle) -> Result<(), String> {
   .await
 }
 
+/// Deletes everything ("Reset Owlbot…", confirmed), then starts over or quits.
+#[tauri::command]
+pub async fn reset_app(app: AppHandle, quit: bool) -> Result<(), String> {
+  blocking(app, move |a| app::reset(a, quit)).await
+}
+
 #[tauri::command]
 pub fn dismiss(app: AppHandle) {
-  *app.state::<AppState>().link.lock().unwrap() = None;
+  let st = app.state::<AppState>();
+  *st.link.lock().unwrap() = None;
+  *st.reset.lock().unwrap() = false;
   crate::window::close_setup(&app);
 }

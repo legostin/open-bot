@@ -99,6 +99,9 @@ pub fn on_event(window: &Window, event: &WindowEvent) {
     }
     WindowEvent::Destroyed if window.label() == SETUP => {
       let first_run = app.try_state::<AppState>().map(|s| s.settings.lock().unwrap().mode.is_none()).unwrap_or(true);
+      if let Some(s) = app.try_state::<AppState>() {
+        *s.reset.lock().unwrap() = false;
+      }
       if first_run {
         app.exit(0);
       } else {
