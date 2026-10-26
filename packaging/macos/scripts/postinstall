@@ -2,10 +2,10 @@
 # Runs as root once the files are in place: sets Owlbot up for the user at the console (their LaunchAgent starts the
 # hub) and opens it in their browser. With nobody at the console (an install over SSH), Owlbot.app does this on its
 # first open.
-BIN="/Library/Application Support/Owlbot/bin"
+APP="/Applications/Owlbot.app"
 USER_NAME="$(stat -f %Su /dev/console)"
 if [ -z "$USER_NAME" ] || [ "$USER_NAME" = root ] || [ "$USER_NAME" = loginwindow ]; then exit 0; fi
 USER_ID="$(id -u "$USER_NAME")"
-launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H /bin/sh "$BIN/agent.sh" install
-launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H open "/Applications/Owlbot/Owlbot.app"
+launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H /bin/sh "$APP/Contents/Resources/bin/agent.sh" install
+launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H open "$APP"
 exit 0

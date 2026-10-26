@@ -1,10 +1,9 @@
 #!/bin/sh
-# Runs as root before the files are copied: stops the hub of the user at the console and removes the previous app code,
-# so an upgrade never mixes old and new files. The data dir is in the user's home and stays.
+# Runs as root before the files are copied: stops the hub of the user at the console and removes the previous copy of
+# the app, so an upgrade never mixes old and new files. The data dir is in the user's home and stays.
 USER_NAME="$(stat -f %Su /dev/console)"
 if [ -n "$USER_NAME" ] && [ "$USER_NAME" != root ]; then
   launchctl bootout "gui/$(id -u "$USER_NAME")/ai.owlbot.hub" 2>/dev/null
 fi
-rm -rf "/Library/Application Support/Owlbot/app" "/Library/Application Support/Owlbot/bin" \
-  "/Applications/Owlbot/Owlbot.app" "/Applications/Owlbot/Uninstall Owlbot.app"
+rm -rf "/Applications/Owlbot.app"
 exit 0

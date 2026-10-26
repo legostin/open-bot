@@ -77,13 +77,54 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run package:mac
-      - name: Install, check, uninstall
+      - name: Disk image: drag to Applications, open, upgrade, move to the Trash
+        run: |
+          set -eu
+          agent="gui/$(id -u)/ai.owlbot.hub"
+          plist="$HOME/Library/LaunchAgents/ai.owlbot.hub.plist"
+          data="$HOME/Library/Application Support/Owlbot"
+          # (`! cmd` would not stop the script under set -e.)
+          up() { curl -fsS http://127.0.0.1:8080/api/auth/state >state.json 2>/dev/null; }
+          hub_pid() { launchctl print "$agent" 2>/dev/null | awk '$1 == "pid" { print $3; exit }'; }
+          logs() { cat "$data/logs/"*.log || true; }
+          wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 150 ]; then echo "timed out: $*"; logs; exit 1; fi; sleep 1; done; }
+          gone() { [ ! -e "$plist" ] && ! launchctl print "$agent" >/dev/null 2>&1 && ! up; }
+
+          dmg=$(ls dist/desktop/owlbot-*.dmg | head -n 1)
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/owl-image "$dmg"
+          test "$(readlink /tmp/owl-image/Applications)" = /Applications
+          codesign --verify --strict /tmp/owl-image/Owlbot.app
+          # Opened from the image itself, the app asks to be dragged to Applications first.
+          code=0; /bin/sh /tmp/owl-image/Owlbot.app/Contents/Resources/bin/open.sh || code=$?
+          test "$code" = 4
+
+          # What dragging does, then what the app runs when it opens: sets up the agent, waits for the hub.
+          ditto /tmp/owl-image/Owlbot.app /Applications/Owlbot.app
+          url=$(/bin/sh /Applications/Owlbot.app/Contents/Resources/bin/open.sh)
+          echo "$url" | grep -Eq '^http://localhost:8080/#setup=[A-Za-z0-9_-]+$'
+          up; grep -q '"hasPassword":false' state.json
+          grep -q "/Applications/Owlbot.app" "$plist"
+          first=$(hub_pid); test -n "$first"
+
+          # Replacing the app while the hub runs (an upgrade) restarts the hub from the new copy.
+          rm -rf /Applications/Owlbot.app
+          ditto /tmp/owl-image/Owlbot.app /Applications/Owlbot.app
+          restarted() { p=$(hub_pid); [ -n "$p" ] && [ "$p" != "$first" ] && up; }
+          wait_for restarted
+          /bin/sh /Applications/Owlbot.app/Contents/Resources/bin/open.sh >/dev/null
+
+          # Moved to the Trash: the hub stops and the agent removes itself; the data stays.
+          mv /Applications/Owlbot.app "$HOME/.Trash/Owlbot.app"
+          wait_for gone
+          test -f "$data/owlbot.db"
+          rm -rf "$HOME/.Trash/Owlbot.app"
+          hdiutil detach /tmp/owl-image
+          echo ok
+      - name: Package: silent install, check, uninstall
         run: |
           set -eu
           pkg=$(ls dist/desktop/owlbot-*.pkg | head -n 1)
-          pkgutil --payload-files "$pkg" | grep -q "Applications/Owlbot/Owlbot.app/Contents/Info.plist"
-          codesign --verify "dist/desktop/build-mac/root/Applications/Owlbot/Owlbot.app"
-          codesign --verify "dist/desktop/build-mac/root/Applications/Owlbot/Uninstall Owlbot.app"
+          pkgutil --payload-files "$pkg" | grep -q "Applications/Owlbot.app/Contents/Resources/bin/hub.sh"
           sudo installer -pkg "$pkg" -target /
 
           # The postinstall starts the hub for the user at the console (the runner's auto-login session).
@@ -99,16 +140,13 @@ jobs:
           fi
           grep -q '"hasPassword":false' state.json
           launchctl print "gui/$(id -u)/ai.owlbot.hub" | grep -q "state = running"
-          url=$(/bin/sh "/Library/Application Support/Owlbot/bin/open.sh")
+          url=$(/bin/sh /Applications/Owlbot.app/Contents/Resources/bin/open.sh)
           echo "$url" | grep -Eq '^http://localhost:8080/#setup=[A-Za-z0-9_-]+$'
 
-          # What Uninstall Owlbot.app runs after its questions ("Keep data").
-          sudo /bin/sh "/Library/Application Support/Owlbot/bin/uninstall.sh" "$(id -u)" "$HOME"
+          sudo /bin/sh /Applications/Owlbot.app/Contents/Resources/bin/uninstall.sh "$(id -u)" "$HOME"
           sleep 2
-          test ! -e /Applications/Owlbot
-          test ! -e "/Library/Application Support/Owlbot"
+          test ! -e /Applications/Owlbot.app
           test ! -e "$HOME/Library/LaunchAgents/ai.owlbot.hub.plist"
-          # (`! cmd` would not stop the script under set -e.)
           if launchctl print "gui/$(id -u)/ai.owlbot.hub" >/dev/null 2>&1; then echo "the agent is still loaded"; exit 1; fi
           if curl -fsS http://127.0.0.1:8080/api/auth/state >/dev/null 2>&1; then echo "the hub still answers"; exit 1; fi
           if pkgutil --pkg-info ai.owlbot.pkg >/dev/null 2>&1; then echo "the package receipt is still there"; exit 1; fi
@@ -118,5 +156,7 @@ jobs:
         if: always()
         with:
           name: macos-installer
-          path: dist/desktop/owlbot-*.pkg
+          path: |
+            dist/desktop/owlbot-*.dmg
+            dist/desktop/owlbot-*.pkg
           if-no-files-found: ignore

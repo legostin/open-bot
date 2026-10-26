@@ -17,15 +17,8 @@
   "mac.welcome.title": "Welcome to Owlbot",
   "mac.welcome.body": "Owlbot is your personal agent. It runs in the background on this Mac and you talk to it in your browser.\n\nAfter the install it starts by itself and opens in your browser, where you choose a password. Your chats, agents and the vault stay on this Mac.",
   "mac.conclusion.title": "Owlbot is installed",
-  "mac.conclusion.body": "Owlbot runs in the background and starts when you log in. It is opening in your browser now; later, open it from Applications → Owlbot.\n\nTo remove it, open Applications → Owlbot → Uninstall Owlbot.",
+  "mac.conclusion.body": "Owlbot runs in the background and starts when you log in. It is opening in your browser now; later, open it from Applications.\n\nTo remove it, move Owlbot from Applications to the Trash. Your data stays in ~/Library/Application Support/Owlbot.",
+  "mac.moveFirst": "Owlbot is running from its disk image. Drag it to the Applications folder first, then open it from Applications.",
   "mac.notStarted": "Owlbot did not start. The log is in {file}.",
-  "mac.ok": "OK",
-  "mac.uninstall.confirm": "Uninstall Owlbot? The app and its background service will be removed from this Mac.",
-  "mac.uninstall.cancel": "Cancel",
-  "mac.uninstall.ok": "Uninstall",
-  "mac.uninstall.keepData": "Keep data",
-  "mac.uninstall.deleteDataButton": "Delete data",
-  "mac.uninstall.deleteData": "Also delete your Owlbot data (chats, agents, memory and the vault) in:\n{dir}\n\nChoose Keep data to keep it for a later install.",
-  "mac.uninstall.done": "Owlbot has been uninstalled.",
-  "mac.uninstall.failed": "Owlbot could not be fully removed: {detail}"
+  "mac.ok": "OK"
 }
