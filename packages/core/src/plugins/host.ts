@@ -213,7 +213,7 @@ export class PluginHost {
     const runAs = isBrainHost ? cfg.isolation.agentUser : cfg.isolation.pluginUser;
     if (cfg.isolation.users) {
       // Directories must belong to the user the plugin runs as (plugins-data is sticky world-writable, like /tmp).
-      execFileSync("sudo", ["-n", "-u", runAs, "--", "mkdir", "-p", dataDir, home], { stdio: "pipe" });
+      execFileSync("sudo", ["-n", "-u", runAs, "--", "mkdir", "-p", dataDir, home], { stdio: "pipe", env: passEnv() });
     } else {
       mkdirSync(dataDir, { recursive: true });
       mkdirSync(home, { recursive: true });
@@ -235,8 +235,8 @@ export class PluginHost {
     const nodeArgs = ["--disable-warning=ExperimentalWarning", runner, rec.layout.serverEntry];
     let child: ChildProcess;
     if (cfg.isolation.users) {
-      const kv = Object.entries({ ...passEnv(), ...env }).map(([k, v]) => `${k}=${v}`);
-      child = spawn("sudo", ["-n", "-u", runAs, "--", "env", "-i", ...kv, process.execPath, ...nodeArgs], { cwd: rec.dir, stdio: ["pipe", "pipe", "pipe"] });
+      const s = sudoSpawn(runAs, { ...passEnv(), ...env }, process.execPath, nodeArgs);
+      child = spawn(s.command, s.args, { cwd: rec.dir, env: s.env, stdio: ["pipe", "pipe", "pipe"] });
     } else {
       child = spawn(process.execPath, nodeArgs, { cwd: rec.dir, env: { ...scrubEnv(process.env), ...env }, stdio: ["pipe", "pipe", "pipe"] });
     }
@@ -640,8 +640,17 @@ export class PluginHost {
   }
 }
 
-/** Do not leak hub secrets into child processes when running without user isolation. */
-/** Harmless variables isolated children (run with `env -i`) still need: binaries, locale, X display, browsers. */
+/**
+ * Run `command` as another unix user with exactly `env`. The variables travel in sudo's own environment
+ * (`--preserve-env`, allowed by the sudoers rule), never on the command line: any user in the container can
+ * read command lines with ps, and these carry egress tokens and MCP server secrets.
+ */
+export function sudoSpawn(user: string, env: Record<string, string>, command: string, args: string[]): { command: string; args: string[]; env: Record<string, string> } {
+  for (const k of Object.keys(env)) if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) throw new Error(`invalid environment variable name: ${k}`);
+  return { command: "sudo", args: ["-n", `--preserve-env=${Object.keys(env).join(",")}`, "-u", user, "--", command, ...args], env };
+}
+
+/** Harmless variables isolated children still need: binaries, locale, X display, browsers. */
 export function passEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const out: Record<string, string> = { PATH: env.PATH ?? "/usr/local/bin:/usr/bin:/bin", LANG: env.LANG ?? "C.UTF-8" };
   for (const k of ["LC_ALL", "DISPLAY", "PLAYWRIGHT_BROWSERS_PATH", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "DISABLE_AUTOUPDATER"]) if (env[k]) out[k] = env[k]!;
