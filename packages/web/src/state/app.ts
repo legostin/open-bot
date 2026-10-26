@@ -348,8 +348,9 @@ export async function loadOlder(id: string): Promise<void> {
   }
 }
 
-export async function sendMessage(id: string, text: string): Promise<void> {
-  const m = await api.post<Message>(`/api/conversations/${encodeURIComponent(id)}/messages`, { text });
+/** A message with the paths of files uploaded for it (state/attachments.ts). */
+export async function sendMessage(id: string, text: string, attachments: string[] = []): Promise<void> {
+  const m = await api.post<Message>(`/api/conversations/${encodeURIComponent(id)}/messages`, attachments.length ? { text, attachments } : { text });
   if (m && m.id) patchConv(id, (c) => ({ ...c, messages: upsertMessage(c.messages, m) }));
 }
 

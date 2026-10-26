@@ -2,10 +2,10 @@
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
 import { memo } from "react";
-import { Bell, CircleAlert, ExternalLink, FileText, ShieldAlert } from "lucide-react";
+import { Bell, CircleAlert, ExternalLink, FileText, Mic, ShieldAlert } from "lucide-react";
 import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
-import { formatTime, notifyLevel } from "../../lib/format";
+import { fileSize, formatDuration, formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import { session } from "../../state/app";
 import { showDetails } from "../../state/prefs";
@@ -86,6 +86,9 @@ function ErrorPart({ message }: { message: string }) {
 function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" }> }) {
   const href = `/api/files?path=${encodeURIComponent(part.path)}`;
   const isImage = part.mimeType?.startsWith("image/");
+  const isAudio = part.mimeType?.startsWith("audio/");
+  const voice = part.kind === "voice";
+  const meta = [part.durationSec !== undefined ? formatDuration(part.durationSec) : undefined, part.size !== undefined ? fileSize(part.size) : part.mimeType].filter(Boolean).join(" · ");
   return (
     <div className="my-1.5">
       {isImage && (
@@ -93,15 +96,16 @@ function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" 
           <img src={href} alt={part.name} className="max-h-72 max-w-full rounded-xl border border-border" loading="lazy" />
         </a>
       )}
+      {isAudio && <audio controls preload="none" src={href} className="mb-1 h-10 w-72 max-w-full" />}
       <a
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm transition hover:bg-surface-2"
+        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg transition hover:bg-surface-2"
       >
-        <FileText className="size-4 shrink-0 text-muted" />
-        <span className="min-w-0 truncate font-medium">{part.name || part.path}</span>
-        {part.mimeType && <span className="shrink-0 text-xs text-muted">{part.mimeType}</span>}
+        {voice ? <Mic className="size-4 shrink-0 text-muted" /> : <FileText className="size-4 shrink-0 text-muted" />}
+        <span className="min-w-0 truncate font-medium">{voice ? t("message.voice") : part.name || part.path}</span>
+        {meta && <span className="shrink-0 text-xs text-muted">{meta}</span>}
       </a>
     </div>
   );

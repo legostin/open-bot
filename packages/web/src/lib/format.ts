@@ -1,7 +1,8 @@
 // Formatting helpers: status labels, relative times and dates in the interface language.
 
 import type { NotifyLevel, TaskStatus } from "@owlbot/shared";
-import { formatDate, formatRelative, t, type MessageKey } from "../i18n";
+import { formatDate, formatRelative, locale, t, type MessageKey } from "../i18n";
+import { sizeParts } from "./attachments";
 
 export type Tone = "neutral" | "success" | "warning" | "danger" | "info";
 
@@ -86,4 +87,21 @@ export function slugify(s: string): string {
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-")
     .slice(0, 40);
+}
+
+const SIZE_UNITS = { b: "units.bytes", kb: "units.kb", mb: "units.mb" } as const;
+
+/** A file size in the interface language and its number format: 512 B, 47 KB, 1.2 MB. */
+export function fileSize(bytes: number): string {
+  const { n, unit } = sizeParts(bytes);
+  return t(SIZE_UNITS[unit], { n: new Intl.NumberFormat(locale).format(n) });
+}
+
+/** 0:12, 1:12, 1:02:03 (a voice note's length). */
+export function formatDuration(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
 }

@@ -1,11 +1,13 @@
 // A conversation: top bar (agent and title, or a group's members), scrolling message list with history loading, composer.
+// Files dropped anywhere on it go to the composer.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, Check, Pencil, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { ArrowDown, Check, Paperclip, Pencil, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { errorText } from "../../lib/api";
 import { agents, conversations, ensureAgents, loadMessages, loadOlder, updateConversation, useConversationMessages } from "../../state/app";
 import { toast } from "../../state/toast";
+import { addFiles } from "../../state/attachments";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
 import { TopBar } from "../../components/Layout";
 import { AgentHeader } from "./AgentHeader";
@@ -87,6 +89,10 @@ export function ChatView({
   const stick = useRef(true);
   const prevHeight = useRef<number | null>(null);
   const [showDown, setShowDown] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  // dragenter/dragleave fire for every child the pointer crosses: count them.
+  const dragDepth = useRef(0);
+  const carriesFiles = (e: DragEvent) => [...e.dataTransfer.types].includes("Files");
 
   useEffect(() => {
     stick.current = true;
@@ -128,7 +134,35 @@ export function ChatView({
   const groupHint = isGroup ? t("group.emptyHint", { lead: agentById.get(meta.agentId)?.name ?? meta.agentId }) : undefined;
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col">
+    <div
+      className="relative flex h-full min-w-0 flex-1 flex-col"
+      onDragEnter={(e) => {
+        if (!carriesFiles(e)) return;
+        e.preventDefault();
+        dragDepth.current++;
+        setDropping(true);
+      }}
+      onDragOver={(e) => {
+        if (carriesFiles(e)) e.preventDefault();
+      }}
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (!dragDepth.current) setDropping(false);
+      }}
+      onDrop={(e) => {
+        if (!carriesFiles(e)) return;
+        e.preventDefault();
+        dragDepth.current = 0;
+        setDropping(false);
+        addFiles(conversationId, [...e.dataTransfer.files]);
+      }}
+    >
+      {dropping && (
+        <div className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-accent/60 bg-bg/85 text-sm font-medium backdrop-blur-sm">
+          <Paperclip className="size-6 text-muted" />
+          {t("composer.dropHere")}
+        </div>
+      )}
       {header && (
         <TopBar>
           {meta && isGroup ? (
