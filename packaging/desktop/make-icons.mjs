@@ -3,9 +3,12 @@
 //   packages/web/public/favicon.svg (the mark)  -> packaging/assets/owlbot.ico (Windows, PNG entries), png/ (Tauri)
 //   packaging/assets/app-icon.svg (Apple grid)  -> packaging/assets/owlbot.icns (macOS)
 //   packaging/assets/tray.svg (the glyph)       -> packaging/assets/png/tray.png (the macOS menu bar, a template image)
+//   packaging/assets/dmg-background.svg         -> packaging/assets/dmg-background.tiff (1x and Retina, macOS tiffutil)
 //   node packaging/desktop/make-icons.mjs
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 
@@ -16,20 +19,22 @@ const sizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
-/** `{ size: PNG }` of an SVG file, on a transparent background. */
-async function render(file, list) {
+/** `{ size: PNG }` of an SVG file, on a transparent background; `height` for one that is not square. */
+async function render(file, list, height = (size) => size) {
   const svg = readFileSync(file, "utf8");
   const shots = {};
   for (const size of list) {
-    await page.setViewportSize({ width: size, height: size });
-    await page.setContent(`<html><body style="margin:0;background:transparent">${svg.replace("<svg ", `<svg width="${size}" height="${size}" `)}</body></html>`);
-    shots[size] = await page.screenshot({ omitBackground: true, clip: { x: 0, y: 0, width: size, height: size } });
+    const h = height(size);
+    await page.setViewportSize({ width: size, height: h });
+    await page.setContent(`<html><body style="margin:0;background:transparent">${svg.replace("<svg ", `<svg width="${size}" height="${h}" `)}</body></html>`);
+    shots[size] = await page.screenshot({ omitBackground: true, clip: { x: 0, y: 0, width: size, height: h } });
   }
   return shots;
 }
 const png = await render(join(ROOT, "packages", "web", "public", "favicon.svg"), sizes);
 const appIcon = await render(join(out, "app-icon.svg"), sizes);
 const tray = await render(join(out, "tray.svg"), [44]);
+const dmg = await render(join(out, "dmg-background.svg"), [660, 1320], (w) => (w * 400) / 660);
 await browser.close();
 
 // ICO: header, one directory entry per size, then the PNG images.
@@ -67,4 +72,10 @@ writeFileSync(join(out, "owlbot.icns"), Buffer.concat([icnsHead, ...chunks]));
 mkdirSync(join(out, "png"), { recursive: true });
 for (const [file, size] of [["32x32.png", 32], ["128x128.png", 128], ["128x128@2x.png", 256], ["icon.png", 512]]) writeFileSync(join(out, "png", file), png[size]);
 writeFileSync(join(out, "png", "tray.png"), tray[44]);
+// The .dmg window's background: Finder picks the Retina image from a two-image TIFF.
+const tmp = mkdtempSync(join(tmpdir(), "owlbot-dmg-"));
+writeFileSync(join(tmp, "bg.png"), dmg[660]);
+writeFileSync(join(tmp, "bg@2x.png"), dmg[1320]);
+execFileSync("tiffutil", ["-cathidpicheck", join(tmp, "bg.png"), join(tmp, "bg@2x.png"), "-out", join(out, "dmg-background.tiff")]);
+rmSync(tmp, { recursive: true });
 console.log(`icons written to ${out}`);
