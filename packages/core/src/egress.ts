@@ -3,9 +3,47 @@
 
 import http from "node:http";
 import net from "node:net";
+import { lookup } from "node:dns/promises";
 import { randomBytes } from "node:crypto";
 import { hostMatches } from "@openbot/shared";
 import type { AuditLog } from "./audit.ts";
+
+const PRIVATE_V4: Array<[string, number]> = [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+  ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4],
+];
+const PRIVATE_V6: Array<[string, number]> = [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]];
+const privateNets = new net.BlockList();
+for (const [a, p] of PRIVATE_V4) privateNets.addSubnet(a, p, "ipv4");
+for (const [a, p] of PRIVATE_V6) privateNets.addSubnet(a, p, "ipv6");
+
+/** dns.lookup replacement that only returns addresses we already checked (no second resolution). */
+function pinnedLookup(addrs: string[]): net.LookupFunction {
+  return ((_host: string, opts: { all?: boolean }, cb: (...a: any[]) => void) => {
+    if (opts?.all) cb(null, addrs.map((address) => ({ address, family: net.isIP(address) })));
+    else cb(null, addrs[0], net.isIP(addrs[0]));
+  }) as net.LookupFunction;
+}
+
+function v4FromHex(hi: string, lo: string): string {
+  const n = ((parseInt(hi, 16) << 16) | parseInt(lo, 16)) >>> 0;
+  return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+}
+
+/** Loopback, LAN, link-local, CGNAT, multicast… including IPv4 embedded in IPv6 (mapped, NAT64, 6to4). */
+export function isPrivateAddress(ip: string): boolean {
+  const v = net.isIP(ip);
+  if (v === 4) return privateNets.check(ip, "ipv4");
+  if (v !== 6) return true;
+  const lower = ip.toLowerCase();
+  const dotted = /^(?:::ffff:|64:ff9b::)(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
+  if (dotted) return privateNets.check(dotted[1], "ipv4");
+  const hex = /^(?:::ffff:|64:ff9b::)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(lower);
+  if (hex) return privateNets.check(v4FromHex(hex[1], hex[2]), "ipv4");
+  const sixToFour = /^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4}):/.exec(lower);
+  if (sixToFour) return privateNets.check(v4FromHex(sixToFour[1], sixToFour[2]), "ipv4");
+  return privateNets.check(ip, "ipv6");
+}
 
 interface Grant {
   owner: string;
@@ -19,6 +57,21 @@ export class EgressProxy {
   audit?: AuditLog;
   /** Dynamic extra allowlist for brains (settings.brainEgressAllow). */
   extraBrainAllow: () => string[] = () => [];
+  /** Hosts allowed to resolve to private addresses (settings.egressPrivateAllow). */
+  privateAllow: () => string[] = () => [];
+
+  /**
+   * Resolve once and return the address to connect to, so a DNS answer cannot change between check and use.
+   * Private destinations are refused unless the host is listed in privateAllow.
+   */
+  async resolveTarget(host: string): Promise<string[]> {
+    const bare = host.replace(/^\[|\]$/g, "");
+    const addrs = net.isIP(bare) ? [bare] : (await lookup(bare, { all: true, verbatim: true })).map((a) => a.address);
+    if (addrs.length === 0) throw new Error(`cannot resolve ${host}`);
+    const okPrivate = this.privateAllow().some((p) => hostMatches(bare, p));
+    if (!okPrivate && addrs.some(isPrivateAddress)) throw new Error(`${host} resolves to a private address; add it to egressPrivateAllow to allow`);
+    return addrs;
+  }
 
   issueToken(owner: string, allow: string[]): string {
     const token = randomBytes(18).toString("base64url");
@@ -79,20 +132,38 @@ export class EgressProxy {
       const headers = { ...req.headers };
       delete headers["proxy-authorization"];
       delete headers["proxy-connection"];
-      const up = http.request(
-        { host: target.hostname, port: target.port || 80, method: req.method, path: target.pathname + target.search, headers },
-        (upRes) => {
-          res.writeHead(upRes.statusCode ?? 502, upRes.headers);
-          upRes.pipe(res);
+      this.resolveTarget(target.hostname).then(
+        (addrs) => {
+          const opts: http.RequestOptions = {
+            host: target.hostname,
+            port: Number(target.port || 80),
+            lookup: pinnedLookup(addrs), // Node tries each address in turn (autoSelectFamily is on by default)
+            method: req.method,
+            path: target.pathname + target.search,
+            headers,
+          };
+          const up = http.request(opts, (upRes) => {
+            res.writeHead(upRes.statusCode ?? 502, upRes.headers);
+            upRes.pipe(res);
+          });
+          up.on("error", (e) => {
+            if (!res.headersSent) res.writeHead(502);
+            res.end(`upstream error: ${e.message}`);
+          });
+          req.pipe(up);
+        },
+        (e: Error) => {
+          this.logDeny(verdict.owner, target.hostname);
+          res.writeHead(403).end(`egress to ${target.hostname} is not allowed: ${e.message}`);
         },
       );
-      up.on("error", (e) => res.writeHead(502).end(`upstream error: ${e.message}`));
-      req.pipe(up);
     });
 
     server.on("connect", (req, clientSocket: net.Socket, head) => {
-      const [host, portStr] = (req.url ?? "").split(":");
-      const port = Number(portStr || 443);
+      const raw = req.url ?? "";
+      const sep = raw.lastIndexOf(":");
+      const host = (sep > 0 ? raw.slice(0, sep) : raw).replace(/^\[|\]$/g, "");
+      const port = Number(sep > 0 ? raw.slice(sep + 1) : 443);
       const token = this.tokenFrom(req);
       const verdict = this.allowed(token, host);
       if (!verdict.ok) {
@@ -100,14 +171,23 @@ export class EgressProxy {
         clientSocket.end(`HTTP/1.1 ${token ? "403 Forbidden" : "407 Proxy Authentication Required"}\r\nProxy-Authenticate: Basic realm=openbot\r\n\r\n`);
         return;
       }
-      const upstream = net.connect(port, host, () => {
-        clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-        if (head?.length) upstream.write(head);
-        upstream.pipe(clientSocket);
-        clientSocket.pipe(upstream);
-      });
-      upstream.on("error", () => clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"));
-      clientSocket.on("error", () => upstream.destroy());
+      clientSocket.on("error", () => {});
+      this.resolveTarget(host).then(
+        (addrs) => {
+          const upstream = net.connect({ host, port, lookup: pinnedLookup(addrs), autoSelectFamily: true }, () => {
+            clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+            if (head?.length) upstream.write(head);
+            upstream.pipe(clientSocket);
+            clientSocket.pipe(upstream);
+          });
+          upstream.on("error", () => clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"));
+          clientSocket.on("error", () => upstream.destroy());
+        },
+        () => {
+          this.logDeny(verdict.owner, host);
+          clientSocket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+        },
+      );
     });
 
     this.server = server;

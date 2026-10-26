@@ -1,0 +1,11 @@
+{
+  "name": "@openbot/plugin-triggers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Proactivity for open-bot: schedules, one-off reminders, page watches, webhooks, heartbeat reviews",
+  "dependencies": {
+    "croner": "^10.0.1",
+    "node-html-parser": "^9.0.4"
+  }
+}

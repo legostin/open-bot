@@ -1,0 +1,10 @@
+{
+  "name": "@openbot/plugin-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "web_fetch (readable page content) and web_search (Brave, Tavily, SearXNG, DuckDuckGo)",
+  "dependencies": {
+    "node-html-parser": "^9.0.4"
+  }
+}

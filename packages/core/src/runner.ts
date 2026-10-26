@@ -99,8 +99,15 @@ export class SessionRunner {
 
   async stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
-    await Promise.all([...this.live.values()].map((l) => l.handle.close().catch(() => {})));
-    this.live.clear();
+    await Promise.all([...this.live.keys()].map((id) => this.closeLive(id)));
+  }
+
+  /** Close a live brain session and revoke its egress grant. */
+  private async closeLive(id: string): Promise<void> {
+    const l = this.live.get(id);
+    this.live.delete(id);
+    this.d.egress.revokeOwner(`brain:${id}`);
+    await l?.handle.close().catch(() => {});
   }
 
   // ---------- public entry points ----------
@@ -424,6 +431,7 @@ export class SessionRunner {
 
     const env: Record<string, string> = {};
     if (local) {
+      this.d.egress.revokeOwner(`brain:${row.id}`);
       const proxyToken = this.d.egress.issueToken(`brain:${row.id}`, DEFAULT_BRAIN_EGRESS);
       const proxy = `http://${proxyToken}:x@127.0.0.1:${this.d.config.egressPort}`;
       Object.assign(env, { HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: "127.0.0.1,localhost,::1", no_proxy: "127.0.0.1,localhost,::1" });
@@ -496,10 +504,7 @@ export class SessionRunner {
       let row = curPrior;
       try {
         if (!live || live.brainRef !== key) {
-          if (live && curPrior) {
-            void live.handle.close();
-            this.live.delete(curPrior.id);
-          }
+          if (live && curPrior) void this.closeLive(curPrior.id);
           const opened = await this.openSession(conv, agent, ref, task, curPrior);
           row = opened.row;
           live = this.live.get(row.id)!;
@@ -523,8 +528,7 @@ export class SessionRunner {
         if (r.retry) {
           lastError = r.error ?? lastError;
           if (r.limited) earliestReset = r.limited.resetAt ?? earliestReset;
-          this.live.get(row!.id)?.handle.close().catch(() => {});
-          this.live.delete(row!.id);
+          void this.closeLive(row!.id);
           continue;
         }
         return r;

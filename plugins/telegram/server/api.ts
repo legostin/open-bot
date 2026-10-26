@@ -1,0 +1,110 @@
+// Minimal Telegram Bot API client over global fetch (the hub's egress proxy applies through env).
+
+export class TelegramError extends Error {
+  code: number;
+  retryAfter?: number;
+  constructor(code: number, description: string, retryAfter?: number) {
+    super(description);
+    this.name = "TelegramError";
+    this.code = code;
+    this.retryAfter = retryAfter;
+  }
+  /** Token revoked or wrong. */
+  get unauthorized(): boolean {
+    return this.code === 401 || this.code === 404;
+  }
+  get parseError(): boolean {
+    return this.code === 400 && /can't parse entities|unsupported start tag|can't find end tag|unexpected end tag/i.test(this.message);
+  }
+  get notModified(): boolean {
+    return this.code === 400 && /message is not modified/i.test(this.message);
+  }
+}
+
+export interface TgUser {
+  id: number;
+  is_bot?: boolean;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+}
+
+export interface TgChat {
+  id: number;
+  type: "private" | "group" | "supergroup" | "channel";
+  title?: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export interface TgMessage {
+  message_id: number;
+  chat: TgChat;
+  from?: TgUser;
+  date: number;
+  text?: string;
+  entities?: Array<{ type: string; offset: number; length: number; url?: string; language?: string }>;
+  reply_markup?: { inline_keyboard?: InlineButton[][] };
+  [k: string]: unknown;
+}
+
+export interface TgCallbackQuery {
+  id: string;
+  from: TgUser;
+  message?: TgMessage;
+  data?: string;
+}
+
+export interface TgUpdate {
+  update_id: number;
+  message?: TgMessage;
+  callback_query?: TgCallbackQuery;
+  [k: string]: unknown;
+}
+
+export type InlineButton = { text: string; callback_data?: string; url?: string };
+
+export class TelegramApi {
+  base: string;
+  private token: string;
+  constructor(baseUrl: string, token: string) {
+    this.base = baseUrl.replace(/\/+$/, "");
+    this.token = token;
+  }
+
+  async call<T = any>(method: string, params: Record<string, unknown> = {}, opts: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<T> {
+    const signals = [AbortSignal.timeout(opts.timeoutMs ?? 30_000)];
+    if (opts.signal) signals.push(opts.signal);
+    let res: Response;
+    try {
+      res = await fetch(`${this.base}/bot${this.token}/${method}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(params),
+        signal: AbortSignal.any(signals),
+      });
+    } catch (e: any) {
+      if (opts.signal?.aborted) throw e;
+      // Never include the URL (it contains the token).
+      const cause = e?.cause?.code ?? e?.cause?.message ?? e?.name ?? "";
+      throw new TelegramError(0, `сеть недоступна${cause ? ` (${cause})` : ""}`);
+    }
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; result?: T; error_code?: number; description?: string; parameters?: { retry_after?: number } } | null;
+    if (!body?.ok) throw new TelegramError(body?.error_code ?? res.status, body?.description ?? `HTTP ${res.status}`, body?.parameters?.retry_after);
+    return body.result as T;
+  }
+
+  /** Same as call(), but waits and retries once when Telegram asks to slow down (429). */
+  async send<T = any>(method: string, params: Record<string, unknown>): Promise<T> {
+    try {
+      return await this.call<T>(method, params);
+    } catch (e) {
+      if (e instanceof TelegramError && e.code === 429 && e.retryAfter && e.retryAfter <= 30) {
+        await new Promise((r) => setTimeout(r, e.retryAfter! * 1000));
+        return this.call<T>(method, params);
+      }
+      throw e;
+    }
+  }
+}

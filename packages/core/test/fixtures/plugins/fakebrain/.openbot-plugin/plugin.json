@@ -1,0 +1,8 @@
+{
+  "id": "fakebrain",
+  "name": "Fake brain",
+  "toolPrefix": "fake",
+  "server": "./server/index.ts",
+  "contributes": { "tools": true, "brains": ["fake", "fake2"] },
+  "permissions": {}
+}

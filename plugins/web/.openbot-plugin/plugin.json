@@ -1,0 +1,47 @@
+{
+  "id": "web",
+  "name": "Веб",
+  "version": "0.1.0",
+  "description": "Чтение веб-страниц (web_fetch) и поиск в интернете (web_search): Brave, Tavily, SearXNG или DuckDuckGo",
+  "author": "open-bot",
+  "builtin": true,
+  "server": "./server/index.ts",
+  "contributes": {
+    "tools": true,
+    "settings": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "title": "Поисковик",
+          "enum": ["auto", "brave", "tavily", "searxng", "duckduckgo"],
+          "default": "auto",
+          "description": "auto — первый настроенный: Brave → Tavily → SearXNG → DuckDuckGo. Ключи Brave и Tavily хранятся в vault (brave_api_key, tavily_api_key, поле value)."
+        },
+        "searxngUrl": {
+          "type": "string",
+          "title": "Адрес SearXNG",
+          "description": "Например, http://searxng:8080 (в настройках инстанса должен быть включён формат json)"
+        },
+        "allowPrivate": {
+          "type": "boolean",
+          "title": "Разрешить локальные адреса",
+          "default": false,
+          "description": "Разрешить web_fetch обращаться к адресам локальной сети (10.x, 192.168.x, 127.x и т. п.). Небезопасно: включайте, только если понимаете зачем."
+        },
+        "userAgent": {
+          "type": "string",
+          "title": "User-Agent",
+          "description": "Заголовок User-Agent для запросов (необязательно)"
+        },
+        "braveBaseUrl": { "type": "string", "title": "Адрес API Brave", "description": "По умолчанию https://api.search.brave.com" },
+        "tavilyBaseUrl": { "type": "string", "title": "Адрес API Tavily", "description": "По умолчанию https://api.tavily.com" },
+        "duckduckgoUrl": { "type": "string", "title": "Адрес DuckDuckGo HTML", "description": "По умолчанию https://html.duckduckgo.com/html/" }
+      }
+    }
+  },
+  "permissions": {
+    "network": ["*"],
+    "vault": ["brave_api_key", "tavily_api_key"]
+  }
+}

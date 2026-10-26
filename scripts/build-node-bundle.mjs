@@ -1,0 +1,21 @@
+// Bundles the machine daemon (packages/node) into one file the hub serves at /download/openbot-node.mjs,
+// so another computer needs only Node.js: curl the file, then `node openbot-node.mjs pair <hub> <code>`.
+import { build } from "esbuild";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+await build({
+  entryPoints: [join(root, "packages/node/src/cli.ts")],
+  outfile: join(root, "packages/node/dist/openbot-node.mjs"),
+  bundle: true,
+  platform: "node",
+  target: "node24",
+  format: "esm",
+  // ws loads these optional native addons with require(); they are not needed.
+  external: ["bufferutil", "utf-8-validate"],
+  banner: { js: 'import { createRequire as __obCreateRequire } from "node:module"; const require = __obCreateRequire(import.meta.url);' },
+  legalComments: "none",
+  logLevel: "warning",
+});
+console.log("built packages/node/dist/openbot-node.mjs");

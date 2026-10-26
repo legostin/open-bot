@@ -28,7 +28,7 @@ export interface BrainListing {
 }
 
 export class BrainRegistry {
-  private pluginBrains = new Map<string, { label: string; pluginId: string; peer: RpcPeer }>();
+  private pluginBrains = new Map<string, { label: string; pluginId: string; peer: RpcPeer; variants: string[] }>();
   private machineHosts = new Map<string, { name: string; peer: RpcPeer; brains: Map<string, string> }>();
   private probeCache = new Map<string, ProbeResult & { checkedAt: string }>();
   private eventRouters = new Map<RpcPeer, Map<string, (e: BrainEvent) => void>>();
@@ -36,8 +36,8 @@ export class BrainRegistry {
 
   // ---------- registration ----------
 
-  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer): void {
-    this.pluginBrains.set(brainId, { label, pluginId, peer });
+  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer, variants: string[] = []): void {
+    this.pluginBrains.set(brainId, { label, pluginId, peer, variants });
     this.attachRouter(peer);
     this.onChange?.();
   }
@@ -86,7 +86,7 @@ export class BrainRegistry {
   list(variants: Record<string, string[]> = {}): BrainListing[] {
     const out: BrainListing[] = [];
     for (const [id, b] of this.pluginBrains) {
-      const vs = variants[id]?.length ? variants[id] : [undefined];
+      const vs = variants[id]?.length ? variants[id] : b.variants.length ? b.variants : [undefined];
       for (const v of vs) {
         const ref = formatBrainRef({ brainId: id, variant: v, machineId: "local" });
         out.push({ ref, brainId: id, machineId: "local", label: v ? `${b.label} (${v})` : b.label, host: `plugin:${b.pluginId}`, probe: this.probeCache.get(ref) });

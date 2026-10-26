@@ -75,7 +75,7 @@ peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pl
     brains: {
       register(provider) {
         brains.set(provider.id, provider);
-        void peer.request("register.brain", { id: provider.id, label: provider.label });
+        void peer.request("register.brain", { id: provider.id, label: provider.label, variants: provider.variants });
       },
     },
     channels: {

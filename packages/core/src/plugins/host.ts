@@ -23,6 +23,8 @@ export interface PluginRecord {
   source: "builtin" | "installed";
   enabled: boolean;
   granted: PluginPermissions;
+  /** Vault items granted by the user in the security console, on top of the manifest. */
+  extraVault: string[];
   commitHash?: string;
   settings: Record<string, unknown>;
   layout?: PluginLayout;
@@ -32,7 +34,7 @@ export interface PluginRecord {
 }
 
 export interface BrainSink {
-  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer): void;
+  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer, variants?: string[]): void;
   unregisterPlugin(pluginId: string): void;
 }
 
@@ -137,6 +139,7 @@ export class PluginHost {
         source,
         enabled: !!r.enabled,
         granted: json<PluginPermissions>(r.granted, layout.manifest.permissions),
+        extraVault: json<string[]>(r.extra_vault, []),
         commitHash: r.commit_hash ?? undefined,
         settings: json(r.settings, {}),
         layout,
@@ -231,7 +234,7 @@ export class PluginHost {
     const nodeArgs = ["--disable-warning=ExperimentalWarning", runner, rec.layout.serverEntry];
     let child: ChildProcess;
     if (cfg.isolation.users) {
-      const kv = Object.entries({ ...env, PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin", LANG: process.env.LANG ?? "C.UTF-8" }).map(([k, v]) => `${k}=${v}`);
+      const kv = Object.entries({ ...passEnv(), ...env }).map(([k, v]) => `${k}=${v}`);
       child = spawn("sudo", ["-n", "-u", runAs, "--", "env", "-i", ...kv, process.execPath, ...nodeArgs], { cwd: rec.dir, stdio: ["pipe", "pipe", "pipe"] });
     } else {
       child = spawn(process.execPath, nodeArgs, { cwd: rec.dir, env: { ...scrubEnv(process.env), ...env }, stdio: ["pipe", "pipe", "pipe"] });
@@ -379,9 +382,10 @@ export class PluginHost {
       return {};
     });
 
-    peer.handle("register.brain", (p: { id: string; label: string }) => {
+    peer.handle("register.brain", (p: { id: string; label: string; variants?: string[] }) => {
       if (!m.contributes.brains.includes(p.id)) deny(`brain ${p.id} not declared in contributes.brains`);
-      this.d.brains.registerPluginBrain(p.id, p.label, id, peer);
+      const variants = Array.isArray(p.variants) ? p.variants.filter((v) => typeof v === "string" && /^[\w.-]{1,64}$/.test(v)).slice(0, 32) : [];
+      this.d.brains.registerPluginBrain(p.id, p.label, id, peer, variants);
       this.d.bus.emit("brains.updated", {});
       return {};
     });
@@ -418,7 +422,7 @@ export class PluginHost {
     peer.handle("vault.get", (p: { ref: string; domain?: string; reason?: string }) => {
       const itemId = p.ref.replace(/^vault:\/\//, "");
       const meta = this.d.vault.getMeta(itemId);
-      const allowed = rec.granted.vault.some((g) => g === itemId || g === "*" || (meta && g === `${meta.type}:*`));
+      const allowed = [...rec.granted.vault, ...rec.extraVault].some((g) => g === itemId || g === "*" || (meta && g === `${meta.type}:*`));
       if (!allowed) deny(`vault item ${itemId} not in permissions.vault`);
       return this.d.vault.access(p.ref, { actor: `plugin:${id}`, pluginId: id, domain: p.domain });
     });
@@ -492,6 +496,17 @@ export class PluginHost {
     const r = this.running.get(id);
     if (r && !r.peer.closed) r.peer.notify("settings.changed", { settings });
     this.d.audit.append("user", "plugin.settings", id);
+  }
+
+  /** Grant a plugin extra vault items (e.g. the key a setting like customKeyRef points to). Takes effect on the next vault.get. */
+  setExtraVault(id: string, items: string[]): void {
+    const rec = this.records.get(id);
+    if (!rec) throw new Error(`unknown plugin ${id}`);
+    const clean = [...new Set(items.map((s) => String(s).replace(/^vault:\/\//, "").trim()).filter(Boolean))];
+    for (const it of clean) if (!/^[\w.:*-]{1,128}$/.test(it)) throw new Error(`invalid vault item ${it}`);
+    rec.extraVault = clean;
+    this.d.db.prepare("update plugins set extra_vault = ? where id = ?").run(JSON.stringify(clean), id);
+    this.d.audit.append("user", "plugin.vault", id, { items: clean });
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<void> {
@@ -601,6 +616,13 @@ export class PluginHost {
 }
 
 /** Do not leak hub secrets into child processes when running without user isolation. */
+/** Harmless variables isolated children (run with `env -i`) still need: binaries, locale, X display, browsers. */
+export function passEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const out: Record<string, string> = { PATH: env.PATH ?? "/usr/local/bin:/usr/bin:/bin", LANG: env.LANG ?? "C.UTF-8" };
+  for (const k of ["LC_ALL", "DISPLAY", "PLAYWRIGHT_BROWSERS_PATH", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "DISABLE_AUTOUPDATER"]) if (env[k]) out[k] = env[k]!;
+  return out;
+}
+
 export function scrubEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {

@@ -225,8 +225,20 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
       return { ok: true };
     });
     api.get("/console-api/plugins", async () =>
-      hub.plugins.list().map((r) => ({ id: r.id, name: r.layout?.manifest.name ?? r.id, source: r.source, enabled: r.enabled, permissions: r.granted, hasUi: !!r.layout?.uiEntry })),
+      hub.plugins.list().map((r) => ({ id: r.id, name: r.layout?.manifest.name ?? r.id, source: r.source, enabled: r.enabled, permissions: r.granted, extraVault: r.extraVault, hasUi: !!r.layout?.uiEntry })),
     );
+    api.put("/console-api/plugins/:id/vault", async (req) => {
+      const id = (req.params as any).id as string;
+      const items = (req.body as any)?.items;
+      if (!Array.isArray(items)) throw new HttpError(400, "items: ожидается массив id записей vault");
+      if (!hub.plugins.get(id)) throw new HttpError(404, "Плагин не найден");
+      try {
+        hub.plugins.setExtraVault(id, items);
+      } catch (e: any) {
+        throw new HttpError(400, e.message);
+      }
+      return { ok: true, extraVault: hub.plugins.get(id)!.extraVault };
+    });
   });
 
   app.get("/console-api/ws", { websocket: true }, (socket, req) => {

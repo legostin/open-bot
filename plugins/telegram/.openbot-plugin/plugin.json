@@ -1,0 +1,49 @@
+{
+  "id": "telegram",
+  "name": "Telegram",
+  "version": "0.1.0",
+  "description": "Канал Telegram: чат с ассистентом, уведомления и подтверждения действий с телефона",
+  "builtin": true,
+  "server": "./server/index.ts",
+  "ui": "./ui/dist/index.js",
+  "contributes": {
+    "channels": ["telegram"],
+    "http": true,
+    "settings": {
+      "type": "object",
+      "properties": {
+        "botTokenRef": {
+          "type": "string",
+          "title": "Токен бота",
+          "description": "Ссылка на запись vault с токеном бота от @BotFather (поле value)",
+          "default": "vault://telegram_bot_token"
+        },
+        "apiBaseUrl": {
+          "type": "string",
+          "title": "Адрес Bot API",
+          "description": "Обычно https://api.telegram.org; меняйте только для собственного сервера Bot API",
+          "default": "https://api.telegram.org"
+        },
+        "pollTimeoutSec": {
+          "type": "integer",
+          "title": "Таймаут long polling, с",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 50
+        },
+        "tokenRetrySec": {
+          "type": "integer",
+          "title": "Повтор при отсутствии токена, с",
+          "default": 60,
+          "minimum": 1
+        }
+      }
+    }
+  },
+  "permissions": {
+    "network": ["api.telegram.org"],
+    "vault": ["telegram_bot_token"],
+    "core": ["channels.inbound", "approvals.resolve", "notifications.feedback", "tasks.list", "settings.get", "ui.emit"],
+    "ui": ["settings.section"]
+  }
+}

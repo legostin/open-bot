@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 export type Db = DatabaseSync;
@@ -32,11 +32,21 @@ const MIGRATIONS: string[] = [
   create table brain_limits(brain_ref text primary key, until text not null, detail text);
   create table usage(day text not null, agent_id text not null, kind text not null, count integer not null default 0, tokens integer not null default 0, primary key(day, agent_id, kind));
   `,
+  // Vault items the user granted a plugin beyond its manifest (security console only).
+  `alter table plugins add column extra_vault text not null default '[]';`,
 ];
 
 export function openDb(file: string): Db {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
+  if (file !== ":memory:") {
+    // Hub-only: plugin and agent users share the data volume. SQLite gives -wal/-shm the same mode.
+    try {
+      chmodSync(file, 0o600);
+    } catch {
+      /* windows */
+    }
+  }
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000;");
   db.exec("create table if not exists schema_version(v integer not null)");
   const row = db.prepare("select v from schema_version").get() as { v: number } | undefined;
