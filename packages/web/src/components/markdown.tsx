@@ -3,9 +3,10 @@
 import { memo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, Lock } from "lucide-react";
 import { t } from "../i18n";
 import { mediaSrc } from "../lib/media";
+import { remarkUserText } from "../lib/user-markdown";
 import { CopyButton, cx } from "./ui";
 
 type MdNode = { type: string; value?: string; children?: MdNode[] };
@@ -54,12 +55,26 @@ const components: Components = {
     </div>
   ),
   input: ({ checked, type }) => (type === "checkbox" ? <input type="checkbox" checked={!!checked} readOnly disabled /> : null),
+  // A secret the hub took out of the user's message (lib/user-markdown.ts).
+  span: ({ className, children }) =>
+    className === "vault-ref" ? (
+      <span className="vault-ref">
+        <Lock className="size-3" />
+        {children}
+      </span>
+    ) : (
+      <span className={className}>{children}</span>
+    ),
 };
 
-export const Markdown = memo(function Markdown({ text, className }: { text: string; className?: string }) {
+const ASSISTANT_PLUGINS = [remarkGfm, remarkHtmlAsText];
+const USER_PLUGINS = [remarkGfm, remarkHtmlAsText, remarkUserText];
+
+/** `user`: what the user typed (line breaks kept, vault chips) rather than an agent's reply. */
+export const Markdown = memo(function Markdown({ text, className, user }: { text: string; className?: string; user?: boolean }) {
   return (
     <div className={cx("md", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkHtmlAsText]} components={components} skipHtml={false}>
+      <ReactMarkdown remarkPlugins={user ? USER_PLUGINS : ASSISTANT_PLUGINS} components={components} skipHtml={false}>
         {text}
       </ReactMarkdown>
     </div>

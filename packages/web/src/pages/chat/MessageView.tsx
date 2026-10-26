@@ -2,7 +2,7 @@
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
 import { memo } from "react";
-import { Bell, CircleAlert, ExternalLink, FileText, Lock, ShieldAlert } from "lucide-react";
+import { Bell, CircleAlert, ExternalLink, FileText, ShieldAlert } from "lucide-react";
 import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
 import { formatTime, notifyLevel } from "../../lib/format";
@@ -107,25 +107,6 @@ function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" 
   );
 }
 
-/** A user's text where secrets the hub took out (vault://id) show as lock chips. */
-function UserText({ text }: { text: string }) {
-  const pieces = text.split(/(vault:\/\/[A-Za-z0-9][\w.-]{0,127})/g);
-  if (pieces.length === 1) return <>{text}</>;
-  return (
-    <>
-      {pieces.map((s, i) =>
-        i % 2 ? (
-          <span key={i} className="mx-0.5 inline-flex items-center gap-1 rounded-md bg-surface/70 px-1.5 font-mono text-[13px]">
-            <Lock className="size-3" /> {s.slice("vault://".length)}
-          </span>
-        ) : (
-          s
-        ),
-      )}
-    </>
-  );
-}
-
 function TypingDots() {
   return (
     <span className="inline-flex items-center gap-1 py-2" aria-label={t("message.typing")}>
@@ -175,9 +156,7 @@ function Parts({ message }: { message: Message }) {
           case "text": {
             const caret = streaming && idx === items.length - 1 && lastPart?.type === "text";
             return message.role === "user" ? (
-              <div key={it.key} className="break-words whitespace-pre-wrap">
-                <UserText text={p.text} />
-              </div>
+              <Markdown key={it.key} text={p.text} className="md-bubble" user />
             ) : (
               <Markdown key={it.key} text={p.text} className={cx(caret && "stream-caret")} />
             );

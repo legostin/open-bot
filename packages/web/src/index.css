@@ -225,6 +225,38 @@
     border-top: 1px solid var(--border);
     margin: 1em 0;
   }
+  /* The user's own message on its ink bubble: everything takes the bubble's text colour. */
+  .md-bubble a,
+  .md-bubble blockquote {
+    color: inherit;
+  }
+  .md-bubble code,
+  .md-bubble pre,
+  .md-bubble th {
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+  .md-bubble code,
+  .md-bubble pre,
+  .md-bubble th,
+  .md-bubble td,
+  .md-bubble hr {
+    border-color: color-mix(in srgb, currentColor 22%, transparent);
+  }
+  .md-bubble blockquote {
+    border-left-color: color-mix(in srgb, currentColor 40%, transparent);
+    opacity: 0.85;
+  }
+  .vault-ref {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin: 0 0.125rem;
+    border-radius: 6px;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    padding: 0 0.375rem;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
 
   @keyframes owl-blink {
     0%,
