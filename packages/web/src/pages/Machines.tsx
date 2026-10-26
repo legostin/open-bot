@@ -5,6 +5,7 @@ import { Check, Laptop, Link2, Pencil, Trash2, X } from "lucide-react";
 import type { Machine } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";
+import { pairLink } from "../lib/desktop";
 import { hubEvents } from "../state/app";
 import { toast } from "../state/toast";
 import { t, tRich } from "../i18n";
@@ -263,6 +264,12 @@ function PairModal({ onClose }: { onClose: () => void }) {
           <div>
             <div className="mb-1.5 text-sm font-medium">{t("machines.step2")}</div>
             <CodeLine>npx owlbot-node run</CodeLine>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="text-muted">{t("machines.orApp")}</span>
+            <a className="font-medium text-accent-text hover:underline" href={pairLink(pairing.hubUrl, pairing.code)}>
+              {t("machines.openInApp")}
+            </a>
           </div>
           <div className="flex items-center gap-2 text-sm">
             {t("machines.code")} <span className="font-mono text-base font-semibold tracking-widest">{pairing.code}</span>

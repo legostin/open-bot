@@ -480,6 +480,8 @@ export default {
   "machines.newCode": "New code",
   "machines.step1": "1. On the machine, run",
   "machines.step2": "2. Then start the daemon",
+  "machines.orApp": "Is the Owlbot app installed on that computer?",
+  "machines.openInApp": "Connect with the app",
   "machines.code": "Code:",
   "machines.expired": "expired",
   "machines.validFor": "valid for {time}",

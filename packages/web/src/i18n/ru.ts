@@ -480,6 +480,8 @@ export default {
   "machines.newCode": "Новый код",
   "machines.step1": "1. На машине выполните",
   "machines.step2": "2. Затем запустите демон",
+  "machines.orApp": "На том компьютере стоит приложение Owlbot?",
+  "machines.openInApp": "Подключить через приложение",
   "machines.code": "Код:",
   "machines.expired": "истёк",
   "machines.validFor": "действует {time}",

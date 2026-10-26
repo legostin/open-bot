@@ -6,6 +6,7 @@ import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
 import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";
 import { applyDelta, mergeFetched, prependOlder, upsertMessage } from "../lib/messages";
+import { desktopTicketFrom } from "../lib/desktop";
 import { adoptHubLocale, t } from "../i18n";
 import { toast } from "./toast";
 
@@ -97,8 +98,19 @@ export function useConversationMessages(id: string | undefined): ConvMessages {
 
 let socket: HubSocket | undefined;
 
+/** The desktop app's one-time sign-in ticket: read once when the page loads, then dropped from the address bar. */
+let desktopTicket = (() => {
+  const ticket = desktopTicketFrom(window.location.hash);
+  if (ticket) history.replaceState(null, "", window.location.pathname + window.location.search);
+  return ticket;
+})();
+
 export async function init(): Promise<void> {
   phase.set({ kind: "loading" });
+  const ticket = desktopTicket;
+  desktopTicket = undefined;
+  // A used or expired ticket just leaves the usual sign-in form.
+  if (ticket) await request("POST", "/api/auth/desktop", { ticket }).catch(() => undefined);
   try {
     const auth = await request<AuthState>("GET", "/api/auth/state");
     adoptHubLocale(auth.language);
