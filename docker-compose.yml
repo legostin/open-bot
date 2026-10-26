@@ -19,6 +19,8 @@ services:
       # Hard egress enforcement for agent/plugin users (needs cap_add NET_ADMIN below):
       # OPENBOT_EGRESS_ENFORCED: iptables
       # TZ: Europe/Moscow
+      # Hub language (en or ru); by default it is taken from the first user's browser at setup:
+      # OPENBOT_LANG: ru
     # cap_add: [NET_ADMIN]
     shm_size: 1gb
 volumes:
