@@ -123,6 +123,11 @@ export class BrainRegistry {
     this.probeCache.delete(formatBrainRef(parseBrainRef(refStr)));
   }
 
+  /** Forget every probe result (their details are in the hub language, which just changed). */
+  invalidateAll(): void {
+    this.probeCache.clear();
+  }
+
   async create(refStr: string, opts: BrainSessionOptions): Promise<BrainHandle> {
     const ref = parseBrainRef(refStr);
     const r = this.resolve(ref);

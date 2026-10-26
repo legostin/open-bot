@@ -40,7 +40,7 @@ export interface PluginHarness {
   invoke(name: string, input?: unknown, ctx?: Partial<ToolCallContext>): Promise<ToolResult>;
   /** Text of a tool result (all text parts joined). */
   invokeText(name: string, input?: unknown, ctx?: Partial<ToolCallContext>): Promise<string>;
-  http(req: { method?: string; path: string; query?: Record<string, string>; headers?: Record<string, string>; body?: unknown; public?: boolean }): Promise<{ status?: number; headers?: Record<string, string>; body?: unknown }>;
+  http(req: { method?: string; path: string; query?: Record<string, string>; headers?: Record<string, string>; body?: unknown; public?: boolean; locale?: Locale }): Promise<{ status?: number; headers?: Record<string, string>; body?: unknown }>;
   hook(name: string, payload: unknown): Promise<unknown>;
   emit(event: string, payload: unknown): void;
   uiMessage(payload: unknown): void;
@@ -139,6 +139,7 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
     if (!o.core) return {};
     return (await o.core(p.method, p.params)) ?? {};
   });
+  let currentLocale: Locale = o.locale ?? "en";
   let ready!: () => void;
   const readyP = new Promise<void>((r) => (ready = r));
   peer.handle("plugin.ready", () => {
@@ -155,7 +156,7 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
       hubUrl: o.hubUrl ?? "http://127.0.0.1:1",
       appRoot: APP_ROOT,
       settings: o.settings ?? {},
-      locale: o.locale ?? "en",
+      locale: currentLocale,
       messages: layout.messages,
     },
     { timeoutMs: 60_000 },
@@ -180,12 +181,15 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
       const r = await h.invoke(name, input, ctx);
       return r.content.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join("\n");
     },
-    http: (req) => peer.request("http.request", { method: "GET", query: {}, headers: {}, body: null, public: false, ...req }),
+    http: (req) => peer.request("http.request", { method: "GET", query: {}, headers: {}, body: null, public: false, locale: currentLocale, ...req }),
     hook: (name, payload) => peer.request("hook.run", { hook: name, payload }),
     emit: (event, payload) => peer.notify("event", { name: event, payload }),
     uiMessage: (payload) => peer.notify("ui.message", { payload }),
     setSettings: (settings) => peer.notify("settings.changed", { settings }),
-    setLocale: (locale) => peer.notify("locale.changed", { locale }),
+    setLocale: (locale) => {
+      currentLocale = locale;
+      peer.notify("locale.changed", { locale });
+    },
     channelSend: (id, message) => peer.request("channel.send", { channelId: id, message }),
     brainProbe: (id, variant) => peer.request("brain.probe", { brainId: id, variant }, { timeoutMs: 30_000 }),
     brainCreate: async (id, opts) => {

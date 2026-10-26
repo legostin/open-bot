@@ -654,7 +654,7 @@ export class TelegramBot {
       case "GET /status":
         return { status: 200, body: this.statusInfo() };
       case "POST /pairing-code":
-        if (this.chat) return { status: 409, body: { error: this.t("http.alreadyLinked") } };
+        if (this.chat) return { status: 409, body: { error: this.ctx.i18n.t("http.alreadyLinked", undefined, req.locale) } };
         await this.newPairingCode();
         return { status: 200, body: this.statusInfo() };
       case "POST /unbind":

@@ -136,6 +136,7 @@ export class NodeClient {
     const peer = createRpcPeer(wsTransport(ws as unknown as WsLike));
     this.peer = peer;
     this.o.service.attach(peer);
+    peer.onNotification("node.locale", (p: { language?: string }) => setHubLocale(normalizeLocale(p?.language)));
     void (async () => {
       try {
         const r = await this.hello();

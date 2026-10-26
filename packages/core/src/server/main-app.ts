@@ -178,6 +178,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       headers: req.headers as Record<string, string>,
       body: req.body ?? null,
       public: true,
+      locale: hubLocale(),
     });
     reply.code(r.status ?? 200);
     for (const [k, v] of Object.entries(r.headers ?? {})) if (!/^(set-cookie|content-security-policy)$/i.test(k)) reply.header(k, v);
@@ -352,6 +353,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
         headers: { "content-type": String(req.headers["content-type"] ?? "") },
         body: req.body ?? null,
         public: false,
+        locale: requestLocale(req),
       });
       reply.code(r.status ?? 200);
       for (const [k, v] of Object.entries(r.headers ?? {})) if (/^(content-type|cache-control|content-disposition)$/i.test(k)) reply.header(k, v);
@@ -418,7 +420,11 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       }
       hub.audit.append("user", "settings.update", undefined, { keys: Object.keys(patch) });
       const next = hub.settings.update(patch as any);
-      if (next.language !== before) hub.plugins.broadcastLocale(next.language);
+      if (next.language !== before) {
+        hub.plugins.broadcastLocale(next.language);
+        hub.machines.broadcastLocale(next.language);
+        hub.brains.invalidateAll();
+      }
       return next;
     });
 

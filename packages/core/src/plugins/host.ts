@@ -474,7 +474,10 @@ export class PluginHost {
     return this.httpPlugins.has(id);
   }
 
-  async http(id: string, req: { method: string; path: string; query: Record<string, string>; headers: Record<string, string>; body: unknown; public: boolean }) {
+  async http(
+    id: string,
+    req: { method: string; path: string; query: Record<string, string>; headers: Record<string, string>; body: unknown; public: boolean; locale: Locale },
+  ) {
     const r = this.running.get(id);
     if (!r || !this.httpPlugins.has(id)) return { status: 404, body: { error: "plugin has no http handler" } };
     return r.peer.request<{ status?: number; headers?: Record<string, string>; body?: unknown }>("http.request", req, { timeoutMs: 60_000 });
@@ -578,7 +581,7 @@ export class PluginHost {
     if (layout.mcpFile) warnings.push(t("plugin.warn.mcp"));
     return {
       stagingId,
-      manifest: layout.manifest,
+      manifest: localizePluginValue(layout, layout.manifest, locale),
       formats: layout.formats,
       permissions: perms,
       commitHash,

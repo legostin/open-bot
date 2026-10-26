@@ -84,6 +84,8 @@ export interface PluginHttpRequest {
   body: unknown;
   /** True for unauthenticated public webhooks (/hooks/<pluginId>/...). Validate secrets yourself. */
   public: boolean;
+  /** Language of whoever made the request (the UI's choice); the hub language for public webhooks. */
+  locale: Locale;
 }
 
 export interface PluginHttpResponse {

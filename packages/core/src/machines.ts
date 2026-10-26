@@ -175,6 +175,11 @@ export class MachineHub {
     return peer.request<T>(method, params, { timeoutMs });
   }
 
+  /** Connected machines use the hub language for texts the hub shows (brain status details). */
+  broadcastLocale(language: string): void {
+    for (const p of this.peers.values()) if (!p.closed) p.notify("node.locale", { language });
+  }
+
   closeAll(): void {
     for (const p of this.peers.values()) p.close();
     this.peers.clear();

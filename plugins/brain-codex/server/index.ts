@@ -26,6 +26,7 @@ const plugin: PluginModule = {
         sandbox: () => settings.sandbox || "danger-full-access",
         stateDir: ctx.dataDir,
         log: (m) => ctx.log.info(m),
+        locale: () => ctx.i18n.locale(),
       }),
     );
   },

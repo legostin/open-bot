@@ -31,6 +31,7 @@ const plugin: PluginModule = {
         allowedTools: () => (Array.isArray(settings.allowedTools) && settings.allowedTools.length ? settings.allowedTools : DEFAULT_CLAUDE_TOOLS),
         stateDir: ctx.dataDir,
         log: (m) => ctx.log.info(m),
+        locale: () => ctx.i18n.locale(),
       }),
     );
   },
