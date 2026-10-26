@@ -26,7 +26,7 @@ describe("policy defaults", () => {
     expect(p.brains["claude-code"].allowedTools).toEqual(expect.arrayContaining(["Read", "Write", "Edit", "Glob", "Grep", "mcp__openbot"]));
     expect(p.brains.codex).toEqual({ enabled: true, sandbox: "workspace-write" });
     expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual(defaultPolicy(userHome));
-    expect(logs.some((l) => l.includes("создан"))).toBe(true);
+    expect(logs.some((l) => l.includes("created"))).toBe(true);
   });
 
   it("fills missing fields and expands ~", () => {
@@ -40,7 +40,7 @@ describe("policy defaults", () => {
   });
 
   it("rejects relative dirs, wrong types and unknown sandboxes", () => {
-    expect(() => normalizePolicy({ allowedDirs: ["relative/dir"] })).toThrow(/абсолютным/);
+    expect(() => normalizePolicy({ allowedDirs: ["relative/dir"] })).toThrow(/absolute/);
     expect(() => normalizePolicy({ exec: { enabled: "yes" } })).toThrow(/exec.enabled/);
     expect(() => normalizePolicy({ brains: { codex: { sandbox: "none" } } })).toThrow(/sandbox/);
     expect(() => normalizePolicy([])).toThrow();
@@ -73,7 +73,7 @@ describe("policy reload", () => {
     const before = store.get();
     writeFileSync(store.file, "{ this is not json");
     expect(store.get()).toEqual(before);
-    expect(logs.some((l) => l.includes("предыдущей политикой"))).toBe(true);
+    expect(logs.some((l) => l.includes("previous policy"))).toBe(true);
     writeFileSync(store.file, JSON.stringify({ exec: { enabled: true } }));
     expect(store.get().exec.enabled).toBe(true);
   });

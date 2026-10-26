@@ -8,16 +8,9 @@ import { BrainHost } from "./brains.ts";
 import { pair, PairError, networkErrorText } from "./pair.ts";
 import { createNodeDaemon } from "./daemon.ts";
 import { consoleLogger, machineInfo, osName } from "./info.ts";
+import { t } from "./messages.ts";
 
-const HELP = `openbot-node — подключает этот компьютер к хабу open-bot
-
-Команды:
-  openbot-node pair <адрес-хаба> <код> [--name <имя>]   привязать машину (код — в веб-интерфейсе: «Машины»)
-  openbot-node run                                     подключиться к хабу и обслуживать запросы (в консоли)
-  openbot-node status                                  привязка, политика, установленные CLI, доступность хаба
-  openbot-node policy                                  путь и содержимое файла политики
-
-Папка состояния: ${nodeHome()} (переопределяется OPENBOT_NODE_HOME)`;
+const help = () => t("cli.help", { home: nodeHome() });
 
 function parseArgs(argv: string[]): { positional: string[]; flags: Record<string, string | true> } {
   const positional: string[] = [];
@@ -39,22 +32,26 @@ const out = (s = "") => process.stdout.write(s + "\n");
 
 async function cmdPair(args: string[], flags: Record<string, string | true>): Promise<void> {
   const [hubUrl, code] = args;
-  if (!hubUrl || !code) throw new PairError("Использование: openbot-node pair <адрес-хаба> <код> [--name <имя>]\nПример: openbot-node pair http://100.64.0.1:8080 AB12CD34");
+  if (!hubUrl || !code) throw new PairError(t("cli.pairUsage"));
   normalizeHubUrl(hubUrl);
   const home = nodeHome();
   const policy = new PolicyStore(home, { log: (m) => out(m) });
   const brains = new BrainHost({ home, policy });
-  out("Проверяю установленные CLI…");
+  out(t("cli.checkingClis"));
   const clis = await brains.probeAll();
   const name = typeof flags.name === "string" ? flags.name : undefined;
   const r = await pair({ home, hubUrl, code, name, info: machineInfo(policy.get(), clis) });
-  out(`\nМашина привязана к хабу ${r.hubUrl}: «${r.name}» (${r.machineId})`);
-  if (r.replaced) out(`Предыдущая привязка (${r.replaced}) заменена — её можно отозвать в веб-интерфейсе.`);
-  out(`Ключ:     ${keyFile(home)}`);
-  out(`Политика: ${policy.file}`);
+  out(t("cli.paired", { hub: r.hubUrl, name: r.name, id: r.machineId }));
+  if (r.replaced) out(t("cli.replaced", { id: r.replaced }));
+  out(t("cli.line.key", { file: keyFile(home) }));
+  out(t("cli.line.policy", { file: policy.file }));
   for (const l of policySummary(policy.get())) out(`  ${l}`);
-  out(`Мозги:    ${clis.map((c) => `${c.brainId} — ${c.available ? `есть${c.version ? ` ${c.version}` : ""}${c.authenticated ? "" : " (нет входа)"}` : (c.detail ?? "нет")}`).join("; ")}`);
-  out("\nДальше: openbot-node run   (или установите как службу — см. README)");
+  const brainState = (c: (typeof clis)[number]) =>
+    c.available
+      ? t("cli.brain.present", { id: c.brainId, version: c.version ? ` ${c.version}` : "" }) + (c.authenticated ? "" : t("cli.brain.noLoginSuffix"))
+      : t("cli.brain.absent", { id: c.brainId, detail: c.detail ?? t("cli.brain.none") });
+  out(t("cli.line.brains", { list: clis.map(brainState).join("; ") }));
+  out(t("cli.next"));
 }
 
 async function cmdRun(): Promise<void> {
@@ -70,13 +67,13 @@ async function cmdRun(): Promise<void> {
       setTimeout(() => process.exit(1), 200).unref();
     },
   });
-  out(`openbot-node: машина «${daemon.config.name}» (${daemon.config.machineId}), хаб ${daemon.config.hubUrl}`);
-  out(`Политика: ${daemon.policy.file} (изменения применяются на лету)`);
+  out(t("cli.run.header", { name: daemon.config.name, id: daemon.config.machineId, hub: daemon.config.hubUrl }));
+  out(t("cli.run.policy", { file: daemon.policy.file }));
   for (const l of policySummary(daemon.policy.get())) out(`  ${l}`);
   const shutdown = async (sig: string) => {
     if (exiting) return;
     exiting = true;
-    log(`${sig}: остановка…`);
+    log(t("cli.stopping", { signal: sig }));
     const force = setTimeout(() => process.exit(1), 10_000);
     force.unref();
     await daemon.stop().catch(() => {});
@@ -85,37 +82,42 @@ async function cmdRun(): Promise<void> {
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGHUP", () => void shutdown("SIGHUP"));
-  process.on("unhandledRejection", (e: any) => log(`необработанная ошибка: ${e?.stack ?? e}`));
-  process.on("uncaughtException", (e: any) => log(`необработанное исключение: ${e?.stack ?? e}`));
+  process.on("unhandledRejection", (e: any) => log(t("cli.unhandledRejection", { error: String(e?.stack ?? e) })));
+  process.on("uncaughtException", (e: any) => log(t("cli.uncaughtException", { error: String(e?.stack ?? e) })));
   daemon.client.start();
 }
 
 async function cmdStatus(): Promise<void> {
   const home = nodeHome();
-  out(`Папка:    ${home}`);
+  out(t("cli.status.home", { home }));
   let hubUrl: string | undefined;
   try {
     const c = loadConfig(home);
     hubUrl = c.hubUrl;
-    out(`Хаб:      ${c.hubUrl}`);
-    out(`Машина:   «${c.name}» (${c.machineId})${c.pairedAt ? `, привязана ${c.pairedAt}` : ""}`);
+    out(t("cli.status.hub", { hub: c.hubUrl }));
+    out(t("cli.status.machine", { name: c.name, id: c.machineId }) + (c.pairedAt ? t("cli.status.pairedAt", { at: c.pairedAt }) : ""));
   } catch (e: any) {
-    out(e instanceof NotPairedError ? "Привязка: нет (openbot-node pair <адрес-хаба> <код>)" : `Привязка: ошибка — ${e.message}`);
+    out(e instanceof NotPairedError ? t("cli.status.notPaired") : t("cli.status.pairError", { error: e.message }));
   }
-  out(`Система:  ${osName()}, ${process.arch}, Node ${process.version}`);
+  out(t("cli.status.system", { os: osName(), arch: process.arch, node: process.version }));
   const policy = new PolicyStore(home, { log: (m) => out(m) });
-  out(`Политика: ${policy.file}`);
+  out(t("cli.line.policy", { file: policy.file }));
   for (const l of policySummary(policy.get())) out(`  ${l}`);
   const brains = new BrainHost({ home, policy });
-  out("CLI мозгов:");
+  out(t("cli.status.brains"));
   for (const c of await brains.probeAll()) {
-    out(`  ${c.brainId}: ${c.available ? `установлен${c.version ? ` (${c.version})` : ""}, ${c.authenticated ? "вход выполнен" : "нет входа"}` : "недоступен"}${c.detail ? ` — ${c.detail}` : ""}`);
+    const detail = c.detail ? ` — ${c.detail}` : "";
+    out(
+      c.available
+        ? t("cli.status.brainInstalled", { id: c.brainId, version: c.version ? ` (${c.version})` : "", login: t(c.authenticated ? "cli.status.signedIn" : "cli.status.notSignedIn"), detail })
+        : t("cli.status.brainMissing", { id: c.brainId, detail }),
+    );
   }
   if (hubUrl) {
     try {
       const r = await fetch(`${hubUrl}/api/auth/state`, { signal: AbortSignal.timeout(5000) });
       const j: any = await r.json().catch(() => ({}));
-      out(r.ok ? `Хаб доступен (open-bot ${j.version ?? "?"})` : `Хаб ответил ${r.status}`);
+      out(r.ok ? t("cli.status.hubOk", { version: j.version ?? "?" }) : t("cli.status.hubStatus", { status: r.status }));
     } catch (e: any) {
       out(networkErrorText(e, hubUrl));
     }
@@ -128,14 +130,14 @@ function cmdPolicy(): void {
   out(policy.file);
   out();
   out(readFileSync(policy.file, "utf8").trimEnd());
-  if (!existsSync(configFile(home))) out("\n(машина ещё не привязана: openbot-node pair <адрес-хаба> <код>)");
+  if (!existsSync(configFile(home))) out(t("cli.policy.notPaired"));
 }
 
 async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positional, flags } = parseArgs(rest);
   if (!cmd || cmd === "help" || cmd === "--help" || cmd === "-h" || flags.help) {
-    out(HELP);
+    out(help());
     return;
   }
   switch (cmd) {
@@ -152,12 +154,12 @@ async function main(): Promise<void> {
       await import("@openbot/mcp-bridge");
       return;
     default:
-      throw new PairError(`Неизвестная команда «${cmd}».\n\n${HELP}`);
+      throw new PairError(t("cli.unknownCommand", { command: cmd, help: help() }));
   }
 }
 
 main().catch((e: any) => {
   const known = e instanceof UserError;
-  process.stderr.write(`${known ? e.message : `Ошибка: ${e?.message ?? e}`}\n`);
+  process.stderr.write(`${known ? e.message : t("cli.error", { error: String(e?.message ?? e) })}\n`);
   process.exit(1);
 });

@@ -62,7 +62,7 @@ export function resolveReal(abs: string): string {
       try {
         real = realpath(cur);
       } catch {
-        throw new PathDenied(`Путь ${abs} проходит через символическую ссылку на несуществующий объект`);
+        throw new PathDenied(`The path ${abs} goes through a symbolic link to something that does not exist`);
       }
       return tail.length ? join(real, ...tail) : real;
     }
@@ -82,18 +82,18 @@ export interface GuardOptions {
 
 /** Validates and resolves a path from the hub. Returns the real absolute path or throws PathDenied. */
 export function resolveAllowedPath(input: unknown, allowedDirs: string[], opts: GuardOptions = {}): string {
-  if (typeof input !== "string" || !input.trim()) throw new PathDenied("Путь не задан");
+  if (typeof input !== "string" || !input.trim()) throw new PathDenied("No path given");
   const raw = input.trim();
-  if (raw.includes("\0")) throw new PathDenied("Недопустимый символ в пути");
+  if (raw.includes("\0")) throw new PathDenied("Invalid character in the path");
   const segments = raw.split(/[\\/]+/);
-  if (segments.includes("..")) throw new PathDenied(`Путь не должен содержать «..»: ${raw}`);
+  if (segments.includes("..")) throw new PathDenied(`The path must not contain “..”: ${raw}`);
   if (WIN) {
-    if (/^[\\/]{2}[?.][\\/]/.test(raw)) throw new PathDenied(`Пути устройств Windows не поддерживаются: ${raw}`);
+    if (/^[\\/]{2}[?.][\\/]/.test(raw)) throw new PathDenied(`Windows device paths are not supported: ${raw}`);
     const rest = /^[a-zA-Z]:/.test(raw) ? raw.slice(2) : raw;
-    if (rest.includes(":")) throw new PathDenied(`Недопустимый символ «:» в пути: ${raw}`);
+    if (rest.includes(":")) throw new PathDenied(`Invalid character “:” in the path: ${raw}`);
   }
   const real = realAllowedDirs(allowedDirs);
-  if (!real.length) throw new PathDenied("На этой машине нет доступных разрешённых папок (allowedDirs в policy.json)");
+  if (!real.length) throw new PathDenied("This machine has no usable allowed folders (allowedDirs in policy.json)");
   let expanded = raw;
   if (raw === "~" || raw.startsWith("~/") || raw.startsWith("~\\")) expanded = join(homedir(), raw.slice(1));
   const abs = isAbsolute(expanded) ? resolve(expanded) : resolve(opts.base ?? real[0], expanded);
@@ -105,10 +105,10 @@ export function resolveAllowedPath(input: unknown, allowedDirs: string[], opts: 
     } catch {
       /* not created yet */
     }
-    if (isInside(resolved, dr) || isInside(resolved, d)) throw new PathDenied(`Служебная папка openbot-node недоступна: ${raw}`);
+    if (isInside(resolved, dr) || isInside(resolved, d)) throw new PathDenied(`The openbot-node state folder is off limits: ${raw}`);
   }
   if (!real.some((d) => isInside(resolved, d))) {
-    throw new PathDenied(`Путь ${raw} вне разрешённых папок (${allowedDirs.join(", ")})`);
+    throw new PathDenied(`The path ${raw} is outside the allowed folders (${allowedDirs.join(", ")})`);
   }
   return resolved;
 }
@@ -118,20 +118,20 @@ export function resolveAllowedPath(input: unknown, allowedDirs: string[], opts: 
  * Absolute keys, "..", "." and odd characters are refused.
  */
 export function resolveWorkspace(key: unknown, root: string): string {
-  if (typeof key !== "string" || !key.trim()) throw new PathDenied("Не задана рабочая папка сессии");
+  if (typeof key !== "string" || !key.trim()) throw new PathDenied("No session working folder given");
   const k = key.trim();
   if (isAbsolute(k) || /^[a-zA-Z]:/.test(k) || k.startsWith("/") || k.startsWith("\\")) {
-    throw new PathDenied(`Рабочая папка должна быть относительным ключом, получено: ${k}`);
+    throw new PathDenied(`The working folder must be a relative key, got: ${k}`);
   }
   const parts = k.split("/");
   for (const s of parts) {
-    if (!s || s === "." || s === ".." || /[\\:*?"<>|\x00-\x1f]/.test(s) || s.length > 128) throw new PathDenied(`Недопустимый ключ рабочей папки: ${k}`);
+    if (!s || s === "." || s === ".." || /[\\:*?"<>|\x00-\x1f]/.test(s) || s.length > 128) throw new PathDenied(`Invalid working folder key: ${k}`);
   }
   mkdirSync(root, { recursive: true });
   const realRoot = realpath(root);
   const target = join(realRoot, ...parts);
   mkdirSync(target, { recursive: true });
   const realTarget = realpath(target);
-  if (!isInside(realTarget, realRoot) || cmp(realTarget) === cmp(realRoot)) throw new PathDenied(`Рабочая папка вне ${root}: ${k}`);
+  if (!isInside(realTarget, realRoot) || cmp(realTarget) === cmp(realRoot)) throw new PathDenied(`The working folder is outside ${root}: ${k}`);
   return realTarget;
 }

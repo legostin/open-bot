@@ -116,12 +116,12 @@ describe("pairing and connection", () => {
   it("wrote config.json and rejects a reused code", async () => {
     const c = loadNodeConfig(nodeHomeDir);
     expect(c).toMatchObject({ hubUrl: hub.config.publicUrl, machineId, name: "test-box" });
-    await expect(pair({ home: join(root, "other-home"), hubUrl: hub.config.publicUrl, code: "WRONG123" })).rejects.toThrow(/отклонил привязку/);
+    await expect(pair({ home: join(root, "other-home"), hubUrl: hub.config.publicUrl, code: "WRONG123" })).rejects.toThrow(/rejected the pairing/);
   });
 
   it("explains an unreachable hub", async () => {
     const port = await freePort();
-    await expect(pair({ home: join(root, "other-home"), hubUrl: `http://127.0.0.1:${port}`, code: "X" })).rejects.toThrow(/Не удалось связаться с хабом/);
+    await expect(pair({ home: join(root, "other-home"), hubUrl: `http://127.0.0.1:${port}`, code: "X" })).rejects.toThrow(/Could not reach the hub/);
   });
 
   it("shows the machine online with its info", () => {
@@ -161,9 +161,9 @@ describe("files and commands through the hub", () => {
   });
 
   it("refuses paths outside the allowed dirs and the daemon home", async () => {
-    await expect(hub.machines.call(machineId, "fs.read", { path: join(root, "hub-data", "openbot.db") })).rejects.toThrow(/вне разрешённых/);
-    await expect(hub.machines.call(machineId, "fs.write", { path: join(nodeHomeDir, "policy.json"), content: "{}" })).rejects.toThrow(/вне разрешённых|Служебная/);
-    await expect(hub.machines.call(machineId, "fs.read", { path: `${workspace}/../../node-home/key.json` })).rejects.toThrow(/«\.\.»/);
+    await expect(hub.machines.call(machineId, "fs.read", { path: join(root, "hub-data", "openbot.db") })).rejects.toThrow(/outside the allowed/);
+    await expect(hub.machines.call(machineId, "fs.write", { path: join(nodeHomeDir, "policy.json"), content: "{}" })).rejects.toThrow(/outside the allowed|state folder/);
+    await expect(hub.machines.call(machineId, "fs.read", { path: `${workspace}/../../node-home/key.json` })).rejects.toThrow(/must not contain/);
   });
 
   it("exec.run runs in the allowed dir and obeys policy reloads", async () => {
@@ -238,14 +238,14 @@ describe("remote brain session", () => {
   });
 
   it("refuses workspace keys that escape the workspaces root", async () => {
-    await expect(hub.brains.create(`claude-code@${machineId}`, opts("sess_bad", "../escape"))).rejects.toThrow(/Недопустимый ключ/);
-    await expect(hub.brains.create(`claude-code@${machineId}`, opts("sess_bad2", workspace))).rejects.toThrow(/относительным ключом/);
+    await expect(hub.brains.create(`claude-code@${machineId}`, opts("sess_bad", "../escape"))).rejects.toThrow(/Invalid working folder key/);
+    await expect(hub.brains.create(`claude-code@${machineId}`, opts("sess_bad2", workspace))).rejects.toThrow(/relative key/);
   });
 
   it("re-announces brains when the owner disables one", async () => {
     editPolicy((p) => (p.brains["claude-code"].enabled = false));
     await until(() => !hub.brains.list().some((b) => b.ref === `claude-code@${machineId}`), 15_000, "claude-code to be unregistered");
-    await expect(hub.machines.call(machineId, "brain.create", { brainId: "claude-code", opts: opts("sess_x", "a/b") })).rejects.toThrow(/отключён/);
+    await expect(hub.machines.call(machineId, "brain.create", { brainId: "claude-code", opts: opts("sess_x", "a/b") })).rejects.toThrow(/disabled/);
   });
 });
 
@@ -253,7 +253,7 @@ describe("revocation", () => {
   it("stops for good when the hub revokes the machine", async () => {
     hub.machines.revoke(machineId);
     await until(() => fatal.length > 0, 15_000, "fatal 4401");
-    expect(fatal[0]).toMatch(/отклонил подключение/);
+    expect(fatal[0]).toMatch(/refused the connection/);
     expect(daemon.client.state).toBe("stopped");
     expect(hub.machines.list().some((m) => m.id === machineId)).toBe(false);
   });

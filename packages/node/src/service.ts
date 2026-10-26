@@ -19,32 +19,32 @@ const short = (s: unknown, max = 160): string => {
 function describe(method: string, p: any): string {
   switch (method) {
     case "exec.run":
-      return `${short(p?.command)}${p?.cwd ? ` (в ${short(p.cwd, 120)})` : ""}`;
+      return `${short(p?.command)}${p?.cwd ? ` (in ${short(p.cwd, 120)})` : ""}`;
     case "fs.read":
     case "fs.list":
       return short(p?.path ?? ".", 200);
     case "fs.write":
-      return `${short(p?.path, 200)} (${typeof p?.content === "string" ? Buffer.byteLength(p.content) : 0} Б)`;
+      return `${short(p?.path, 200)} (${typeof p?.content === "string" ? Buffer.byteLength(p.content) : 0} B)`;
     case "brain.probe":
       return String(p?.brainId ?? "");
     case "brain.create":
-      return `${p?.brainId} сессия ${p?.opts?.sessionId} папка ${short(p?.opts?.workspace, 80)}`;
+      return `${p?.brainId} session=${p?.opts?.sessionId} workspace=${short(p?.opts?.workspace, 80)}`;
     case "brain.send":
-      return `сессия ${p?.sessionId} (${typeof p?.turn?.text === "string" ? p.turn.text.length : 0} симв.)`;
+      return `session=${p?.sessionId} (${typeof p?.turn?.text === "string" ? p.turn.text.length : 0} chars)`;
     case "brain.interrupt":
     case "brain.close":
-      return `сессия ${p?.sessionId}`;
+      return `session=${p?.sessionId}`;
     default:
       return "";
   }
 }
 
 function outcome(method: string, r: any): string {
-  if (method === "exec.run") return `код ${r?.code}`;
-  if (method === "fs.read") return `${Buffer.byteLength(String(r?.content ?? ""))} Б`;
-  if (method === "fs.write") return `${r?.bytes} Б`;
-  if (method === "fs.list") return `${r?.entries?.length ?? 0} элементов`;
-  if (method === "brain.probe") return r?.available ? `доступен${r.authenticated ? "" : ", без входа"}` : "недоступен";
+  if (method === "exec.run") return `exit ${r?.code}`;
+  if (method === "fs.read") return `${Buffer.byteLength(String(r?.content ?? ""))} B`;
+  if (method === "fs.write") return `${r?.bytes} B`;
+  if (method === "fs.list") return `${r?.entries?.length ?? 0} entries`;
+  if (method === "brain.probe") return r?.available ? `available${r.authenticated ? "" : ", not signed in"}` : "unavailable";
   return "ok";
 }
 
@@ -68,10 +68,10 @@ export class NodeService {
       const what = describe(method, p);
       try {
         const r = await fn(p);
-        this.log(`${method} ${what} → ${outcome(method, r)} (${Date.now() - started} мс)`);
+        this.log(`${method} ${what} → ${outcome(method, r)} (${Date.now() - started} ms)`);
         return r;
       } catch (e: any) {
-        this.log(`${method} ${what} → отказ: ${e?.message ?? e}`);
+        this.log(`${method} ${what} → denied: ${e?.message ?? e}`);
         throw e;
       }
     };

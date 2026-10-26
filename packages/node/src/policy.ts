@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { ensureHome, policyFile, UserError } from "./home.ts";
+import { t } from "./messages.ts";
 
 export type CodexSandbox = "read-only" | "workspace-write" | "danger-full-access";
 
@@ -51,28 +52,28 @@ export function defaultPolicy(userHome = homedir()): Policy {
 const SANDBOXES: CodexSandbox[] = ["read-only", "workspace-write", "danger-full-access"];
 
 function expandPath(p: unknown, userHome: string, field: string): string {
-  if (typeof p !== "string" || !p.trim()) throw new Error(`${field}: ожидается непустая строка с путём`);
+  if (typeof p !== "string" || !p.trim()) throw new Error(t("policy.expectedPath", { field }));
   let s = p.trim();
   if (s === "~" || s.startsWith("~/") || s.startsWith("~\\")) s = join(userHome, s.slice(1));
-  if (!isAbsolute(s)) throw new Error(`${field}: путь должен быть абсолютным (или начинаться с ~): ${p}`);
+  if (!isAbsolute(s)) throw new Error(t("policy.mustBeAbsolute", { field, path: p }));
   return resolve(s);
 }
 
 const bool = (v: unknown, d: boolean, field: string): boolean => {
   if (v === undefined) return d;
-  if (typeof v !== "boolean") throw new Error(`${field}: ожидается true или false`);
+  if (typeof v !== "boolean") throw new Error(t("policy.expectedBool", { field }));
   return v;
 };
 
 const strList = (v: unknown, field: string): string[] | undefined => {
   if (v === undefined || v === null) return undefined;
-  if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw new Error(`${field}: ожидается массив строк`);
+  if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw new Error(t("policy.expectedStrings", { field }));
   return v as string[];
 };
 
 /** Fills missing fields with defaults, expands ~ and validates types. Throws a readable error. */
 export function normalizePolicy(raw: any, userHome = homedir()): Policy {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("ожидается JSON-объект");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(t("policy.expectedObject"));
   const d = defaultPolicy(userHome);
   const allowedDirs = raw.allowedDirs === undefined ? d.allowedDirs : (strList(raw.allowedDirs, "allowedDirs") ?? []).map((p, i) => expandPath(p, userHome, `allowedDirs[${i}]`));
   const exec = raw.exec ?? {};
@@ -81,12 +82,12 @@ export function normalizePolicy(raw: any, userHome = homedir()): Policy {
   const cc = brains["claude-code"] ?? {};
   const cx = brains.codex ?? {};
   const sandbox = cx.sandbox ?? d.brains.codex.sandbox;
-  if (!SANDBOXES.includes(sandbox)) throw new Error(`brains.codex.sandbox: одно из ${SANDBOXES.join(", ")}`);
+  if (!SANDBOXES.includes(sandbox)) throw new Error(t("policy.sandbox", { values: SANDBOXES.join(", ") }));
   const maxTimeoutMs = exec.maxTimeoutMs === undefined ? undefined : Number(exec.maxTimeoutMs);
-  if (maxTimeoutMs !== undefined && !(maxTimeoutMs > 0)) throw new Error("exec.maxTimeoutMs: ожидается положительное число");
+  if (maxTimeoutMs !== undefined && !(maxTimeoutMs > 0)) throw new Error(t("policy.maxTimeout"));
   const command = (v: unknown, field: string) => {
     if (v === undefined || v === null || v === "") return undefined;
-    if (typeof v !== "string") throw new Error(`${field}: ожидается строка`);
+    if (typeof v !== "string") throw new Error(t("policy.expectedString", { field }));
     return v.startsWith("~") ? expandPath(v, userHome, field) : v;
   };
   return {
@@ -132,13 +133,13 @@ export class PolicyStore {
       ensureHome(home);
       const p = defaultPolicy(this.userHome);
       writeFileSync(this.file, JSON.stringify(p, null, 2) + "\n", { mode: 0o600 });
-      this.log(`создан файл политики с безопасными настройками: ${this.file}`);
+      this.log(t("policy.created", { file: this.file }));
     }
     this.current = this.read(true)!;
     try {
       mkdirSync(this.current.workspacesRoot, { recursive: true });
     } catch (e: any) {
-      this.log(`не удалось создать ${this.current.workspacesRoot}: ${e.message}`);
+      this.log(t("policy.mkdirFailed", { dir: this.current.workspacesRoot, error: e.message }));
     }
   }
 
@@ -159,10 +160,10 @@ export class PolicyStore {
       this.lastError = undefined;
       return p;
     } catch (e: any) {
-      const msg = `ошибка в ${this.file}: ${e.message}`;
-      if (initial) throw new UserError(`Ошибка в ${this.file}: ${e.message}`);
+      const msg = t("policy.keepPrevious", { file: this.file, error: e.message });
+      if (initial) throw new UserError(t("policy.errorIn", { file: this.file, error: e.message }));
       this.stamp = stamp;
-      if (msg !== this.lastError) this.log(`${msg} — продолжаю с предыдущей политикой`);
+      if (msg !== this.lastError) this.log(msg);
       this.lastError = msg;
       return undefined;
     }
@@ -174,7 +175,7 @@ export class PolicyStore {
       const p = this.read(false);
       if (p && JSON.stringify(p) !== JSON.stringify(this.current)) {
         this.current = p;
-        this.log("политика перечитана");
+        this.log(t("policy.reloaded"));
         for (const cb of this.listeners) {
           try {
             cb(p);
@@ -199,14 +200,22 @@ export class PolicyStore {
   }
 }
 
+const yes = (v: boolean) => t(v ? "policy.summary.yes" : "policy.summary.no");
+
 export function policySummary(p: Policy): string[] {
   const cc = p.brains["claude-code"];
   return [
-    `Разрешённые папки: ${p.allowedDirs.length ? p.allowedDirs.join(", ") : "нет"}`,
-    `Рабочие папки мозгов: ${p.workspacesRoot}`,
-    `Файлы: чтение ${p.fs.read ? "да" : "нет"}, запись ${p.fs.write ? "да" : "нет"}`,
-    `Команды: ${p.exec.enabled ? (p.exec.allowCommands?.length ? `только ${p.exec.allowCommands.join(", ")}` : "любые") : "запрещены"}`,
-    `Claude Code: ${cc.enabled ? `включён, инструменты: ${cc.allowedTools.join(", ")}` : "отключён"}`,
-    `Codex: ${p.brains.codex.enabled ? `включён, песочница ${p.brains.codex.sandbox}` : "отключён"}`,
+    t("policy.summary.dirs", { dirs: p.allowedDirs.length ? p.allowedDirs.join(", ") : t("policy.summary.none") }),
+    t("policy.summary.workspaces", { dir: p.workspacesRoot }),
+    t("policy.summary.files", { read: yes(p.fs.read), write: yes(p.fs.write) }),
+    t("policy.summary.commands", {
+      commands: p.exec.enabled
+        ? p.exec.allowCommands?.length
+          ? t("policy.summary.onlyCommands", { list: p.exec.allowCommands.join(", ") })
+          : t("policy.summary.anyCommand")
+        : t("policy.summary.noCommands"),
+    }),
+    t("policy.summary.claude", { state: cc.enabled ? t("policy.summary.claudeOn", { tools: cc.allowedTools.join(", ") }) : t("policy.summary.off") }),
+    t("policy.summary.codex", { state: p.brains.codex.enabled ? t("policy.summary.codexOn", { sandbox: p.brains.codex.sandbox }) : t("policy.summary.off") }),
   ];
 }

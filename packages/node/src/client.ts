@@ -2,7 +2,8 @@
 // Reconnects forever with exponential backoff (max 60 s); a 4401 close (revoked / unknown key) is fatal.
 
 import WebSocket from "ws";
-import { createRpcPeer, wsTransport, type RpcPeer, type WsLike } from "@openbot/shared";
+import { createRpcPeer, normalizeLocale, wsTransport, type RpcPeer, type WsLike } from "@openbot/shared";
+import { setHubLocale, t } from "./messages.ts";
 import { nodeWsUrl } from "./home.ts";
 import { signChallenge } from "./keys.ts";
 import { machineInfo, type Logger } from "./info.ts";
@@ -59,9 +60,9 @@ export class NodeClient {
   waitOnline(timeoutMs = 30_000): Promise<void> {
     if (this.state === "online") return Promise.resolve();
     return new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error("хаб не ответил вовремя")), timeoutMs);
+      const timer = setTimeout(() => reject(new Error(t("client.helloTimeout"))), timeoutMs);
       this.onlineWaiters.push(() => {
-        clearTimeout(t);
+        clearTimeout(timer);
         resolve();
       });
     });
@@ -105,15 +106,13 @@ export class NodeClient {
       void this.o.service.abortAll();
       if (this.state === "stopped") return;
       if (code === CLOSE_UNAUTHORIZED) {
-        const message =
-          `Хаб отклонил подключение (${reason || "unauthorized"}): машина отозвана или ключ не подходит.\n` +
-          `Привяжите машину заново: openbot-node pair ${this.o.hubUrl} <код>`;
+        const message = t("client.rejected", { reason: reason || "unauthorized", hub: this.o.hubUrl });
         this.o.log(message);
         void this.stop();
         this.o.onFatal?.(message);
         return;
       }
-      if (wasOnline) this.o.log(`соединение с хабом потеряно (${code}${reason ? ` ${reason}` : ""})`);
+      if (wasOnline) this.o.log(t("client.lost", { code: `${code}${reason ? ` ${reason}` : ""}` }));
       this.scheduleReconnect(lastError);
     });
   }
@@ -125,8 +124,8 @@ export class NodeClient {
     const max = this.o.maxBackoffMs ?? 60_000;
     const delay = Math.min(max, min * 2 ** Math.min(this.attempt, 16));
     this.attempt++;
-    const after = delay < 1000 ? `${delay} мс` : `${Math.round(delay / 1000)} с`;
-    this.o.log(why ? `хаб ${this.o.hubUrl} недоступен (${why}), повтор через ${after}` : `переподключение через ${after}`);
+    const after = delay < 1000 ? t("client.ms", { n: delay }) : t("client.sec", { n: Math.round(delay / 1000) });
+    this.o.log(why ? t("client.retry", { hub: this.o.hubUrl, reason: why, after }) : t("client.reconnect", { after }));
     clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }
@@ -144,20 +143,20 @@ export class NodeClient {
         this.attempt = 0;
         this.state = "online";
         this.hubName = r?.name;
-        this.o.log(`подключено к хабу ${this.o.hubUrl} как «${r?.name ?? this.o.machineId}»`);
+        this.o.log(t("client.connected", { hub: this.o.hubUrl, name: r?.name ?? this.o.machineId }));
         for (const w of this.onlineWaiters.splice(0)) w();
         clearInterval(this.pingTimer);
         this.pingTimer = setInterval(() => {
           peer.request("node.ping", {}, { timeoutMs: 15_000 }).catch(() => {
             if (this.peer === peer) {
-              this.o.log("хаб не отвечает на ping, переподключение");
+              this.o.log(t("client.pingLost"));
               ws.terminate();
             }
           });
         }, this.o.pingIntervalMs ?? 30_000);
         this.pingTimer.unref?.();
       } catch (e: any) {
-        this.o.log(`node.hello не удался: ${e?.message ?? e}`);
+        this.o.log(t("client.helloFailed", { error: String(e?.message ?? e) }));
         ws.terminate();
       }
     })();
@@ -166,12 +165,13 @@ export class NodeClient {
   /** Probe the CLIs and announce this machine (info + installed brains) to the hub. */
   async hello(): Promise<{ machineId: string; name: string }> {
     const peer = this.peer;
-    if (!peer) throw new Error("нет соединения с хабом");
+    if (!peer) throw new Error(t("client.offline"));
     const clis = await this.o.service.brains.probeAll();
     const info = machineInfo(this.o.service.policy.get(), clis);
     const brains = this.o.service.brains.available();
-    const r = await peer.request<{ machineId: string; name: string }>("node.hello", { info, brains }, { timeoutMs: 30_000 });
-    this.o.log(`мозги: ${brains.map((b) => b.id).join(", ") || "нет"}`);
+    const r = await peer.request<{ machineId: string; name: string; language?: string }>("node.hello", { info, brains }, { timeoutMs: 30_000 });
+    setHubLocale(normalizeLocale(r?.language));
+    this.o.log(t("client.brains", { list: brains.map((b) => b.id).join(", ") || t("cli.brain.none") }));
     return r;
   }
 

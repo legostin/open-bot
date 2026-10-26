@@ -25,13 +25,13 @@ const SHELL_META = /[;&|`$<>\r\n]|%[^%\s]+%|\^/;
 
 /** Throws ExecDenied unless the policy allows this command. */
 export function checkCommand(command: unknown, policy: Policy): string {
-  if (!policy.exec.enabled) throw new ExecDenied("Выполнение команд на этой машине запрещено (exec.enabled = false в policy.json)");
-  if (typeof command !== "string" || !command.trim()) throw new ExecDenied("Команда не задана");
+  if (!policy.exec.enabled) throw new ExecDenied("Running commands is not allowed on this machine (exec.enabled = false in policy.json)");
+  if (typeof command !== "string" || !command.trim()) throw new ExecDenied("No command given");
   const cmd = command.trim();
   const allow = policy.exec.allowCommands ?? [];
   if (allow.length) {
-    if (SHELL_META.test(cmd)) throw new ExecDenied("При заданном exec.allowCommands нельзя использовать ; & | ` $ < > ^ %VAR% и переводы строк");
-    if (!matchesAny(cmd, allow)) throw new ExecDenied(`Команда не входит в exec.allowCommands: ${cmd}`);
+    if (SHELL_META.test(cmd)) throw new ExecDenied("With exec.allowCommands set, ; & | ` $ < > ^ %VAR% and line breaks are not allowed");
+    if (!matchesAny(cmd, allow)) throw new ExecDenied(`The command is not in exec.allowCommands: ${cmd}`);
   }
   return cmd;
 }
@@ -126,15 +126,15 @@ export function runShell(o: RunOptions): Promise<ExecResult> {
       o.track?.delete(child);
       let stdout = Buffer.concat(out).toString("utf8");
       let stderr = Buffer.concat(err).toString("utf8");
-      if (cap.truncated) stderr += `\n[openbot-node] вывод обрезан до ${Math.round(cap.max / 1024)} КБ`;
+      if (cap.truncated) stderr += `\n[openbot-node] output truncated to ${Math.round(cap.max / 1024)} KB`;
       let exit = code ?? (signal ? 128 + (signal === "SIGKILL" ? 9 : 15) : -1);
       if (timedOut) {
         exit = TIMEOUT_EXIT_CODE;
-        stderr += `\n[openbot-node] превышен таймаут ${Math.round(o.timeoutMs / 1000)} с, процесс остановлен`;
+        stderr += `\n[openbot-node] timed out after ${Math.round(o.timeoutMs / 1000)} s, the process was stopped`;
       }
       if (spawnError) {
         exit = exit === 0 ? -1 : exit;
-        stderr += `\n[openbot-node] не удалось запустить команду: ${spawnError.message}`;
+        stderr += `\n[openbot-node] could not start the command: ${spawnError.message}`;
       }
       resolvePromise({ code: exit, stdout, stderr: stderr.replace(/^\n/, "") });
     };
@@ -169,7 +169,7 @@ export async function execRun(
   } catch {
     isDir = false;
   }
-  if (!isDir) throw new ExecDenied(`Рабочая папка не существует или не является папкой: ${String(params?.cwd ?? cwd)}`);
+  if (!isDir) throw new ExecDenied(`The working folder does not exist or is not a folder: ${String(params?.cwd ?? cwd)}`);
   const max = policy.exec.maxTimeoutMs ?? DEFAULT_MAX_TIMEOUT_MS;
   const requested = Number(params?.timeoutMs);
   const timeoutMs = Math.min(Number.isFinite(requested) && requested > 0 ? requested : DEFAULT_TIMEOUT_MS, max);

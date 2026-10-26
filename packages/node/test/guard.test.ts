@@ -45,20 +45,20 @@ describe("resolveAllowedPath", () => {
 
   it("rejects paths outside, including sibling dirs sharing a prefix", () => {
     expect(() => resolveAllowedPath(join(outside, "secret.txt"), dirs)).toThrow(PathDenied);
-    expect(() => resolveAllowedPath(join(root, "allowed-evil", "x"), dirs)).toThrow(/вне разрешённых/);
+    expect(() => resolveAllowedPath(join(root, "allowed-evil", "x"), dirs)).toThrow(/outside the allowed/);
     expect(() => resolveAllowedPath(root, dirs)).toThrow(PathDenied);
   });
 
   it('rejects ".." segments even when they would stay inside', () => {
-    expect(() => resolveAllowedPath(`${allowed}${sep}..${sep}outside${sep}secret.txt`, dirs)).toThrow(/«\.\.»/);
+    expect(() => resolveAllowedPath(`${allowed}${sep}..${sep}outside${sep}secret.txt`, dirs)).toThrow(/must not contain/);
     expect(() => resolveAllowedPath("../outside/secret.txt", dirs)).toThrow(PathDenied);
     expect(() => resolveAllowedPath("sub/../a.txt", dirs)).toThrow(PathDenied);
   });
 
   it("rejects symlink escapes for reads and for new files", () => {
     dirLink(outside, join(allowed, "link"));
-    expect(() => resolveAllowedPath(join(allowed, "link", "secret.txt"), dirs)).toThrow(/вне разрешённых/);
-    expect(() => resolveAllowedPath(join(allowed, "link", "new.txt"), dirs)).toThrow(/вне разрешённых/);
+    expect(() => resolveAllowedPath(join(allowed, "link", "secret.txt"), dirs)).toThrow(/outside the allowed/);
+    expect(() => resolveAllowedPath(join(allowed, "link", "new.txt"), dirs)).toThrow(/outside the allowed/);
     expect(() => resolveAllowedPath(join(allowed, "link"), dirs)).toThrow(PathDenied);
   });
 
@@ -78,14 +78,14 @@ describe("resolveAllowedPath", () => {
   it("refuses denied dirs inside allowed ones (the daemon's home)", () => {
     const home = join(allowed, ".openbot-node");
     mkdirSync(home, { recursive: true });
-    expect(() => resolveAllowedPath(join(home, "policy.json"), dirs, { deny: [home] })).toThrow(/Служебная папка/);
+    expect(() => resolveAllowedPath(join(home, "policy.json"), dirs, { deny: [home] })).toThrow(/state folder/);
     expect(resolveAllowedPath(join(allowed, "a.txt"), dirs, { deny: [home] })).toBe(join(allowed, "a.txt"));
   });
 
   it("rejects empty input and missing allowed dirs", () => {
     expect(() => resolveAllowedPath("", dirs)).toThrow(PathDenied);
     expect(() => resolveAllowedPath(undefined, dirs)).toThrow(PathDenied);
-    expect(() => resolveAllowedPath("a.txt", [join(root, "missing")])).toThrow(/нет доступных/);
+    expect(() => resolveAllowedPath("a.txt", [join(root, "missing")])).toThrow(/no usable/);
   });
 
   it.runIf(process.platform === "win32")("is case-insensitive on Windows and refuses device paths", () => {

@@ -27,10 +27,10 @@ describe("BrainHost", () => {
   it("probes enabled brains and reports disabled ones as unavailable", async () => {
     const clis = await host.probeAll();
     expect(clis.find((c) => c.brainId === "claude-code")).toMatchObject({ available: true, authenticated: true, version: "1.0.0" });
-    expect(clis.find((c) => c.brainId === "codex")).toMatchObject({ available: false, detail: "отключён в policy.json" });
+    expect(clis.find((c) => c.brainId === "codex")).toMatchObject({ available: false, detail: "disabled in policy.json" });
     expect(host.available().map((b) => b.id)).toEqual(["claude-code"]);
-    await expect(host.probe({ brainId: "codex" })).rejects.toThrow(/отключён/);
-    await expect(host.probe({ brainId: "gemini" })).rejects.toThrow(/Неизвестный/);
+    await expect(host.probe({ brainId: "codex" })).rejects.toThrow(/disabled/);
+    await expect(host.probe({ brainId: "gemini" })).rejects.toThrow(/Unknown brain/);
   });
 
   it("runs sessions in the workspace with the owner's tools and only harmless hub env", async () => {
@@ -78,7 +78,7 @@ describe("BrainHost", () => {
   });
 
   it("refuses unknown sessions and disabled brains", async () => {
-    await expect(host.send({ sessionId: "nope", turn: { text: "x" } }, () => {})).rejects.toThrow(/Неизвестная сессия/);
-    await expect(host.create({ brainId: "codex", opts: { sessionId: "s2", workspace: "a/b" } as any })).rejects.toThrow(/отключён/);
+    await expect(host.send({ sessionId: "nope", turn: { text: "x" } }, () => {})).rejects.toThrow(/Unknown brain session/);
+    await expect(host.create({ brainId: "codex", opts: { sessionId: "s2", workspace: "a/b" } as any })).rejects.toThrow(/disabled/);
   });
 });

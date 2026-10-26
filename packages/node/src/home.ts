@@ -4,6 +4,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { t } from "./messages.ts";
 
 export interface NodeConfig {
   hubUrl: string;
@@ -36,7 +37,7 @@ export class UserError extends Error {}
 
 export class NotPairedError extends UserError {
   constructor(home: string) {
-    super(`Машина не привязана к хабу (нет ${configFile(home)}).\nСначала выполните: openbot-node pair <адрес-хаба> <код>`);
+    super(t("home.notPaired", { file: configFile(home) }));
   }
 }
 
@@ -47,9 +48,9 @@ export function loadConfig(home: string): NodeConfig {
   try {
     c = JSON.parse(readFileSync(file, "utf8"));
   } catch (e: any) {
-    throw new Error(`Не удалось прочитать ${file}: ${e.message}`);
+    throw new Error(t("home.readFailed", { file, error: e.message }));
   }
-  if (!c?.hubUrl || !c?.machineId) throw new Error(`${file} повреждён: нет hubUrl или machineId. Привяжите машину заново: openbot-node pair <адрес-хаба> <код>`);
+  if (!c?.hubUrl || !c?.machineId) throw new Error(t("home.configCorrupt", { file }));
   return { hubUrl: String(c.hubUrl), machineId: String(c.machineId), name: String(c.name ?? ""), pairedAt: c.pairedAt };
 }
 
@@ -57,7 +58,7 @@ export function loadKey(home: string): NodeKey {
   const file = keyFile(home);
   if (!existsSync(file)) throw new NotPairedError(home);
   const k = JSON.parse(readFileSync(file, "utf8"));
-  if (!k?.secretKey || Buffer.from(String(k.secretKey), "base64url").length !== 32) throw new Error(`${file} повреждён: привяжите машину заново`);
+  if (!k?.secretKey || Buffer.from(String(k.secretKey), "base64url").length !== 32) throw new Error(t("home.keyCorrupt", { file }));
   return { secretKey: String(k.secretKey), publicKey: String(k.publicKey ?? "") };
 }
 
@@ -84,9 +85,9 @@ export function normalizeHubUrl(input: string): string {
   try {
     u = new URL(raw);
   } catch {
-    throw new UserError(`Неверный адрес хаба «${raw}». Пример: https://bot.example.com или http://100.64.0.1:8080`);
+    throw new UserError(t("home.badUrl", { url: raw }));
   }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new UserError(`Адрес хаба должен начинаться с http:// или https:// (получено «${raw}»)`);
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new UserError(t("home.badScheme", { url: raw }));
   u.search = "";
   u.hash = "";
   return u.toString().replace(/\/+$/, "");

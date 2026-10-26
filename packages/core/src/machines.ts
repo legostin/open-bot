@@ -9,7 +9,7 @@ import type { EventBus } from "./bus.ts";
 import type { BrainRegistry } from "./brains.ts";
 import type { AuditLog } from "./audit.ts";
 import type { ToolRegistry } from "./tools/registry.ts";
-import { LocalizedError } from "./i18n.ts";
+import { hubLocale, LocalizedError } from "./i18n.ts";
 
 export const NODE_AUTH_PREFIX = "openbot-node-auth:";
 const PAIRING_TTL = 10 * 60_000;
@@ -147,7 +147,7 @@ export class MachineHub {
       this.brains.registerMachine(id, m.name, peer, p.brains ?? []);
       this.bus.emit("machine.updated", m);
       this.bus.emit("brains.updated", {});
-      return { machineId: id, name: m.name };
+      return { machineId: id, name: m.name, language: hubLocale() };
     });
     peer.handle("node.ping", () => {
       this.db.prepare("update machines set last_seen_at = ? where id = ?").run(nowIso(), id);

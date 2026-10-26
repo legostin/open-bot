@@ -39,12 +39,12 @@ describe("fs inside allowed dirs", () => {
   });
 
   it("gives clear errors for missing files, dirs and binary files", () => {
-    expect(() => fsRead({ path: join(allowed, "missing.txt") }, p, {})).toThrow(/не найден/);
-    expect(() => fsRead({ path: allowed }, p, {})).toThrow(/папка/);
+    expect(() => fsRead({ path: join(allowed, "missing.txt") }, p, {})).toThrow(/not found/);
+    expect(() => fsRead({ path: allowed }, p, {})).toThrow(/folder, not a file/);
     expect(() => fsList({ path: join(allowed, "b.txt") }, p, {})).toThrow(FsDenied);
-    expect(() => fsWrite({ path: join(allowed, "zdir"), content: "x" }, p, {})).toThrow(/папка/);
+    expect(() => fsWrite({ path: join(allowed, "zdir"), content: "x" }, p, {})).toThrow(/folder, not a file/);
     writeFileSync(join(allowed, "bin.dat"), Buffer.from([1, 2, 0, 3]));
-    expect(() => fsRead({ path: join(allowed, "bin.dat") }, p, {})).toThrow(/Двоичный/);
+    expect(() => fsRead({ path: join(allowed, "bin.dat") }, p, {})).toThrow(/Binary/);
     expect(() => fsWrite({ path: join(allowed, "x.txt"), content: 42 as any }, p, {})).toThrow(/content/);
   });
 });
@@ -70,8 +70,8 @@ describe("fs outside allowed dirs", () => {
     const home = join(allowed, ".openbot-node");
     mkdirSync(home, { recursive: true });
     writeFileSync(join(home, "policy.json"), "{}");
-    expect(() => fsWrite({ path: join(home, "policy.json"), content: "{}" }, p, { deny: [home] })).toThrow(/Служебная/);
-    expect(() => fsRead({ path: join(home, "policy.json") }, p, { deny: [home] })).toThrow(/Служебная/);
+    expect(() => fsWrite({ path: join(home, "policy.json"), content: "{}" }, p, { deny: [home] })).toThrow(/state folder/);
+    expect(() => fsRead({ path: join(home, "policy.json") }, p, { deny: [home] })).toThrow(/state folder/);
   });
 });
 

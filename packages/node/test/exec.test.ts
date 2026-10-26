@@ -38,11 +38,11 @@ describe("exec policy", () => {
     expect(checkCommand("git status", p)).toBe("git status");
     expect(checkCommand("npm test -- --run", p)).toBe("npm test -- --run");
     expect(() => checkCommand("rm -rf /", p)).toThrow(/allowCommands/);
-    expect(() => checkCommand("git status; rm -rf /", p)).toThrow(/нельзя использовать/);
+    expect(() => checkCommand("git status; rm -rf /", p)).toThrow(/are not allowed/);
     expect(() => checkCommand("git status && whoami", p)).toThrow(ExecDenied);
     expect(() => checkCommand("npm test $(whoami)", p)).toThrow(ExecDenied);
     expect(() => checkCommand("npm test\nwhoami", p)).toThrow(ExecDenied);
-    expect(() => checkCommand("", p)).toThrow(/не задана/);
+    expect(() => checkCommand("", p)).toThrow(/No command/);
     // No allowlist: any command, chaining included.
     expect(checkCommand("echo a && echo b", policy({ enabled: true }))).toBe("echo a && echo b");
   });
@@ -50,7 +50,7 @@ describe("exec policy", () => {
   it("keeps cwd inside the allowed dirs", async () => {
     const p = policy({ enabled: true });
     await expect(execRun({ command: nodeCmd("1"), cwd: outside }, p, {})).rejects.toBeInstanceOf(PathDenied);
-    await expect(execRun({ command: nodeCmd("1"), cwd: join(allowed, "nope") }, p, {})).rejects.toThrow(/не существует/);
+    await expect(execRun({ command: nodeCmd("1"), cwd: join(allowed, "nope") }, p, {})).rejects.toThrow(/does not exist/);
   });
 });
 
@@ -74,7 +74,7 @@ describe("exec.run", () => {
     const r = await execRun({ command: nodeCmd("process.stdout.write('x'.repeat(3*1024*1024))") }, p, {});
     expect(r.code).toBe(0);
     expect(r.stdout.length).toBe(1024 * 1024);
-    expect(r.stderr).toContain("обрезан");
+    expect(r.stderr).toContain("truncated");
   });
 
   it("enforces the timeout and kills the whole process tree", async () => {
@@ -86,7 +86,7 @@ describe("exec.run", () => {
     const started = Date.now();
     const r = await execRun({ command: nodeCmd(script), timeoutMs: 1500 }, p, {});
     expect(r.code).toBe(124);
-    expect(r.stderr).toContain("таймаут");
+    expect(r.stderr).toContain("timed out");
     expect(Date.now() - started).toBeLessThan(10_000);
     expect(existsSync(pidFile)).toBe(true);
     const pid = Number(readFileSync(pidFile, "utf8"));

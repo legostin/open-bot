@@ -9,6 +9,7 @@ import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
 import { createClaudeCodeProvider, createCodexProvider } from "@openbot/brains-cli";
 import type { PolicyStore } from "./policy.ts";
 import { resolveWorkspace } from "./guard.ts";
+import { hubLocale, tHub } from "./messages.ts";
 
 export const BRAIN_IDS = ["claude-code", "codex"] as const;
 export type NodeBrainId = (typeof BRAIN_IDS)[number];
@@ -81,7 +82,7 @@ const SAFE_ARG = /^[A-Za-z0-9][\w.:/@[\]-]{0,199}$/;
 
 function safeArg(v: unknown, field: string): string | undefined {
   if (v === undefined || v === null || v === "") return undefined;
-  if (typeof v !== "string" || !SAFE_ARG.test(v)) throw new Error(`Недопустимое значение ${field}: ${String(v).slice(0, 80)}`);
+  if (typeof v !== "string" || !SAFE_ARG.test(v)) throw new Error(`Invalid ${field}: ${String(v).slice(0, 80)}`);
   return v;
 }
 
@@ -112,6 +113,7 @@ export class BrainHost {
         allowedTools: () => policy().brains["claude-code"].allowedTools,
         stateDir: stateDir("claude-code"),
         log,
+        locale: hubLocale,
       }),
     );
     this.providers.set(
@@ -121,6 +123,7 @@ export class BrainHost {
         sandbox: () => policy().brains.codex.sandbox,
         stateDir: stateDir("codex"),
         log,
+        locale: hubLocale,
       }),
     );
   }
@@ -130,8 +133,8 @@ export class BrainHost {
   }
 
   private provider(id: string): BrainProviderImpl {
-    if (!(BRAIN_IDS as readonly string[]).includes(id)) throw new Error(`Неизвестный мозг: ${id}`);
-    if (!this.enabled(id)) throw new Error(`Мозг ${id} отключён на этой машине (policy.json)`);
+    if (!(BRAIN_IDS as readonly string[]).includes(id)) throw new Error(`Unknown brain: ${id}`);
+    if (!this.enabled(id)) throw new Error(`Brain ${id} is disabled on this machine (policy.json)`);
     return this.providers.get(id as NodeBrainId)!;
   }
 
@@ -140,7 +143,7 @@ export class BrainHost {
     return Promise.all(
       BRAIN_IDS.map(async (id) => {
         if (!this.enabled(id)) {
-          const r = { available: false, authenticated: false, detail: "отключён в policy.json" };
+          const r = { available: false, authenticated: false, detail: tHub("brains.disabled") };
           this.lastProbe.set(id, r);
           return { brainId: id, ...r };
         }
@@ -170,7 +173,7 @@ export class BrainHost {
   async create(p: { brainId: string; opts: BrainSessionOptions }): Promise<{ workspace: string }> {
     const provider = this.provider(p.brainId);
     const opts = p.opts;
-    if (!opts?.sessionId || typeof opts.sessionId !== "string") throw new Error("sessionId не задан");
+    if (!opts?.sessionId || typeof opts.sessionId !== "string") throw new Error("sessionId is required");
     const policy = this.o.policy.get();
     const workspace = resolveWorkspace(opts.workspace, policy.workspacesRoot);
     const env: Record<string, string> = {};
@@ -200,7 +203,7 @@ export class BrainHost {
 
   async send(p: { sessionId: string; turn: BrainTurn }, emit: (event: BrainEvent) => void): Promise<void> {
     const s = this.sessions.get(p.sessionId);
-    if (!s) throw new Error(`Неизвестная сессия мозга: ${p.sessionId}`);
+    if (!s) throw new Error(`Unknown brain session: ${p.sessionId}`);
     try {
       for await (const event of s.session.send(p.turn)) emit(event);
     } catch (e: any) {
