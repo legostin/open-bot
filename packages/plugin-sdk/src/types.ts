@@ -1,0 +1,143 @@
+// Plugin-side API. Plugins should only `import type` from here: the runner provides
+// the implementation, so plugins installed outside the monorepo need no runtime deps.
+
+import type {
+  BrainEvent,
+  BrainSessionOptions,
+  BrainTurn,
+  CoreMethod,
+  NotifyLevel,
+  OutboundMessage,
+  ProbeResult,
+  ToolCallContext,
+  ToolResult,
+  ToolSpec,
+} from "@openbot/shared";
+
+export type ToolHandler = (input: any, ctx: ToolCallContext) => Promise<ToolResult | string> | ToolResult | string;
+
+export interface ToolRegistration extends ToolSpec {
+  /** Short name; the core exposes it as `<toolPrefix>_<name>`. */
+  name: string;
+  handler: ToolHandler;
+}
+
+export interface BrainSessionImpl {
+  send(turn: BrainTurn): AsyncIterable<BrainEvent>;
+  interrupt(): Promise<void> | void;
+  close(): Promise<void> | void;
+}
+
+export interface BrainProviderImpl {
+  id: string;
+  label: string;
+  probe(variant?: string): Promise<ProbeResult>;
+  createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl>;
+}
+
+export interface ChannelImpl {
+  id: string;
+  label: string;
+  send(message: OutboundMessage): Promise<{ externalId?: string } | void>;
+  status?(): Promise<{ connected: boolean; detail?: string }>;
+}
+
+export type HookName = "session.start" | "tool.before" | "tool.after" | "message.in" | "notify.before";
+
+export interface HookPayloads {
+  "session.start": { sessionId: string; agentId: string; conversationId: string; taskId?: string; background: boolean };
+  "tool.before": { tool: string; input: unknown; context: ToolCallContext };
+  "tool.after": { tool: string; input: unknown; result: ToolResult; context: ToolCallContext };
+  "message.in": { conversationId: string; text: string; channel?: string };
+  "notify.before": { level: NotifyLevel; title: string; body: string; agentId?: string; triggerId?: string };
+}
+
+export interface HookResults {
+  "session.start": { appendSystemPrompt?: string } | void;
+  "tool.before": { block?: string; input?: unknown } | void;
+  "tool.after": { result?: ToolResult } | void;
+  "message.in": { block?: string; text?: string } | void;
+  "notify.before": { block?: string; level?: NotifyLevel } | void;
+}
+
+export type EventName =
+  | "message.created"
+  | "message.updated"
+  | "task.updated"
+  | "notification.created"
+  | "notification.feedback"
+  | "approval.created"
+  | "approval.resolved"
+  | "conversation.updated"
+  | "vault.state";
+
+export interface PluginHttpRequest {
+  method: string;
+  /** Path after /api/plugins/<id>/http (or /hooks/<id> for public requests), starting with "/". */
+  path: string;
+  query: Record<string, string>;
+  headers: Record<string, string>;
+  body: unknown;
+  /** True for unauthenticated public webhooks (/hooks/<pluginId>/...). Validate secrets yourself. */
+  public: boolean;
+}
+
+export interface PluginHttpResponse {
+  status?: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
+export interface PluginLogger {
+  debug(...args: unknown[]): void;
+  info(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
+export interface PluginContext {
+  pluginId: string;
+  pluginDir: string;
+  /** Private writable directory for this plugin. */
+  dataDir: string;
+  /** Base URL of the hub, reachable from this process (e.g. http://127.0.0.1:8080). */
+  hubUrl: string;
+  /** Absolute path of the hub's repository root (for locating shared binaries like the MCP bridge). */
+  appRoot: string;
+  settings: Record<string, any>;
+  onSettingsChange(cb: (settings: Record<string, any>) => void): void;
+  log: PluginLogger;
+  tools: { register(tool: ToolRegistration): void };
+  brains: { register(provider: BrainProviderImpl): void };
+  channels: { register(channel: ChannelImpl): void };
+  events: { on(name: EventName, cb: (payload: any) => void): void };
+  hooks: { on<H extends HookName>(hook: H, handler: (payload: HookPayloads[H]) => Promise<HookResults[H]> | HookResults[H]): void };
+  http: { handle(handler: (req: PluginHttpRequest) => Promise<PluginHttpResponse> | PluginHttpResponse): void };
+  ui: {
+    /** Push an event to all web clients: they receive {type:"plugin.event", data:{pluginId, channel, payload}}. */
+    emit(channel: string, payload: unknown): void;
+    /** Messages sent by this plugin's UI over the hub websocket. */
+    onMessage(cb: (payload: any) => void): void;
+  };
+  vault: {
+    /** Fields of a vault item. Only items allowed by permissions.vault and the item's scope. */
+    get(ref: string, opts?: { domain?: string; reason?: string }): Promise<Record<string, string>>;
+  };
+  storage: {
+    get<T = unknown>(key: string): Promise<T | undefined>;
+    set(key: string, value: unknown): Promise<void>;
+    delete(key: string): Promise<void>;
+    list(prefix?: string): Promise<Array<{ key: string; value: unknown }>>;
+  };
+  core: { call<T = any>(method: CoreMethod, params?: unknown): Promise<T> };
+}
+
+export interface PluginModule {
+  activate(ctx: PluginContext): Promise<void> | void;
+  deactivate?(): Promise<void> | void;
+}
+
+/** Identity helper for type inference. Optional: plugins may export a plain object. */
+export function definePlugin(mod: PluginModule): PluginModule {
+  return mod;
+}

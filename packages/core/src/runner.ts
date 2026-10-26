@@ -1,0 +1,664 @@
+// Session runner: turns user messages, delegated tasks and trigger runs into brain sessions.
+// Handles brain selection and fallback, streaming into messages, tasks, deferred approvals and recovery.
+
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, Task, ToolResult } from "@openbot/shared";
+import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@openbot/shared";
+import type { Config } from "./config.ts";
+import type { Store, SessionRow } from "./store.ts";
+import type { Settings } from "./settings.ts";
+import type { AgentRegistry } from "./agents.ts";
+import type { BrainRegistry, BrainHandle } from "./brains.ts";
+import type { SkillIndex } from "./skills.ts";
+import type { HookRegistry } from "./hooks.ts";
+import type { Notifier } from "./notifier.ts";
+import type { ChannelRegistry } from "./channels.ts";
+import type { AuditLog } from "./audit.ts";
+import type { EventBus } from "./bus.ts";
+import type { Redactor } from "./vault/redact.ts";
+import type { ToolGateway } from "./tools/gateway.ts";
+import type { ApprovalService } from "./approvals.ts";
+import type { EgressProxy } from "./egress.ts";
+import { DEFAULT_BRAIN_EGRESS } from "./settings.ts";
+import { buildSystemPrompt } from "./prompt.ts";
+
+export interface RunnerDeps {
+  config: Config;
+  store: Store;
+  settings: Settings;
+  agents: AgentRegistry;
+  brains: BrainRegistry;
+  skills: SkillIndex;
+  hooks: HookRegistry;
+  notifier: Notifier;
+  channels: ChannelRegistry;
+  audit: AuditLog;
+  bus: EventBus;
+  redactor: Redactor;
+  gateway: ToolGateway;
+  approvals: ApprovalService;
+  egress: EgressProxy;
+  /** Claude Code-format plugin dirs to pass to Claude Code sessions. */
+  claudePluginDirs: () => string[];
+  machineName: (machineId: string) => string | undefined;
+}
+
+interface Live {
+  handle: BrainHandle;
+  brainRef: string;
+}
+
+export interface TurnResult {
+  text: string;
+  error?: string;
+  limited?: { resetAt?: string };
+  awaitingApproval: boolean;
+}
+
+/** Harness built-in tools whose results come from the outside world. */
+const NATIVE_SOURCE_TOOLS = /^(WebFetch|WebSearch|web_search|fetch)$/i;
+const MAX_TASK_CONCURRENCY = 4;
+
+export class SessionRunner {
+  d: RunnerDeps;
+  private live = new Map<string, Live>();
+  private queues = new Map<string, Promise<unknown>>();
+  private activeTurns = new Map<string, { sessionId: string; handle: BrainHandle }>();
+  private runningTasks = new Set<string>();
+  private brainLoad = new Map<string, number>();
+  private timer?: NodeJS.Timeout;
+  private streamingMessage = new Map<string, string>(); // conversationId -> messageId
+
+  constructor(deps: RunnerDeps) {
+    this.d = deps;
+    deps.approvals.onDeferredApproved = (a) => this.onDeferredApproved(a);
+    deps.approvals.onDeferredDenied = (a) => this.onDeferredDenied(a);
+    deps.bus.on("approval.created", (a: Approval) => this.attachApprovalPart(a));
+    deps.bus.on("approval.resolved", (a: Approval) => this.updateApprovalPart(a));
+  }
+
+  // ---------- lifecycle ----------
+
+  start(): void {
+    this.d.store.failStreamingMessages();
+    for (const t of this.d.store.listTasks({ status: ["running", "waiting_approval", "interrupted"] })) {
+      this.d.store.updateTask(t.id, { status: "queued" });
+    }
+    this.timer = setInterval(() => {
+      this.scheduleTasks();
+      const s = this.d.settings.get();
+      const { remind } = this.d.approvals.sweep(s.approvalExpireHours);
+      for (const a of remind) {
+        void this.d.notifier.notify({ level: "notify", title: "Ждёт подтверждения", body: a.summary, agentId: a.agentId, taskId: a.taskId });
+      }
+    }, 15_000);
+    this.timer.unref();
+    setTimeout(() => this.scheduleTasks(), 1000).unref();
+  }
+
+  async stop(): Promise<void> {
+    if (this.timer) clearInterval(this.timer);
+    await Promise.all([...this.live.values()].map((l) => l.handle.close().catch(() => {})));
+    this.live.clear();
+  }
+
+  // ---------- public entry points ----------
+
+  /** A user message arrived (web, Telegram, ...). Returns the stored user message. */
+  async userMessage(conversationId: string, text: string, opts: { channel?: string } = {}): Promise<Message> {
+    const conv = this.d.store.getConversation(conversationId);
+    if (!conv) throw new Error("Переписка не найдена");
+    const hooked = await this.d.hooks.run("message.in", { conversationId, text, channel: opts.channel }, (p, r) =>
+      r.block ? { blocked: r.block } : r.text !== undefined ? { ...p, text: r.text } : p,
+    );
+    const msg = this.d.store.addMessage({ conversationId, role: "user", parts: [{ type: "text", text }], status: "complete", channel: opts.channel });
+    if (hooked.blocked) {
+      this.d.store.addMessage({ conversationId, role: "system", parts: [{ type: "error", message: `Сообщение заблокировано: ${hooked.blocked}` }], status: "complete" });
+      return msg;
+    }
+    const prompt = this.d.skills.expandCommand(hooked.payload.text) ?? hooked.payload.text;
+    void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { replyChannel: opts.channel }));
+    return msg;
+  }
+
+  interrupt(conversationId: string): boolean {
+    const a = this.activeTurns.get(conversationId);
+    if (!a) return false;
+    void a.handle.interrupt();
+    return true;
+  }
+
+  createTask(t: {
+    agentId: string;
+    goal: string;
+    title: string;
+    parentConversationId?: string;
+    parentTaskId?: string;
+    background: boolean;
+    createdBy: Task["createdBy"];
+    triggerId?: string;
+  }): Task {
+    const task = this.d.store.createTask({ ...t });
+    this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete" });
+    this.d.audit.append(t.createdBy === "user" ? "user" : `agent:${t.agentId}`, "task.create", task.id, { title: t.title, background: t.background, triggerId: t.triggerId });
+    setImmediate(() => this.scheduleTasks());
+    return task;
+  }
+
+  cancelTask(id: string): Task | undefined {
+    const t = this.d.store.getTask(id);
+    if (!t) return undefined;
+    this.interrupt(t.conversationId);
+    return this.d.store.updateTask(id, { status: "cancelled" });
+  }
+
+  retryTask(id: string): Task | undefined {
+    const t = this.d.store.getTask(id);
+    if (!t) return undefined;
+    const r = this.d.store.updateTask(id, { status: "queued", error: undefined, resumeAt: undefined });
+    setImmediate(() => this.scheduleTasks());
+    return r;
+  }
+
+  // ---------- queueing ----------
+
+  private enqueue<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.queues.get(key) ?? Promise.resolve();
+    const next = prev.then(fn, fn);
+    this.queues.set(
+      key,
+      next.catch(() => {}),
+    );
+    return next;
+  }
+
+  // ---------- tasks ----------
+
+  scheduleTasks(): void {
+    const now = Date.now();
+    const candidates = this.d.store
+      .listTasks({ status: ["queued", "paused"], limit: 100 })
+      .filter((t) => t.status === "queued" || (t.resumeAt && Date.parse(t.resumeAt) <= now))
+      .reverse();
+    for (const t of candidates) {
+      if (this.runningTasks.size >= MAX_TASK_CONCURRENCY) break;
+      if (this.runningTasks.has(t.id)) continue;
+      this.runningTasks.add(t.id);
+      void this.enqueue(t.conversationId, () => this.runTask(t)).finally(() => {
+        this.runningTasks.delete(t.id);
+        setImmediate(() => this.scheduleTasks());
+      });
+    }
+  }
+
+  private budgetOk(agent: AgentDef): boolean {
+    const day = new Date().toISOString().slice(0, 10);
+    const r = this.d.store.db.prepare("select count from usage where day = ? and agent_id = ? and kind = 'background_run'").get(day, agent.id) as { count: number } | undefined;
+    return (r?.count ?? 0) < agent.budget.backgroundRunsPerDay;
+  }
+
+  private countUsage(agentId: string, kind: string, tokens = 0): void {
+    const day = new Date().toISOString().slice(0, 10);
+    this.d.store.db
+      .prepare("insert into usage(day, agent_id, kind, count, tokens) values (?,?,?,1,?) on conflict(day, agent_id, kind) do update set count = count + 1, tokens = tokens + excluded.tokens")
+      .run(day, agentId, kind, tokens);
+  }
+
+  private async runTask(task: Task): Promise<void> {
+    const fresh = this.d.store.getTask(task.id);
+    if (!fresh || !["queued", "paused"].includes(fresh.status)) return;
+    const agent = this.d.agents.get(fresh.agentId);
+    const conv = this.d.store.getConversation(fresh.conversationId);
+    if (!agent || !conv) {
+      this.d.store.updateTask(fresh.id, { status: "failed", error: "агент или переписка не найдены" });
+      return;
+    }
+    if (fresh.background && !this.budgetOk(agent)) {
+      this.d.store.updateTask(fresh.id, { status: "failed", error: "дневной бюджет фоновых запусков исчерпан" });
+      await this.d.notifier.notify({ level: "digest", title: `Бюджет агента ${agent.name} исчерпан`, body: `Задача «${fresh.title}» не запущена.`, agentId: agent.id });
+      return;
+    }
+    if (fresh.background) this.countUsage(agent.id, "background_run");
+    this.d.store.updateTask(fresh.id, { status: "running", resumeAt: undefined });
+
+    const resumed = fresh.status === "paused" || this.d.store.listMessages(conv.id, { limit: 3 }).some((m) => m.role === "assistant");
+    const prompt = resumed
+      ? "Продолжи работу над задачей с того места, где остановился."
+      : [
+          `Задача: ${fresh.title}`,
+          "",
+          fresh.goal,
+          "",
+          fresh.background
+            ? "Когда закончишь, вызови notify (один раз) и кратко опиши итог."
+            : "Когда закончишь, кратко опиши результат — он будет передан тому, кто поставил задачу.",
+        ].join("\n");
+
+    const r = await this.runTurn(conv, prompt, { task: fresh });
+    const cur = this.d.store.getTask(fresh.id);
+    if (!cur || cur.status === "cancelled") return;
+
+    if (r.limited) {
+      this.d.store.updateTask(fresh.id, {
+        status: "paused",
+        resumeAt: r.limited.resetAt ?? new Date(Date.now() + 30 * 60_000).toISOString(),
+        error: "лимит подписки — продолжу позже",
+      });
+      return;
+    }
+    if (r.error && !r.text) {
+      this.d.store.updateTask(fresh.id, { status: "failed", error: r.error });
+      if (!fresh.background || fresh.createdBy !== "trigger") {
+        await this.d.notifier.notify({ level: "notify", title: `Задача не выполнена: ${fresh.title}`, body: r.error, agentId: agent.id, taskId: fresh.id });
+      }
+      return;
+    }
+    if (r.awaitingApproval) {
+      this.d.store.updateTask(fresh.id, { status: "waiting_approval", result: r.text });
+      return;
+    }
+    this.d.store.updateTask(fresh.id, { status: "done", result: r.text, error: undefined });
+    await this.reportTaskDone(this.d.store.getTask(fresh.id)!);
+  }
+
+  private async reportTaskDone(task: Task): Promise<void> {
+    const result = truncate(task.result ?? "", 6000);
+    if (task.createdBy === "agent" && task.parentConversationId) {
+      const parent = this.d.store.getConversation(task.parentConversationId);
+      if (parent) {
+        const note = `[Система] Делегированная задача ${task.id} «${task.title}» завершена.\nРезультат:\n${result}`;
+        this.d.store.addMessage({ conversationId: parent.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: task.id });
+        void this.enqueue(parent.id, () => this.runTurn(parent, note, {}));
+      }
+      return;
+    }
+    if (task.createdBy === "user") {
+      await this.d.notifier.notify({ level: "notify", title: `Готово: ${task.title}`, body: result, agentId: task.agentId, taskId: task.id });
+    }
+    // Trigger tasks report through the agent's own notify() call.
+  }
+
+  // ---------- deferred approvals ----------
+
+  private async onDeferredApproved(a: Approval): Promise<void> {
+    const result = await this.d.gateway.executeApproved(a);
+    const conv = this.d.store.getConversation(a.conversationId);
+    if (!conv) return;
+    const note = `[Система] Пользователь одобрил действие «${a.summary}». Оно выполнено.\nРезультат${result.isError ? " (ошибка)" : ""}:\n${truncate(resultText(result), 4000)}`;
+    this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: a.taskId });
+    const task = a.taskId ? this.d.store.getTask(a.taskId) : undefined;
+    if (task && task.status === "waiting_approval") {
+      this.d.store.updateTask(task.id, { status: "running" });
+      void this.enqueue(conv.id, async () => {
+        const r = await this.runTurn(conv, note, { task });
+        if (!r.awaitingApproval) {
+          this.d.store.updateTask(task.id, { status: r.error && !r.text ? "failed" : "done", result: r.text, error: r.error });
+          const t = this.d.store.getTask(task.id)!;
+          if (t.status === "done") await this.reportTaskDone(t);
+        } else this.d.store.updateTask(task.id, { status: "waiting_approval" });
+      });
+    } else {
+      void this.enqueue(conv.id, () => this.runTurn(conv, note, {}));
+    }
+  }
+
+  private async onDeferredDenied(a: Approval): Promise<void> {
+    const conv = this.d.store.getConversation(a.conversationId);
+    if (!conv) return;
+    const note = `[Система] Пользователь отклонил действие «${a.summary}».`;
+    this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: a.taskId });
+    const task = a.taskId ? this.d.store.getTask(a.taskId) : undefined;
+    if (task && task.status === "waiting_approval") this.d.store.updateTask(task.id, { status: "done", result: (task.result ?? "") + "\n\n(действие отклонено пользователем)" });
+  }
+
+  private attachApprovalPart(a: Approval): void {
+    const msgId = this.streamingMessage.get(a.conversationId);
+    if (!msgId) return;
+    const m = this.d.store.getMessage(msgId);
+    if (!m) return;
+    this.d.store.updateMessage(m.id, { parts: [...m.parts, { type: "approval", approvalId: a.id, summary: a.summary, status: "pending" }] });
+  }
+
+  private updateApprovalPart(a: Approval): void {
+    const msgs = this.d.store.listMessages(a.conversationId, { limit: 50 });
+    for (const m of msgs) {
+      if (m.parts.some((p) => p.type === "approval" && p.approvalId === a.id)) {
+        this.d.store.updateMessage(m.id, {
+          parts: m.parts.map((p) => (p.type === "approval" && p.approvalId === a.id ? { ...p, status: a.status } : p)),
+        });
+      }
+    }
+  }
+
+  // ---------- turns ----------
+
+  workspacePath(s: { agentId: string; taskId?: string; conversationId: string }): string {
+    return join(this.d.config.dataDir, "workspaces", s.agentId, s.taskId ?? s.conversationId);
+  }
+
+  private limitedUntil(ref: string): string | undefined {
+    const r = this.d.store.db.prepare("select until from brain_limits where brain_ref = ?").get(formatBrainRef(parseBrainRef(ref))) as { until: string } | undefined;
+    return r && Date.parse(r.until) > Date.now() ? r.until : undefined;
+  }
+
+  private setLimited(ref: string, until: string, detail: string): void {
+    this.d.store.db
+      .prepare("insert into brain_limits(brain_ref, until, detail) values (?,?,?) on conflict(brain_ref) do update set until = excluded.until, detail = excluded.detail")
+      .run(formatBrainRef(parseBrainRef(ref)), until, detail);
+    this.d.bus.emit("brains.updated", {});
+  }
+
+  /** Brains of the agent in preference order that are connected, not rate-limited and not saturated. */
+  private async candidates(agent: AgentDef, preferred?: string): Promise<{ usable: string[]; earliestReset?: string; reasons: string[] }> {
+    const ordered = preferred ? [preferred, ...agent.brains.filter((b) => formatBrainRef(parseBrainRef(b)) !== formatBrainRef(parseBrainRef(preferred)))] : agent.brains;
+    const usable: string[] = [];
+    const reasons: string[] = [];
+    let earliestReset: string | undefined;
+    const conc = this.d.settings.get().brainConcurrency;
+    for (const ref of ordered) {
+      if (!this.d.brains.has(ref)) {
+        reasons.push(`${ref}: не подключён`);
+        continue;
+      }
+      const lim = this.limitedUntil(ref);
+      if (lim) {
+        reasons.push(`${ref}: лимит до ${lim}`);
+        if (!earliestReset || lim < earliestReset) earliestReset = lim;
+        continue;
+      }
+      if ((this.brainLoad.get(formatBrainRef(parseBrainRef(ref))) ?? 0) >= conc) {
+        reasons.push(`${ref}: занят`);
+        continue;
+      }
+      const p = await this.d.brains.probe(ref);
+      if (!p.available || !p.authenticated) {
+        reasons.push(`${ref}: ${p.detail ?? (p.available ? "нет авторизации" : "недоступен")}`);
+        continue;
+      }
+      usable.push(ref);
+    }
+    return { usable, earliestReset, reasons };
+  }
+
+  private async openSession(conv: Conversation, agent: AgentDef, brainRef: string, task: Task | undefined, prior?: SessionRow): Promise<{ row: SessionRow; handle: BrainHandle }> {
+    const background = task?.background ?? false;
+    const ref = parseBrainRef(brainRef);
+    const sameBrain = prior && formatBrainRef(parseBrainRef(prior.brainRef)) === formatBrainRef(ref);
+    let row: SessionRow;
+    let token: string;
+    if (sameBrain && prior) {
+      row = prior;
+      token = this.d.store.rotateSessionToken(prior.id);
+    } else {
+      if (prior) this.d.store.updateSession(prior.id, { status: "closed" });
+      const created = this.d.store.createSession({ conversationId: conv.id, taskId: task?.id, agentId: agent.id, brainRef: formatBrainRef(ref), background, tainted: prior?.tainted });
+      row = created.row;
+      token = created.token;
+    }
+
+    const local = ref.machineId === "local";
+    const workspace = local ? this.workspacePath(row) : `${agent.id}/${task?.id ?? conv.id}`;
+    if (local) mkdirSync(workspace, { recursive: true });
+    const skills = this.d.skills.forAgent(agent.skills);
+    let skillsDir: string | undefined;
+    if (local && ref.brainId === "claude-code") skillsDir = join(workspace, ".claude", "skills");
+    if (local && ref.brainId === "codex") skillsDir = join(workspace, ".agents", "skills");
+    if (skillsDir) this.d.skills.materialize(skillsDir, skills);
+
+    const hook = await this.d.hooks.run("session.start", { sessionId: row.id, agentId: agent.id, conversationId: conv.id, taskId: task?.id, background }, (p) => p);
+    const appended = hook.results.map((r) => r?.appendSystemPrompt).filter(Boolean) as string[];
+    const s = this.d.settings.get();
+    const systemPrompt = buildSystemPrompt({
+      agent,
+      timezone: s.timezone,
+      language: s.language,
+      consoleUrl: this.d.config.consoleUrl,
+      task,
+      background,
+      skills,
+      nativeSkills: !!skillsDir,
+      appended,
+      machineName: local ? undefined : this.d.machineName(ref.machineId),
+    });
+
+    const env: Record<string, string> = {};
+    if (local) {
+      const proxyToken = this.d.egress.issueToken(`brain:${row.id}`, DEFAULT_BRAIN_EGRESS);
+      const proxy = `http://${proxyToken}:x@127.0.0.1:${this.d.config.egressPort}`;
+      Object.assign(env, { HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: "127.0.0.1,localhost,::1", no_proxy: "127.0.0.1,localhost,::1" });
+    }
+
+    const handle = await this.d.brains.create(formatBrainRef(ref), {
+      sessionId: row.id,
+      agent,
+      variant: ref.variant,
+      model: agent.model,
+      workspace,
+      mcp: {
+        url: `${local ? this.d.config.internalUrl : this.d.config.publicUrl}/mcp`,
+        token,
+        bridgeCommand: local ? [process.execPath, "--disable-warning=ExperimentalWarning", join(this.d.config.appRoot, "packages", "mcp-bridge", "src", "index.ts")] : [],
+      },
+      systemPrompt,
+      skillsDir,
+      claudePluginDirs: local && ref.brainId === "claude-code" ? this.d.claudePluginDirs() : [],
+      resume: sameBrain ? prior?.resumeToken : undefined,
+      env,
+      background,
+    });
+    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref) });
+    if (!sameBrain) this.d.audit.append("core", "session.open", row.id, { agent: agent.id, brain: formatBrainRef(ref), conversation: conv.id, task: task?.id });
+    return { row, handle };
+  }
+
+  /** Text transcript of recent messages for handing a conversation to a different brain. */
+  private handoffSummary(conversationId: string): string {
+    const msgs = this.d.store.listMessages(conversationId, { limit: 30 });
+    const lines: string[] = [];
+    for (const m of msgs) {
+      const t = m.parts
+        .map((p) => (p.type === "text" ? p.text : p.type === "tool_call" ? `[вызов ${p.name}]` : p.type === "notification" ? `[уведомление: ${p.title}]` : ""))
+        .filter(Boolean)
+        .join(" ");
+      if (t) lines.push(`${m.role === "user" ? "Пользователь" : m.role === "assistant" ? "Ассистент" : "Система"}: ${truncate(t, 800)}`);
+    }
+    return this.d.redactor.text(lines.join("\n"));
+  }
+
+  async runTurn(conv: Conversation, prompt: string, opts: { task?: Task; replyChannel?: string }): Promise<TurnResult> {
+    const agent = this.d.agents.get(conv.agentId) ?? this.d.agents.get(this.d.settings.get().defaultAgent)!;
+    const task = opts.task ?? (conv.taskId ? this.d.store.getTask(conv.taskId) : undefined);
+    const prior = this.d.store.activeSession(conv.id, agent.id);
+    const tried = new Set<string>();
+    let handoff = false;
+    let lastError = "";
+    let earliestReset: string | undefined;
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const { usable, earliestReset: reset, reasons } = await this.candidates(agent, prior?.brainRef);
+      earliestReset = reset ?? earliestReset;
+      const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
+      if (!ref) {
+        const why = reasons.length ? reasons.join("; ") : lastError || "нет подходящих мозгов";
+        const allLimited = earliestReset && usable.length === 0 && reasons.every((r) => r.includes("лимит") || r.includes("не подключён") || r.includes("занят"));
+        const message = allLimited
+          ? `Все доступные мозги упёрлись в лимиты подписки. Продолжу после ${new Date(earliestReset!).toLocaleString("ru-RU")}.`
+          : `Не могу запустить агента «${agent.name}»: ${why}. Настройте мозг в разделе «Мозги» (Claude Code, Codex или API-ключ).`;
+        this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "error", message }], status: "complete", taskId: task?.id });
+        return { text: "", error: message, limited: allLimited ? { resetAt: earliestReset } : undefined, awaitingApproval: false };
+      }
+      const key = formatBrainRef(parseBrainRef(ref));
+      tried.add(key);
+
+      const curPrior = this.d.store.activeSession(conv.id, agent.id);
+      let live = curPrior ? this.live.get(curPrior.id) : undefined;
+      let row = curPrior;
+      try {
+        if (!live || live.brainRef !== key) {
+          if (live && curPrior) {
+            void live.handle.close();
+            this.live.delete(curPrior.id);
+          }
+          const opened = await this.openSession(conv, agent, ref, task, curPrior);
+          row = opened.row;
+          live = this.live.get(row.id)!;
+          handoff = !!curPrior && formatBrainRef(parseBrainRef(curPrior.brainRef)) !== key;
+        }
+      } catch (e: any) {
+        lastError = `${ref}: ${e.message}`;
+        this.d.brains.invalidate(ref);
+        continue;
+      }
+
+      let text = prompt;
+      if (handoff) {
+        text = `[Система] Переписка продолжается на другом мозге. Краткая история:\n${this.handoffSummary(conv.id)}\n\n---\n${prompt}`;
+        handoff = false;
+      }
+
+      this.brainLoad.set(key, (this.brainLoad.get(key) ?? 0) + 1);
+      try {
+        const r = await this.streamTurn(conv, row!, live!, agent, text, task, opts.replyChannel);
+        if (r.retry) {
+          lastError = r.error ?? lastError;
+          if (r.limited) earliestReset = r.limited.resetAt ?? earliestReset;
+          this.live.get(row!.id)?.handle.close().catch(() => {});
+          this.live.delete(row!.id);
+          continue;
+        }
+        return r;
+      } finally {
+        this.brainLoad.set(key, Math.max(0, (this.brainLoad.get(key) ?? 1) - 1));
+      }
+    }
+    return { text: "", error: lastError || "не удалось выполнить ход", awaitingApproval: false };
+  }
+
+  private async streamTurn(
+    conv: Conversation,
+    row: SessionRow,
+    live: Live,
+    agent: AgentDef,
+    text: string,
+    task: Task | undefined,
+    replyChannel?: string,
+  ): Promise<TurnResult & { retry?: boolean }> {
+    const msg = this.d.store.addMessage({ conversationId: conv.id, role: "assistant", parts: [], status: "streaming", agentId: agent.id, taskId: task?.id, brainRef: live.brainRef, channel: replyChannel });
+    this.streamingMessage.set(conv.id, msg.id);
+    this.activeTurns.set(conv.id, { sessionId: row.id, handle: live.handle });
+
+    let parts: MessagePart[] = [];
+    let fullText = "";
+    let lastFlush = 0;
+    let produced = false;
+    let error: string | undefined;
+    let fatal = false;
+    let limited: { resetAt?: string } | undefined;
+    let resumeToken: string | undefined;
+    let awaitingApproval = false;
+    let tokens = 0;
+
+    const current = () => this.d.store.getMessage(msg.id)?.parts ?? parts;
+    const flush = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastFlush < 400) return;
+      lastFlush = now;
+      // Keep approval parts that were attached concurrently.
+      const extra = current().filter((p) => p.type === "approval" && !parts.some((q) => q.type === "approval" && q.approvalId === (p as any).approvalId));
+      parts = [...parts, ...extra];
+      this.d.store.updateMessage(msg.id, { parts }, force);
+    };
+
+    const onEvent = (e: BrainEvent) => {
+      switch (e.type) {
+        case "text": {
+          const delta = this.d.redactor.text(e.delta);
+          produced = true;
+          fullText += delta;
+          const last = parts[parts.length - 1];
+          if (last && last.type === "text") parts[parts.length - 1] = { type: "text", text: last.text + delta };
+          else parts.push({ type: "text", text: delta });
+          this.d.bus.emit("message.delta", { id: msg.id, conversationId: conv.id, delta });
+          flush();
+          break;
+        }
+        case "tool_call": {
+          produced = true;
+          parts.push({ type: "tool_call", id: e.id, name: e.name, input: this.d.redactor.value(e.input) });
+          if (NATIVE_SOURCE_TOOLS.test(e.name) && !row.tainted) {
+            this.d.store.updateSession(row.id, { tainted: true });
+            row.tainted = true;
+          }
+          flush(true);
+          break;
+        }
+        case "tool_result": {
+          const out = this.d.redactor.text(e.output);
+          if (/awaiting_approval/.test(out)) awaitingApproval = true;
+          parts.push({ type: "tool_result", id: e.id, output: truncate(out, 4000), isError: e.isError });
+          flush(true);
+          break;
+        }
+        case "usage":
+          tokens += (e.inputTokens ?? 0) + (e.outputTokens ?? 0);
+          break;
+        case "limit_hit":
+          limited = { resetAt: e.resetAt };
+          error = `лимит: ${e.detail}`;
+          break;
+        case "error":
+          error = e.message;
+          if (e.fatal) fatal = true;
+          break;
+        case "done":
+          resumeToken = e.resumeToken;
+          break;
+      }
+    };
+
+    try {
+      await live.handle.send({ text }, onEvent);
+    } catch (e: any) {
+      error = e.message;
+      fatal = true;
+    } finally {
+      this.activeTurns.delete(conv.id);
+      this.streamingMessage.delete(conv.id);
+    }
+
+    if (resumeToken) this.d.store.updateSession(row.id, { resumeToken });
+    this.countUsage(agent.id, "turn", tokens);
+
+    // Pending approvals from this session also mean we are waiting.
+    if (!awaitingApproval) {
+      awaitingApproval = !!this.d.store.db.prepare("select 1 from approvals where session_id = ? and status = 'pending' limit 1").get(row.id);
+    }
+
+    if (limited) {
+      this.setLimited(live.brainRef, limited.resetAt ?? new Date(Date.now() + 60 * 60_000).toISOString(), error ?? "limit");
+    }
+
+    // Nothing produced and the brain failed or is limited: let the caller try the next brain.
+    if (!produced && (limited || fatal)) {
+      this.d.store.updateMessage(msg.id, { parts: [{ type: "error", message: `${live.brainRef}: ${error ?? "ошибка"} — пробую другой мозг…` }], status: "error" });
+      if (fatal && !limited) this.d.brains.invalidate(live.brainRef);
+      return { text: "", error, limited, awaitingApproval: false, retry: true };
+    }
+
+    if (error) parts.push({ type: "error", message: error });
+    parts = [...parts, ...current().filter((p) => p.type === "approval" && !parts.some((q) => q.type === "approval" && q.approvalId === (p as any).approvalId))];
+    this.d.store.updateMessage(msg.id, { parts, status: error && !produced ? "error" : "complete" });
+
+    if (replyChannel && fullText.trim() && this.d.channels.has(replyChannel)) {
+      await this.d.channels.send(replyChannel, { kind: "reply", text: fullText.trim(), conversationId: conv.id, link: `${this.d.config.publicUrl}/` });
+    }
+    return { text: fullText.trim(), error, limited, awaitingApproval };
+  }
+}
+
+function resultText(r: ToolResult): string {
+  return r.content.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join("\n");
+}
+
+export { newId, nowIso };

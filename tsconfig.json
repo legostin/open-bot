@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "packages/shared/src",
+    "packages/plugin-sdk/src",
+    "packages/core/src",
+    "packages/mcp-bridge/src",
+    "packages/brains-cli/src",
+    "packages/node/src",
+    "packages/testkit/src",
+    "plugins/*/server"
+  ],
+  "exclude": ["**/node_modules", "**/dist"]
+}

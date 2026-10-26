@@ -1,0 +1,613 @@
+// Plugin host: discovers plugins, spawns their server processes, routes RPC, enforces permissions.
+
+import { spawn, execFileSync, type ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, cpSync, rmSync, renameSync, statSync, readFileSync } from "node:fs";
+import { join, dirname, basename, resolve } from "node:path";
+import { randomBytes } from "node:crypto";
+import type { CoreMethod, OpenbotManifest, PluginLayout, PluginPermissions, ToolDescriptor, ToolSpec } from "@openbot/shared";
+import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, type RpcPeer } from "@openbot/shared";
+import { json, type Db } from "../db.ts";
+import type { Config } from "../config.ts";
+import type { EventBus, BusEventName } from "../bus.ts";
+import type { ToolRegistry } from "../tools/registry.ts";
+import type { HookRegistry, HookName } from "../hooks.ts";
+import type { VaultService } from "../vault/service.ts";
+import type { AuditLog } from "../audit.ts";
+import type { EgressProxy } from "../egress.ts";
+
+export type PluginStatus = "stopped" | "starting" | "running" | "crashed" | "disabled" | "no-server" | "error";
+
+export interface PluginRecord {
+  id: string;
+  dir: string;
+  source: "builtin" | "installed";
+  enabled: boolean;
+  granted: PluginPermissions;
+  commitHash?: string;
+  settings: Record<string, unknown>;
+  layout?: PluginLayout;
+  status: PluginStatus;
+  lastError?: string;
+  logs: Array<{ ts: string; level: string; msg: string }>;
+}
+
+export interface BrainSink {
+  registerPluginBrain(brainId: string, label: string, pluginId: string, peer: RpcPeer): void;
+  unregisterPlugin(pluginId: string): void;
+}
+
+export interface ChannelSink {
+  register(channelId: string, label: string, pluginId: string, peer: RpcPeer): void;
+  unregisterPlugin(pluginId: string): void;
+}
+
+export interface HostDeps {
+  config: Config;
+  db: Db;
+  bus: EventBus;
+  tools: ToolRegistry;
+  hooks: HookRegistry;
+  vault: VaultService;
+  audit: AuditLog;
+  egress: EgressProxy;
+  brains: BrainSink;
+  channels: ChannelSink;
+  coreCall: (pluginId: string, method: CoreMethod, params: any) => Promise<unknown>;
+  /** Called after plugin set changes (skills/agents/mcp roots need re-indexing). */
+  onLayoutsChanged: () => void;
+}
+
+interface Running {
+  child: ChildProcess;
+  peer: RpcPeer;
+  stopping: boolean;
+  unsubs: Array<() => void>;
+}
+
+export interface InstallPreview {
+  stagingId: string;
+  manifest: OpenbotManifest;
+  formats: PluginLayout["formats"];
+  permissions: PluginPermissions;
+  commitHash?: string;
+  warnings: string[];
+  hasServer: boolean;
+  hasUi: boolean;
+}
+
+const MAX_LOGS = 300;
+
+export class PluginHost {
+  d: HostDeps;
+  records = new Map<string, PluginRecord>();
+  private running = new Map<string, Running>();
+  private crashes = new Map<string, number[]>();
+  private httpPlugins = new Set<string>();
+  private uiMessageTargets = new Set<string>();
+  private staging = new Map<string, { dir: string; commitHash?: string; layout: PluginLayout; source: string }>();
+
+  constructor(deps: HostDeps) {
+    this.d = deps;
+  }
+
+  get installedDir(): string {
+    return join(this.d.config.dataDir, "plugins");
+  }
+
+  dataDirOf(id: string): string {
+    return join(this.d.config.dataDir, "plugins-data", id);
+  }
+
+  // ---------- discovery ----------
+
+  discover(): void {
+    const seen = new Set<string>();
+    const consider = (dir: string, source: "builtin" | "installed") => {
+      let layout: PluginLayout;
+      try {
+        layout = readPluginLayout(dir);
+      } catch (e) {
+        console.error(`[plugins] skip ${dir}: ${(e as Error).message}`);
+        return;
+      }
+      const id = layout.manifest.id;
+      if (seen.has(id)) {
+        console.error(`[plugins] duplicate plugin id ${id} in ${dir}, skipped`);
+        return;
+      }
+      seen.add(id);
+      const row = this.d.db.prepare("select * from plugins where id = ?").get(id) as any;
+      if (!row) {
+        if (source === "installed") {
+          console.error(`[plugins] ${dir} has no install record; ignored (install it through the UI)`);
+          return;
+        }
+        this.d.db
+          .prepare("insert into plugins(id, dir, source, enabled, granted, commit_hash, installed_at, settings) values (?,?,?,?,?,?,?,?)")
+          .run(id, dir, source, 1, JSON.stringify(layout.manifest.permissions), null, nowIso(), "{}");
+      } else if (source === "builtin") {
+        // Builtin plugins always get their declared permissions (they ship with the hub).
+        this.d.db.prepare("update plugins set dir = ?, granted = ? where id = ?").run(dir, JSON.stringify(layout.manifest.permissions), id);
+      }
+      const r = this.d.db.prepare("select * from plugins where id = ?").get(id) as any;
+      const prev = this.records.get(id);
+      this.records.set(id, {
+        id,
+        dir,
+        source,
+        enabled: !!r.enabled,
+        granted: json<PluginPermissions>(r.granted, layout.manifest.permissions),
+        commitHash: r.commit_hash ?? undefined,
+        settings: json(r.settings, {}),
+        layout,
+        status: prev?.status ?? (layout.serverEntry ? "stopped" : "no-server"),
+        lastError: prev?.lastError,
+        logs: prev?.logs ?? [],
+      });
+    };
+    const scan = (root: string, source: "builtin" | "installed") => {
+      if (!existsSync(root)) return;
+      for (const d of readdirSync(root)) {
+        if (d.startsWith(".")) continue;
+        const dir = join(root, d);
+        if (!statSync(dir).isDirectory()) continue;
+        consider(dir, source);
+      }
+    };
+    scan(this.d.config.builtinPluginsDir, "builtin");
+    mkdirSync(this.installedDir, { recursive: true });
+    scan(this.installedDir, "installed");
+    this.d.onLayoutsChanged();
+  }
+
+  list(): PluginRecord[] {
+    return [...this.records.values()].sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  get(id: string): PluginRecord | undefined {
+    return this.records.get(id);
+  }
+
+  enabledLayouts(): PluginLayout[] {
+    return this.list()
+      .filter((r) => r.enabled && r.layout)
+      .map((r) => r.layout!);
+  }
+
+  // ---------- lifecycle ----------
+
+  async startAll(filter: Config["plugins"]): Promise<void> {
+    const ids = this.list()
+      .filter((r) => r.enabled && r.layout?.serverEntry)
+      .map((r) => r.id)
+      .filter((id) => filter === "all" || (Array.isArray(filter) && filter.includes(id)));
+    await Promise.all(ids.map((id) => this.start(id).catch((e) => console.error(`[plugins] ${id} failed to start:`, e.message))));
+  }
+
+  async start(id: string): Promise<void> {
+    const rec = this.records.get(id);
+    if (!rec || !rec.layout) throw new Error(`unknown plugin ${id}`);
+    if (!rec.enabled) {
+      rec.status = "disabled";
+      return;
+    }
+    if (!rec.layout.serverEntry) {
+      rec.status = "no-server";
+      return;
+    }
+    if (this.running.has(id)) return;
+    rec.status = "starting";
+    const dataDir = this.dataDirOf(id);
+
+    const cfg = this.d.config;
+    const proxyToken = this.d.egress.issueToken(`plugin:${id}`, rec.granted.network);
+    const proxyUrl = `http://${proxyToken}:x@127.0.0.1:${cfg.egressPort}`;
+    // Builtin brain plugins run harness CLIs (claude, codex) as the "agent" user with a persistent home
+    // (CLI logins live there); everything else runs as the unprivileged "plugin" user.
+    const isBrainHost = rec.source === "builtin" && rec.layout.manifest.contributes.brains.length > 0;
+    const home = isBrainHost ? join(cfg.dataDir, "home", "agent") : dataDir;
+    const runAs = isBrainHost ? cfg.isolation.agentUser : cfg.isolation.pluginUser;
+    if (cfg.isolation.users) {
+      // Directories must belong to the user the plugin runs as (plugins-data is sticky world-writable, like /tmp).
+      execFileSync("sudo", ["-n", "-u", runAs, "--", "mkdir", "-p", dataDir, home], { stdio: "pipe" });
+    } else {
+      mkdirSync(dataDir, { recursive: true });
+      mkdirSync(home, { recursive: true });
+    }
+    const env: Record<string, string> = {
+      HOME: home,
+      OPENBOT_DATA_DIR_PLUGIN: dataDir,
+      OPENBOT_PLUGIN_ID: id,
+      NODE_USE_ENV_PROXY: "1",
+      HTTP_PROXY: proxyUrl,
+      HTTPS_PROXY: proxyUrl,
+      http_proxy: proxyUrl,
+      https_proxy: proxyUrl,
+      NO_PROXY: "127.0.0.1,localhost,::1",
+      no_proxy: "127.0.0.1,localhost,::1",
+      TZ: cfg.timezone,
+    };
+    const runner = join(cfg.appRoot, "packages", "plugin-sdk", "src", "runner.ts");
+    const nodeArgs = ["--disable-warning=ExperimentalWarning", runner, rec.layout.serverEntry];
+    let child: ChildProcess;
+    if (cfg.isolation.users) {
+      const kv = Object.entries({ ...env, PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin", LANG: process.env.LANG ?? "C.UTF-8" }).map(([k, v]) => `${k}=${v}`);
+      child = spawn("sudo", ["-n", "-u", runAs, "--", "env", "-i", ...kv, process.execPath, ...nodeArgs], { cwd: rec.dir, stdio: ["pipe", "pipe", "pipe"] });
+    } else {
+      child = spawn(process.execPath, nodeArgs, { cwd: rec.dir, env: { ...scrubEnv(process.env), ...env }, stdio: ["pipe", "pipe", "pipe"] });
+    }
+
+    const peer = createRpcPeer(ndjsonTransport(child.stdout!, child.stdin!));
+    const running: Running = { child, peer, stopping: false, unsubs: [] };
+    this.running.set(id, running);
+
+    child.stderr!.setEncoding("utf8");
+    child.stderr!.on("data", (chunk: string) => {
+      for (const line of chunk.split("\n")) if (line.trim()) this.log(rec, "stderr", line);
+    });
+    child.on("exit", (code, signal) => this.onExit(id, code, signal));
+    child.on("error", (e) => {
+      rec.lastError = e.message;
+      this.log(rec, "error", `spawn failed: ${e.message}`);
+    });
+
+    this.wire(rec, peer, running);
+
+    let readyResolve!: () => void;
+    const ready = new Promise<void>((r) => (readyResolve = r));
+    peer.handle("plugin.ready", () => {
+      readyResolve();
+      return {};
+    });
+    try {
+      await peer.request(
+        "plugin.activate",
+        { pluginId: id, dataDir, pluginDir: rec.dir, hubUrl: cfg.internalUrl, appRoot: cfg.appRoot, settings: rec.settings },
+        { timeoutMs: 60_000 },
+      );
+      await ready;
+      rec.status = "running";
+      rec.lastError = undefined;
+      this.d.audit.append("core", "plugin.start", id);
+    } catch (e: any) {
+      rec.status = "error";
+      rec.lastError = e.message;
+      this.log(rec, "error", `activation failed: ${e.message}`);
+      await this.stop(id);
+      rec.status = "error";
+      throw e;
+    } finally {
+      this.d.bus.emit("plugins.updated", {});
+    }
+  }
+
+  async stop(id: string): Promise<void> {
+    const r = this.running.get(id);
+    if (!r) return;
+    r.stopping = true;
+    try {
+      await r.peer.request("plugin.deactivate", {}, { timeoutMs: 3000 });
+    } catch {
+      /* ignore */
+    }
+    setTimeout(() => {
+      if (r.child.exitCode === null) r.child.kill("SIGKILL");
+    }, 3000).unref();
+    this.cleanup(id);
+    const rec = this.records.get(id);
+    if (rec && rec.status !== "error") rec.status = rec.enabled ? "stopped" : "disabled";
+    this.d.bus.emit("plugins.updated", {});
+  }
+
+  async stopAll(): Promise<void> {
+    await Promise.all([...this.running.keys()].map((id) => this.stop(id)));
+  }
+
+  async restart(id: string): Promise<void> {
+    await this.stop(id);
+    await this.start(id);
+  }
+
+  private cleanup(id: string): void {
+    const r = this.running.get(id);
+    if (r) {
+      for (const u of r.unsubs) u();
+      r.peer.close();
+    }
+    this.running.delete(id);
+    this.d.tools.unregisterOwner(id);
+    this.d.hooks.unregisterOwner(id);
+    this.d.brains.unregisterPlugin(id);
+    this.d.channels.unregisterPlugin(id);
+    this.httpPlugins.delete(id);
+    this.uiMessageTargets.delete(id);
+    this.d.egress.revokeOwner(`plugin:${id}`);
+  }
+
+  private onExit(id: string, code: number | null, signal: string | null): void {
+    const r = this.running.get(id);
+    const rec = this.records.get(id);
+    if (!r || !rec) return;
+    const expected = r.stopping;
+    this.cleanup(id);
+    if (expected) return;
+    this.log(rec, "error", `process exited unexpectedly (code=${code}, signal=${signal})`);
+    const now = Date.now();
+    const list = (this.crashes.get(id) ?? []).filter((t) => now - t < 10 * 60_000);
+    list.push(now);
+    this.crashes.set(id, list);
+    if (list.length >= 5) {
+      rec.status = "crashed";
+      rec.lastError = "Плагин падал 5 раз за 10 минут и был остановлен";
+      this.d.audit.append("core", "plugin.crash-disabled", id);
+      this.d.bus.emit("plugins.updated", {});
+      return;
+    }
+    rec.status = "crashed";
+    const delay = Math.min(30_000, 1000 * 2 ** (list.length - 1));
+    setTimeout(() => {
+      if (rec.enabled && !this.running.has(id)) this.start(id).catch((e) => this.log(rec, "error", `restart failed: ${e.message}`));
+    }, delay).unref();
+    this.d.bus.emit("plugins.updated", {});
+  }
+
+  private log(rec: PluginRecord, level: string, msg: string): void {
+    rec.logs.push({ ts: nowIso(), level, msg: this.d.vault.redactor.text(msg) });
+    if (rec.logs.length > MAX_LOGS) rec.logs.splice(0, rec.logs.length - MAX_LOGS);
+    if (level === "error" || process.env.OPENBOT_DEBUG) console.error(`[plugin:${rec.id}] ${msg}`);
+  }
+
+  // ---------- RPC wiring ----------
+
+  private wire(rec: PluginRecord, peer: RpcPeer, running: Running): void {
+    const id = rec.id;
+    const m = rec.layout!.manifest;
+    const prefix = toolPrefixOf(m);
+    const deny = (what: string): never => {
+      this.d.audit.append(`plugin:${id}`, "plugin.permission-denied", what);
+      throw new Error(`plugin ${id} is not allowed: ${what}`);
+    };
+
+    peer.onNotification("log", (p: { level: string; msg: string }) => this.log(rec, p.level, p.msg));
+
+    peer.handle("register.tool", (p: { spec: ToolSpec }) => {
+      if (!m.contributes.tools) deny("contributes.tools is false");
+      const short = p.spec.name;
+      const name = `${prefix}_${short}`;
+      const descriptor: ToolDescriptor = { ...p.spec, name, owner: id };
+      this.d.tools.register(descriptor, (input, ctx) => peer.request("tool.invoke", { name: short, input, context: ctx }, { timeoutMs: 15 * 60_000 }));
+      return {};
+    });
+
+    peer.handle("register.brain", (p: { id: string; label: string }) => {
+      if (!m.contributes.brains.includes(p.id)) deny(`brain ${p.id} not declared in contributes.brains`);
+      this.d.brains.registerPluginBrain(p.id, p.label, id, peer);
+      this.d.bus.emit("brains.updated", {});
+      return {};
+    });
+
+    peer.handle("register.channel", (p: { id: string; label: string }) => {
+      if (!m.contributes.channels.includes(p.id)) deny(`channel ${p.id} not declared in contributes.channels`);
+      this.d.channels.register(p.id, p.label, id, peer);
+      return {};
+    });
+
+    peer.handle("register.hook", (p: { hook: HookName }) => {
+      if (!m.contributes.hooks.includes(p.hook)) deny(`hook ${p.hook} not declared in contributes.hooks`);
+      this.d.hooks.register(p.hook, id, (payload) => peer.request("hook.run", { hook: p.hook, payload }, { timeoutMs: 10_000 }));
+      return {};
+    });
+
+    peer.handle("register.http", () => {
+      if (!m.contributes.http) deny("contributes.http is false");
+      this.httpPlugins.add(id);
+      return {};
+    });
+
+    peer.handle("events.subscribe", (p: { names: BusEventName[] }) => {
+      for (const name of p.names) {
+        const unsub = this.d.bus.on(name, (payload) => {
+          if (!peer.closed) peer.notify("event", { name, payload: this.d.vault.redactor.value(payload) });
+        });
+        running.unsubs.push(unsub);
+      }
+      this.uiMessageTargets.add(id);
+      return {};
+    });
+
+    peer.handle("vault.get", (p: { ref: string; domain?: string; reason?: string }) => {
+      const itemId = p.ref.replace(/^vault:\/\//, "");
+      const meta = this.d.vault.getMeta(itemId);
+      const allowed = rec.granted.vault.some((g) => g === itemId || g === "*" || (meta && g === `${meta.type}:*`));
+      if (!allowed) deny(`vault item ${itemId} not in permissions.vault`);
+      return this.d.vault.access(p.ref, { actor: `plugin:${id}`, pluginId: id, domain: p.domain });
+    });
+
+    const kv = this.d.db;
+    peer.handle("storage.get", (p: { key: string }) => {
+      const r = kv.prepare("select value from plugin_kv where plugin_id = ? and key = ?").get(id, p.key) as { value: string } | undefined;
+      return r ? JSON.parse(r.value) : null;
+    });
+    peer.handle("storage.set", (p: { key: string; value: unknown }) => {
+      kv.prepare("insert into plugin_kv(plugin_id, key, value) values (?,?,?) on conflict(plugin_id, key) do update set value = excluded.value").run(
+        id,
+        p.key,
+        JSON.stringify(p.value ?? null),
+      );
+      return {};
+    });
+    peer.handle("storage.delete", (p: { key: string }) => {
+      kv.prepare("delete from plugin_kv where plugin_id = ? and key = ?").run(id, p.key);
+      return {};
+    });
+    peer.handle("storage.list", (p: { prefix?: string }) => {
+      const rows = kv.prepare("select key, value from plugin_kv where plugin_id = ? and key like ? order by key").all(id, `${(p.prefix ?? "").replace(/[%_]/g, "\\$&")}%`) as Array<{
+        key: string;
+        value: string;
+      }>;
+      return rows.map((r) => ({ key: r.key, value: JSON.parse(r.value) }));
+    });
+
+    peer.handle("core.call", async (p: { method: CoreMethod; params: unknown }) => {
+      if (!rec.granted.core.includes(p.method)) deny(`core method ${p.method} not in permissions.core`);
+      return this.d.coreCall(id, p.method, p.params);
+    });
+  }
+
+  // ---------- HTTP and UI routing ----------
+
+  hasHttp(id: string): boolean {
+    return this.httpPlugins.has(id);
+  }
+
+  async http(id: string, req: { method: string; path: string; query: Record<string, string>; headers: Record<string, string>; body: unknown; public: boolean }) {
+    const r = this.running.get(id);
+    if (!r || !this.httpPlugins.has(id)) return { status: 404, body: { error: "plugin has no http handler" } };
+    return r.peer.request<{ status?: number; headers?: Record<string, string>; body?: unknown }>("http.request", req, { timeoutMs: 60_000 });
+  }
+
+  uiMessage(id: string, payload: unknown): void {
+    const r = this.running.get(id);
+    if (r && !r.peer.closed) r.peer.notify("ui.message", { payload });
+  }
+
+  uiPlugins(): Array<{ id: string; name: string; url: string }> {
+    return this.list()
+      .filter((r) => r.enabled && r.layout?.uiEntry && existsSync(r.layout.uiEntry))
+      .map((r) => ({ id: r.id, name: r.layout!.manifest.name, url: `/plugins-ui/${r.id}/${basename(r.layout!.uiEntry!)}` }));
+  }
+
+  uiDir(id: string): string | undefined {
+    const r = this.records.get(id);
+    return r?.enabled && r.layout?.uiEntry ? dirname(r.layout.uiEntry) : undefined;
+  }
+
+  // ---------- settings ----------
+
+  setSettings(id: string, settings: Record<string, unknown>): void {
+    const rec = this.records.get(id);
+    if (!rec) throw new Error(`unknown plugin ${id}`);
+    rec.settings = settings;
+    this.d.db.prepare("update plugins set settings = ? where id = ?").run(JSON.stringify(settings), id);
+    const r = this.running.get(id);
+    if (r && !r.peer.closed) r.peer.notify("settings.changed", { settings });
+    this.d.audit.append("user", "plugin.settings", id);
+  }
+
+  async setEnabled(id: string, enabled: boolean): Promise<void> {
+    const rec = this.records.get(id);
+    if (!rec) throw new Error(`unknown plugin ${id}`);
+    rec.enabled = enabled;
+    this.d.db.prepare("update plugins set enabled = ? where id = ?").run(enabled ? 1 : 0, id);
+    this.d.audit.append("user", enabled ? "plugin.enable" : "plugin.disable", id);
+    if (enabled) {
+      this.crashes.delete(id);
+      rec.status = "stopped";
+      await this.start(id).catch(() => {});
+    } else {
+      await this.stop(id);
+      rec.status = "disabled";
+    }
+    this.d.onLayoutsChanged();
+    this.d.bus.emit("plugins.updated", {});
+  }
+
+  // ---------- install ----------
+
+  async prepareInstall(source: string): Promise<InstallPreview> {
+    const stagingRoot = join(this.installedDir, ".staging");
+    mkdirSync(stagingRoot, { recursive: true });
+    const stagingId = randomBytes(6).toString("hex");
+    const dir = join(stagingRoot, stagingId);
+    let commitHash: string | undefined;
+    if (/^(https?:\/\/|git@|ssh:\/\/)/.test(source)) {
+      execFileSync("git", ["clone", "--depth", "1", source, dir], { stdio: "pipe", timeout: 120_000 });
+      commitHash = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    } else {
+      const src = resolve(source);
+      if (!existsSync(src)) throw new Error(`Папка не найдена: ${src}`);
+      cpSync(src, dir, { recursive: true, filter: (p) => !p.includes(`${"node_modules"}`) });
+    }
+    const layout = readPluginLayout(dir);
+    if (this.records.get(layout.manifest.id)?.source === "builtin") throw new Error(`Плагин ${layout.manifest.id} встроенный и не может быть заменён`);
+    this.staging.set(stagingId, { dir, commitHash, layout, source });
+    const perms = layout.manifest.permissions;
+    const warnings: string[] = [];
+    if (layout.uiEntry) warnings.push("UI-плагин получает полный доступ к интерфейсу (но не к пульту безопасности).");
+    if (perms.network.includes("*")) warnings.push("Плагин может обращаться к любым сайтам.");
+    if (perms.vault.length) warnings.push(`Доступ к vault: ${perms.vault.join(", ")}`);
+    if (perms.core.includes("approvals.resolve")) warnings.push("Плагин может отвечать на подтверждения от вашего имени.");
+    if (layout.formats.includes("claude") || layout.formats.includes("codex")) warnings.push("Скиллы, команды и MCP-серверы плагина станут доступны агентам.");
+    if (layout.mcpFile) warnings.push("Плагин добавляет MCP-серверы, они будут запущены как процессы.");
+    return {
+      stagingId,
+      manifest: layout.manifest,
+      formats: layout.formats,
+      permissions: perms,
+      commitHash,
+      warnings,
+      hasServer: !!layout.serverEntry,
+      hasUi: !!layout.uiEntry,
+    };
+  }
+
+  async confirmInstall(stagingId: string): Promise<PluginRecord> {
+    const st = this.staging.get(stagingId);
+    if (!st) throw new Error("Установка не найдена или устарела");
+    this.staging.delete(stagingId);
+    const id = st.layout.manifest.id;
+    const target = join(this.installedDir, id);
+    if (this.running.has(id)) await this.stop(id);
+    if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+    renameSync(st.dir, target);
+    const pkg = join(target, "package.json");
+    if (existsSync(pkg)) {
+      const deps = JSON.parse(readFileSync(pkg, "utf8")).dependencies;
+      if (deps && Object.keys(deps).length) {
+        execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], {
+          cwd: target,
+          stdio: "pipe",
+          timeout: 300_000,
+          shell: process.platform === "win32",
+        });
+      }
+    }
+    const perms = st.layout.manifest.permissions;
+    this.d.db
+      .prepare(
+        "insert into plugins(id, dir, source, enabled, granted, commit_hash, installed_at, settings) values (?,?,?,?,?,?,?,?) on conflict(id) do update set dir = excluded.dir, granted = excluded.granted, commit_hash = excluded.commit_hash, enabled = 1",
+      )
+      .run(id, target, "installed", 1, JSON.stringify(perms), st.commitHash ?? null, nowIso(), "{}");
+    this.d.audit.append("user", "plugin.install", id, { source: st.source, commit: st.commitHash, permissions: perms });
+    this.discover();
+    await this.start(id).catch(() => {});
+    this.d.bus.emit("plugins.updated", {});
+    return this.records.get(id)!;
+  }
+
+  async uninstall(id: string): Promise<void> {
+    const rec = this.records.get(id);
+    if (!rec) throw new Error(`unknown plugin ${id}`);
+    if (rec.source === "builtin") throw new Error("Встроенный плагин нельзя удалить, только отключить");
+    await this.stop(id);
+    rmSync(rec.dir, { recursive: true, force: true });
+    this.d.db.prepare("delete from plugins where id = ?").run(id);
+    this.d.db.prepare("delete from plugin_kv where plugin_id = ?").run(id);
+    this.records.delete(id);
+    this.d.audit.append("user", "plugin.uninstall", id);
+    this.d.onLayoutsChanged();
+    this.d.bus.emit("plugins.updated", {});
+  }
+}
+
+/** Do not leak hub secrets into child processes when running without user isolation. */
+export function scrubEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (v === undefined) continue;
+    if (/KEY|TOKEN|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL/i.test(k)) continue;
+    if (k.startsWith("OPENBOT_")) continue;
+    out[k] = v;
+  }
+  return out;
+}

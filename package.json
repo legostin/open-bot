@@ -1,0 +1,33 @@
+{
+  "name": "open-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Friendly, proactive, self-hosted personal agent. Your subscriptions, your machines, secure by default.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.5"
+  },
+  "workspaces": [
+    "packages/*",
+    "plugins/*"
+  ],
+  "scripts": {
+    "dev": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
+    "start": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
+    "build": "npm run build:ui-plugins && npm run build -w @openbot/web && npm run build -w @openbot/console",
+    "build:ui-plugins": "node scripts/build-ui-plugins.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
