@@ -23,6 +23,9 @@ export interface PolicyResult {
 /** Tools background tasks may always use regardless of effect. */
 export const BACKGROUND_ALWAYS_ALLOWED = ["notify", "task_status", "skill_load", "vault_list", "memory_search", "memory_read"];
 
+/** Local changes that outlive the session: after outside content they need the user's yes (a call with no input only reads). */
+export const ASK_WHEN_TAINTED = ["profile_update"];
+
 function getField(input: unknown, path: string): unknown {
   let v: any = input;
   for (const k of path.split(".")) v = v?.[k];
@@ -90,6 +93,8 @@ export function decide(p: PolicyInput, rules: Rule[], isKnownTarget: (t: string)
   if (tool.effect === "read") return { decision: "allow", reason: t("policy.read") };
   if (tool.effect === "local-write") {
     if (p.profile === "strict") return { decision: "ask", reason: t("policy.strictLocalWrite") };
+    const changes = !!input && typeof input === "object" && Object.keys(input).length > 0;
+    if (p.tainted && changes && ASK_WHEN_TAINTED.includes(tool.name)) return { decision: "ask", reason: t("policy.taintedSelfEdit") };
     return { decision: "allow", reason: t("policy.localWrite") };
   }
 

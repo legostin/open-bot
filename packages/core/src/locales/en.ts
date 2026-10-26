@@ -44,6 +44,7 @@ export default {
   "policy.read": "read-only",
   "policy.strictLocalWrite": "strict profile: local changes need approval",
   "policy.localWrite": "local change",
+  "policy.taintedSelfEdit": "after outside content, an agent changes its own profile only with your approval",
   "policy.taintedNewTargets": "the session has read untrusted content; new recipients: {targets}",
   "policy.externalNeedsApproval": "external actions need approval",
 
@@ -62,6 +63,7 @@ export default {
   "task.declinedSuffix": "(the user declined the action)",
   "agent.notFound": "No such agent",
   "agent.builtinCannotDelete": "The built-in assistant cannot be deleted",
+  "agent.selfEditApproval": "Change its own profile (name, description or instructions)",
   "agentDraft.notFound": "This draft of a new agent no longer exists",
   "agentDraft.alreadyCreated": "“{name}” has already been created",
   "agentDraft.nameRequired": "The agent needs a name",

@@ -13,7 +13,7 @@ import { errorText, hubLocale, localizePluginValue, LocalizedError, requestLocal
 import type { Hub } from "../app.ts";
 import { toUiEvent } from "../bus.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
-import { agentFromMarkdown, localizedAgent } from "../agents.ts";
+import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, safeFile, securityHeaders, sendFile } from "./http.ts";
 
@@ -277,18 +277,10 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.put("/api/agents/:id", async (req) => {
       const id = (req.params as any).id as string;
       const b = (req.body ?? {}) as Partial<AgentDef> & { markdown?: string };
-      const prev = hub.agents.get(id);
       // The editor showed the name and description in the reader's language: edits to a translated
       // agent go into that translation, so the other languages keep theirs.
-      const locale = requestLocale(req);
-      const tr = prev?.i18n?.[locale];
-      let patch: Partial<AgentDef> = b;
-      if (tr && !b.markdown) {
-        const { name, description, ...rest } = b;
-        const edited = { ...tr, ...(name !== undefined ? { name } : {}), ...(description !== undefined ? { description } : {}) };
-        patch = { ...rest, i18n: { ...prev!.i18n, [locale]: edited } };
-      }
-      const agent: AgentDef = b.markdown ? agentFromMarkdown(id, b.markdown, "user") : { ...(prev ?? agentFromMarkdown(id, "", "user")), ...patch, id, source: "user" };
+      const base = hub.agents.get(id) ?? agentFromMarkdown(id, "", "user");
+      const agent: AgentDef = b.markdown ? agentFromMarkdown(id, b.markdown, "user") : { ...patchAgent(base, b, requestLocale(req)), id, source: "user" };
       return hub.saveAgent(agent, "user");
     });
     api.delete("/api/agents/:id", async (req) => {

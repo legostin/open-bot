@@ -52,6 +52,18 @@ export function localizedAgent(a: AgentDef, locale: Locale): AgentDef {
   return tr ? { ...a, name: tr.name ?? a.name, description: tr.description ?? a.description } : a;
 }
 
+/**
+ * `prev` with `patch` applied. A translated agent keeps its other languages: a new name or description goes into its
+ * `locale` translation when it has one, the rest into the definition.
+ */
+export function patchAgent(prev: AgentDef, patch: Partial<AgentDef>, locale: Locale): AgentDef {
+  const tr = prev.i18n?.[locale];
+  if (!tr || (patch.name === undefined && patch.description === undefined)) return { ...prev, ...patch };
+  const { name, description, ...rest } = patch;
+  const edited = { ...tr, ...(name !== undefined ? { name } : {}), ...(description !== undefined ? { description } : {}) };
+  return { ...prev, ...rest, i18n: { ...prev.i18n, [locale]: edited } };
+}
+
 export function agentName(a: AgentDef, locale: Locale): string {
   return a.i18n?.[locale]?.name ?? a.name;
 }

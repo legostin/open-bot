@@ -43,6 +43,7 @@ export default {
   "policy.read": "чтение",
   "policy.strictLocalWrite": "строгий профиль: локальные изменения требуют подтверждения",
   "policy.localWrite": "локальное изменение",
+  "policy.taintedSelfEdit": "после чтения внешних материалов агент меняет свой профиль только с вашего подтверждения",
   "policy.taintedNewTargets": "сессия читала недоверенный контент, новые адресаты: {targets}",
   "policy.externalNeedsApproval": "внешнее действие требует подтверждения",
 
@@ -61,6 +62,7 @@ export default {
   "task.declinedSuffix": "(действие отклонено пользователем)",
   "agent.notFound": "Нет такого агента",
   "agent.builtinCannotDelete": "Встроенного ассистента нельзя удалить",
+  "agent.selfEditApproval": "Изменить свой профиль (имя, описание или инструкции)",
   "agentDraft.notFound": "Этого черновика агента больше нет",
   "agentDraft.alreadyCreated": "«{name}» уже создан",
   "agentDraft.nameRequired": "Агенту нужно имя",

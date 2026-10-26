@@ -62,6 +62,8 @@ interface TurnOpts {
 interface Live {
   handle: BrainHandle;
   brainRef: string;
+  /** The agent definition the session was opened with: an edited agent gets a fresh session on its next turn. */
+  stamp: string;
 }
 
 export interface TurnResult {
@@ -571,7 +573,7 @@ export class SessionRunner {
       env,
       background,
     });
-    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref) });
+    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: JSON.stringify(agent) });
     if (!sameBrain) this.d.audit.append("core", "session.open", row.id, { agent: agent.id, brain: formatBrainRef(ref), conversation: conv.id, task: task?.id });
     return { row, handle };
   }
@@ -648,8 +650,12 @@ export class SessionRunner {
       let live = curPrior ? this.live.get(curPrior.id) : undefined;
       let row = curPrior;
       try {
-        if (!live || live.brainRef !== key) {
-          if (live && curPrior) void this.closeLive(curPrior.id);
+        if (!live || live.brainRef !== key || live.stamp !== JSON.stringify(agent)) {
+          // The same brain resumes the same conversation with the new instructions: let the old process finish first.
+          if (live && curPrior) {
+            if (live.brainRef === key) await this.closeLive(curPrior.id);
+            else void this.closeLive(curPrior.id);
+          }
           const opened = await this.openSession(conv, agent, ref, task, curPrior);
           row = opened.row;
           live = this.live.get(row.id)!;

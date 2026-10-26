@@ -1,5 +1,5 @@
 // Scriptable brain for core integration tests.
-// "CALL <tool> <json>" calls a hub tool over MCP; "LIMIT" makes brain `fake` hit its limit.
+// "CALL <tool> <json>" calls a hub tool over MCP; "LIMIT" makes brain `fake` hit its limit; "PROMPT?" echoes the instructions.
 import type { PluginContext } from "@openbot/plugin-sdk";
 import type { BrainEvent, BrainSessionOptions } from "@openbot/shared";
 
@@ -44,6 +44,12 @@ export default {
               yield { type: "tool_call", id: "t1", name: "Read", input: { path: "notes.md" } };
               yield { type: "tool_result", id: "t1", output: "the notes" };
               yield { type: "text", delta: `${id} found it` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
+            // The instructions this session was opened with.
+            if ((turn.text.trim().split("\n").at(-1) ?? "") === "PROMPT?") {
+              yield { type: "text", delta: `${id} prompt: ${o.agent.prompt} | in system prompt: ${o.systemPrompt.includes(o.agent.prompt)}` };
               yield { type: "done", resumeToken: `${id}-resume` };
               return;
             }

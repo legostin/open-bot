@@ -35,6 +35,14 @@ describe("policy engine", () => {
     expect(decide(base({ tool: tool("fs_write", "local-write"), profile: "strict" }), [], unknownTargets).decision).toBe("ask");
   });
 
+  it("after outside content an agent changes its own profile only with approval; reading it stays free", () => {
+    const self = tool("profile_update", "local-write");
+    expect(decide(base({ tool: self, input: { prompt: "x" } }), [], unknownTargets).decision).toBe("allow");
+    expect(decide(base({ tool: self, input: { prompt: "x" }, tainted: true }), [], unknownTargets).decision).toBe("ask");
+    expect(decide(base({ tool: self, input: {}, tainted: true }), [], unknownTargets).decision).toBe("allow");
+    expect(decide(base({ tool: tool("fs_write", "local-write"), tainted: true }), [], unknownTargets).decision).toBe("allow");
+  });
+
   it("deny rules win over allow rules", () => {
     const rules = [rule({ id: "a", decision: "allow" }), rule({ id: "d", decision: "deny" })];
     expect(decide(base(), rules, unknownTargets)).toMatchObject({ decision: "deny", ruleId: "d" });
