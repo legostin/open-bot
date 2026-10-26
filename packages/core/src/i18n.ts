@@ -60,6 +60,10 @@ export class LocalizedError extends Error {
   localized(locale: Locale): string {
     return tFor(locale)(this.key, this.params);
   }
+  /** Sent with the error over JSON-RPC (plugins, machines): the message key and its text in the hub language. */
+  get rpcData(): { key: string; params?: Params; text: string } {
+    return { key: this.key, params: this.params, text: this.localized(hubLocale()) };
+  }
 }
 
 /** Locale of an HTTP request: the UI's explicit choice, then Accept-Language, then the hub language. */

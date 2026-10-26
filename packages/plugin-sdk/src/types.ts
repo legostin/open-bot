@@ -137,7 +137,11 @@ export interface PluginContext {
     onMessage(cb: (payload: any) => void): void;
   };
   vault: {
-    /** Fields of a vault item. Only items allowed by permissions.vault and the item's scope. */
+    /**
+     * Fields of a vault item. Only items allowed by permissions.vault and the item's scope.
+     * Hub errors (here and in core calls) are English in `message`; `data.text` has the same error in the
+     * hub language for showing to people, and `data.key` / `data.params` identify it.
+     */
     get(ref: string, opts?: { domain?: string; reason?: string }): Promise<Record<string, string>>;
   };
   storage: {

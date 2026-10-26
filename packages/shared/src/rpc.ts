@@ -115,7 +115,8 @@ export function createRpcPeer(transport: RpcTransport): RpcPeer {
         sendObj({
           jsonrpc: "2.0",
           id: msg.id,
-          error: { code, message: e?.message ?? String(e), data: e instanceof RpcError ? e.data : undefined },
+          // Errors may describe themselves for the other side (rpcData), e.g. a localized hub error's key and text.
+          error: { code, message: e?.message ?? String(e), data: e instanceof RpcError ? e.data : e?.rpcData },
         });
       }
       return;

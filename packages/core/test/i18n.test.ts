@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { catalogProblems, readPluginLayout } from "@openbot/shared";
-import { coreCatalog, LocalizedError, requestLocale, tFor } from "../src/i18n.ts";
+import { catalogProblems, createRpcPeer, memoryTransportPair, readPluginLayout } from "@openbot/shared";
+import { configureHubLocale, coreCatalog, LocalizedError, requestLocale, tFor } from "../src/i18n.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
 const pluginDirs = readdirSync(join(ROOT, "plugins"), { withFileTypes: true })
@@ -43,5 +43,22 @@ describe("i18n catalogs", () => {
     expect(tFor("ru")("cli.auditOk", { count: 5 })).toBe("Журнал цел: 5 записей");
     expect(requestLocale({ headers: { "x-openbot-locale": "ru" } } as any)).toBe("ru");
     expect(requestLocale({ headers: { "accept-language": "ru-RU,ru;q=0.9" } } as any)).toBe("ru");
+  });
+
+  it("sends the key and the hub-language text with errors over RPC", async () => {
+    configureHubLocale(() => "ru");
+    try {
+      const [a, b] = memoryTransportPair();
+      const hub = createRpcPeer(a);
+      const plugin = createRpcPeer(b);
+      hub.handle("vault.get", () => {
+        throw new LocalizedError("vault.notFound", { id: "x" });
+      });
+      const err: any = await plugin.request("vault.get", {}).catch((e) => e);
+      expect(err.message).toBe("No vault item vault://x");
+      expect(err.data).toEqual({ key: "vault.notFound", params: { id: "x" }, text: "Нет записи vault://x" });
+    } finally {
+      configureHubLocale(() => "en");
+    }
   });
 });

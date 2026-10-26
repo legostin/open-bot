@@ -223,7 +223,7 @@ export class TelegramBot {
       const fields = await this.ctx.vault.get(this.settings.botTokenRef, { reason: "Telegram bot" });
       token = (fields.value ?? fields.token ?? fields.password ?? "").trim();
     } catch (e: any) {
-      this.setState("no-token", { key: "status.tokenMissing", params: { ref: this.settings.botTokenRef, error: e?.message ?? String(e) } });
+      this.setState("no-token", { key: "status.tokenMissing", params: { ref: this.settings.botTokenRef, error: e?.data?.text ?? e?.message ?? String(e) } });
       return false;
     }
     if (!token) {
