@@ -14,5 +14,9 @@
   "settings.tavilyBaseUrl.title": "Адрес API Tavily",
   "settings.tavilyBaseUrl.description": "По умолчанию https://api.tavily.com",
   "settings.duckduckgoUrl.title": "Адрес DuckDuckGo HTML",
-  "settings.duckduckgoUrl.description": "По умолчанию https://html.duckduckgo.com/html/"
+  "settings.duckduckgoUrl.description": "По умолчанию https://html.duckduckgo.com/html/",
+  "setup.brave.title": "API-ключ Brave Search",
+  "setup.brave.hint": "Необязательно: поиск станет лучше. Бесплатный ключ — в кабинете Brave Search API.",
+  "setup.tavily.title": "API-ключ Tavily",
+  "setup.tavily.hint": "Необязательно: поиск, заточенный под агентов. Ключ — на app.tavily.com."
 }

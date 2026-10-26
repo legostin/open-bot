@@ -33,8 +33,10 @@ export function createCoreCall(hub: Hub) {
         const text = String(p.text ?? "").trim();
         if (!text) return { ignored: true };
         if (text === "/stop") return { interrupted: hub.runner.interrupt(conv.id) };
-        const m = await hub.runner.userMessage(conv.id, text, { channel: String(p.channel ?? pluginId) });
-        return { messageId: m.id, conversationId: conv.id };
+        let secrets = 0;
+        const m = await hub.runner.userMessage(conv.id, text, { channel: String(p.channel ?? pluginId), onCapture: (c) => (secrets = c.stored.length + c.withheld) });
+        // secrets > 0: the channel should delete the user's original message, it still holds the value.
+        return { messageId: m.id, conversationId: conv.id, ...(secrets ? { secrets } : {}) };
       }
       case "tasks.create": {
         const agentId = p.agentId ?? hub.settings.get().defaultAgent;

@@ -73,7 +73,9 @@ export type EventName =
   | "approval.created"
   | "approval.resolved"
   | "conversation.updated"
-  | "vault.state";
+  | "vault.state"
+  /** `{ ids }`: vault items the user just stored from the chat (e.g. the token this plugin waits for). */
+  | "vault.updated";
 
 export interface PluginHttpRequest {
   method: string;

@@ -6,6 +6,14 @@
   "server": "./server/index.ts",
   "builtin": true,
   "contributes": {
+    "setup": {
+      "secrets": [
+        {"vault": "anthropic_api_key", "title": "%setup.anthropic.title%", "hint": "%setup.anthropic.hint%", "link": "https://console.anthropic.com/settings/keys", "pattern": "^sk-ant-api\\d{2}-[A-Za-z0-9_-]{20,}$"},
+        {"vault": "openai_api_key", "title": "%setup.openai.title%", "hint": "%setup.openai.hint%", "link": "https://platform.openai.com/api-keys", "pattern": "^sk-(?!ant-|or-)[A-Za-z0-9_-]{20,}$"},
+        {"vault": "openrouter_api_key", "title": "%setup.openrouter.title%", "hint": "%setup.openrouter.hint%", "link": "https://openrouter.ai/settings/keys", "pattern": "^sk-or-v1-[A-Za-z0-9]{20,}$"},
+        {"vault": "custom_llm_api_key", "setting": "customKeyRef", "title": "%setup.custom.title%", "hint": "%setup.custom.hint%"}
+      ]
+    },
     "brains": ["api"],
     "settings": {
       "type": "object",

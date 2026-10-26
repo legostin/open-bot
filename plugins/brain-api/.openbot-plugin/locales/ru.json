@@ -46,5 +46,13 @@
   "error.streamBroken": "Поток ответа {provider} прервался: {detail}",
   "error.streamEnded": "Поток ответа {provider} оборвался до конца сообщения",
   "note.maxSteps": "(Ход остановлен: достигнут предел в {n, plural, one {# шаг} few {# шага} many {# шагов} other {# шага}}.)",
-  "note.maxTokens": "(Ответ обрезан: достигнут лимит max_tokens.)"
+  "note.maxTokens": "(Ответ обрезан: достигнут лимит max_tokens.)",
+  "setup.anthropic.title": "API-ключ Anthropic",
+  "setup.anthropic.hint": "Создайте ключ в Anthropic Console (Settings → API keys).",
+  "setup.openai.title": "API-ключ OpenAI",
+  "setup.openai.hint": "Создайте ключ на платформе OpenAI (API keys).",
+  "setup.openrouter.title": "API-ключ OpenRouter",
+  "setup.openrouter.hint": "Создайте ключ в настройках OpenRouter (Keys).",
+  "setup.custom.title": "Ключ своего OpenAI-совместимого сервера",
+  "setup.custom.hint": "Нужен, только если ваш сервер (Ollama, LM Studio, vLLM…) требует ключ."
 }

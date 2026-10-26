@@ -34,6 +34,9 @@ const MIGRATIONS: string[] = [
   `,
   // Vault items the user granted a plugin beyond its manifest (security console only).
   `alter table plugins add column extra_vault text not null default '[]';`,
+  // Secrets the hub asked for in the chat (values never stored here, only where they went).
+  `create table secret_requests(id text primary key, vault_id text not null, title text not null, hint text, link text, plugin_id text, setting text,
+    conversation_id text, status text not null, created_at text not null, resolved_at text);`,
 ];
 
 export function openDb(file: string): Db {

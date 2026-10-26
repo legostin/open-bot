@@ -17,6 +17,7 @@ const plugin: PluginModule = {
     });
     ctx.http.handle((req) => b.http(req));
     ctx.events.on("vault.state", (p) => b.onVaultState(p));
+    ctx.events.on("vault.updated", (p) => b.onVaultUpdated(p));
     ctx.onSettingsChange((s) => b.updateSettings(s));
     ctx.i18n.onChange(() => b.onLocaleChange());
     await b.start();

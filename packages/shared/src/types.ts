@@ -111,6 +111,44 @@ export interface Approval {
   resolvedVia?: "console" | "telegram" | "rule" | "timeout";
 }
 
+// ---------- Secrets entered in the chat ----------
+
+export type SecretRequestStatus = "pending" | "saved" | "cancelled";
+
+/**
+ * The hub asked the user for a secret in the chat. The value is typed into a card (or pasted as the next message)
+ * and stored in the vault; the model only ever learns `vault://<vaultId>`.
+ */
+export interface SecretRequest {
+  id: string;
+  vaultId: string;
+  /** What it is, e.g. "Telegram bot token". */
+  title: string;
+  /** Why it is needed / where to get it (written by the agent or the plugin manifest). */
+  hint?: string;
+  link?: string;
+  /** Plugin that uses the secret; its `setting` receives "vault://<vaultId>". */
+  pluginId?: string;
+  setting?: string;
+  conversationId?: string;
+  status: SecretRequestStatus;
+  /** Whether the vault already holds an item with this id (saving replaces it). */
+  exists?: boolean;
+  createdAt: ISODate;
+  resolvedAt?: ISODate;
+}
+
+/** What a plugin needs before it works, for the setup card in the chat and the plugins page. */
+export interface PluginSetupView {
+  pluginId: string;
+  name: string;
+  enabled: boolean;
+  status: string;
+  lastError?: string;
+  vaultState: VaultState;
+  secrets: Array<{ vaultId: string; title: string; hint?: string; link?: string; required: boolean; present: boolean; setting?: string }>;
+}
+
 // ---------- Conversations, messages ----------
 
 export type MessageRole = "user" | "assistant" | "system";
@@ -122,7 +160,11 @@ export type MessagePart =
   | { type: "approval"; approvalId: string; summary: string; status: ApprovalStatus }
   | { type: "notification"; level: NotifyLevel; title: string; body: string }
   | { type: "error"; message: string }
-  | { type: "attachment"; path: string; name: string; mimeType?: string };
+  | { type: "attachment"; path: string; name: string; mimeType?: string }
+  /** A secret the user types into the chat card; the value goes straight to the vault and never into the conversation. */
+  | { type: "secret_request"; requestId: string; vaultId: string; title: string; status: SecretRequestStatus }
+  /** A plugin's setup card: its secrets and its own setup UI (e.g. Telegram pairing), live. */
+  | { type: "plugin_setup"; pluginId: string };
 
 export interface Message {
   id: string;
@@ -375,4 +417,5 @@ export type UiEvent =
   | { type: "settings.updated"; data: Record<string, unknown> }
   | { type: "machine.updated"; data: Machine }
   | { type: "vault.state"; data: { state: VaultState } }
+  | { type: "secret.request"; data: SecretRequest }
   | { type: "plugin.event"; data: { pluginId: string; channel: string; payload: unknown } };

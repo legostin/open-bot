@@ -24,6 +24,22 @@ export const PluginPermissionsSchema = z
   })
   .default({ network: [], vault: [], core: [], ui: [], fs: [] });
 
+/** A secret a plugin needs. The user types it into the chat; it lands in the vault under `vault`. */
+export const SetupSecretSchema = z.object({
+  /** Vault item id; must also be listed in permissions.vault. */
+  vault: z.string().regex(/^[A-Za-z0-9][\w.-]{0,127}$/),
+  /** Plugin setting that receives "vault://<vault>". */
+  setting: z.string().optional(),
+  title: z.string(),
+  /** Where to get it (markdown). */
+  hint: z.string().optional(),
+  link: z.string().url().optional(),
+  /** Regular expression for the whole value: lets the hub recognise it when the user pastes it into a message. */
+  pattern: z.string().optional(),
+  required: z.boolean().default(false),
+});
+export type SetupSecret = z.infer<typeof SetupSecretSchema>;
+
 export const OpenbotManifestSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{1,40}$/, "id: lowercase letters, digits, dashes"),
   name: z.string().min(1),
@@ -44,6 +60,12 @@ export const OpenbotManifestSchema = z.object({
       http: z.boolean().default(false),
       /** JSON Schema for plugin settings, rendered as a form in the web UI. */
       settings: z.record(z.string(), z.unknown()).optional(),
+      /** What the user provides before the plugin works; shown as a setup card in the chat. */
+      setup: z
+        .object({
+          secrets: z.array(SetupSecretSchema).default([]),
+        })
+        .optional(),
     })
     .default({ tools: false, brains: [], channels: [], triggers: [], hooks: [], http: false }),
   permissions: PluginPermissionsSchema,

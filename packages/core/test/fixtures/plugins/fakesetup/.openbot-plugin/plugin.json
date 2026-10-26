@@ -1,0 +1,13 @@
+{
+  "id": "fakesetup",
+  "name": "Fake setup",
+  "contributes": {
+    "settings": { "type": "object", "properties": { "tokenRef": { "type": "string", "default": "" } } },
+    "setup": {
+      "secrets": [
+        { "vault": "fake_token", "setting": "tokenRef", "title": "%setup.token%", "pattern": "^fk_[a-z0-9]{20}$", "required": true }
+      ]
+    }
+  },
+  "permissions": { "vault": ["fake_token"] }
+}

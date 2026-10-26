@@ -10,6 +10,8 @@ import { toast } from "../state/toast";
 import { t, type MessageKey } from "../i18n";
 import { pluginLoad } from "../plugins/host";
 import { SchemaForm } from "../components/SchemaForm";
+import { PluginSetupCard } from "../components/SecretCards";
+import { usePluginRegistry } from "../plugins/slots";
 import { Badge, Button, cx, EmptyState, ErrorNote, Field, Input, Loading, Modal, Page, Toggle } from "../components/ui";
 
 interface Permissions {
@@ -31,7 +33,7 @@ interface PluginView {
   lastError?: string;
   formats: string[];
   permissions: Permissions;
-  contributes?: { tools?: boolean; brains?: string[]; channels?: string[]; triggers?: string[]; hooks?: string[]; http?: boolean; settings?: Record<string, unknown> };
+  contributes?: { tools?: boolean; brains?: string[]; channels?: string[]; triggers?: string[]; hooks?: string[]; http?: boolean; settings?: Record<string, unknown>; setup?: { secrets?: unknown[] } };
   settings: Record<string, unknown>;
   hasUi: boolean;
   hasServer: boolean;
@@ -92,6 +94,7 @@ function PermissionList({ p }: { p: Permissions }) {
 
 export function PluginsPage() {
   const [list, setList] = useState<PluginView[] | null>(null);
+  const { settings: sections } = usePluginRegistry();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [logsFor, setLogsFor] = useState<PluginView | null>(null);
@@ -190,6 +193,15 @@ export function PluginsPage() {
                   <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
                   <span className="min-w-0 break-words">{p.lastError ?? `UI: ${ui?.error}`}</span>
                 </div>
+              )}
+
+              {p.enabled && (!!p.contributes?.setup?.secrets?.length || sections.some((s) => s.pluginId === p.id)) && (
+                <details className="mt-3" open>
+                  <summary className="cursor-pointer text-xs font-medium text-muted select-none hover:text-fg">{t("plugins.setup")}</summary>
+                  <div className="mt-2">
+                    <PluginSetupCard pluginId={p.id} bare />
+                  </div>
+                </details>
               )}
 
               <details className="mt-3 group">

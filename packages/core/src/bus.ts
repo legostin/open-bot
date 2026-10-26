@@ -13,6 +13,9 @@ export type BusEvents = {
   "approval.created": any;
   "approval.resolved": any;
   "vault.state": { state: string };
+  /** Vault items written outside the console (a secret typed into the chat): ids only. */
+  "vault.updated": { ids: string[] };
+  "secret.request": any;
   "plugins.updated": Record<string, never>;
   "brains.updated": Record<string, never>;
   "agents.updated": Record<string, never>;
@@ -72,6 +75,7 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "settings.updated":
     case "machine.updated":
     case "plugin.event":
+    case "secret.request":
       return { type: name, data: payload } as UiEvent;
     case "vault.state":
       return { type: "vault.state", data: payload } as UiEvent;

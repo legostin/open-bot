@@ -4,7 +4,7 @@
 // Guard rails:
 // - only the default agent sees them (ToolGateway.visible), and only in interactive sessions for anything that writes;
 // - a session that has read outside content (tainted) may look but not change anything, so injected text in a web page
-//   or an email cannot reconfigure the hub;
+//   or an email cannot reconfigure the hub (cards that only ask the user, like secret requests, are still allowed);
 // - security-relevant settings (egress allowlists, approval behaviour) stay with the user in the settings panel;
 // - revoking a machine is an external effect and needs the user's approval in the security console.
 
@@ -21,6 +21,9 @@ export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHou
 
 const SECRET_KEY = /key|token|secret|password/i;
 
+/** Tools that only put a card in front of the user, who then decides: fine even after outside content was read. */
+const CARDS = new Set(["secret_request", "plugin_setup"]);
+
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 const json = (v: unknown): ToolResult => text(JSON.stringify(v, null, 2));
 
@@ -28,7 +31,7 @@ export function registerHubTools(hub: Hub): void {
   const reg = (spec: Omit<ToolDescriptor, "owner" | "name"> & { name: string }, fn: (input: any, ctx: ToolCallContext) => Promise<ToolResult> | ToolResult) => {
     const writes = spec.effect !== "read";
     hub.tools.register({ ...(writes ? { availability: "interactive" as const } : {}), ...spec, name: HUB_TOOL_PREFIX + spec.name, owner: "core" }, async (input, ctx) => {
-      if (writes && ctx.tainted) {
+      if (writes && ctx.tainted && !CARDS.has(spec.name)) {
         return text(
           "Refused: this conversation has read outside content (web pages, emails, files), so hub settings cannot be changed from it. " +
             "Ask the user to make the change in the settings panel (gear icon) or in a fresh chat.",
@@ -295,6 +298,76 @@ export function registerHubTools(hub: Hub): void {
       if (!m) return text(`No machine ${i.machine}.`, true);
       hub.machines.revoke(m.id);
       return text(`Machine ${m.name} disconnected.`);
+    },
+  );
+
+  // ---------- secrets and setup cards ----------
+
+  reg(
+    {
+      name: "secret_request",
+      effect: "local-write",
+      description:
+        "Ask the user for a secret (API key, token, password) with a secure input card in this chat. The value goes straight into the vault; " +
+        "you only ever get vault://<vault>. Use it whenever something needs a secret: never ask the user to paste secrets as a message, never send them to the vault or the security console themselves. " +
+        "For a plugin's own secrets prefer hub_plugin_setup. Waits a little for the user; if they take longer you get a system note once it is saved.",
+      inputSchema: obj(
+        {
+          vault: { type: "string", description: "Vault item id to store it under, e.g. github_token (letters, digits, _ . -)" },
+          title: { type: "string", description: "What it is, in the user's language, e.g. “GitHub token”" },
+          hint: { type: "string", description: "One or two sentences in the user's language: why it is needed and where to get it (markdown)" },
+          link: { type: "string", description: "Page where the user creates the secret, if any" },
+          plugin: { type: "string", description: "Plugin that will use it (must be allowed to read this vault item)" },
+          setting: { type: "string", description: "That plugin's setting that should point at vault://<vault>" },
+        },
+        ["vault", "title"],
+      ),
+    },
+    async (i, ctx) => {
+      const req = hub.secrets.create({
+        vaultId: String(i.vault ?? "").trim(),
+        title: String(i.title ?? "").trim() || String(i.vault),
+        hint: i.hint ? String(i.hint) : undefined,
+        link: i.link && /^https?:\/\//.test(String(i.link)) ? String(i.link) : undefined,
+        pluginId: i.plugin ? String(i.plugin) : undefined,
+        setting: i.setting ? String(i.setting) : undefined,
+        conversationId: ctx.conversationId,
+      });
+      hub.runner.attachPart(ctx.conversationId, { type: "secret_request", requestId: req.id, vaultId: req.vaultId, title: req.title, status: req.status });
+      const locked = hub.vault.state() !== "unlocked";
+      const r = await hub.secrets.wait(req.id, hub.settings.get().approvalInlineWaitSec * 1000);
+      if (r.status === "saved") return text(`Saved as vault://${r.vaultId}${r.pluginId ? `; plugin ${r.pluginId} uses it now` : ""}. Refer to it by this reference; never ask for the value again.`);
+      if (r.status === "cancelled") return text("The user dismissed the request.");
+      return text(
+        `A secure input card for ${r.title} is shown in the chat${locked ? " (the vault is locked: the card asks the user to unlock it first)" : ""}. ` +
+          "The user has not filled it in yet. Do not ask for the value in a message; tell the user briefly what to enter and where to get it. You will get a system note when it is saved.",
+      );
+    },
+  );
+
+  reg(
+    {
+      name: "plugin_setup",
+      effect: "local-write",
+      description:
+        "Show a plugin's setup card in this chat: the secrets it needs (typed into secure fields, straight into the vault) and its own setup steps " +
+        "(e.g. the Telegram pairing button). Use it whenever the user wants to connect or fix a plugin, instead of sending them to settings pages.",
+      inputSchema: obj({ id: { type: "string", description: "Plugin id, see hub_plugins_list" } }, ["id"]),
+    },
+    (i, ctx) => {
+      const view = hub.secrets.setupView(String(i.id), hubLocale());
+      hub.runner.attachPart(ctx.conversationId, { type: "plugin_setup", pluginId: view.pluginId });
+      const missing = view.secrets.filter((s) => !s.present);
+      const lines = [
+        `Setup card for ${view.name} is shown in the chat.`,
+        `Plugin: ${view.enabled ? "enabled" : "disabled (the card has a switch)"}, status ${view.status}${view.lastError ? ` (${view.lastError})` : ""}.`,
+        view.vaultState !== "unlocked" ? "The vault is locked: the card asks the user to unlock it first." : "",
+        view.secrets.length
+          ? `Secrets: ${view.secrets.map((s) => `${s.title} (vault://${s.vaultId}) ${s.present ? "present" : s.required ? "MISSING, required" : "missing, optional"}`).join("; ")}.`
+          : "It needs no secrets.",
+        missing.length ? "Tell the user in a sentence what to enter and where to get it; the card does the rest. Do not ask for values in messages." : "",
+      ];
+      return text(lines.filter(Boolean).join("\n"));
     },
   );
 

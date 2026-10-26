@@ -12,7 +12,8 @@ import { LocalizedError, tFor } from "../i18n.ts";
 export class VaultError extends LocalizedError {
   code: "sealed" | "uninitialized" | "not_found" | "forbidden" | "bad_passphrase" | "exists" | "invalid";
   constructor(code: VaultError["code"], key: string, params?: Params) {
-    super(key, params);
+    // The same HTTP status on both origins (the security console and the chat's create/unlock card).
+    super(key, params, code === "not_found" ? 404 : code === "bad_passphrase" || code === "invalid" ? 400 : code === "forbidden" ? 403 : 409);
     this.code = code;
   }
 }

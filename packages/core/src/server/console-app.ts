@@ -117,7 +117,7 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
     api.addHook("preHandler", guard);
 
     // ---------- vault ----------
-    api.get("/console-api/vault", async () => ({ state: hub.vault.state(), items: hub.vault.list(), autoUnlock: !!cfg.vaultPassphraseFile }));
+    api.get("/console-api/vault", async () => ({ state: hub.vault.state(), items: hub.vault.list(), autoUnlock: !!cfg.vaultPassphraseFile || existsSync(hub.rememberedPassphraseFile()) }));
     api.post("/console-api/vault/init", async (req) => {
       hub.vault.init(String((req.body as any)?.passphrase ?? ""));
       hub.audit.append("user", "vault.init");
@@ -137,6 +137,8 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
       const b = req.body as any;
       if (String(b?.newPassphrase ?? "").length < 8) throw new HttpError(400, "vault.minLength");
       hub.vault.changePassphrase(String(b?.oldPassphrase ?? ""), String(b.newPassphrase));
+      // A passphrase remembered for automatic unlock follows the change.
+      if (existsSync(hub.rememberedPassphraseFile())) hub.rememberVaultPassphrase(String(b.newPassphrase));
       hub.audit.append("user", "vault.passphrase-change");
       return { ok: true };
     });

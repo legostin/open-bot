@@ -7,6 +7,11 @@
   "server": "./server/index.ts",
   "ui": "./ui/dist/index.js",
   "contributes": {
+    "setup": {
+      "secrets": [
+        {"vault": "telegram_bot_token", "setting": "botTokenRef", "title": "%setup.botToken.title%", "hint": "%setup.botToken.hint%", "link": "https://t.me/BotFather", "pattern": "^\\d{6,12}:[A-Za-z0-9_-]{30,}$", "required": true}
+      ]
+    },
     "channels": ["telegram"],
     "http": true,
     "settings": {

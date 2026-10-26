@@ -46,5 +46,13 @@
   "error.streamBroken": "The {provider} response stream broke off: {detail}",
   "error.streamEnded": "The {provider} response stream ended before the message was complete",
   "note.maxSteps": "(Turn stopped: reached the limit of {n, plural, one {# step} other {# steps}}.)",
-  "note.maxTokens": "(Response cut off: reached the max_tokens limit.)"
+  "note.maxTokens": "(Response cut off: reached the max_tokens limit.)",
+  "setup.anthropic.title": "Anthropic API key",
+  "setup.anthropic.hint": "Create a key in the Anthropic Console (Settings → API keys).",
+  "setup.openai.title": "OpenAI API key",
+  "setup.openai.hint": "Create a key on the OpenAI platform (API keys).",
+  "setup.openrouter.title": "OpenRouter API key",
+  "setup.openrouter.hint": "Create a key in your OpenRouter settings (Keys).",
+  "setup.custom.title": "Key for the custom OpenAI-compatible server",
+  "setup.custom.hint": "Only if your server (Ollama, LM Studio, vLLM…) asks for a key."
 }

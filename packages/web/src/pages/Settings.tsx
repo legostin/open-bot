@@ -10,7 +10,7 @@ import { agents, ensureAgents, hubEvents, logout, refreshBootstrap, session } fr
 import { toast } from "../state/toast";
 import { explicitLocale, locale, LOCALES, t, type MessageKey } from "../i18n";
 import { usePluginRegistry } from "../plugins/slots";
-import { PluginBoundary } from "../plugins/boundary";
+import { PluginSetupCard } from "../components/SecretCards";
 import { BrowserLanguageSelect } from "../components/LanguageSelect";
 import { Button, Card, ErrorNote, Field, Input, Loading, Page, Select, TagInput, Toggle } from "../components/ui";
 
@@ -250,16 +250,14 @@ export function SettingsPage() {
 
         {pending.error && <ErrorNote>{pending.error}</ErrorNote>}
 
-        {sections.map((sec) => {
-          const C = sec.component;
-          return (
+        {/* One card per plugin: its secrets (typed in place, straight into the vault) and its own sections. */}
+        {sections
+          .filter((sec, i) => sections.findIndex((x) => x.pluginId === sec.pluginId) === i)
+          .map((sec) => (
             <Card key={sec.key} title={sec.title}>
-              <PluginBoundary pluginId={sec.pluginId}>
-                <C pluginId={sec.pluginId} />
-              </PluginBoundary>
+              <PluginSetupCard pluginId={sec.pluginId} bare />
             </Card>
-          );
-        })}
+          ))}
 
         <Card title={t("settings.security")}>
           <p className="mb-3 text-sm text-muted">{t("settings.securityText")}</p>

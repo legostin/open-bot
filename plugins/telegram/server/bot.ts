@@ -129,6 +129,14 @@ export class TelegramBot {
     if (p?.state === "unlocked" && !this.api) this.wake?.();
   }
 
+  /** The user typed a token into the chat: if it is ours, connect now (a replaced token needs a reconnect). */
+  onVaultUpdated(p: { ids?: string[] } | undefined): void {
+    const ours = this.settings.botTokenRef.replace(/^vault:\/\//, "");
+    if (!p?.ids?.includes(ours)) return;
+    if (this.api) this.reconnect();
+    else this.wake?.();
+  }
+
   /** Hub language changed: new command menu and status text. */
   onLocaleChange(): void {
     this.emitStatus();
@@ -357,8 +365,16 @@ export class TelegramBot {
     }
     this.startTyping();
     try {
-      const r = await this.ctx.core.call<{ ignored?: boolean }>("channels.inbound", { channel: "telegram", text });
+      const r = await this.ctx.core.call<{ ignored?: boolean; secrets?: number }>("channels.inbound", { channel: "telegram", text });
       if (r?.ignored) this.stopTyping();
+      // The hub took a secret out of this message (it is in the vault now): the copy in Telegram goes too.
+      if (r?.secrets) {
+        const gone = await this.api!.send("deleteMessage", { chat_id: chatId, message_id: m.message_id }).then(
+          () => true,
+          () => false,
+        );
+        await this.sendHtml(chatId, this.t(gone ? "bot.secretStored" : "bot.secretStoredDeleteYourself")).catch(() => {});
+      }
     } catch (e: any) {
       this.stopTyping();
       await this.sendHtml(chatId, this.t("bot.forwardFailed", { error: escapeHtml(e?.message ?? String(e)) }));

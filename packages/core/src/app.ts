@@ -1,6 +1,6 @@
 // Hub composition root: builds every core service, wires them together, starts/stops servers.
 
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentDef, CoreMethod } from "@openbot/shared";
 import { DEFAULT_LOCALE, catalogLookup, localizeValue, normalizeLocale } from "@openbot/shared";
@@ -32,6 +32,7 @@ import { MachineHub } from "./machines.ts";
 import { createCoreCall } from "./core-call.ts";
 import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, LocalizedError, t } from "./i18n.ts";
 import { registerHubTools } from "./tools/hub-tools.ts";
+import { SecretIntake } from "./secrets.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -61,6 +62,7 @@ export class Hub {
   mcpClients: McpClientManager;
   auth: AuthService;
   machines: MachineHub;
+  secrets: SecretIntake;
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -110,6 +112,7 @@ export class Hub {
         owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),
     });
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit });
+    this.secrets = new SecretIntake({ db: this.db, bus: this.bus, audit: this.audit, vault: this.vault, plugins: () => this.plugins });
     this.runner = new SessionRunner({
       config,
       store: this.store,
@@ -128,6 +131,7 @@ export class Hub {
       egress: this.egress,
       claudePluginDirs: () => this.plugins.enabledLayouts().filter((l) => l.formats.includes("claude") && !l.manifest.builtin).map((l) => l.dir),
       machineName: (id) => this.machines.name(id),
+      secrets: this.secrets,
     });
     this.mcpClients = new McpClientManager({ config, registry: this.tools, vault: this.vault, audit: this.audit, egress: this.egress });
     this.plugins = new PluginHost({
@@ -185,6 +189,18 @@ export class Hub {
     }
     this.bus.emit("settings.updated", { keys: Object.keys(p) });
     return next;
+  }
+
+  /** Where "unlock automatically after restarts" keeps the vault passphrase (hub-only file, like a Docker secret). */
+  rememberedPassphraseFile(): string {
+    return join(this.config.dataDir, "vault.passphrase");
+  }
+
+  /** Remember the passphrase for automatic unlock, or forget it (undefined). */
+  rememberVaultPassphrase(passphrase: string | undefined): void {
+    const file = this.rememberedPassphraseFile();
+    if (passphrase === undefined) rmSync(file, { force: true });
+    else writeFileSync(file, passphrase, { mode: 0o600 });
   }
 
   saveAgent(agent: AgentDef, actor: string): AgentDef {
@@ -245,7 +261,8 @@ export class Hub {
     const cfg = this.config;
     if (cfg.isolation.users) process.umask(0o002);
     for (const d of ["workspaces", "skills", "commands", "agents", "plugins", "plugins-data", "home"]) mkdirSync(join(cfg.dataDir, d), { recursive: true });
-    if (cfg.vaultPassphraseFile) this.vault.unlockFromFile(cfg.vaultPassphraseFile);
+    const passphraseFile = cfg.vaultPassphraseFile ?? (existsSync(this.rememberedPassphraseFile()) ? this.rememberedPassphraseFile() : undefined);
+    if (passphraseFile) this.vault.unlockFromFile(passphraseFile);
     this.audit.append("core", "hub.start", cfg.version);
 
     await this.egress.listen(cfg.egressPort);

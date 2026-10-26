@@ -1,0 +1,170 @@
+// Secrets in the chat: typed into cards or pasted into messages, they land in the vault and never reach the model,
+// the stored conversation or the plugin hooks. Uses the scripted fake brain (test/fixtures/plugins/fakebrain).
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync } from "node:fs";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Hub, loadConfig } from "../src/index.ts";
+
+const fixtures = join(import.meta.dirname, "fixtures");
+const FAKE = "fk_abcdefghij0123456789";
+const GITHUB = `ghp_${"a1B2".repeat(9)}`;
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const s = createServer();
+    s.once("error", reject);
+    s.listen(0, "127.0.0.1", () => {
+      const port = (s.address() as { port: number }).port;
+      s.close(() => resolve(port));
+    });
+  });
+}
+
+async function until<T>(fn: () => Promise<T | undefined | false> | T | undefined | false, what: string, timeoutMs = 15_000): Promise<T> {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const v = await fn();
+    if (v) return v as T;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
+describe("secrets in the chat", () => {
+  let hub: Hub;
+  let base = "";
+  let cookie = "";
+  let csrf = "";
+  let conv = "";
+
+  const req = async (method: string, path: string, body?: unknown): Promise<{ status: number; json: any }> => {
+    const r = await fetch(base + path, {
+      method,
+      headers: { origin: base, ...(cookie ? { cookie } : {}), ...(csrf ? { "x-csrf": csrf } : {}), ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const sc = r.headers.get("set-cookie");
+    if (sc) cookie = sc.split(";")[0];
+    const text = await r.text();
+    try {
+      return { status: r.status, json: JSON.parse(text) };
+    } catch {
+      return { status: r.status, json: text };
+    }
+  };
+  const ok = async (method: string, path: string, body?: unknown) => {
+    const r = await req(method, path, body);
+    if (r.status >= 400) throw new Error(`${method} ${path} → ${r.status} ${JSON.stringify(r.json)}`);
+    return r.json;
+  };
+  const messages = async (): Promise<any[]> => ok("GET", `/api/conversations/${conv}/messages`);
+  const allText = async () => JSON.stringify(await messages());
+  /** Send a message and wait for the fake brain's reply to it. */
+  const say = async (text: string, reply: RegExp) => {
+    const sent = await ok("POST", `/api/conversations/${conv}/messages`, { text });
+    return until(async () => {
+      const msgs = await messages();
+      const after = msgs.slice(msgs.findIndex((m) => m.id === sent.id) + 1);
+      return after.find((m) => m.role === "assistant" && m.status !== "streaming" && m.parts.some((p: any) => p.type === "text" && reply.test(p.text)));
+    }, `reply matching ${reply}`);
+  };
+
+  beforeAll(async () => {
+    const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
+    const config = loadConfig(
+      { OPENBOT_PORT: String(port), OPENBOT_CONSOLE_PORT: String(consolePort), OPENBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      { dataDir: mkdtempSync(join(tmpdir(), "ob-secrets-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents") },
+    );
+    hub = new Hub(config);
+    await hub.start();
+    base = config.publicUrl;
+    await until(() => hub.brains.has("fake@local"), "fake brain");
+    await ok("POST", "/api/auth/setup", { token: hub.auth.setupToken, password: "integration-pass-1" });
+    const boot = await ok("GET", "/api/bootstrap");
+    csrf = boot.csrf;
+    conv = boot.mainConversationId;
+    await ok("PATCH", "/api/settings", { approvalInlineWaitSec: 1 });
+  });
+
+  afterAll(async () => {
+    await hub?.stop();
+  });
+
+  it("drops a pasted secret while the vault does not exist yet, and says so", async () => {
+    const reply = await say(`token ${FAKE} please`, /fake heard/);
+    const text = await allText();
+    expect(text).not.toContain(FAKE);
+    expect(JSON.stringify(reply)).toMatch(/vault is locked/);
+    expect((await messages()).some((m) => m.role === "system" && m.parts.some((p: any) => p.type === "error" && /vault is locked/.test(p.message)))).toBe(true);
+  });
+
+  it("creates the vault from the chat and can remember the passphrase", async () => {
+    expect((await req("POST", "/api/vault/init", { passphrase: "short" })).status).toBe(400);
+    expect(await ok("POST", "/api/vault/init", { passphrase: "chat-vault-pass", remember: true })).toEqual({ state: "unlocked" });
+    expect(existsSync(hub.rememberedPassphraseFile())).toBe(true);
+    hub.vault.seal();
+    expect((await req("POST", "/api/vault/unlock", { passphrase: "wrong-pass-123" })).status).toBeGreaterThanOrEqual(400);
+    expect(await ok("POST", "/api/vault/unlock", { passphrase: "chat-vault-pass", remember: false })).toEqual({ state: "unlocked" });
+    expect(existsSync(hub.rememberedPassphraseFile())).toBe(false);
+  });
+
+  it("takes a pasted token out of the message, stores it and configures the plugin that declared it", async () => {
+    const reply = await say(`here it is: ${FAKE}.`, /fake heard/);
+    const user = (await messages()).filter((m) => m.role === "user").at(-1);
+    expect(user.parts[0].text).toBe("here it is: vault://fake_token.");
+    expect(JSON.stringify(reply)).toContain("vault://fake_token");
+    expect(await allText()).not.toContain(FAKE);
+    expect(hub.vault.read("fake_token").fields.value).toBe(FAKE);
+    expect(hub.plugins.get("fakesetup")!.settings.tokenRef).toBe("vault://fake_token");
+
+    await say(`gh: ${GITHUB}`, /fake heard/);
+    expect(hub.vault.read("github_token").fields.value).toBe(GITHUB);
+    expect(await allText()).not.toContain(GITHUB);
+  });
+
+  it("asks for a secret with a card; the value goes to the vault and the agent carries on", async () => {
+    await say('CALL hub_secret_request {"vault":"svc_key","title":"Service key","hint":"From the dashboard"}', /tool said: A secure input card/);
+    const card = (await messages()).flatMap((m) => m.parts).find((p: any) => p.type === "secret_request" && p.vaultId === "svc_key");
+    expect(card).toMatchObject({ title: "Service key", status: "pending" });
+    const before = await ok("GET", `/api/secret-requests/${card.requestId}`);
+    expect(before).toMatchObject({ status: "pending", hint: "From the dashboard", vaultState: "unlocked" });
+
+    const saved = await ok("POST", `/api/secret-requests/${card.requestId}`, { value: "s3cr3t-value-123" });
+    expect(saved.status).toBe("saved");
+    expect(JSON.stringify(saved)).not.toContain("s3cr3t-value-123");
+    expect(hub.vault.read("svc_key").fields.value).toBe("s3cr3t-value-123");
+    // The agent is told (by reference only) and continues.
+    await until(async () => (await messages()).some((m) => m.role === "assistant" && JSON.stringify(m.parts).includes("The user stored Service key")), "continuation turn");
+    expect(await allText()).not.toContain("s3cr3t-value-123");
+    // The card shows the new state.
+    expect((await messages()).flatMap((m) => m.parts).find((p: any) => p.type === "secret_request" && p.requestId === card.requestId).status).toBe("saved");
+    expect((await req("POST", `/api/secret-requests/${card.requestId}`, { value: "again" })).status).toBe(409);
+  });
+
+  it("takes a bare reply as the answer to the open card", async () => {
+    await say('CALL hub_secret_request {"vault":"other_key","title":"Other key"}', /tool said: A secure input card/);
+    await say("plain-token-value-xyz", /fake heard/);
+    expect(hub.vault.read("other_key").fields.value).toBe("plain-token-value-xyz");
+    expect(await allText()).not.toContain("plain-token-value-xyz");
+    const user = (await messages()).filter((m) => m.role === "user").at(-1);
+    expect(user.parts[0].text).toBe("vault://other_key");
+  });
+
+  it("shows a plugin's setup card and stores its secrets write-only", async () => {
+    const reply = await say('CALL hub_plugin_setup {"id":"fakesetup"}', /tool said: Setup card/);
+    expect(JSON.stringify(reply)).toMatch(/Fake token \(vault:\/\/fake_token\) present/);
+    expect((await messages()).flatMap((m) => m.parts).some((p: any) => p.type === "plugin_setup" && p.pluginId === "fakesetup")).toBe(true);
+
+    const view = await ok("POST", "/api/plugins/fakesetup/secrets/fake_token", { value: "fk_zzzzzzzzzz0123456789" });
+    expect(view.secrets).toEqual([expect.objectContaining({ vaultId: "fake_token", title: "Fake token", present: true, required: true })]);
+    expect(hub.vault.read("fake_token").fields.value).toBe("fk_zzzzzzzzzz0123456789");
+    expect((await req("POST", "/api/plugins/fakesetup/secrets/not_declared", { value: "x" })).status).toBe(404);
+    expect((await req("POST", "/api/plugins/fakesetup/secrets/fake_token", { value: "   " })).status).toBe(400);
+  });
+
+  it("refuses a card for a plugin that cannot read the item", async () => {
+    await say('CALL hub_secret_request {"vault":"svc_key","title":"x","plugin":"fakebrain"}', /tool said: .*not allowed to read/);
+  });
+});

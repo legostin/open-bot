@@ -386,6 +386,54 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       return { ok: true };
     });
 
+    // ----- the vault from the chat: create or unlock only (reading items, sealing, scopes stay in the security console) -----
+    const unlockTries = { count: 0, since: Date.now() };
+    const passphraseIn = (req: FastifyRequest) => {
+      const b = (req.body ?? {}) as { passphrase?: unknown; remember?: unknown };
+      return { passphrase: String(b.passphrase ?? ""), remember: b.remember === true };
+    };
+    api.post("/api/vault/init", async (req) => {
+      const { passphrase, remember } = passphraseIn(req);
+      hub.vault.init(passphrase);
+      hub.rememberVaultPassphrase(remember ? passphrase : undefined);
+      hub.audit.append("user", "vault.init", undefined, { via: "chat", remember });
+      return { state: hub.vault.state() };
+    });
+    api.post("/api/vault/unlock", async (req) => {
+      if (Date.now() - unlockTries.since > 10 * 60_000) Object.assign(unlockTries, { count: 0, since: Date.now() });
+      if (unlockTries.count >= 10) throw new HttpError(429, "auth.tooManyAttempts");
+      const { passphrase, remember } = passphraseIn(req);
+      try {
+        hub.vault.unlock(passphrase);
+      } catch (e) {
+        unlockTries.count++;
+        throw e;
+      }
+      unlockTries.count = 0;
+      hub.rememberVaultPassphrase(remember ? passphrase : undefined);
+      hub.audit.append("user", "vault.unlock", undefined, { via: "chat", remember });
+      return { state: hub.vault.state() };
+    });
+
+    // ----- secrets typed into the chat: write-only, nothing here ever returns a value -----
+    api.get("/api/secret-requests/:id", async (req) => {
+      const r = hub.secrets.get((req.params as any).id);
+      if (!r) throw new HttpError(404, "secrets.requestNotFound");
+      return { ...r, vaultState: hub.vault.state() };
+    });
+    api.post("/api/secret-requests/:id", async (req) => {
+      const { request } = hub.secrets.fulfil((req.params as any).id, String((req.body as any)?.value ?? ""), "user");
+      return { ...request, vaultState: hub.vault.state() };
+    });
+    api.post("/api/secret-requests/:id/cancel", async (req) => ({ ...hub.secrets.cancel((req.params as any).id, "user"), vaultState: hub.vault.state() }));
+    api.get("/api/plugins/:id/setup", async (req) => hub.secrets.setupView((req.params as any).id, requestLocale(req)));
+    api.post("/api/plugins/:id/secrets/:vault", async (req) => {
+      const { id, vault } = req.params as { id: string; vault: string };
+      const s = hub.secrets.setupSecret(id, vault);
+      hub.secrets.store({ vaultId: s.vault, title: hub.secrets.secretTitle(id, s, hubLocale()), value: String((req.body as any)?.value ?? ""), pluginId: id, setting: s.setting, actor: "user" });
+      return hub.secrets.setupView(id, requestLocale(req));
+    });
+
     // ----- MCP servers -----
     api.get("/api/mcp-servers", async () => ({ servers: hub.mcpClients.list(), config: hub.mcpClients.readUserServers() }));
     api.put("/api/mcp-servers", async (req) => {

@@ -3,7 +3,7 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, Task, ToolResult } from "@openbot/shared";
+import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, SecretRequest, Task, ToolResult } from "@openbot/shared";
 import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@openbot/shared";
 import type { Config } from "./config.ts";
 import type { Store, SessionRow } from "./store.ts";
@@ -24,6 +24,7 @@ import { DEFAULT_BRAIN_EGRESS } from "./settings.ts";
 import { buildSystemPrompt } from "./prompt.ts";
 import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
+import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
 
 export interface RunnerDeps {
   config: Config;
@@ -44,6 +45,7 @@ export interface RunnerDeps {
   /** Claude Code-format plugin dirs to pass to Claude Code sessions. */
   claudePluginDirs: () => string[];
   machineName: (machineId: string) => string | undefined;
+  secrets: SecretIntake;
 }
 
 interface Live {
@@ -79,6 +81,7 @@ export class SessionRunner {
     deps.approvals.onDeferredDenied = (a) => this.onDeferredDenied(a);
     deps.bus.on("approval.created", (a: Approval) => this.attachApprovalPart(a));
     deps.bus.on("approval.resolved", (a: Approval) => this.updateApprovalPart(a));
+    deps.secrets.onResolved = (r, how) => this.onSecretResolved(r, how);
   }
 
   // ---------- lifecycle ----------
@@ -118,20 +121,63 @@ export class SessionRunner {
   // ---------- public entry points ----------
 
   /** A user message arrived (web, Telegram, ...). Returns the stored user message. */
-  async userMessage(conversationId: string, text: string, opts: { channel?: string } = {}): Promise<Message> {
+  async userMessage(conversationId: string, text: string, opts: { channel?: string; onCapture?: (c: CaptureResult) => void } = {}): Promise<Message> {
     const conv = this.d.store.getConversation(conversationId);
     if (!conv) throw new LocalizedError("conversation.notFound");
+    // Secrets come out first: message hooks, the stored message and the model only see vault:// references.
+    const cap = this.d.secrets.capture(text, conversationId, "user");
+    if (cap.stored.length || cap.withheld) opts.onCapture?.(cap);
+    text = cap.text;
     const hooked = await this.d.hooks.run("message.in", { conversationId, text, channel: opts.channel }, (p, r) =>
       r.block ? { blocked: r.block } : r.text !== undefined ? { ...p, text: r.text } : p,
     );
     const msg = this.d.store.addMessage({ conversationId, role: "user", parts: [{ type: "text", text }], status: "complete", channel: opts.channel });
+    if (cap.withheld) this.d.store.addMessage({ conversationId, role: "system", parts: [{ type: "error", message: t("secrets.withheld") }], status: "complete" });
     if (hooked.blocked) {
       this.d.store.addMessage({ conversationId, role: "system", parts: [{ type: "error", message: t("message.blocked", { reason: hooked.blocked }) }], status: "complete" });
       return msg;
     }
-    const prompt = this.d.skills.expandCommand(hooked.payload.text) ?? hooked.payload.text;
+    // Just the answer to a secret card whose tool call is still waiting: that call carries on, no new turn.
+    if (cap.answered?.waited && text.trim() === `vault://${cap.answered.request.vaultId}`) return msg;
+    const note = captureNote(cap);
+    const expanded = this.d.skills.expandCommand(hooked.payload.text) ?? hooked.payload.text;
+    const prompt = note ? `${expanded}\n\n${note}` : expanded;
     void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { replyChannel: opts.channel }));
     return msg;
+  }
+
+  /** A card (secret request, plugin setup) for the message the agent is writing right now in this conversation. */
+  attachPart(conversationId: string, part: MessagePart): void {
+    const msgId = this.streamingMessage.get(conversationId);
+    const m = msgId ? this.d.store.getMessage(msgId) : undefined;
+    if (m) this.d.store.updateMessage(m.id, { parts: [...m.parts, part] });
+    else this.d.store.addMessage({ conversationId, role: "system", parts: [part], status: "complete" });
+  }
+
+  /** The user saved (or dismissed) a secret card after its tool call stopped waiting: tell the agent and let it go on. */
+  private onSecretResolved(r: SecretRequest, how: { waited: boolean; viaMessage: boolean }): void {
+    this.updateSecretPart(r);
+    // Answered by a chat message: that message starts the next turn itself.
+    if (how.waited || how.viaMessage || r.status === "pending" || !r.conversationId) return;
+    const conv = this.d.store.getConversation(r.conversationId);
+    if (!conv) return;
+    if (r.status === "cancelled") {
+      const note = `[System] The user dismissed the request for ${r.title} (vault://${r.vaultId}).`;
+      this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete" });
+      return;
+    }
+    const note = `[System] The user stored ${r.title} in the vault as vault://${r.vaultId}${r.pluginId ? ` and plugin ${r.pluginId} now uses it` : ""}. Carry on with what it was needed for.`;
+    this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete" });
+    void this.enqueue(conv.id, () => this.runTurn(conv, note, {}));
+  }
+
+  private updateSecretPart(r: SecretRequest): void {
+    if (!r.conversationId) return;
+    for (const m of this.d.store.listMessages(r.conversationId, { limit: 50 })) {
+      if (m.parts.some((p) => p.type === "secret_request" && p.requestId === r.id && p.status !== r.status)) {
+        this.d.store.updateMessage(m.id, { parts: m.parts.map((p) => (p.type === "secret_request" && p.requestId === r.id ? { ...p, status: r.status } : p)) });
+      }
+    }
   }
 
   interrupt(conversationId: string): boolean {
@@ -591,9 +637,8 @@ export class SessionRunner {
       const now = Date.now();
       if (!force && now - lastFlush < 400) return;
       lastFlush = now;
-      // Keep approval parts that were attached concurrently.
-      const extra = current().filter((p) => p.type === "approval" && !parts.some((q) => q.type === "approval" && q.approvalId === (p as any).approvalId));
-      parts = [...parts, ...extra];
+      // Keep cards (approvals, secret requests, setup) that were attached or updated concurrently.
+      parts = mergeAttached(parts, current());
       this.d.store.updateMessage(msg.id, { parts }, force);
     };
 
@@ -674,7 +719,7 @@ export class SessionRunner {
     }
 
     if (error) parts.push({ type: "error", message: error });
-    parts = [...parts, ...current().filter((p) => p.type === "approval" && !parts.some((q) => q.type === "approval" && q.approvalId === (p as any).approvalId))];
+    parts = mergeAttached(parts, current());
     this.d.store.updateMessage(msg.id, { parts, status: error && !produced ? "error" : "complete" });
 
     if (replyChannel && fullText.trim() && this.d.channels.has(replyChannel)) {
@@ -682,6 +727,29 @@ export class SessionRunner {
     }
     return { text: fullText.trim(), error, limited, awaitingApproval };
   }
+}
+
+/** Parts the hub adds to a message from outside the brain stream: cards with their own live status. */
+function attachedKey(p: MessagePart): string | undefined {
+  if (p.type === "approval") return `approval:${p.approvalId}`;
+  if (p.type === "secret_request") return `secret:${p.requestId}`;
+  if (p.type === "plugin_setup") return `setup:${p.pluginId}`;
+  return undefined;
+}
+
+/** The streamed parts with the stored version of every card (newer status) and any card attached meanwhile. */
+function mergeAttached(local: MessagePart[], stored: MessagePart[]): MessagePart[] {
+  const cards = new Map<string, MessagePart>();
+  for (const p of stored) {
+    const k = attachedKey(p);
+    if (k) cards.set(k, p);
+  }
+  const out = local.map((p) => {
+    const k = attachedKey(p);
+    return k && cards.has(k) ? cards.get(k)! : p;
+  });
+  for (const [k, p] of cards) if (!out.some((q) => attachedKey(q) === k)) out.push(p);
+  return out;
 }
 
 function resultText(r: ToolResult): string {

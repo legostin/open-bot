@@ -87,36 +87,36 @@ function TelegramSettings({ ui }: { ui: OpenBotUI }) {
     <Card title="Telegram" actions={<Badge tone={tone(status)}>{label(status)}</Badge>}>
       <p style={muted}>{status.detail}</p>
 
-      {(status.state === "no-token" || status.state === "unauthorized") && (
-        <ol>
-          <li>
-            {rich("ui.setup.botfather", {
-              botfather: (
-                <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">
-                  @BotFather
-                </a>
-              ),
-            })}
-          </li>
-          <li>{rich("ui.setup.vault", { name: <code>{status.tokenRef.replace(/^vault:\/\//, "")}</code>, field: <code>value</code> })}</li>
-          <li>{t("ui.setup.wait")}</li>
-        </ol>
-      )}
+      {/* No token yet: the setup card above this section has the token field (it goes straight into the vault). */}
+      {(status.state === "no-token" || status.state === "unauthorized") && <p style={muted}>{t("ui.setup.wait")}</p>}
 
       {status.state === "polling" && !status.chat && status.pairingCode && (
         <div>
-          <p>{status.bot?.username ? t("ui.pair.promptNamed", { bot: `@${status.bot.username}` }) : t("ui.pair.prompt")}</p>
-          <div style={code}>/start {status.pairingCode}</div>
-          <div style={row}>
-            {status.deepLink && (
-              <a href={status.deepLink} target="_blank" rel="noreferrer">
-                {t("ui.pair.openLink")}
-              </a>
-            )}
-            <Button variant="secondary" disabled={busy} onClick={() => act("/pairing-code")}>
-              {t("ui.pair.newCode")}
-            </Button>
-          </div>
+          {status.deepLink ? (
+            <>
+              <p>{t("ui.pair.oneTap", { bot: status.bot?.username ? `@${status.bot.username}` : t("status.bot") })}</p>
+              <div style={row}>
+                <Button variant="primary" onClick={() => window.open(status.deepLink!, "_blank", "noopener,noreferrer")}>
+                  {t("ui.pair.openLink")}
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => act("/pairing-code")}>
+                  {t("ui.pair.newCode")}
+                </Button>
+              </div>
+              <p style={muted}>{t("ui.pair.orSend")}</p>
+              <div style={code}>/start {status.pairingCode}</div>
+            </>
+          ) : (
+            <>
+              <p>{status.bot?.username ? t("ui.pair.promptNamed", { bot: `@${status.bot.username}` }) : t("ui.pair.prompt")}</p>
+              <div style={code}>/start {status.pairingCode}</div>
+              <div style={row}>
+                <Button variant="secondary" disabled={busy} onClick={() => act("/pairing-code")}>
+                  {t("ui.pair.newCode")}
+                </Button>
+              </div>
+            </>
+          )}
           <p style={muted}>{t("ui.pair.note")}</p>
         </div>
       )}
