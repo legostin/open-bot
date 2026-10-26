@@ -126,7 +126,7 @@ describe("request building", () => {
   });
 
   it("builds Anthropic tool_result blocks with images, sorted tools and cache points", () => {
-    const { body, headers } = buildAnthropicRequest(
+    const { body, betas } = buildAnthropicRequest(
       call([
         { role: "user", parts: [{ type: "text", text: "shot" }] },
         {
@@ -152,7 +152,7 @@ describe("request building", () => {
     expect(body.output_config).toEqual({ effort: "high" });
     // Haiku 5.5 has no server-side fallback.
     expect(body.fallbacks).toBeUndefined();
-    expect(headers["anthropic-beta"]).toBeUndefined();
+    expect(betas).toEqual([]);
     const msgs = body.messages as any[];
     expect(msgs[1].content[0]).toEqual({ type: "thinking", thinking: "", signature: "sig" });
     expect(msgs[2].content).toEqual([
@@ -232,7 +232,7 @@ describe("settings and models", () => {
     const s = resolveSettings({ maxTokens: "8000", maxSteps: -1, anthropicModel: "  ", customVision: "true", anthropicEffort: "" });
     expect(s.maxTokens).toBe(8000);
     expect(s.maxSteps).toBe(40);
-    expect(s.anthropicModel).toBe("claude-sonnet-5-5");
+    expect(s.anthropicModel).toBe("claude-opus-5-5");
     expect(s.customVision).toBe(true);
   });
 
@@ -241,8 +241,8 @@ describe("settings and models", () => {
     expect(resolveModel(VARIANTS.anthropic, "opus", s)).toBe("claude-opus-5-5");
     expect(resolveModel(VARIANTS.anthropic, "fable", s)).toBe("claude-fable-5-1");
     expect(resolveModel(VARIANTS.anthropic, "claude-opus-4-8", s)).toBe("claude-opus-4-8");
-    expect(resolveModel(VARIANTS.anthropic, "gpt-5", s)).toBe("claude-sonnet-5-5");
-    expect(resolveModel(VARIANTS.anthropic, undefined, s)).toBe("claude-sonnet-5-5");
+    expect(resolveModel(VARIANTS.anthropic, "gpt-5", s)).toBe("claude-opus-5-5");
+    expect(resolveModel(VARIANTS.anthropic, undefined, s)).toBe("claude-opus-5-5");
     expect(resolveModel(VARIANTS.openai, "sonnet", s)).toBe("gpt-5");
     expect(resolveModel(VARIANTS.openai, "gpt-5-mini", s)).toBe("gpt-5-mini");
     expect(resolveModel(VARIANTS.openrouter, "anthropic/claude-sonnet-4.5", s)).toBe("anthropic/claude-sonnet-4.5");

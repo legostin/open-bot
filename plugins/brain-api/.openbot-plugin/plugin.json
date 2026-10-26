@@ -21,7 +21,7 @@
           "type": "string",
           "title": "Модель Anthropic по умолчанию",
           "description": "Если у агента не указана модель. Псевдонимы агента: opus, sonnet, haiku, fable.",
-          "default": "claude-sonnet-5-5"
+          "default": "claude-opus-5-5"
         },
         "openaiModel": { "type": "string", "title": "Модель OpenAI по умолчанию", "default": "gpt-5" },
         "openrouterModel": { "type": "string", "title": "Модель OpenRouter по умолчанию", "default": "openrouter/auto" },

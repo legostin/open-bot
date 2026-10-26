@@ -1,12 +1,12 @@
-// Anthropic Messages API adapter: raw HTTP + SSE streaming, tool_use / tool_result blocks, prompt caching,
-// thinking blocks kept verbatim for replay, server-side refusal fallback.
+// Anthropic Messages API adapter on the official SDK (which sends anthropic-version 2026-10-21):
+// streaming, tool_use / tool_result blocks, prompt caching, thinking blocks kept verbatim for replay,
+// server-side refusal fallback. Requests go through the brain session's egress proxy (fetchVia).
 
+import Anthropic from "@anthropic-ai/sdk";
 import type { HistoryMessage, Part, RawPart } from "./history.ts";
-import { LlmError, classifyHttpError, isAbortError, networkError, request, trimSlash } from "./http.ts";
-import { parseSse } from "./sse.ts";
+import { LlmError, classifyHttpError, fetchVia, isAbortError, networkError, trimSlash } from "./http.ts";
 import { parseToolInput, sortedTools, toolSchema, zeroUsage, type CallResult, type ModelCall, type ModelStream, type StopKind, type Usage } from "./provider.ts";
 
-export const ANTHROPIC_VERSION = "2026-10-21";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 /** Models that accept `fallbacks: "default"` (Claude Haiku 5.5 has no server-side fallback). */
 const FALLBACK_MODELS = new Set(["claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"]);
@@ -76,7 +76,8 @@ function markCache(content: Block[]): boolean {
   return false;
 }
 
-export function buildAnthropicRequest(call: ModelCall, cfg: AnthropicConfig): { body: Record<string, unknown>; headers: Record<string, string> } {
+/** Request body (without `stream`) and the betas it needs. Built from our own history format, hence the loose block type. */
+export function buildAnthropicRequest(call: ModelCall, cfg: AnthropicConfig): { body: Record<string, unknown>; betas: string[] } {
   const tools = sortedTools(call.tools).map((t) => ({
     name: t.name,
     description: t.description ?? "",
@@ -106,17 +107,46 @@ export function buildAnthropicRequest(call: ModelCall, cfg: AnthropicConfig): { 
   body.messages = messages;
   if (cfg.effort) body.output_config = { effort: cfg.effort };
 
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    accept: "text/event-stream",
-    "x-api-key": cfg.apiKey,
-    "anthropic-version": ANTHROPIC_VERSION,
-  };
+  const betas: string[] = [];
   if (cfg.refusalFallback && FALLBACK_MODELS.has(call.model)) {
     body.fallbacks = "default";
-    headers["anthropic-beta"] = FALLBACK_BETA;
+    betas.push(FALLBACK_BETA);
   }
-  return { body, headers };
+  return { body, betas };
+}
+
+const clients = new Map<string, Anthropic>();
+
+function clientFor(cfg: AnthropicConfig): Anthropic {
+  const key = JSON.stringify([cfg.baseUrl, cfg.apiKey, cfg.proxyEnv ?? null]);
+  let c = clients.get(key);
+  if (!c) {
+    c = new Anthropic({
+      apiKey: cfg.apiKey,
+      baseURL: trimSlash(cfg.baseUrl),
+      fetch: fetchVia(cfg.proxyEnv, IDLE_TIMEOUT_MS),
+      // Limits and overloads are handled by the hub (brain fallback, retry after reset), not by in-place retries.
+      maxRetries: 0,
+      timeout: 60 * 60_000,
+    });
+    if (clients.size > 32) clients.clear();
+    clients.set(key, c);
+  }
+  return c;
+}
+
+/** SDK errors → LlmError with the same classification as before (limits, auth, context, thinking). */
+function toLlmError(e: unknown, url: string): LlmError {
+  if (e instanceof LlmError) return e;
+  if (e instanceof Anthropic.APIConnectionError) return networkError(e.cause ?? e, url);
+  if (e instanceof Anthropic.APIError) {
+    const headers: Record<string, string> = {};
+    e.headers?.forEach((v: string, k: string) => (headers[k.toLowerCase()] = v));
+    const errType = String((e.error as any)?.error?.type ?? (e.error as any)?.type ?? "");
+    const status = e.status ?? STREAM_ERROR_STATUS[errType] ?? 500;
+    return classifyHttpError(status, headers, JSON.stringify(e.error ?? { error: { message: e.message } }), "Anthropic");
+  }
+  return new LlmError("network", `Поток ответа Anthropic прервался: ${(e as Error)?.message ?? e}`);
 }
 
 interface BlockState {
@@ -206,19 +236,16 @@ const STREAM_ERROR_STATUS: Record<string, number> = {
 };
 
 export async function* anthropicStream(cfg: AnthropicConfig, call: ModelCall): ModelStream {
-  const { body, headers } = buildAnthropicRequest(call, cfg);
+  const { body, betas } = buildAnthropicRequest(call, cfg);
   const url = `${trimSlash(cfg.baseUrl)}/v1/messages`;
   const usage: Usage = zeroUsage();
-  let res;
+  let stream: AsyncIterable<Anthropic.Beta.Messages.BetaRawMessageStreamEvent>;
   try {
-    res = await request(url, { method: "POST", headers, body: JSON.stringify(body), signal: call.signal, proxyEnv: cfg.proxyEnv, idleTimeoutMs: IDLE_TIMEOUT_MS });
+    const params = { ...body, stream: true, ...(betas.length ? { betas } : {}) } as unknown as Anthropic.Beta.Messages.MessageCreateParamsStreaming;
+    stream = await clientFor(cfg).beta.messages.create(params, { signal: call.signal });
   } catch (e) {
-    if (call.signal.aborted || isAbortError(e)) return { parts: [], stop: "aborted", usage };
-    throw networkError(e, url);
-  }
-  if (res.status < 200 || res.status >= 300) {
-    const text = await res.text().catch(() => "");
-    throw classifyHttpError(res.status, res.headers, text, "Anthropic");
+    if (call.signal.aborted || isAbortError(e) || e instanceof Anthropic.APIUserAbortError) return { parts: [], stop: "aborted", usage };
+    throw toLlmError(e, url);
   }
 
   const blocks: Array<BlockState | undefined> = [];
@@ -237,14 +264,9 @@ export async function* anthropicStream(cfg: AnthropicConfig, call: ModelCall): M
   };
 
   try {
-    for await (const ev of parseSse(res.body)) {
-      let d: any;
-      try {
-        d = JSON.parse(ev.data);
-      } catch {
-        continue;
-      }
-      switch (d?.type ?? ev.event) {
+    for await (const ev of stream) {
+      const d: any = ev;
+      switch (d?.type) {
         case "message_start":
           model = d.message?.model;
           setUsage(d.message?.usage);
@@ -283,7 +305,7 @@ export async function* anthropicStream(cfg: AnthropicConfig, call: ModelCall): M
     }
   } catch (e) {
     if (call.signal.aborted) return { parts: textSoFar(blocks), stop: "aborted", usage, model };
-    const err = e instanceof LlmError ? e : new LlmError("network", `Поток ответа Anthropic прервался: ${(e as Error)?.message ?? e}`);
+    const err = toLlmError(e, url);
     err.partial = textSoFar(blocks);
     throw err;
   }

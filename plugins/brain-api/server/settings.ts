@@ -26,7 +26,7 @@ export interface ApiSettings {
 
 export const DEFAULT_SETTINGS: ApiSettings = {
   defaultVariant: "anthropic",
-  anthropicModel: "claude-sonnet-5-5",
+  anthropicModel: "claude-opus-5-5",
   openaiModel: "gpt-5",
   openrouterModel: "openrouter/auto",
   customModel: "llama3.1",

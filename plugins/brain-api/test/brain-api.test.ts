@@ -82,7 +82,7 @@ describe("brain-api plugin", () => {
     expect(llm.requests).toHaveLength(1);
     const req = llm.requests[0];
     expect(req.path).toBe("/v1/messages");
-    expect(req.headers["x-api-key"]).toBe("sk-ant-test");
+    expect(req.headers.authorization).toBe("Bearer sk-ant-test");
     expect(req.headers["anthropic-version"]).toBe("2026-10-21");
     expect(req.headers["anthropic-beta"]).toBe("server-side-fallback-2026-07-01");
     expect(req.body).toMatchObject({ model: "claude-sonnet-5-5", max_tokens: 16000, stream: true, fallbacks: "default" });

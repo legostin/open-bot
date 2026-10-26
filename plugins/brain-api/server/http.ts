@@ -99,6 +99,21 @@ export function request(urlStr: string, o: RequestOptions = {}): Promise<HttpRes
   });
 }
 
+/** A fetch implementation over request(): lets SDK clients use the session's egress proxy and idle timeout. */
+export function fetchVia(proxyEnv: Record<string, string> | undefined, idleTimeoutMs: number): typeof fetch {
+  return async (input, init = {}) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const headers: Record<string, string> = {};
+    new Headers(init.headers).forEach((v, k) => (headers[k] = v));
+    const body = init.body == null ? undefined : typeof init.body === "string" ? init.body : await new Response(init.body).text();
+    const res = await request(url, { method: init.method ?? "GET", headers, body, signal: init.signal ?? undefined, proxyEnv, idleTimeoutMs });
+    const out = new Headers();
+    for (const [k, v] of Object.entries(res.headers)) out.set(k, v);
+    const empty = res.status === 204 || res.status === 304 || init.method === "HEAD";
+    return new Response(empty ? null : ReadableStream.from(res.body), { status: res.status, headers: out });
+  };
+}
+
 // ---------- error classification ----------
 
 function parseDuration(s: string): number | undefined {
