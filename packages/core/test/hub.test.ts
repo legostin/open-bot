@@ -171,6 +171,15 @@ describe("hub (integration)", () => {
     const agents: any[] = await web.req("GET", "/api/agents");
     expect(agents.find((a) => a.id === "assistant")).toBeTruthy();
     await web.req("PATCH", "/api/settings", { language: "en" });
+
+    // Editing a translated agent in Russian changes the Russian name only.
+    await web.req("PUT", "/api/agents/polyglot", { name: "Polyglot", description: "Speaks", prompt: "x", i18n: { ru: { name: "Полиглот" } } });
+    const ru = await web.raw("PUT", "/api/agents/polyglot", { name: "Полиглот 2", description: "Говорит" }, { "x-openbot-locale": "ru" });
+    expect(ru.status).toBe(200);
+    const byLang = async (l: string) => ((await web.raw("GET", "/api/agents", undefined, { "x-openbot-locale": l })).json as any[]).find((a) => a.id === "polyglot");
+    expect(await byLang("en")).toMatchObject({ name: "Polyglot", description: "Speaks" });
+    expect(await byLang("ru")).toMatchObject({ name: "Полиглот 2", description: "Говорит" });
+    await web.req("DELETE", "/api/agents/polyglot");
   });
 
   it("delivers plugin files into the session workspace", async () => {

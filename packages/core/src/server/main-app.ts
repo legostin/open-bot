@@ -263,7 +263,18 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     api.put("/api/agents/:id", async (req) => {
       const id = (req.params as any).id as string;
       const b = (req.body ?? {}) as Partial<AgentDef> & { markdown?: string };
-      const agent: AgentDef = b.markdown ? agentFromMarkdown(id, b.markdown, "user") : { ...(hub.agents.get(id) ?? agentFromMarkdown(id, "", "user")), ...b, id, source: "user" };
+      const prev = hub.agents.get(id);
+      // The editor showed the name and description in the reader's language: edits to a translated
+      // agent go into that translation, so the other languages keep theirs.
+      const locale = requestLocale(req);
+      const tr = prev?.i18n?.[locale];
+      let patch: Partial<AgentDef> = b;
+      if (tr && !b.markdown) {
+        const { name, description, ...rest } = b;
+        const edited = { ...tr, ...(name !== undefined ? { name } : {}), ...(description !== undefined ? { description } : {}) };
+        patch = { ...rest, i18n: { ...prev!.i18n, [locale]: edited } };
+      }
+      const agent: AgentDef = b.markdown ? agentFromMarkdown(id, b.markdown, "user") : { ...(prev ?? agentFromMarkdown(id, "", "user")), ...patch, id, source: "user" };
       hub.audit.append("user", "agent.save", id);
       return hub.agents.save(agent);
     });
