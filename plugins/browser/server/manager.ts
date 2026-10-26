@@ -7,6 +7,7 @@ import { mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolResult } from "@openbot/shared";
 import type { PluginContext } from "@openbot/plugin-sdk";
+import { createChromiumInstaller, INSTALL_WAIT_MS, isMissingExecutableError, type ChromiumInstaller } from "./install.ts";
 import { pageCall } from "./page-script.ts";
 import { ACTION_LABEL_RE, LINK_ACTION_LABEL_RE } from "./safety.ts";
 import {
@@ -64,6 +65,8 @@ interface Cast {
 export class BrowserManager {
   ctx: PluginContext;
   settings: BrowserSettings;
+  /** Installs Playwright's Chromium when it is missing (outside Docker); launches wait for it. */
+  readonly installer: ChromiumInstaller;
   readonly downloadsDir: string;
   private readonly profileDir: string;
   private context: BrowserContext | null = null;
@@ -90,6 +93,11 @@ export class BrowserManager {
   constructor(ctx: PluginContext) {
     this.ctx = ctx;
     this.settings = readSettings(ctx.settings);
+    this.installer = createChromiumInstaller({
+      chromiumPath: () => chromium.executablePath(),
+      log: ctx.log,
+      onChange: () => this.scheduleState(),
+    });
     this.downloadsDir = join(ctx.dataDir, "downloads");
     this.profileDir = join(ctx.dataDir, "profile");
     this.timers.push(setInterval(() => void this.tick(), 5_000));
@@ -143,6 +151,8 @@ export class BrowserManager {
   }
 
   private async launch(): Promise<BrowserContext> {
+    // Outside Docker Chromium may still be downloading (or missing): wait for that one install.
+    await this.installer.ensure(INSTALL_WAIT_MS);
     mkdirSync(this.profileDir, { recursive: true });
     mkdirSync(this.downloadsDir, { recursive: true });
     // A previous process (or container) may have left Chromium's profile lock behind; we are the only user of it.
@@ -164,18 +174,32 @@ export class BrowserManager {
           ...(proxy ? ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"] : []),
         ],
       });
+    // Playwright still misses a browser file the installer's check did not know about: run the installer, retry once.
+    const openOrInstall = async (h: boolean): Promise<BrowserContext> => {
+      try {
+        return await open(h);
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        if (!isMissingExecutableError(msg) || this.installer.disabled) throw e;
+        this.ctx.log.warn(`Playwright cannot find a browser executable (${msg.split("\n")[0]}): running the installer`);
+        await this.installer.ensure(INSTALL_WAIT_MS, true);
+        return await open(h);
+      }
+    };
     let context: BrowserContext;
     try {
-      context = await open(headless);
+      context = await openOrInstall(headless);
       this.headlessMode = headless;
     } catch (e: any) {
+      if (e instanceof ToolError) throw e;
       const msg = String(e?.message ?? e);
-      if (/Executable doesn't exist|browserType\.launch.*install/i.test(msg)) {
-        throw new ToolError("Chromium is not installed. On the server, run: npx playwright install chromium", "noChromium");
+      if (isMissingExecutableError(msg)) {
+        const off = this.installer.disabled ? ", and the automatic install is turned off (PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD)" : "";
+        throw new ToolError(`Chromium is not installed (${msg.split("\n")[0]})${off}. On the server, run: npx playwright install chromium`, "noChromium");
       }
       if (!headless) {
         this.ctx.log.warn(`headed launch failed (${msg.split("\n")[0]}), falling back to headless`);
-        context = await open(true);
+        context = await openOrInstall(true);
         this.headlessMode = true;
       } else {
         const detail = msg.split("\n")[0];
@@ -213,6 +237,7 @@ export class BrowserManager {
   async dispose(): Promise<void> {
     for (const t of this.timers) clearInterval(t);
     if (this.stateTimer) clearTimeout(this.stateTimer);
+    this.installer.dispose();
     await this.close();
   }
 
@@ -754,6 +779,7 @@ export class BrowserManager {
       tabs,
       url: active?.url() ?? "",
       title: active ? (this.titles.get(active) ?? "") : "",
+      install: this.installer.status(),
     });
   }
 }

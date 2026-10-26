@@ -14,6 +14,14 @@ interface Tab {
   active: boolean;
 }
 
+/** Playwright's Chromium being downloaded by the plugin (outside Docker, on first use). */
+interface InstallStatus {
+  installing: boolean;
+  step: string | null;
+  progress: number | null;
+  error: string | null;
+}
+
 interface BrowserState {
   running: boolean;
   headless: boolean | null;
@@ -22,6 +30,7 @@ interface BrowserState {
   tabs: Tab[];
   url: string;
   title: string;
+  install?: InstallStatus;
 }
 
 let host: OpenBotUI;
@@ -231,9 +240,26 @@ function BrowserPane() {
 
       {error && <div style={S.error}>{error}</div>}
 
-      {state && !state.running ? (
+      {state && !state.running && state.install?.installing ? (
+        <div>
+          <EmptyState icon="globe" title={t("ui.install.title")} hint={t("ui.install.hint")} />
+          <div style={{ ...S.row, justifyContent: "center" }}>
+            <Spinner size={14} />
+            {state.install.step && (
+              <span style={S.hint}>
+                {state.install.progress !== null
+                  ? t("ui.install.progress", { step: state.install.step, percent: state.install.progress })
+                  : t("ui.install.step", { step: state.install.step })}
+              </span>
+            )}
+          </div>
+        </div>
+      ) : state && !state.running ? (
         <div>
           <EmptyState icon="globe" title={t("ui.stopped.title")} hint={t("ui.stopped.hint")} />
+          {state.install?.error && (
+            <div style={{ ...S.error, textAlign: "center", marginBottom: 8 }}>{t("ui.install.failed", { detail: state.install.error })}</div>
+          )}
           <div style={{ display: "flex", justifyContent: "center" }}>
             <Button onClick={() => send({ type: "start" })}>{t("ui.start")}</Button>
           </div>
