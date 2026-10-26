@@ -68,6 +68,7 @@ export async function startMockTelegram(token: string): Promise<MockTelegram> {
       case "answerCallbackQuery":
       case "sendChatAction":
       case "deleteWebhook":
+      case "setMyCommands":
         return ok(true);
       default:
         return { status: 404, body: { ok: false, error_code: 404, description: "Not Found: method not found" } };

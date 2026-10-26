@@ -168,13 +168,20 @@ export async function* openAiStream(cfg: OpenAiConfig, call: ModelCall): ModelSt
     }
   } catch (e) {
     if (call.signal.aborted) return { parts: partial(), stop: "aborted", usage, model };
-    const err = e instanceof LlmError ? e : new LlmError("network", `Поток ответа ${cfg.label} прервался: ${(e as Error)?.message ?? e}`);
+    const detail = String((e as Error)?.message ?? e);
+    const err =
+      e instanceof LlmError
+        ? e
+        : new LlmError("network", `The ${cfg.label} response stream broke off: ${detail}`, { key: "error.streamBroken", params: { provider: cfg.label, detail } });
     err.partial = partial();
     throw err;
   }
   if (call.signal.aborted) return { parts: partial(), stop: "aborted", usage, model };
   if (!done && !finish) {
-    const err = new LlmError("network", `Поток ответа ${cfg.label} оборвался до конца сообщения`);
+    const err = new LlmError("network", `The ${cfg.label} response stream ended before the message was complete`, {
+      key: "error.streamEnded",
+      params: { provider: cfg.label },
+    });
     err.partial = partial();
     throw err;
   }

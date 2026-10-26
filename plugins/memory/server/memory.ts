@@ -25,6 +25,13 @@ export interface WriteInput {
 }
 
 const MAX_CONTENT = 100_000;
+const MAX_TITLE = 200;
+
+const tooLong = () => new PathError("contentTooLong", `Text is too long (max ${MAX_CONTENT} characters)`, { max: MAX_CONTENT });
+const indexReadOnly = () => new PathError("indexReadOnly", `${INDEX_FILE} is generated automatically and cannot be edited`, { file: INDEX_FILE });
+/** Exported for the HTTP handler. */
+export const factNotFound = (path: string) => new NotFoundError("factNotFound", `Fact not found: ${path}`, { path });
+const notInReview = (path: string) => new NotFoundError("notInReview", `No fact pending review at ${path}`, { path });
 
 export class Memory {
   store: MemoryStore;
@@ -89,12 +96,12 @@ export class Memory {
       const title = String(input.title ?? "")
         .replace(/\s+/g, " ")
         .trim();
-      if (!title) throw new PathError("Нужен заголовок факта (title)");
-      if (title.length > 200) throw new PathError("Слишком длинный заголовок (максимум 200 символов)");
+      if (!title) throw new PathError("titleRequired", "A fact title (title) is required");
+      if (title.length > MAX_TITLE) throw new PathError("titleTooLong", `Title is too long (max ${MAX_TITLE} characters)`, { max: MAX_TITLE });
       const content = stripFrontmatter(String(input.content ?? "")).trim();
-      if (content.length > MAX_CONTENT) throw new PathError(`Слишком длинный текст (максимум ${MAX_CONTENT} символов)`);
+      if (content.length > MAX_CONTENT) throw tooLong();
       const path = input.path ? normalizePath(input.path) : this.uniquePath(title);
-      if (path === INDEX_FILE) throw new PathError(`${INDEX_FILE} генерируется автоматически и не редактируется`);
+      if (path === INDEX_FILE) throw indexReadOnly();
       const existing = this.store.facts.get(path);
       const now = new Date().toISOString();
       const fact: Fact = {
@@ -123,10 +130,10 @@ export class Memory {
   forget(rawPath: string): Promise<{ path: string }> {
     return this.lock(async () => {
       const path = normalizePath(rawPath);
-      if (path === INDEX_FILE) throw new PathError(`${INDEX_FILE} генерируется автоматически`);
+      if (path === INDEX_FILE) throw new PathError("indexGenerated", `${INDEX_FILE} is generated automatically`, { file: INDEX_FILE });
       const a = this.store.removeActive(path);
       const r = this.store.removeReview(path);
-      if (!a && !r) throw new NotFoundError(`Факт не найден: ${path}`);
+      if (!a && !r) throw factNotFound(path);
       this.index.remove(path);
       await this.commit("forget", path);
       return { path };
@@ -137,8 +144,8 @@ export class Memory {
   putRaw(rawPath: string, raw: string): Promise<Fact> {
     return this.lock(async () => {
       const path = normalizePath(rawPath);
-      if (path === INDEX_FILE) throw new PathError(`${INDEX_FILE} генерируется автоматически и не редактируется`);
-      if (raw.length > MAX_CONTENT) throw new PathError(`Слишком длинный текст (максимум ${MAX_CONTENT} символов)`);
+      if (path === INDEX_FILE) throw indexReadOnly();
+      if (raw.length > MAX_CONTENT) throw tooLong();
       const existing = this.store.facts.get(path);
       const parsed = parseFact(path, raw);
       const now = new Date().toISOString();
@@ -161,7 +168,7 @@ export class Memory {
     return this.lock(async () => {
       const path = normalizePath(rawPath);
       const item = this.store.review.get(path);
-      if (!item) throw new NotFoundError(`Нет факта на проверке: ${path}`);
+      if (!item) throw notInReview(path);
       const existing = this.store.facts.get(path);
       const { inPlace: _inPlace, ...rest } = item;
       const fact: Fact = { ...rest, status: "active", created: existing?.created || item.created, updated: new Date().toISOString() };
@@ -176,7 +183,7 @@ export class Memory {
   reject(rawPath: string): Promise<{ path: string }> {
     return this.lock(async () => {
       const path = normalizePath(rawPath);
-      if (!this.store.removeReview(path)) throw new NotFoundError(`Нет факта на проверке: ${path}`);
+      if (!this.store.removeReview(path)) throw notInReview(path);
       await this.commit("reject", path);
       return { path };
     });

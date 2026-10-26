@@ -3,6 +3,7 @@
 
 import http from "node:http";
 import https from "node:https";
+import type { Params } from "@openbot/shared";
 import type { Part } from "./history.ts";
 
 export type LlmErrorKind = "limit" | "auth" | "network" | "http" | "context" | "thinking" | "aborted";
@@ -13,11 +14,16 @@ export class LlmError extends Error {
   resetAt?: string;
   /** Content streamed before the failure. */
   partial?: Part[];
-  constructor(kind: LlmErrorKind, message: string, extra: { status?: number; resetAt?: string } = {}) {
+  /** Catalog key (and params) of the text shown to the user; `message` is its English version (logs, fallback). */
+  key?: string;
+  params?: Params;
+  constructor(kind: LlmErrorKind, message: string, extra: { status?: number; resetAt?: string; key?: string; params?: Params } = {}) {
     super(message);
     this.kind = kind;
     this.status = extra.status;
     this.resetAt = extra.resetAt;
+    this.key = extra.key;
+    this.params = extra.params;
   }
 }
 
@@ -93,7 +99,7 @@ export function request(urlStr: string, o: RequestOptions = {}): Promise<HttpRes
         },
       });
     });
-    if (o.idleTimeoutMs) req.setTimeout(o.idleTimeoutMs, () => req.destroy(new Error(`нет ответа ${Math.round(o.idleTimeoutMs! / 1000)} с`)));
+    if (o.idleTimeoutMs) req.setTimeout(o.idleTimeoutMs, () => req.destroy(new Error(`no response for ${Math.round(o.idleTimeoutMs! / 1000)} s`)));
     req.on("error", reject);
     req.end(o.body);
   });
@@ -177,15 +183,19 @@ export function classifyHttpError(status: number, headers: Record<string, string
     return new LlmError("limit", `${provider}: ${message}`, { status, resetAt: resetAtFromHeaders(headers) });
   }
   if (/egress to .* is not allowed/.test(message)) {
-    return new LlmError("network", `Доступ к хосту запрещён политикой сети хаба (${message}). Добавьте хост в настройку «brainEgressAllow».`, { status });
+    return new LlmError("network", `The hub's network policy blocks this host (${message}). Add the host to the "brainEgressAllow" hub setting.`, {
+      status,
+      key: "error.egressDenied",
+      params: { message },
+    });
   }
   if (status === 401 || status === 403) {
-    return new LlmError("auth", `Ключ API отклонён (${provider}, ${status}): ${message}`, { status });
+    return new LlmError("auth", `API key rejected (${provider}, ${status}): ${message}`, { status, key: "error.keyRejected", params: { provider, status, message } });
   }
   if ((status === 400 || status === 413) && CONTEXT_RE.test(message)) return new LlmError("context", `${provider}: ${message}`, { status });
   if (status === 400 && /signature|thinking/i.test(message)) return new LlmError("thinking", `${provider}: ${message}`, { status });
-  if (status === 404) return new LlmError("http", `${provider}: модель или адрес не найдены (404): ${message}`, { status });
-  return new LlmError("http", `${provider}: ошибка API ${status}: ${message}`, { status });
+  if (status === 404) return new LlmError("http", `${provider}: model or URL not found (404): ${message}`, { status, key: "error.notFound", params: { provider, message } });
+  return new LlmError("http", `${provider}: API error ${status}: ${message}`, { status, key: "error.api", params: { provider, status, message } });
 }
 
 /** Network-level failure (connection refused, DNS, TLS, reset). */
@@ -197,7 +207,8 @@ export function networkError(e: unknown, url: string): LlmError {
   } catch {
     /* keep raw */
   }
-  return new LlmError("network", `Не удалось связаться с ${host}: ${err?.code ? err.code + " " : ""}${err?.message ?? String(e)}`);
+  const detail = `${err?.code ? err.code + " " : ""}${err?.message ?? String(e)}`;
+  return new LlmError("network", `Could not reach ${host}: ${detail}`, { key: "error.unreachable", params: { host, detail } });
 }
 
 export function trimSlash(s: string): string {

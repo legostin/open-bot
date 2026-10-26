@@ -1,24 +1,27 @@
 // Time math: cron in the user's timezone, heartbeat slots, local dates, ISO parsing in a timezone.
 
 import { Cron } from "croner";
+import { TriggerError } from "./errors.ts";
 import type { Trigger } from "./types.ts";
 
-const WEEKDAYS_RU = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const CRON_HINT = '(minute hour day month weekday), e.g. "0 9 * * 1-5"';
 
 function cron(expr: string, tz?: string): Cron {
   return new Cron(expr.trim(), { timezone: tz, paused: true, mode: "5-part" });
 }
 
-/** Error message for a bad 5-field cron, or undefined when valid. */
-export function cronError(expr: unknown): string | undefined {
-  if (typeof expr !== "string" || !expr.trim()) return 'Укажите cron из 5 полей (минута час день месяц день_недели), например "0 9 * * 1-5"';
+/** What is wrong with a 5-field cron, or undefined when valid. */
+export function cronError(expr: unknown): TriggerError | undefined {
+  if (typeof expr !== "string" || !expr.trim()) return new TriggerError("cronMissing", `Specify a 5-field cron ${CRON_HINT}`);
   if (expr.trim().split(/\s+/).length !== 5)
-    return `Неверное cron-выражение "${expr}": нужно ровно 5 полей (минута час день месяц день_недели), например "0 9 * * 1-5"`;
+    return new TriggerError("cronFields", `Invalid cron expression "${expr}": exactly 5 fields are required ${CRON_HINT}`, { expr });
   try {
     const c = cron(expr);
-    if (!c.nextRun()) return `Cron "${expr}" никогда не сработает`;
+    if (!c.nextRun()) return new TriggerError("cronNever", `Cron "${expr}" never fires`, { expr });
   } catch (e: any) {
-    return `Неверное cron-выражение "${expr}": ${String(e?.message ?? e).replace(/^CronPattern: /, "")}`;
+    const reason = String(e?.message ?? e).replace(/^CronPattern: /, "");
+    return new TriggerError("cronInvalid", `Invalid cron expression "${expr}": ${reason}`, { expr, reason });
   }
   return undefined;
 }
@@ -31,8 +34,9 @@ export function cronNext(expr: string, tz: string, after: Date): Date | null {
   }
 }
 
-export function timeError(t: unknown): string | undefined {
-  return typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? undefined : `Время "${String(t)}" должно быть в формате ЧЧ:ММ, например "09:30"`;
+export function timeError(t: unknown): TriggerError | undefined {
+  if (typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t)) return undefined;
+  return new TriggerError("timeFormat", `Time "${String(t)}" must be in HH:MM format, e.g. "09:30"`, { value: String(t) });
 }
 
 /** Next heartbeat slot: the earliest of the "HH:MM" times on the given weekdays, in tz. */
@@ -69,13 +73,13 @@ export function localDate(d: Date, tz: string): string {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
-/** "2026-10-27 09:00 (вт)" in tz. */
+/** "2026-10-27 09:00 (Tue)" in tz (for prompts and tool output). */
 export function formatLocal(d: Date | string | undefined, tz: string): string {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
   if (Number.isNaN(date.getTime())) return "—";
   const p = zonedParts(date, tz);
-  const wd = WEEKDAYS_RU[new Date(Date.UTC(+p.year, +p.month - 1, +p.day)).getUTCDay()];
+  const wd = WEEKDAYS[new Date(Date.UTC(+p.year, +p.month - 1, +p.day)).getUTCDay()];
   return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute} (${wd})`;
 }
 
@@ -139,20 +143,20 @@ export function computeNextRun(t: Trigger, tz: string, now: Date): Date | null {
   }
 }
 
-/** Human description of when a trigger fires (Russian, for the UI and tool output). */
+/** English description of when a trigger fires (tool output; the UI builds a localized one from the fields). */
 export function describeSchedule(t: Trigger): string {
   switch (t.kind) {
     case "schedule":
       return `cron ${t.cron}`;
     case "once":
-      return `один раз: ${t.at}`;
+      return `once: ${t.at}`;
     case "watch":
-      return `каждые ${t.intervalMinutes} мин: ${t.url}${t.selector ? ` [${t.selector}]` : ""}${t.jsonPath ? ` {${t.jsonPath}}` : ""}`;
+      return `every ${t.intervalMinutes} min: ${t.url}${t.selector ? ` [${t.selector}]` : ""}${t.jsonPath ? ` {${t.jsonPath}}` : ""}`;
     case "event":
-      return "вебхук";
+      return "webhook";
     case "heartbeat": {
-      const wd = t.weekdays?.length === 5 && [1, 2, 3, 4, 5].every((d) => t.weekdays!.includes(d)) ? "по будням" : (t.weekdays ?? []).map((d) => WEEKDAYS_RU[d]).join(",");
-      return `${wd} в ${(t.times ?? []).join(", ")}`;
+      const wd = t.weekdays?.length === 5 && [1, 2, 3, 4, 5].every((d) => t.weekdays!.includes(d)) ? "weekdays" : (t.weekdays ?? []).map((d) => WEEKDAYS[d]).join(",");
+      return `${wd} at ${(t.times ?? []).join(", ")}`;
     }
   }
 }

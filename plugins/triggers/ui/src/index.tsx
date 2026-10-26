@@ -1,10 +1,11 @@
-// "Триггеры" page: list, enable toggle, create/edit per kind, run now, run history.
+// "Triggers" page: list, enable toggle, create/edit per kind, run now, run history.
 
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, EmptyState, Spinner, definePluginUI } from "@openbot/ui";
 import type { OpenBotUI } from "@openbot/ui";
 
 type Kind = "schedule" | "once" | "watch" | "event" | "heartbeat";
+type ErrorParams = Record<string, string | number>;
 
 interface Trigger {
   id: string;
@@ -25,11 +26,12 @@ interface Trigger {
   weekdays?: number[];
   nextRunAt: string | null;
   webhookUrl: string | null;
-  scheduleText: string;
   state: {
     lastRunAt?: string;
     lastStatus?: "ok" | "error" | "skipped";
     lastError?: string;
+    lastErrorCode?: string;
+    lastErrorParams?: ErrorParams;
     lastCheckedAt?: string;
     lastValue?: string;
     done?: boolean;
@@ -44,6 +46,8 @@ interface Run {
   taskId?: string;
   taskStatus?: string;
   detail?: string;
+  code?: string;
+  params?: ErrorParams;
 }
 
 interface ListResponse {
@@ -52,38 +56,49 @@ interface ListResponse {
   agents: Array<{ id: string; name: string }>;
 }
 
-const KIND_LABEL: Record<Kind, string> = {
-  schedule: "Расписание",
-  once: "Один раз",
-  watch: "Слежение",
-  event: "Вебхук",
-  heartbeat: "Обзор",
-};
-const KIND_HINT: Record<Kind, string> = {
-  schedule: "Повторяется по cron-расписанию в вашем часовом поясе.",
-  once: "Срабатывает один раз в указанное время — напоминание.",
-  watch: "Проверяет страницу или JSON и запускает агента, только когда значение изменилось.",
-  event: "Даёт адрес вебхука с секретом: внешний сервис присылает событие — агент его разбирает.",
-  heartbeat: "Регулярный обзор: агент сам смотрит память, задачи и ближайшие дела и пишет, только если есть что-то важное.",
-};
-const REASON_LABEL: Record<string, string> = {
-  schedule: "по расписанию",
-  "catch-up": "пропущенный запуск",
-  once: "в назначенное время",
-  change: "изменение",
-  webhook: "вебхук",
-  heartbeat: "обзор",
-  manual: "вручную",
-};
-const WEEKDAYS = [
-  [1, "Пн"],
-  [2, "Вт"],
-  [3, "Ср"],
-  [4, "Чт"],
-  [5, "Пт"],
-  [6, "Сб"],
-  [0, "Вс"],
-] as const;
+// Set in definePluginUI; the page reloads when the language changes.
+let i18n: OpenBotUI["i18n"];
+const tr = (key: string, params?: ErrorParams) => i18n.t(key, params);
+
+const KINDS: Kind[] = ["schedule", "once", "watch", "event", "heartbeat"];
+/** Form order of weekdays: Monday first, Sunday last (0 = Sunday). */
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/** Short weekday name in the interface language (0 = Sunday); 2026-10-25 is a Sunday. */
+function weekdayName(d: number): string {
+  return i18n.formatDate(Date.UTC(2026, 9, 25 + d, 12), { weekday: "short", timeZone: "UTC" });
+}
+
+const capitalize = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+
+/** An error from the backend in the interface language: the catalog message for its code, else the text as is. */
+function errorText(code: string | undefined, params: ErrorParams | undefined, fallback: string | undefined): string {
+  if (code) {
+    const key = `error.${code}`;
+    const text = tr(key, params);
+    if (text !== key) return text;
+  }
+  return fallback ?? "";
+}
+
+/** When a trigger fires, in the interface language. */
+function describeSchedule(t: Trigger): string {
+  switch (t.kind) {
+    case "schedule":
+      return tr("ui.schedule.cron", { cron: t.cron ?? "" });
+    case "once":
+      return tr("ui.schedule.once", { at: t.at ?? "" });
+    case "watch":
+      return tr("ui.schedule.watch", { n: t.intervalMinutes ?? 60, target: `${t.url}${t.selector ? ` [${t.selector}]` : ""}${t.jsonPath ? ` {${t.jsonPath}}` : ""}` });
+    case "event":
+      return tr("ui.schedule.webhook");
+    case "heartbeat": {
+      const wd = t.weekdays ?? [];
+      const days = wd.length === 5 && [1, 2, 3, 4, 5].every((d) => wd.includes(d)) ? tr("ui.schedule.weekdays") : wd.map(weekdayName).join(",");
+      return tr("ui.schedule.heartbeat", { days, times: (t.times ?? []).join(", ") });
+    }
+  }
+}
 
 const s = {
   page: { maxWidth: 960, margin: "0 auto", padding: 16, display: "grid", gap: 12 },
@@ -99,7 +114,7 @@ const s = {
 function fmt(iso: string | null | undefined, tz: string): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return i18n.formatDate(iso, { timeZone: tz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   } catch {
     return iso;
   }
@@ -117,11 +132,11 @@ function toLocalInput(iso: string | undefined, tz: string): string {
 }
 
 function statusBadge(t: Trigger) {
-  if (t.kind === "once" && t.state.done) return <Badge tone="neutral">выполнен</Badge>;
-  if (!t.enabled) return <Badge tone="neutral">выключен</Badge>;
-  if (t.state.lastStatus === "error") return <Badge tone="danger">ошибка</Badge>;
-  if (t.state.lastStatus === "skipped") return <Badge tone="warning">пропуск</Badge>;
-  return <Badge tone="success">активен</Badge>;
+  if (t.kind === "once" && t.state.done) return <Badge tone="neutral">{tr("ui.status.done")}</Badge>;
+  if (!t.enabled) return <Badge tone="neutral">{tr("ui.status.off")}</Badge>;
+  if (t.state.lastStatus === "error") return <Badge tone="danger">{tr("ui.status.error")}</Badge>;
+  if (t.state.lastStatus === "skipped") return <Badge tone="warning">{tr("ui.status.skipped")}</Badge>;
+  return <Badge tone="success">{tr("ui.status.active")}</Badge>;
 }
 
 // ---------- form ----------
@@ -177,7 +192,7 @@ function TriggerForm({ ui, initial, agents, tz, onDone }: FormProps) {
     try {
       if (editing) await ui.plugin.http("PATCH", `/triggers/${initial!.id}`, body);
       else await ui.plugin.http("POST", "/triggers", body);
-      ui.toast(editing ? "Триггер сохранён" : "Триггер создан", "success");
+      ui.toast(editing ? tr("ui.form.saved") : tr("ui.form.created"), "success");
       onDone();
     } catch (e: any) {
       setError(e?.message ?? String(e));
@@ -195,26 +210,26 @@ function TriggerForm({ ui, initial, agents, tz, onDone }: FormProps) {
   );
 
   return (
-    <Card title={editing ? `Изменить: ${initial!.name}` : "Новый триггер"}>
+    <Card title={editing ? tr("ui.form.editTitle", { name: initial!.name }) : tr("ui.form.newTitle")}>
       {field(
-        "Вид",
+        tr("ui.form.kind"),
         <select style={s.input} value={kind} disabled={editing} onChange={(e: any) => setKind(e.target.value)}>
-          {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
+          {KINDS.map((k) => (
             <option key={k} value={k}>
-              {KIND_LABEL[k]}
+              {tr(`ui.kind.${k}`)}
             </option>
           ))}
         </select>,
-        KIND_HINT[kind],
+        tr(`ui.kindHint.${kind}`),
       )}
-      {field("Название", <input style={s.input} value={name} onChange={(e: any) => setName(e.target.value)} placeholder="Например: Утренняя сводка" />)}
+      {field(tr("ui.form.name"), <input style={s.input} value={name} onChange={(e: any) => setName(e.target.value)} placeholder={tr("ui.form.namePlaceholder")} />)}
       {field(
-        "Что сделать агенту",
-        <textarea style={s.input} rows={5} value={prompt} onChange={(e: any) => setPrompt(e.target.value)} placeholder="Например: проверь почту и напиши, если есть что-то срочное" />,
-        "Контекст события (изменение, данные вебхука) добавляется автоматически.",
+        tr("ui.form.prompt"),
+        <textarea style={s.input} rows={5} value={prompt} onChange={(e: any) => setPrompt(e.target.value)} placeholder={tr("ui.form.promptPlaceholder")} />,
+        tr("ui.form.promptHint"),
       )}
       {field(
-        "Агент",
+        tr("ui.form.agent"),
         <select style={s.input} value={agent} onChange={(e: any) => setAgent(e.target.value)}>
           {(agents.length ? agents : [{ id: agent, name: agent }]).map((a) => (
             <option key={a.id} value={a.id}>
@@ -225,54 +240,60 @@ function TriggerForm({ ui, initial, agents, tz, onDone }: FormProps) {
       )}
 
       {kind === "schedule" &&
-        field("Cron", <input style={{ ...s.input, ...s.mono }} value={cron} onChange={(e: any) => setCron(e.target.value)} />, `минута час день месяц день_недели, часовой пояс ${tz}. «0 9 * * 1-5» — по будням в 9:00.`)}
-      {kind === "once" && field("Когда", <input type="datetime-local" style={s.input} value={at} onChange={(e: any) => setAt(e.target.value)} />, `Время в часовом поясе ${tz}.`)}
+        field(tr("ui.form.cron"), <input style={{ ...s.input, ...s.mono }} value={cron} onChange={(e: any) => setCron(e.target.value)} />, tr("ui.form.cronHint", { tz }))}
+      {kind === "once" && field(tr("ui.form.at"), <input type="datetime-local" style={s.input} value={at} onChange={(e: any) => setAt(e.target.value)} />, tr("ui.form.atHint", { tz }))}
       {kind === "watch" && (
         <>
-          {field("Адрес страницы или API", <input style={s.input} value={url} onChange={(e: any) => setUrl(e.target.value)} placeholder="https://…" />)}
+          {field(tr("ui.form.url"), <input style={s.input} value={url} onChange={(e: any) => setUrl(e.target.value)} placeholder="https://…" />)}
           {field(
-            "Что сравнивать",
+            tr("ui.form.mode"),
             <select style={s.input} value={mode} onChange={(e: any) => setMode(e.target.value)}>
-              <option value="page">Весь текст страницы</option>
-              <option value="selector">Текст по CSS-селектору</option>
-              <option value="json">Значение в JSON</option>
+              <option value="page">{tr("ui.form.mode.page")}</option>
+              <option value="selector">{tr("ui.form.mode.selector")}</option>
+              <option value="json">{tr("ui.form.mode.json")}</option>
             </select>,
           )}
-          {mode === "selector" && field("CSS-селектор", <input style={{ ...s.input, ...s.mono }} value={selector} onChange={(e: any) => setSelector(e.target.value)} placeholder=".price" />)}
-          {mode === "json" && field("JSON-путь", <input style={{ ...s.input, ...s.mono }} value={jsonPath} onChange={(e: any) => setJsonPath(e.target.value)} placeholder="data.items[0].price" />)}
-          {field("Интервал проверки, минут", <input type="number" min={5} style={s.input} value={interval} onChange={(e: any) => setIntervalMin(e.target.value)} />, "Не меньше 5 минут. Агент запускается только при изменении.")}
+          {mode === "selector" &&
+            field(tr("ui.form.selector"), <input style={{ ...s.input, ...s.mono }} value={selector} onChange={(e: any) => setSelector(e.target.value)} placeholder=".price" />)}
+          {mode === "json" &&
+            field(tr("ui.form.jsonPath"), <input style={{ ...s.input, ...s.mono }} value={jsonPath} onChange={(e: any) => setJsonPath(e.target.value)} placeholder="data.items[0].price" />)}
+          {field(
+            tr("ui.form.interval"),
+            <input type="number" min={5} style={s.input} value={interval} onChange={(e: any) => setIntervalMin(e.target.value)} />,
+            tr("ui.form.intervalHint"),
+          )}
         </>
       )}
       {kind === "heartbeat" && (
         <>
-          {field("Время", <input style={s.input} value={times} onChange={(e: any) => setTimes(e.target.value)} placeholder="10:00, 18:00" />, `Через запятую, часовой пояс ${tz}.`)}
+          {field(tr("ui.form.times"), <input style={s.input} value={times} onChange={(e: any) => setTimes(e.target.value)} placeholder="10:00, 18:00" />, tr("ui.form.timesHint", { tz }))}
           <div style={s.field}>
-            <span>Дни недели</span>
+            <span>{tr("ui.form.weekdays")}</span>
             <div style={s.row}>
-              {WEEKDAYS.map(([d, label]) => (
+              {WEEKDAY_ORDER.map((d) => (
                 <label key={d} style={s.row}>
                   <input
                     type="checkbox"
                     checked={weekdays.includes(d)}
                     onChange={(e: any) => setWeekdays(e.target.checked ? [...weekdays, d] : weekdays.filter((x) => x !== d))}
                   />
-                  {label}
+                  {capitalize(weekdayName(d))}
                 </label>
               ))}
             </div>
           </div>
         </>
       )}
-      {kind === "event" && !editing && <p style={s.muted}>Адрес вебхука и секрет появятся после создания.</p>}
-      {field("Запусков в день, не больше", <input type="number" min={1} style={s.input} value={maxRuns} onChange={(e: any) => setMaxRuns(e.target.value)} />)}
+      {kind === "event" && !editing && <p style={s.muted}>{tr("ui.form.eventHint")}</p>}
+      {field(tr("ui.form.maxRuns"), <input type="number" min={1} style={s.input} value={maxRuns} onChange={(e: any) => setMaxRuns(e.target.value)} />)}
 
       {error && <p style={s.error}>{error}</p>}
       <div style={s.row}>
         <Button variant="primary" disabled={busy} onClick={submit}>
-          {editing ? "Сохранить" : "Создать"}
+          {editing ? tr("ui.form.save") : tr("ui.form.create")}
         </Button>
         <Button variant="ghost" disabled={busy} onClick={onDone}>
-          Отмена
+          {tr("ui.form.cancel")}
         </Button>
       </div>
     </Card>
@@ -297,40 +318,52 @@ function History({ ui, trigger, tz, onClose }: { ui: OpenBotUI; trigger: Trigger
   }, [ui, trigger.id, load]);
 
   return (
-    <Card title={`История: ${trigger.name}`} actions={<Button variant="ghost" size="sm" onClick={onClose}>Закрыть</Button>}>
+    <Card
+      title={tr("ui.history.title", { name: trigger.name })}
+      actions={
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          {tr("ui.history.close")}
+        </Button>
+      }
+    >
       {!runs ? (
         <Spinner />
       ) : runs.length === 0 ? (
-        <p style={s.muted}>Запусков пока не было.</p>
+        <p style={s.muted}>{tr("ui.history.empty")}</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <tbody>
-            {runs.map((r) => (
-              <tr key={r.id}>
-                <td style={{ padding: "4px 8px 4px 0", whiteSpace: "nowrap" }}>{fmt(r.at, tz)}</td>
-                <td style={{ padding: "4px 8px" }}>{REASON_LABEL[r.reason] ?? r.reason}</td>
-                <td style={{ padding: "4px 8px" }}>
-                  <Badge tone={r.status === "started" ? "success" : r.status === "skipped" ? "warning" : "danger"}>
-                    {r.status === "started" ? "запущен" : r.status === "skipped" ? "пропущен" : "ошибка"}
-                  </Badge>
-                </td>
-                <td style={{ padding: "4px 0 4px 8px" }}>
-                  {r.taskId ? (
-                    <a
-                      href={`/tasks/${r.taskId}`}
-                      onClick={(e: any) => {
-                        e.preventDefault();
-                        ui.navigate(`/tasks/${r.taskId}`);
-                      }}
-                    >
-                      задача{r.taskStatus ? ` (${r.taskStatus})` : ""}
-                    </a>
-                  ) : (
-                    <span style={s.muted}>{r.detail}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {runs.map((r) => {
+              const reasonKey = `ui.reason.${r.reason}`;
+              const reason = tr(reasonKey);
+              return (
+                <tr key={r.id}>
+                  <td style={{ padding: "4px 8px 4px 0", whiteSpace: "nowrap" }}>{fmt(r.at, tz)}</td>
+                  <td style={{ padding: "4px 8px" }}>{reason === reasonKey ? r.reason : reason}</td>
+                  <td style={{ padding: "4px 8px" }}>
+                    <Badge tone={r.status === "started" ? "success" : r.status === "skipped" ? "warning" : "danger"}>
+                      {r.status === "started" ? tr("ui.run.started") : r.status === "skipped" ? tr("ui.run.skipped") : tr("ui.run.error")}
+                    </Badge>
+                  </td>
+                  <td style={{ padding: "4px 0 4px 8px" }}>
+                    {r.taskId ? (
+                      <a
+                        href={`/tasks/${r.taskId}`}
+                        onClick={(e: any) => {
+                          e.preventDefault();
+                          ui.navigate(`/tasks/${r.taskId}`);
+                        }}
+                      >
+                        {tr("ui.run.task")}
+                        {r.taskStatus ? ` (${r.taskStatus})` : ""}
+                      </a>
+                    ) : (
+                      <span style={s.muted}>{errorText(r.code, r.params, r.detail)}</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -357,48 +390,59 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OpenBotUI; t: Trigg
   };
 
   const copy = (text: string) => {
-    void navigator.clipboard?.writeText(text).then(() => ui.toast("Скопировано", "success"));
+    void navigator.clipboard?.writeText(text).then(() => ui.toast(tr("ui.card.copied"), "success"));
   };
+
+  const lastError = t.state.lastError ? errorText(t.state.lastErrorCode, t.state.lastErrorParams, t.state.lastError) : "";
 
   return (
     <Card
       title={
         <span style={s.row}>
           <b>{t.name}</b>
-          <Badge tone="info">{KIND_LABEL[t.kind]}</Badge>
+          <Badge tone="info">{tr(`ui.kind.${t.kind}`)}</Badge>
           {statusBadge(t)}
         </span>
       }
       actions={
-        <label style={s.row} title={t.enabled ? "Выключить" : "Включить"}>
+        <label style={s.row} title={t.enabled ? tr("ui.card.disable") : tr("ui.card.enable")}>
           <input type="checkbox" checked={t.enabled} disabled={busy} onChange={(e: any) => call("PATCH", `/triggers/${t.id}`, { enabled: e.target.checked })} />
-          {t.enabled ? "Включён" : "Выключен"}
+          {t.enabled ? tr("ui.card.on") : tr("ui.card.off")}
         </label>
       }
     >
       <div style={{ display: "grid", gap: 4 }}>
-        <span style={s.muted}>{t.scheduleText}</span>
+        <span style={s.muted}>{describeSchedule(t)}</span>
         <span>
-          Следующий запуск: <b>{t.kind === "event" ? "по событию" : fmt(t.nextRunAt, tz)}</b> · Последний: {fmt(t.state.lastRunAt, tz)}
-          {t.kind === "watch" && t.state.lastCheckedAt && <> · Проверено: {fmt(t.state.lastCheckedAt, tz)}</>}
+          {tr("ui.card.next")} <b>{t.kind === "event" ? tr("ui.card.onEvent") : fmt(t.nextRunAt, tz)}</b> · {tr("ui.card.last")} {fmt(t.state.lastRunAt, tz)}
+          {t.kind === "watch" && t.state.lastCheckedAt && (
+            <>
+              {" "}
+              · {tr("ui.card.checked")} {fmt(t.state.lastCheckedAt, tz)}
+            </>
+          )}
         </span>
-        {t.state.lastError && <span style={s.error}>{t.state.lastError}</span>}
-        {t.kind === "watch" && t.state.lastValue && <span style={{ ...s.muted, ...s.mono }}>Текущее значение: {t.state.lastValue.slice(0, 200)}</span>}
+        {lastError && <span style={s.error}>{lastError}</span>}
+        {t.kind === "watch" && t.state.lastValue && (
+          <span style={{ ...s.muted, ...s.mono }}>
+            {tr("ui.card.value")} {t.state.lastValue.slice(0, 200)}
+          </span>
+        )}
         {t.kind === "event" && t.webhookUrl && (
           <div style={{ display: "grid", gap: 4 }}>
             <span style={s.row}>
               <span style={s.mono}>{t.webhookUrl}</span>
               <Button size="sm" variant="ghost" onClick={() => copy(t.webhookUrl!)}>
-                Копировать
+                {tr("ui.card.copy")}
               </Button>
             </span>
             <span style={s.row}>
-              Секрет (заголовок x-openbot-secret): <span style={s.mono}>{showSecret ? t.secret : "••••••••"}</span>
+              {tr("ui.card.secret")} <span style={s.mono}>{showSecret ? t.secret : "••••••••"}</span>
               <Button size="sm" variant="ghost" onClick={() => setShowSecret(!showSecret)}>
-                {showSecret ? "Скрыть" : "Показать"}
+                {showSecret ? tr("ui.card.hide") : tr("ui.card.show")}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => copy(t.secret ?? "")}>
-                Копировать
+                {tr("ui.card.copy")}
               </Button>
             </span>
           </div>
@@ -411,11 +455,14 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OpenBotUI; t: Trigg
           disabled={busy}
           onClick={() =>
             call("POST", `/triggers/${t.id}/run`, undefined, (r) =>
-              ui.toast(r?.status === "started" ? "Задача запущена" : `Не запущено: ${r?.detail ?? ""}`, r?.status === "started" ? "success" : "error"),
+              ui.toast(
+                r?.status === "started" ? tr("ui.card.started") : tr("ui.card.notStarted", { reason: errorText(r?.code, r?.params, r?.detail) }),
+                r?.status === "started" ? "success" : "error",
+              ),
             )
           }
         >
-          Запустить сейчас
+          {tr("ui.card.runNow")}
         </Button>
         {t.kind === "watch" && (
           <Button
@@ -424,28 +471,37 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OpenBotUI; t: Trigg
             disabled={busy}
             onClick={() =>
               call("POST", `/triggers/${t.id}/check`, undefined, (r) =>
-                ui.toast(r?.error ? `Ошибка: ${r.error}` : r?.changed ? "Есть изменения — агент запущен" : r?.baseline ? "Запомнил текущее значение" : "Изменений нет", r?.error ? "error" : "info"),
+                ui.toast(
+                  r?.error
+                    ? tr("ui.card.checkError", { error: errorText(r.code, r.params, r.error) })
+                    : r?.changed
+                      ? tr("ui.card.changed")
+                      : r?.baseline
+                        ? tr("ui.card.baseline")
+                        : tr("ui.card.unchanged"),
+                  r?.error ? "error" : "info",
+                ),
               )
             }
           >
-            Проверить
+            {tr("ui.card.check")}
           </Button>
         )}
         <Button size="sm" variant="ghost" disabled={busy} onClick={onEdit}>
-          Изменить
+          {tr("ui.card.edit")}
         </Button>
         <Button size="sm" variant="ghost" onClick={onHistory}>
-          История
+          {tr("ui.card.history")}
         </Button>
         <Button
           size="sm"
           variant="danger"
           disabled={busy}
           onClick={() => {
-            if (window.confirm(`Удалить триггер «${t.name}»?`)) void call("DELETE", `/triggers/${t.id}`);
+            if (window.confirm(tr("ui.card.confirmDelete", { name: t.name }))) void call("DELETE", `/triggers/${t.id}`);
           }}
         >
-          Удалить
+          {tr("ui.card.delete")}
         </Button>
       </div>
     </Card>
@@ -473,7 +529,7 @@ function TriggersPage({ ui }: { ui: OpenBotUI }) {
     return ui.plugin.on("changed", () => load());
   }, [ui, load]);
 
-  if (!data) return <div style={s.page}>{error ? <p style={s.error}>Не удалось загрузить триггеры: {error}</p> : <Spinner />}</div>;
+  if (!data) return <div style={s.page}>{error ? <p style={s.error}>{tr("ui.loadFailed", { error })}</p> : <Spinner />}</div>;
   const tz = data.timezone;
   const historyTrigger = history ? data.triggers.find((t) => t.id === history) : undefined;
 
@@ -481,12 +537,12 @@ function TriggersPage({ ui }: { ui: OpenBotUI }) {
     <div style={s.page}>
       <div style={s.head}>
         <div>
-          <h2 style={{ margin: 0 }}>Триггеры</h2>
-          <span style={s.muted}>Когда агенту действовать самому. Часовой пояс: {tz}</span>
+          <h2 style={{ margin: 0 }}>{tr("ui.title")}</h2>
+          <span style={s.muted}>{tr("ui.subtitle", { tz })}</span>
         </div>
         {editing === null && (
           <Button variant="primary" onClick={() => setEditing("new")}>
-            Создать триггер
+            {tr("ui.create")}
           </Button>
         )}
       </div>
@@ -508,7 +564,7 @@ function TriggersPage({ ui }: { ui: OpenBotUI }) {
       {historyTrigger && <History ui={ui} trigger={historyTrigger} tz={tz} onClose={() => setHistory(null)} />}
 
       {data.triggers.length === 0 ? (
-        <EmptyState title="Триггеров пока нет" hint="Создайте расписание, напоминание или слежение за страницей — или попросите ассистента в чате." icon="alarm-clock" />
+        <EmptyState title={tr("ui.empty.title")} hint={tr("ui.empty.hint")} icon="alarm-clock" />
       ) : (
         data.triggers.map((t) => <TriggerCard key={t.id} ui={ui} t={t} tz={tz} onEdit={() => setEditing(t)} onHistory={() => setHistory(t.id)} />)
       )}
@@ -517,5 +573,6 @@ function TriggersPage({ ui }: { ui: OpenBotUI }) {
 }
 
 export default definePluginUI((ui) => {
-  return ui.routes.add({ path: "/triggers", title: "Триггеры", icon: "alarm-clock", nav: true, component: () => <TriggersPage ui={ui} /> });
+  i18n = ui.i18n;
+  return ui.routes.add({ path: "/triggers", title: tr("ui.title"), icon: "alarm-clock", nav: true, component: () => <TriggersPage ui={ui} /> });
 });

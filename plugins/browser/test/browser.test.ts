@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect, type AddressInfo, type Socket } from "node:net";
 import type { ToolResult } from "@openbot/shared";
+import { catalogLookup, localizeValue, readPluginLayout } from "@openbot/shared";
 import { startPlugin, type PluginHarness } from "@openbot/testkit";
 
 const PLUGIN_DIR = join(import.meta.dirname, "..");
@@ -180,12 +181,18 @@ describe("browser plugin (headless Chromium)", () => {
       submit: "external",
     });
     expect([...h.tools.values()].every((t) => t.source === true)).toBe(true);
-    expect(h.tools.get("submit")!.approvalSummary).toBe("Браузер: {description} ({url})");
+    // The approval summary is a catalog reference: the hub resolves it in the hub language, then fills {field}s.
+    const summary = h.tools.get("submit")!.approvalSummary!;
+    expect(summary).toBe("%approval.submit%");
+    const { messages } = readPluginLayout(PLUGIN_DIR);
+    expect(localizeValue(summary, catalogLookup(messages, "en"))).toBe("Browser: {description} ({url})");
+    expect(localizeValue(summary, catalogLookup(messages, "ru"))).toBe("Браузер: {description} ({url})");
   });
 
   it("opens a page and lists interactive elements with refs", async () => {
     const opened = await ok("open", { url: base + "/" });
-    expect(opened).toContain("Открыто");
+    expect(opened).toContain("Opened.");
+    expect(opened).toContain(`Page: Главная — ${base}/`);
     expect(opened).toContain(`Главная — ${base}/`);
     const snap = await ok("snapshot");
     expect(snap).toContain("# Магазин");
@@ -259,9 +266,9 @@ describe("browser plugin (headless Chromium)", () => {
     await ok("type", { ref: refOf(snap, /textbox "Имя"/), text: "Пётр" });
     const wrong = await call("submit", { ref: refOf(snap, /button "Купить"/), url: "https://shop.example/", description: "Купить" });
     expect(wrong.isError).toBe(true);
-    expect(text(wrong)).toContain("Страница изменилась");
+    expect(text(wrong)).toContain("The page has changed");
     const r = await ok("submit", { ref: refOf(snap, /button "Купить"/), url: base + "/", description: "Оформить заказ в тестовом магазине" });
-    expect(r).toContain("Выполнено: Оформить заказ в тестовом магазине");
+    expect(r).toContain("Done: Оформить заказ в тестовом магазине");
     expect(r).toContain("Заказ —");
     expect(posted.at(-1)).toMatchObject({ path: "/order" });
     expect(posted.at(-1)!.body.get("name")).toBe("Пётр");
@@ -282,7 +289,7 @@ describe("browser plugin (headless Chromium)", () => {
     const vaultRef = "vault://site-login";
     await ok("fill_secret", { ref: refOf(snap, /textbox "Логин"/), vaultRef, field: "username" });
     const pw = await ok("fill_secret", { ref: refOf(snap, /textbox\[password\] "Пароль"/), vaultRef });
-    expect(pw).toContain("значение не показывается");
+    expect(pw).toContain("the value is not shown");
     await ok("fill_secret", { ref: refOf(snap, /textbox "Код"/), vaultRef });
     const notInput = await call("fill_secret", { ref: refOf(snap, /button "Показать пароль"/), vaultRef });
     expect(notInput.isError).toBe(true);
@@ -311,7 +318,7 @@ describe("browser plugin (headless Chromium)", () => {
     expect(buf[0]).toBe(0xff);
     expect(buf[1]).toBe(0xd8);
     expect(buf.length).toBeLessThan(400_000);
-    expect(text(r)).toContain("Скриншот видимой области");
+    expect(text(r)).toContain("Screenshot of the visible area");
   });
 
   it("truncates page text", async () => {
@@ -319,16 +326,16 @@ describe("browser plugin (headless Chromium)", () => {
     const t = await ok("get_text", { maxChars: 500 });
     expect(t).toContain("Строка номер 0");
     expect(t).not.toContain("Строка номер 599");
-    expect(t).toMatch(/обрезано: показано 500 из \d+ символов/);
+    expect(t).toMatch(/truncated: showing 500 of \d+ characters/);
   });
 
   it("downloads files by ref and by url", async () => {
     await ok("open", { url: base + "/" });
     const snap = await ok("snapshot");
     const byRef = await ok("download", { ref: refOf(snap, /link "Скачать отчёт"/) });
-    expect(byRef).toMatch(/Файл сохранён в рабочую папку: downloads\/отчёт 1\.txt \(.*, 10 Б\)/);
+    expect(byRef).toMatch(/File saved to the workspace: downloads\/отчёт 1\.txt \(.*, 10 B\)/);
     const byUrl = await ok("download", { url: base + "/file.txt" });
-    expect(byUrl).toMatch(/рабочую папку: downloads\/отчёт 1 \(1\)\.txt/);
+    expect(byUrl).toMatch(/workspace: downloads\/отчёт 1 \(1\)\.txt/);
     const dir = join(h.dataDir, "downloads");
     expect(readdirSync(dir).sort()).toEqual(["отчёт 1 (1).txt", "отчёт 1.txt"]);
     expect(readFileSync(join(dir, "отчёт 1.txt"), "utf8")).toBe("hello file");
@@ -336,7 +343,7 @@ describe("browser plugin (headless Chromium)", () => {
     expect(readFileSync(join(workspace, "downloads", "отчёт 1.txt"), "utf8")).toBe("hello file");
     expect(h.coreCalls.filter((c) => c.method === "files.deliver").every((c) => c.params.sessionId)).toBe(true);
     // Opening a file URL downloads it instead of failing.
-    expect(await ok("open", { url: base + "/file.txt" })).toMatch(/По адресу оказался файл, он скачан\. Файл сохранён в рабочую папку: downloads\/отчёт 1 \(2\)\.txt/);
+    expect(await ok("open", { url: base + "/file.txt" })).toMatch(/The URL turned out to be a file; it was downloaded\. File saved to the workspace: downloads\/отчёт 1 \(2\)\.txt/);
   });
 
   it("manages tabs", async () => {
@@ -350,18 +357,28 @@ describe("browser plugin (headless Chromium)", () => {
 
   it("tells the model to hand captchas to the user", async () => {
     const r = await ok("open", { url: base + "/captcha" });
-    expect(r).toContain("капча");
-    expect(r).toContain("Взять управление");
+    expect(r).toContain("captcha");
+    expect(r).toContain("take control");
   });
 
   it("keeps the agent away from local addresses unless allowed", async () => {
     h.setSettings({ headless: "always", takeoverWaitSec: 0 });
     const r = await call("open", { url: base + "/" });
     expect(r.isError).toBe(true);
-    expect(text(r)).toContain("локальной сети");
+    expect(text(r)).toContain("local network");
     expect((await call("download", { url: "http://169.254.169.254/latest" })).isError).toBe(true);
     h.setSettings({ headless: "always", allowLocalNetwork: true, takeoverWaitSec: 0 });
     await ok("open", { url: base + "/" });
+  });
+
+  it("reports pane errors with a code the UI translates", async () => {
+    h.uiMessage({ type: "navigate", url: "ftp://example.com/" });
+    const err = await until(() => h.coreCalls.find((c) => c.method === "ui.emit" && (c.params as { channel: string }).channel === "error"));
+    expect((err.params as { payload: unknown }).payload).toEqual({
+      message: "Only http(s) URLs can be opened, not ftp:",
+      code: "urlProtocol",
+      params: { protocol: "ftp:" },
+    });
   });
 
   it("streams frames to the UI and lets the user take over", async () => {
@@ -377,7 +394,7 @@ describe("browser plugin (headless Chromium)", () => {
     await until(() => emits().find((e) => e.channel === "control" && e.payload.user === true));
     const blocked = await call("snapshot");
     expect(blocked.isError).toBe(true);
-    expect(text(blocked)).toContain("Пользователь управляет браузером");
+    expect(text(blocked)).toContain("The user is controlling the browser");
 
     // Click the big button (top-left 640x400 of the 1280x800 viewport) and type into the field below it.
     const framesBefore = emits().filter((e) => e.channel === "frame").length;
@@ -487,7 +504,7 @@ describe("browser plugin behind the hub egress proxy", () => {
     const snap = text(await h.invoke("snapshot"));
     const click = await h.invoke("click", { ref: refOf(snap, /link "Локальная ссылка"/) });
     expect(click.isError).toBe(true);
-    expect(text(click)).toContain("локальный адрес 127.0.0.1");
+    expect(text(click)).toContain("local address 127.0.0.1");
     expect(text(click)).not.toContain("Секретная админка");
     expect(text(click)).toContain("about:blank");
     const redirect = await h.invoke("open", { url: "http://proxied.example/redirect" });

@@ -117,8 +117,8 @@ export class MemoryStore {
     const p = normalizePath(path);
     const abs = review ? join(this.root, REVIEW_DIR, ...p.split("/")) : join(this.root, ...p.split("/"));
     const rel = relative(this.root, abs);
-    if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new PathError(`Путь вне папки памяти: ${path}`);
-    if (existsSync(abs) && lstatSync(abs).isSymbolicLink()) throw new PathError(`Символические ссылки не поддерживаются: ${path}`);
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new PathError("outsideRoot", `Path is outside the memory folder: ${path}`, { path });
+    if (existsSync(abs) && lstatSync(abs).isSymbolicLink()) throw new PathError("symlink", `Symbolic links are not supported: ${path}`, { path });
     return abs;
   }
 

@@ -4,11 +4,12 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { parse as parseHtml } from "node-html-parser";
+import { TriggerError } from "./errors.ts";
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 
-export class WatchError extends Error {}
+export class WatchError extends TriggerError {}
 
 // ---------- JSON path ----------
 
@@ -24,7 +25,7 @@ export function parseJsonPath(path: string): PathToken[] {
   while (pos < s.length) {
     re.lastIndex = pos;
     const m = re.exec(s);
-    if (!m || m.index !== pos || m[0].length === 0) throw new WatchError(`Неверный JSON-путь "${path}" (позиция ${pos + 1}). Пример: data.items[0].price`);
+    if (!m || m.index !== pos || m[0].length === 0) throw new WatchError("jsonPathSyntax", `Invalid JSON path "${path}" (position ${pos + 1}). Example: data.items[0].price`, { path, pos: pos + 1 });
     if (m[1] !== undefined) tokens.push(m[1]);
     else if (m[2] !== undefined) tokens.push(Number(m[2]));
     else if (m[3] !== undefined) tokens.push(m[3].replace(/\\(.)/g, "$1"));
@@ -32,7 +33,7 @@ export function parseJsonPath(path: string): PathToken[] {
     else if (m[5] !== undefined) tokens.push(Number(m[5]));
     pos = re.lastIndex;
   }
-  if (!tokens.length) throw new WatchError(`Пустой JSON-путь "${path}"`);
+  if (!tokens.length) throw new WatchError("jsonPathEmpty", `Empty JSON path "${path}"`, { path });
   return tokens;
 }
 
@@ -53,12 +54,13 @@ export function evalJsonPath(data: unknown, tokens: PathToken[]): unknown {
 
 // ---------- selectors / text ----------
 
-export function selectorError(selector: string): string | undefined {
+export function selectorError(selector: string): TriggerError | undefined {
   try {
     parseHtml("<div></div>").querySelectorAll(selector);
     return undefined;
   } catch (e: any) {
-    return `Неверный CSS-селектор "${selector}": ${e?.message ?? e}`;
+    const reason = String(e?.message ?? e);
+    return new TriggerError("selectorInvalid", `Invalid CSS selector "${selector}": ${reason}`, { selector, reason });
   }
 }
 
@@ -86,16 +88,16 @@ export function extractValue(body: string, contentType: string, opts: { selector
     try {
       data = JSON.parse(body);
     } catch {
-      throw new WatchError("Ответ не является JSON — JSON-путь применить нельзя");
+      throw new WatchError("notJson", "The response is not JSON, so the JSON path cannot be applied");
     }
     const v = evalJsonPath(data, parseJsonPath(opts.jsonPath));
-    if (v === undefined) throw new WatchError(`JSON-путь ${opts.jsonPath} ничего не нашёл`);
+    if (v === undefined) throw new WatchError("jsonPathNothing", `JSON path ${opts.jsonPath} matched nothing`, { path: opts.jsonPath });
     return typeof v === "string" ? v : JSON.stringify(v, null, 2);
   }
   if (opts.selector) {
     const root = parseHtml(body);
     const els = root.querySelectorAll(opts.selector);
-    if (!els.length) throw new WatchError(`CSS-селектор ${opts.selector} ничего не нашёл на странице`);
+    if (!els.length) throw new WatchError("selectorNothing", `CSS selector ${opts.selector} matched nothing on the page`, { selector: opts.selector });
     return els.map((e) => norm(e.structuredText)).join("\n");
   }
   return looksHtml(contentType, body) ? pageText(body) : body.trim();
@@ -126,12 +128,13 @@ export async function assertFetchable(url: string, allowPrivate: boolean): Promi
   try {
     u = new URL(url);
   } catch {
-    throw new WatchError(`Неверный адрес: ${url}`);
+    throw new WatchError("badAddress", `Invalid address: ${url}`, { url });
   }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new WatchError("Поддерживаются только адреса http и https");
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new WatchError("httpOnly", "Only http and https addresses are supported");
   if (allowPrivate) return u;
   const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  const blocked = () => new WatchError(`Адрес ${u.hostname} во внутренней сети: следить за ним запрещено (настройка allowPrivateUrls)`);
+  const blocked = () =>
+    new WatchError("privateHost", `${u.hostname} is on an internal network: watching it is not allowed (setting allowPrivateUrls)`, { host: u.hostname });
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) throw blocked();
   if (isIP(host)) {
     if (isPrivateAddress(host)) throw blocked();
@@ -178,8 +181,9 @@ export async function fetchPage(url: string, opts: { allowPrivate: boolean; time
         headers: { "user-agent": "open-bot-triggers/0.1 (+watch)", accept: "text/html,application/json;q=0.9,*/*;q=0.8" },
       });
     } catch (e: any) {
-      const why = e?.name === "TimeoutError" ? "таймаут" : (e?.cause?.code ?? e?.message ?? String(e));
-      throw new WatchError(`Не удалось загрузить ${current}: ${why}`);
+      if (e?.name === "TimeoutError") throw new WatchError("fetchTimeout", `Could not load ${current}: timeout`, { url: current });
+      const why = String(e?.cause?.code ?? e?.message ?? e);
+      throw new WatchError("fetchFailed", `Could not load ${current}: ${why}`, { url: current, reason: why });
     }
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
       current = new URL(res.headers.get("location")!, current).toString();
@@ -188,11 +192,11 @@ export async function fetchPage(url: string, opts: { allowPrivate: boolean; time
     }
     if (!res.ok) {
       await res.body?.cancel().catch(() => {});
-      throw new WatchError(`${current} ответил ${res.status}`);
+      throw new WatchError("httpStatus", `${current} responded with ${res.status}`, { url: current, status: res.status });
     }
     return { body: await readLimited(res, MAX_BODY_BYTES), contentType: res.headers.get("content-type") ?? "", url: current };
   }
-  throw new WatchError(`Слишком много перенаправлений: ${url}`);
+  throw new WatchError("tooManyRedirects", `Too many redirects: ${url}`, { url });
 }
 
 // ---------- diff ----------
@@ -220,6 +224,6 @@ export function lineDiff(prev: string, next: string, maxLines = 60): string {
     else added.push(l);
   }
   const out = [...removed.map((l) => `- ${l}`), ...added.map((l) => `+ ${l}`)];
-  if (out.length > maxLines) return [...out.slice(0, maxLines), `… ещё ${out.length - maxLines} строк`].join("\n");
+  if (out.length > maxLines) return [...out.slice(0, maxLines), `… ${out.length - maxLines} more lines`].join("\n");
   return out.join("\n");
 }

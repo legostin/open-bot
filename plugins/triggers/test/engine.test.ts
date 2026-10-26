@@ -12,6 +12,7 @@ function fakeCtx(kv = new Map<string, unknown>(), tz = "Europe/Moscow") {
     pluginId: "triggers",
     hubUrl: "http://127.0.0.1:8080",
     settings: {},
+    i18n: { locale: () => "en", t: (key: string) => (key === "heartbeat.defaultName" ? "Daily review" : key), onChange() {} },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     ui: { emit() {}, onMessage() {} },
     storage: {
@@ -110,7 +111,8 @@ describe("trigger engine", () => {
     expect((await e.runNow("t_lim")).status).toBe("started");
     expect((await e.runNow("t_lim")).status).toBe("started");
     const third = await e.runNow("t_lim");
-    expect(third).toMatchObject({ status: "skipped", detail: expect.stringContaining("лимит") });
+    expect(third).toMatchObject({ status: "skipped", detail: expect.stringContaining("limit"), code: "dailyLimit", params: { max: 2 } });
+    expect(e.get("t_lim")!.state).toMatchObject({ lastStatus: "skipped", lastErrorCode: "dailyLimit" });
     expect((await e.runNow("t_lim", { force: true })).status).toBe("started"); // the user from the UI
     expect(f.created()).toHaveLength(3);
     const runs = await e.runs("t_lim");
@@ -162,7 +164,7 @@ describe("trigger engine", () => {
     await e.boot(); // the planned run is within the catch-up grace period: it is just due, not missed
     await new Promise((r) => setTimeout(r, 200));
     const runs = await e.runs("t_busy");
-    expect(runs[0]).toMatchObject({ status: "skipped", detail: expect.stringContaining("ещё не завершён") });
+    expect(runs[0]).toMatchObject({ status: "skipped", detail: expect.stringContaining("not finished"), code: "previousRunning" });
     expect(f.created()).toHaveLength(0);
     e.stop();
   });

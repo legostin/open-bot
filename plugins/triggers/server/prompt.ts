@@ -30,7 +30,7 @@ export function truncateBytes(s: string, max: number): { text: string; truncated
   return { text: buf.subarray(0, end).toString("utf8"), truncated: true };
 }
 
-const truncateChars = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}\n…[обрезано, всего ${s.length} символов]` : s);
+const truncateChars = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}\n…[truncated, ${s.length} characters in total]` : s);
 
 /** Fence untrusted text so it cannot close the fence itself. */
 function fenced(tag: string, text: string): string {

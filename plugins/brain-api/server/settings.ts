@@ -118,7 +118,7 @@ export const VARIANTS: Record<string, VariantInfo> = {
   },
   custom: {
     id: "custom",
-    label: "OpenAI-совместимый сервер",
+    label: "OpenAI-compatible server",
     protocol: "openai",
     baseUrl: (s) => s.customBaseUrl,
     defaultModel: (s) => s.customModel,

@@ -46,7 +46,7 @@ export function isSafeSessionId(id: string): boolean {
 }
 
 export function sessionPath(dataDir: string, sessionId: string): string {
-  if (!isSafeSessionId(sessionId)) throw new Error(`недопустимый идентификатор сессии: ${sessionId}`);
+  if (!isSafeSessionId(sessionId)) throw new Error(`invalid session id: ${sessionId}`);
   return join(dataDir, "sessions", `${sessionId}.json`);
 }
 
@@ -137,9 +137,9 @@ export function stripThinking(messages: HistoryMessage[]): HistoryMessage[] {
 
 /** Text of tool result content for display (images become placeholders). */
 export function contentText(content: Array<TextPart | ImagePart>): string {
-  return content.map((c) => (c.type === "text" ? c.text : `[изображение ${c.mimeType}]`)).join("\n");
+  return content.map((c) => (c.type === "text" ? c.text : `[image ${c.mimeType}]`)).join("\n");
 }
 
 export function truncate(s: string, max: number): string {
-  return s.length <= max ? s : `${s.slice(0, max)}\n…[обрезано: ещё ${s.length - max} символов]`;
+  return s.length <= max ? s : `${s.slice(0, max)}\n…[truncated: ${s.length - max} more characters]`;
 }

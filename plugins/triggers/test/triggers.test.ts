@@ -80,7 +80,7 @@ describe("triggers plugin", () => {
     const r = (await h.http({ path: "/triggers" })).body as any;
     const hb = r.triggers.filter((t: any) => t.kind === "heartbeat");
     expect(hb).toHaveLength(1);
-    expect(hb[0]).toMatchObject({ agentId: "assistant", enabled: true, times: ["10:00", "18:00"], weekdays: [1, 2, 3, 4, 5] });
+    expect(hb[0]).toMatchObject({ name: "Daily review", agentId: "assistant", enabled: true, times: ["10:00", "18:00"], weekdays: [1, 2, 3, 4, 5] });
     expect(r.timezone).toBe("Asia/Tokyo");
     expect(r.agents.map((a: any) => a.id)).toEqual(["assistant", "researcher"]);
   });
@@ -105,14 +105,18 @@ describe("triggers plugin", () => {
       expect(r.isError).toBe(true);
       return (r.content[0] as any).text as string;
     };
-    expect(await bad({ kind: "schedule", name: "x", prompt: "p", cron: "0 9 * *" })).toContain("5 полей");
-    expect(await bad({ kind: "once", name: "x", prompt: "p", at: "2020-01-01T09:00" })).toContain("уже прошло");
-    expect(await bad({ kind: "watch", name: "x", prompt: "p", url: siteUrl, intervalMinutes: 2 })).toContain("не меньше 5 минут");
-    expect(await bad({ kind: "schedule", name: "x", prompt: "p", cron: "0 9 * * *", agent: "nobody" })).toContain("Неизвестный агент");
-    expect(await bad({ kind: "alarm", name: "x", prompt: "p" })).toContain("Неизвестный вид");
+    expect(await bad({ kind: "schedule", name: "x", prompt: "p", cron: "0 9 * *" })).toContain("5 fields");
+    expect(await bad({ kind: "once", name: "x", prompt: "p", at: "2020-01-01T09:00" })).toContain("already passed");
+    expect(await bad({ kind: "watch", name: "x", prompt: "p", url: siteUrl, intervalMinutes: 2 })).toContain("at least 5 minutes");
+    expect(await bad({ kind: "schedule", name: "x", prompt: "p", cron: "0 9 * * *", agent: "nobody" })).toContain('Unknown agent "nobody". Available: assistant, researcher');
+    expect(await bad({ kind: "alarm", name: "x", prompt: "p" })).toContain("Unknown trigger kind");
     const http = await h.http({ method: "POST", path: "/triggers", body: { kind: "once", name: "x", prompt: "p", at: "yesterday" } });
     expect(http.status).toBe(400);
-    expect((http.body as any).error).toContain("Не понимаю время");
+    expect(http.body).toEqual({
+      error: 'Cannot understand the time "yesterday": use ISO format, e.g. 2026-10-27T09:00 (your local time) or 2026-10-27T06:00:00Z',
+      code: "badTime",
+      params: { value: "yesterday" },
+    });
   });
 
   it("fires a once trigger at its time", async () => {
@@ -208,7 +212,7 @@ describe("triggers plugin", () => {
     const upd = await h.invokeText("update", { id, cron: "0 17 * * 5", name: "Отчёт за неделю" });
     expect(upd).toContain('Updated trigger');
     expect(upd).toContain("cron 0 17 * * 5");
-    expect(upd).toMatch(/Next run: \d{4}-\d\d-\d\d 17:00 \(пт\)/);
+    expect(upd).toMatch(/Next run: \d{4}-\d\d-\d\d 17:00 \(Fri\)/);
     const off = await h.invokeText("update", { id, enabled: false });
     expect(off).toContain("disabled");
     expect((await get(id)).nextRunAt).toBeNull();
@@ -219,7 +223,7 @@ describe("triggers plugin", () => {
     expect((await h.http({ path: `/triggers/${id}` })).status).toBe(404);
     const missing = await h.invoke("delete", { id });
     expect(missing.isError).toBe(true);
-    expect((missing.content[0] as any).text).toContain("не найден");
+    expect((missing.content[0] as any).text).toBe(`Trigger ${id} not found`);
   });
 
   it("supports the UI API: create, patch, run, runs", async () => {
@@ -227,7 +231,7 @@ describe("triggers plugin", () => {
     expect(created.status).toBe(201);
     const t = created.body as any;
     expect(t.createdBy).toBe("user");
-    expect(t.scheduleText).toBe("вс,сб в 21:00");
+    expect(t.scheduleText).toBe("Sun,Sat at 21:00");
     const next = new Date(t.nextRunAt);
     expect([next.getUTCHours(), next.getUTCMinutes()]).toEqual([12, 0]); // 21:00 JST
     expect([0, 6]).toContain(new Date(next.getTime() + 9 * 3600_000).getUTCDay());
@@ -258,5 +262,39 @@ describe("triggers plugin", () => {
     const w = idOf(await h.invokeText("create", { kind: "watch", name: "Курс", prompt: "Rate changed.", url: siteUrl, intervalMinutes: 10 }));
     h.emit("notification.feedback", { id: "n_2", triggerId: w, feedback: "less" });
     await until(async () => (await get(w)).intervalMinutes === 20);
+  });
+});
+
+describe("triggers plugin in Russian", () => {
+  let h: PluginHarness;
+
+  beforeAll(async () => {
+    h = await startPlugin({
+      dir,
+      locale: "ru",
+      core: (method) => {
+        if (method === "settings.get") return { timezone: "Europe/Moscow", defaultAgent: "assistant" };
+        if (method === "agents.list") return [{ id: "assistant", name: "Ассистент" }];
+        return {};
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await h?.stop();
+  });
+
+  it("names the default review and answers the UI in the hub language, the model in English", async () => {
+    const r = (await h.http({ path: "/triggers" })).body as any;
+    expect(r.triggers.find((t: any) => t.kind === "heartbeat").name).toBe("Обзор дня");
+
+    const bad = await h.http({ method: "POST", path: "/triggers", body: { kind: "watch", name: "x", prompt: "p", url: "https://example.com", intervalMinutes: 2 } });
+    expect(bad.status).toBe(400);
+    expect((bad.body as any).error).toBe("Интервал проверки — не меньше 5 минут (указано 2)");
+    expect((await h.http({ path: "/triggers/t_nope" })).body).toMatchObject({ error: "Триггер t_nope не найден", code: "notFound" });
+    expect(await h.invokeText("delete", { id: "t_nope" })).toBe("Trigger t_nope not found");
+
+    h.setLocale("en");
+    expect(((await h.http({ path: "/triggers/t_nope" })).body as any).error).toBe("Trigger t_nope not found");
   });
 });

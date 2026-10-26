@@ -1,8 +1,8 @@
 {
   "id": "triggers",
-  "name": "Триггеры",
+  "name": "%name%",
   "version": "0.1.0",
-  "description": "Проактивность: расписания, напоминания, слежение за страницами, вебхуки и регулярные обзоры, которые запускают фоновые задачи агентов",
+  "description": "%description%",
   "builtin": true,
   "server": "./server/index.ts",
   "ui": "./ui/dist/index.js",
@@ -16,13 +16,13 @@
       "properties": {
         "allowPrivateUrls": {
           "type": "boolean",
-          "title": "Разрешить слежение за адресами локальной сети",
-          "description": "По умолчанию триггеры watch не обращаются к localhost и внутренним адресам (защита от SSRF)",
+          "title": "%settings.allowPrivateUrls.title%",
+          "description": "%settings.allowPrivateUrls.description%",
           "default": false
         },
         "watchTimeoutSec": {
           "type": "integer",
-          "title": "Таймаут загрузки страницы, с",
+          "title": "%settings.watchTimeoutSec.title%",
           "default": 30,
           "minimum": 1,
           "maximum": 120

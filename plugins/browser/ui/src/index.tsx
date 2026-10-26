@@ -1,5 +1,6 @@
-// UI of the browser plugin: live view with takeover (right pane tab «Браузер») and a compact renderer for browser_* calls.
+// UI of the browser plugin: live view with takeover (right pane tab "Browser") and a compact renderer for browser_* calls.
 // React and @openbot/ui come from the host (import map); this file is bundled by scripts/build-ui-plugins.mjs.
+// Texts come from .openbot-plugin/locales (ui.* keys) through ui.i18n.t.
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
@@ -24,7 +25,18 @@ interface BrowserState {
 }
 
 let host: OpenBotUI;
+let t: OpenBotUI["i18n"]["t"] = (key) => key;
 const send = (payload: Record<string, unknown>) => host.plugin.send(payload);
+
+/** The backend sends `code` + `params` (ui.error.<code>) with an English `message` as a fallback. */
+function errorText(e: { message?: string; code?: string; params?: Record<string, string> } | undefined): string {
+  if (e?.code) {
+    const key = `ui.error.${e.code}`;
+    const text = t(key, e.params ?? {});
+    if (text !== key) return text;
+  }
+  return e?.message ? t("ui.error.other", { detail: e.message }) : t("ui.error.generic");
+}
 
 const viewerId = Math.random().toString(36).slice(2);
 const BUTTONS = ["left", "middle", "right", "back", "forward"];
@@ -77,7 +89,7 @@ function BrowserPane() {
         if (!s.running) setHasFrame(false);
       }),
       host.plugin.on("control", (c: { user: boolean }) => setState((s) => (s ? { ...s, control: c.user ? "user" : "agent" } : s))),
-      host.plugin.on("error", (e: { message?: string }) => setError(String(e?.message ?? "Ошибка браузера"))),
+      host.plugin.on("error", (e: { message?: string; code?: string; params?: Record<string, string> }) => setError(errorText(e))),
     ];
     return () => {
       clearInterval(renew);
@@ -88,8 +100,8 @@ function BrowserPane() {
 
   useEffect(() => {
     if (!error) return;
-    const t = setTimeout(() => setError(null), 6000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setError(null), 6000);
+    return () => clearTimeout(timer);
   }, [error]);
 
   // Wheel needs a non-passive native listener to prevent the pane from scrolling.
@@ -151,29 +163,29 @@ function BrowserPane() {
   const tabs = state?.tabs ?? [];
   const active = tabs.find((t) => t.active);
   const status = control ? (
-    <Badge tone="warning">Управляете вы — агент ждёт</Badge>
+    <Badge tone="warning">{t("ui.status.user")}</Badge>
   ) : state?.busy ? (
-    <Badge tone="info">Агент: {state.busy}</Badge>
+    <Badge tone="info">{t("ui.status.busy", { tool: state.busy })}</Badge>
   ) : (
-    <Badge tone="neutral">Управляет агент</Badge>
+    <Badge tone="neutral">{t("ui.status.agent")}</Badge>
   );
 
   return (
     <div style={S.root}>
       <div style={S.row}>
-        <Button size="sm" variant="ghost" title="Назад" onClick={() => send({ type: "back" })}>
+        <Button size="sm" variant="ghost" title={t("ui.nav.back")} onClick={() => send({ type: "back" })}>
           ←
         </Button>
-        <Button size="sm" variant="ghost" title="Вперёд" onClick={() => send({ type: "forward" })}>
+        <Button size="sm" variant="ghost" title={t("ui.nav.forward")} onClick={() => send({ type: "forward" })}>
           →
         </Button>
-        <Button size="sm" variant="ghost" title="Обновить" onClick={() => send({ type: "reload" })}>
+        <Button size="sm" variant="ghost" title={t("ui.nav.reload")} onClick={() => send({ type: "reload" })}>
           ⟳
         </Button>
         <input
           style={S.url}
           value={draftUrl ?? state?.url ?? ""}
-          placeholder="Адрес сайта"
+          placeholder={t("ui.urlPlaceholder")}
           spellCheck={false}
           onFocus={(e) => {
             setDraftUrl(state?.url ?? "");
@@ -193,18 +205,18 @@ function BrowserPane() {
       <div style={S.row}>
         {tabs.length > 0 && (
           <select style={S.select} value={active?.index ?? ""} onChange={(e) => send({ type: "tab", action: "switch", index: Number(e.target.value) })}>
-            {tabs.map((t) => (
-              <option key={t.index} value={t.index}>
-                {t.index}. {cut(t.title || t.url || "Новая вкладка", 40)}
+            {tabs.map((tab) => (
+              <option key={tab.index} value={tab.index}>
+                {tab.index}. {cut(tab.title || tab.url || t("ui.tab.new"), 40)}
               </option>
             ))}
           </select>
         )}
-        <Button size="sm" variant="ghost" title="Новая вкладка" onClick={() => send({ type: "tab", action: "new" })}>
+        <Button size="sm" variant="ghost" title={t("ui.tab.new")} onClick={() => send({ type: "tab", action: "new" })}>
           +
         </Button>
         {tabs.length > 0 && (
-          <Button size="sm" variant="ghost" title="Закрыть вкладку" onClick={() => send({ type: "tab", action: "close", index: active?.index })}>
+          <Button size="sm" variant="ghost" title={t("ui.tab.close")} onClick={() => send({ type: "tab", action: "close", index: active?.index })}>
             ×
           </Button>
         )}
@@ -212,7 +224,7 @@ function BrowserPane() {
         {state?.running && status}
         {state?.running && (
           <Button size="sm" variant={control ? "primary" : "secondary"} onClick={() => send({ type: "control", on: !control })}>
-            {control ? "Вернуть управление агенту" : "Взять управление"}
+            {control ? t("ui.control.return") : t("ui.control.take")}
           </Button>
         )}
       </div>
@@ -221,9 +233,9 @@ function BrowserPane() {
 
       {state && !state.running ? (
         <div>
-          <EmptyState icon="globe" title="Браузер не запущен" hint="Агент запустит его сам, когда понадобится. Можно открыть сайт вручную: введите адрес выше." />
+          <EmptyState icon="globe" title={t("ui.stopped.title")} hint={t("ui.stopped.hint")} />
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <Button onClick={() => send({ type: "start" })}>Запустить браузер</Button>
+            <Button onClick={() => send({ type: "start" })}>{t("ui.start")}</Button>
           </div>
         </div>
       ) : (
@@ -244,7 +256,7 @@ function BrowserPane() {
               if (text) send({ type: "input", event: "text", text });
             }}
             onContextMenu={(e) => control && e.preventDefault()}
-            title={control ? undefined : "Нажмите «Взять управление», чтобы кликать и печатать"}
+            title={control ? undefined : t("ui.screen.locked")}
           >
             <img ref={imgRef} alt="" draggable={false} style={{ ...S.img, display: hasFrame ? "block" : "none" }} />
             {!hasFrame && (
@@ -254,9 +266,7 @@ function BrowserPane() {
             )}
           </div>
           <div style={S.hint}>
-            {control
-              ? "Клики и клавиши уходят в браузер. Когда закончите (например, пройдёте капчу или войдёте в аккаунт), верните управление агенту."
-              : "Это живой экран браузера агента. Чтобы пройти капчу или войти самому, нажмите «Взять управление»."}
+            {control ? t("ui.hint.user") : t("ui.hint.agent")}
           </div>
         </>
       )}
@@ -266,22 +276,8 @@ function BrowserPane() {
 
 // ---------- compact renderer for browser_* tool calls in the chat ----------
 
-const LABELS: Record<string, string> = {
-  open: "Открыл страницу",
-  snapshot: "Осмотрел страницу",
-  get_text: "Прочитал текст",
-  screenshot: "Сделал скриншот",
-  scroll: "Прокрутил страницу",
-  back: "Вернулся назад",
-  tabs: "Вкладки",
-  wait: "Ждёт",
-  click: "Нажал",
-  type: "Ввёл текст",
-  press_key: "Нажал клавишу",
-  fill_secret: "Подставил данные из vault",
-  download: "Скачал файл",
-  submit: "Действие с подтверждением",
-};
+/** Tools with a label (ui.call.<name>). */
+const LABELED = new Set(["open", "snapshot", "get_text", "screenshot", "scroll", "back", "tabs", "wait", "click", "type", "press_key", "fill_secret", "download", "submit"]);
 
 const C: Record<string, CSSProperties> = {
   box: { margin: "4px 0", fontSize: 13 },
@@ -290,12 +286,12 @@ const C: Record<string, CSSProperties> = {
   pre: { margin: "6px 0 0", padding: 8, borderRadius: 6, background: "rgba(127,127,127,.1)", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 320, overflow: "auto", fontSize: 12 },
 };
 
-/** The URL from the "Страница: <title> — <url>" line that every browser result ends with. */
+/** The URL from the "Page: <title> — <url>" line that every browser result ends with. */
 function pageUrl(output: string | undefined): string {
-  const line = output?.split("\n").find((l) => l.startsWith("Страница: "));
+  const line = output?.split("\n").find((l) => l.startsWith("Page: "));
   if (!line) return "";
   const last = line.split(" — ").pop() ?? "";
-  return last.replace(/ \(вкладка \d+ из \d+\)$/, "").trim();
+  return last.replace(/ \(tab \d+ of \d+\)$/, "").trim();
 }
 
 function shortUrl(u: string): string {
@@ -315,16 +311,16 @@ function BrowserCall({ call, result }: ToolResultProps) {
   const detail = name === "submit" && typeof input.description === "string" ? input.description : name === "press_key" && typeof input.key === "string" ? input.key : "";
   return (
     <div style={C.box}>
-      <button type="button" style={C.head} onClick={() => setOpen(!open)} title={open ? "Скрыть результат" : "Показать результат"}>
+      <button type="button" style={C.head} onClick={() => setOpen(!open)} title={open ? t("ui.call.hide") : t("ui.call.show")}>
         <span aria-hidden>🌐</span>
-        <span style={{ fontWeight: 500 }}>{LABELS[name] ?? call.name}</span>
+        <span style={{ fontWeight: 500 }}>{LABELED.has(name) ? t(`ui.call.${name}`) : call.name}</span>
         {detail && <span>· {cut(detail, 80)}</span>}
         {url && (
           <span style={C.muted} title={url}>
             {shortUrl(url)}
           </span>
         )}
-        {!result ? <Spinner size={12} /> : result.isError ? <Badge tone="danger">ошибка</Badge> : null}
+        {!result ? <Spinner size={12} /> : result.isError ? <Badge tone="danger">{t("ui.call.error")}</Badge> : null}
       </button>
       {open && result && <pre style={C.pre}>{result.output}</pre>}
     </div>
@@ -333,8 +329,9 @@ function BrowserCall({ call, result }: ToolResultProps) {
 
 export default definePluginUI((ui) => {
   host = ui;
+  t = (key, params) => ui.i18n.t(key, params);
   const offs = [
-    ui.slots.register("pane.right", { id: "browser", title: "Браузер", icon: "globe", component: BrowserPane }),
+    ui.slots.register("pane.right", { id: "browser", title: t("ui.pane.title"), icon: "globe", component: BrowserPane }),
     ui.slots.register("chat.toolResult", { id: "browser-call", match: { tool: ["browser_*", "*__browser_*"] }, component: BrowserCall }),
   ];
   return () => offs.forEach((off) => off());

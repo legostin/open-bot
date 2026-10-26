@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readPluginLayout, translator } from "@openbot/shared";
 import { startPlugin, type PluginHarness } from "@openbot/testkit";
 
 const DIR = join(import.meta.dirname, "..");
@@ -30,6 +31,9 @@ describe("memory plugin", () => {
     expect([...h.tools.keys()].sort()).toEqual(["forget", "list", "read", "search", "write"]);
     expect(h.tools.get("write")!.effect).toBe("local-write");
     expect(h.tools.get("search")!.effect).toBe("read");
+    // Approval summaries are catalog references, resolved by the hub in its language.
+    expect(h.tools.get("write")!.approvalSummary).toBe("%approval.write%");
+    expect(h.tools.get("forget")!.approvalSummary).toBe("%approval.forget%");
     expect(h.hooks.has("session.start")).toBe(true);
     const root = join(h.dataDir, "memory");
     for (const d of ["people", "projects", "notes"]) expect(existsSync(join(root, d))).toBe(true);
@@ -147,7 +151,12 @@ describe("memory plugin", () => {
     const search = (await h.http({ method: "GET", path: "/search", query: { q: "олег" } })).body as any;
     expect(search.results[0].path).toBe("profile.md");
     expect((await h.http({ method: "GET", path: "/file", query: { path: "MEMORY.md" } })).body).toMatchObject({ generated: true });
-    expect((await h.http({ method: "GET", path: "/file", query: { path: "nope.md" } })).status).toBe(404);
+    const missing = await h.http({ method: "GET", path: "/file", query: { path: "nope.md" } });
+    expect(missing.status).toBe(404);
+    expect(missing.body).toMatchObject({ error: "Fact not found: nope.md", code: "factNotFound", params: { path: "nope.md" } });
+    // The UI shows backend errors in the reader's language from the plugin's catalogs ("ui.error.<code>").
+    const { code, params } = missing.body as any;
+    expect(translator(readPluginLayout(DIR).messages, "ru")(`ui.error.${code}`, params)).toBe("Факт не найден: nope.md");
     expect((await h.http({ method: "GET", path: "/tree", public: true })).status).toBe(404);
 
     await h.http({ method: "PUT", path: "/file", body: { path: "notes/tmp.md", content: "# Временная\nудалить" } });

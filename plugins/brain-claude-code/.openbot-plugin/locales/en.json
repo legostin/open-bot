@@ -1,0 +1,9 @@
+{
+  "name": "Claude Code",
+  "description": "Brain on a Claude subscription: runs Claude Code headless with open-bot tools.",
+  "settings.tokenRef.title": "Token (vault reference)",
+  "settings.tokenRef.description": "The output of `claude setup-token`, stored in the vault. If empty, the CLI's own login is used.",
+  "settings.command.title": "CLI command",
+  "settings.allowedTools.title": "Claude Code built-in tools",
+  "settings.allowedTools.description": "Empty: the default set (Bash, files, web, tasks, skills and open-bot tools)."
+}

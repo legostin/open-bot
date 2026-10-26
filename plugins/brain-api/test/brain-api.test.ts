@@ -229,7 +229,7 @@ describe("brain-api plugin", () => {
     const events = await h.brainSend("s-401", { text: "hi" });
     const err = events.find((e) => e.type === "error") as Extract<BrainEvent, { type: "error" }>;
     expect(err.fatal).toBe(true);
-    expect(err.message).toMatch(/^Ключ API отклонён/);
+    expect(err.message).toMatch(/^API key rejected \(Anthropic, 401\)/);
     expect(err.message).toContain("invalid x-api-key");
     expect(events.at(-1)?.type).toBe("done");
   });
@@ -238,7 +238,7 @@ describe("brain-api plugin", () => {
     await h.brainCreate("api", opts("s-nokey", { variant: "openrouter" }));
     // openrouter has no key in this vault → fatal before any request.
     const events = await h.brainSend("s-nokey", { text: "hi" });
-    expect(events[0]).toEqual({ type: "error", message: "Добавьте ключ openrouter_api_key в vault", fatal: true });
+    expect(events[0]).toEqual({ type: "error", message: "Add the openrouter_api_key key to the vault", fatal: true });
     expect(llm.requests).toHaveLength(0);
   });
 
@@ -250,7 +250,7 @@ describe("brain-api plugin", () => {
       const events = await h.brainSend("s-net", { text: "hi" });
       const err = events.find((e) => e.type === "error") as Extract<BrainEvent, { type: "error" }>;
       expect(err.fatal).toBe(true);
-      expect(err.message).toContain("Не удалось связаться с 127.0.0.1:1");
+      expect(err.message).toContain("Could not reach 127.0.0.1:1");
     } finally {
       h.setSettings(settings);
       await sleep(100);
@@ -265,7 +265,7 @@ describe("brain-api plugin", () => {
       await h.brainCreate("api", opts("s-steps"));
       const events = await h.brainSend("s-steps", { text: "loop" });
       expect(events.filter((e) => e.type === "tool_result")).toHaveLength(2);
-      expect(text(events)).toContain("предел в 2 шагов");
+      expect(text(events)).toContain("(Turn stopped: reached the limit of 2 steps.)");
       expect(llm.requests).toHaveLength(2);
     } finally {
       h.setSettings(settings);
@@ -333,11 +333,14 @@ describe("brain-api plugin", () => {
 
     const bare = await startPlugin({ dir: PLUGIN_DIR, settings, vault: {} });
     try {
-      expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ available: true, authenticated: false, detail: "Добавьте ключ anthropic_api_key в vault" });
-      expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ available: true, authenticated: false, detail: "Добавьте ключ openrouter_api_key в vault" });
-      expect(await bare.brainProbe("api")).toMatchObject({ authenticated: false, detail: "Добавьте ключ anthropic_api_key в vault" });
+      expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ available: true, authenticated: false, detail: "Add the anthropic_api_key key to the vault" });
+      expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ available: true, authenticated: false, detail: "Add the openrouter_api_key key to the vault" });
+      expect(await bare.brainProbe("api")).toMatchObject({ authenticated: false, detail: "Add the anthropic_api_key key to the vault" });
       expect(await bare.brainProbe("api", "custom")).toMatchObject({ available: true, authenticated: true });
-      expect(await bare.brainProbe("api", "nope")).toMatchObject({ available: false, authenticated: false });
+      expect(await bare.brainProbe("api", "nope")).toMatchObject({ available: false, authenticated: false, detail: 'Unknown variant "nope". Available: anthropic, openai, openrouter, custom' });
+      // Probe details are shown on the Brains page in the hub language.
+      bare.setLocale("ru");
+      expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ authenticated: false, detail: "Добавьте ключ anthropic_api_key в vault" });
     } finally {
       await bare.stop();
     }

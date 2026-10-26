@@ -42,21 +42,29 @@ interface ReviewItem extends FactMeta {
 type View = { kind: "empty" } | { kind: "file"; path: string } | { kind: "edit"; path?: string } | { kind: "review" } | { kind: "search"; q: string };
 
 let UI: OpenBotUI;
+let t: OpenBotUI["i18n"]["t"] = (key) => key;
 
 const http = <T,>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown) => UI.plugin.http<T>(method, path, body);
 const q = (path: string) => encodeURIComponent(path);
 
+/** Backend errors carry a code ("ui.error.<code>" in the catalogs) and an English message as a fallback. */
 function errText(e: any): string {
-  return e?.body?.error ?? e?.error ?? e?.message ?? String(e);
+  const body = e?.body ?? e;
+  if (typeof body?.code === "string") {
+    const key = `ui.error.${body.code}`;
+    const text = t(key, body.params ?? {});
+    if (text !== key) return text;
+  }
+  return body?.error ?? e?.message ?? String(e);
 }
 
 function fmtDate(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
+  return Number.isNaN(d.getTime()) ? iso : UI.i18n.formatDate(d, { dateStyle: "medium", timeStyle: "short" });
 }
 
-const NEW_TEMPLATE = "---\ntitle: Новый факт\ntags: []\n---\n\n";
+const newTemplate = () => `---\ntitle: ${t("ui.newFact")}\ntags: []\n---\n\n`;
 
 const s = {
   page: { display: "flex", gap: 16, height: "100%", minHeight: 0, padding: 16, boxSizing: "border-box" } as CSSProperties,
@@ -118,13 +126,13 @@ function FolderTree(props: { tree: Tree; selected?: string; onOpen(path: string)
                     {f.title}
                   </button>
                 ))}
-              {dir && !facts.length && <div style={{ ...s.muted, padding: "2px 8px" }}>пусто</div>}
+              {dir && !facts.length && <div style={{ ...s.muted, padding: "2px 8px" }}>{t("ui.tree.empty")}</div>}
             </div>
           )}
         </div>
       ))}
       <button style={{ ...s.item(props.selected === "MEMORY.md"), ...s.muted, marginTop: 8 }} onClick={() => props.onOpen("MEMORY.md")}>
-        MEMORY.md — индекс
+        {t("ui.tree.index")}
       </button>
     </div>
   );
@@ -144,13 +152,13 @@ function FileView(props: { path: string; version: number; onEdit(): void; onDele
     };
   }, [props.path, props.version]);
 
-  if (error) return <EmptyState title="Не удалось открыть факт" hint={error} icon="brain" />;
+  if (error) return <EmptyState title={t("ui.file.openFailed")} hint={error} icon="brain" />;
   if (!file) return <Spinner />;
   const remove = async () => {
-    if (!confirm(`Удалить «${file.title}»? Изменение останется в истории git.`)) return;
+    if (!confirm(t("ui.file.confirmDelete", { title: file.title }))) return;
     try {
       await http("DELETE", `/file?path=${q(file.path)}`);
-      UI.toast("Факт удалён", "success");
+      UI.toast(t("ui.file.deleted"), "success");
       props.onDeleted();
     } catch (e) {
       UI.toast(errText(e), "error");
@@ -158,15 +166,15 @@ function FileView(props: { path: string; version: number; onEdit(): void; onDele
   };
   return (
     <Card
-      title={file.title}
+      title={file.generated ? t("ui.indexTitle") : file.title}
       actions={
         file.generated ? undefined : (
           <div style={s.row}>
             <Button size="sm" variant="secondary" onClick={props.onEdit}>
-              Изменить
+              {t("ui.edit")}
             </Button>
             <Button size="sm" variant="danger" onClick={remove}>
-              Удалить
+              {t("ui.delete")}
             </Button>
           </div>
         )
@@ -174,17 +182,17 @@ function FileView(props: { path: string; version: number; onEdit(): void; onDele
     >
       <div style={{ ...s.row, marginBottom: 12 }}>
         <span style={s.muted}>{file.path}</span>
-        {file.tags?.map((t) => (
-          <Badge key={t}>{t}</Badge>
+        {file.tags?.map((tag) => (
+          <Badge key={tag}>{tag}</Badge>
         ))}
-        {file.status === "review" && <Badge tone="warning">на проверке</Badge>}
-        {file.pendingReview && file.status !== "review" && <Badge tone="warning">есть версия на проверке</Badge>}
+        {file.status === "review" && <Badge tone="warning">{t("ui.badge.inReview")}</Badge>}
+        {file.pendingReview && file.status !== "review" && <Badge tone="warning">{t("ui.badge.pendingVersion")}</Badge>}
       </div>
-      <Markdown text={file.body || "_Пусто_"} />
+      <Markdown text={file.body || t("ui.emptyBody")} />
       {!file.generated && (
         <div style={{ ...s.muted, marginTop: 12 }}>
-          {file.updated && <>Обновлено {fmtDate(file.updated)}</>}
-          {file.source && <> · источник: {file.source}</>}
+          {file.updated && <>{t("ui.file.updated", { date: fmtDate(file.updated) })}</>}
+          {file.source && <> · {t("ui.source", { source: file.source })}</>}
         </div>
       )}
     </Card>
@@ -193,7 +201,7 @@ function FileView(props: { path: string; version: number; onEdit(): void; onDele
 
 function Editor(props: { path?: string; onSaved(path: string): void; onCancel(): void }) {
   const [path, setPath] = useState(props.path ?? "notes/");
-  const [text, setText] = useState<string | null>(props.path ? null : NEW_TEMPLATE);
+  const [text, setText] = useState<string | null>(props.path ? null : newTemplate);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -209,7 +217,7 @@ function Editor(props: { path?: string; onSaved(path: string): void; onCancel():
     try {
       const p = path.trim().endsWith(".md") ? path.trim() : `${path.trim()}.md`;
       const f = await http<FactFile>("PUT", "/file", { path: p, content: text ?? "" });
-      UI.toast("Сохранено", "success");
+      UI.toast(t("ui.editor.saved"), "success");
       props.onSaved(f.path);
     } catch (e) {
       setError(errText(e));
@@ -221,25 +229,25 @@ function Editor(props: { path?: string; onSaved(path: string): void; onCancel():
   if (text === null && !error) return <Spinner />;
   return (
     <Card
-      title={props.path ? `Редактирование: ${props.path}` : "Новый факт"}
+      title={props.path ? t("ui.editor.editing", { path: props.path }) : t("ui.newFact")}
       actions={
         <div style={s.row}>
           <Button size="sm" variant="primary" onClick={save} disabled={saving}>
-            Сохранить
+            {t("ui.save")}
           </Button>
           <Button size="sm" variant="ghost" onClick={props.onCancel}>
-            Отмена
+            {t("ui.cancel")}
           </Button>
         </div>
       }
     >
       {!props.path && (
         <label style={{ display: "block", marginBottom: 8 }}>
-          <div style={s.muted}>Путь (папки: people/, projects/, notes/; файл .md)</div>
+          <div style={s.muted}>{t("ui.editor.pathLabel")}</div>
           <input style={s.input} value={path} onChange={(e) => setPath(e.target.value)} placeholder="people/anna.md" />
         </label>
       )}
-      <div style={{ ...s.muted, marginBottom: 6 }}>Markdown с заголовком в блоке frontmatter (title, tags).</div>
+      <div style={{ ...s.muted, marginBottom: 6 }}>{t("ui.editor.hint")}</div>
       <textarea style={s.textarea} value={text ?? ""} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       {error && <div style={s.error}>{error}</div>}
     </Card>
@@ -260,7 +268,7 @@ function ReviewQueue(props: { version: number; onOpen(path: string): void }) {
     setBusy(item.path);
     try {
       await http("POST", `/review/${action}`, { path: item.path });
-      UI.toast(action === "approve" ? "Факт добавлен в память" : "Факт отклонён", action === "approve" ? "success" : "info");
+      UI.toast(action === "approve" ? t("ui.review.approved") : t("ui.review.rejected"), action === "approve" ? "success" : "info");
       load();
     } catch (e) {
       UI.toast(errText(e), "error");
@@ -271,12 +279,10 @@ function ReviewQueue(props: { version: number; onOpen(path: string): void }) {
 
   if (!items) return <Spinner />;
   if (!items.length)
-    return <EmptyState title="Нечего проверять" icon="brain" hint="Сюда попадают факты, которые агент записал после чтения недоверенного контента (веб-страниц, писем, внешних инструментов)." />;
+    return <EmptyState title={t("ui.review.emptyTitle")} icon="brain" hint={t("ui.review.emptyHint")} />;
   return (
     <>
-      <div style={s.muted}>
-        Эти факты агент записал в сессии, где читал недоверенный контент. Пока вы их не одобрите, они не попадают в поиск и в промпт агента.
-      </div>
+      <div style={s.muted}>{t("ui.review.intro")}</div>
       {items.map((item) => (
         <Card
           key={item.path}
@@ -284,31 +290,31 @@ function ReviewQueue(props: { version: number; onOpen(path: string): void }) {
           actions={
             <div style={s.row}>
               <Button size="sm" variant="primary" disabled={busy === item.path} onClick={() => act(item, "approve")}>
-                Одобрить
+                {t("ui.review.approve")}
               </Button>
               <Button size="sm" variant="danger" disabled={busy === item.path} onClick={() => act(item, "reject")}>
-                Отклонить
+                {t("ui.review.reject")}
               </Button>
             </div>
           }
         >
           <div style={{ ...s.row, marginBottom: 8 }}>
             <span style={s.muted}>{item.path}</span>
-            {item.tags.map((t) => (
-              <Badge key={t}>{t}</Badge>
+            {item.tags.map((tag) => (
+              <Badge key={tag}>{tag}</Badge>
             ))}
-            {item.current && <Badge tone="info">заменит существующий факт</Badge>}
+            {item.current && <Badge tone="info">{t("ui.review.replaces")}</Badge>}
           </div>
-          <Markdown text={item.body || "_Пусто_"} />
+          <Markdown text={item.body || t("ui.emptyBody")} />
           <div style={{ ...s.muted, marginTop: 8 }}>
-            {fmtDate(item.updated)} · источник: {item.source || "неизвестен"}
+            {fmtDate(item.updated)} · {t("ui.source", { source: item.source || t("ui.review.unknownSource") })}
           </div>
           {item.current && (
             <details style={{ marginTop: 8 }}>
-              <summary style={{ cursor: "pointer" }}>Текущая версия</summary>
-              <Markdown text={item.current.body || "_Пусто_"} />
+              <summary style={{ cursor: "pointer" }}>{t("ui.review.current")}</summary>
+              <Markdown text={item.current.body || t("ui.emptyBody")} />
               <Button size="sm" variant="ghost" onClick={() => props.onOpen(item.path)}>
-                Открыть
+                {t("ui.open")}
               </Button>
             </details>
           )}
@@ -327,11 +333,11 @@ function SearchResults(props: { q: string; onOpen(path: string): void }) {
       .catch((e) => (UI.toast(errText(e), "error"), setHits([])));
   }, [props.q]);
   if (!hits) return <Spinner />;
-  if (!hits.length) return <EmptyState title={`Ничего не найдено по запросу «${props.q}»`} icon="brain" />;
+  if (!hits.length) return <EmptyState title={t("ui.search.none", { query: props.q })} icon="brain" />;
   return (
     <>
       {hits.map((h) => (
-        <Card key={h.path} title={h.title} actions={<Button size="sm" variant="secondary" onClick={() => props.onOpen(h.path)}>Открыть</Button>}>
+        <Card key={h.path} title={h.title} actions={<Button size="sm" variant="secondary" onClick={() => props.onOpen(h.path)}>{t("ui.open")}</Button>}>
           <div style={{ ...s.muted, marginBottom: 4 }}>{h.path}</div>
           <Markdown text={h.snippet} />
         </Card>
@@ -380,11 +386,7 @@ function MemoryPage() {
       break;
     default:
       content = (
-        <EmptyState
-          title="Память"
-          icon="brain"
-          hint="Здесь хранится то, что агент знает о вас: профиль, люди, проекты и заметки. Выберите факт слева, найдите нужное или добавьте новый."
-        />
+        <EmptyState title={t("ui.title")} icon="brain" hint={t("ui.home.hint")} />
       );
   }
 
@@ -397,14 +399,14 @@ function MemoryPage() {
             if (query.trim()) setView({ kind: "search", q: query.trim() });
           }}
         >
-          <input style={s.input} type="search" placeholder="Поиск по памяти…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input style={s.input} type="search" placeholder={t("ui.search.placeholder")} value={query} onChange={(e) => setQuery(e.target.value)} />
         </form>
         <div style={s.row}>
           <Button size="sm" variant="secondary" onClick={() => setView({ kind: "edit" })}>
-            Новый факт
+            {t("ui.newFact")}
           </Button>
           <Button size="sm" variant={tree?.review ? "primary" : "ghost"} onClick={() => setView({ kind: "review" })}>
-            {`На проверке${tree?.review ? ` (${tree.review})` : ""}`}
+            {t("ui.reviewButton", { count: tree?.review ?? 0 })}
           </Button>
         </div>
         {error && <div style={s.error}>{error}</div>}
@@ -417,5 +419,6 @@ function MemoryPage() {
 
 export default definePluginUI((ui) => {
   UI = ui;
-  return ui.routes.add({ path: "/memory", title: "Память", icon: "brain", component: MemoryPage, nav: true });
+  t = ui.i18n.t;
+  return ui.routes.add({ path: "/memory", title: t("ui.title"), icon: "brain", component: MemoryPage, nav: true });
 });
