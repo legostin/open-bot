@@ -12,3 +12,5 @@ playwright-report/
 !.env.example
 packages/web/public/shared/
 plugins/*/ui/dist/
+.claude/worktrees/
+.claude/settings.local.json
