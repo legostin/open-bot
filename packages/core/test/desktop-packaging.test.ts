@@ -10,7 +10,7 @@ import { RESOLVE_HOOK, defaultDataDir, desktopPorts, hubEnv, openUrl, setupCode 
 // @ts-ignore
 import { resolveWorkspace, workspaces } from "../../../packaging/desktop/resolve.mjs";
 // @ts-ignore
-import { removeDanglingLinks } from "../../../packaging/desktop/stage.mjs";
+import { removeDanglingLinks, wanted } from "../../../packaging/desktop/stage.mjs";
 // @ts-ignore
 import { loadCatalogs } from "../../../packaging/desktop/locales.mjs";
 // @ts-ignore
@@ -20,6 +20,14 @@ const ROOT = join(import.meta.dirname, "..", "..", "..");
 const tmp = () => mkdtempSync(join(tmpdir(), "owl-desktop-"));
 
 describe("desktop launcher", () => {
+  it("stages the hub without the desktop app's own sources", () => {
+    expect(wanted(join(ROOT, "packages", "core", "src", "cli.ts"))).toBe(true);
+    expect(wanted(join(ROOT, "packages", "desktop", "package.json"))).toBe(true);
+    expect(wanted(join(ROOT, "packages", "desktop", "src-tauri", "target", "release", "owlbot"))).toBe(false);
+    expect(wanted(join(ROOT, "packages", "desktop", "ui", "src", "main.ts"))).toBe(false);
+    expect(wanted(join(ROOT, "packages", "core", "test", "hub.test.ts"))).toBe(false);
+  });
+
   it("keeps data in the user's profile", () => {
     expect(defaultDataDir({ LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local" }, "win32", "C:\\Users\\u")).toBe(join("C:\\Users\\u\\AppData\\Local", "Owlbot"));
     expect(defaultDataDir({}, "darwin", "/Users/u")).toBe(join("/Users/u", "Library", "Application Support", "Owlbot"));

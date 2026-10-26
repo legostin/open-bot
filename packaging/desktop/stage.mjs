@@ -23,7 +23,7 @@ const NODE_DISTS = {
 };
 
 /** What runs in an installed app; tests, sources of the built UIs and dev configs stay behind. */
-function wanted(src) {
+export function wanted(src) {
   const rel = relative(ROOT, src).split(sep).join("/");
   if (rel === "") return true;
   const parts = rel.split("/");
@@ -32,6 +32,8 @@ function wanted(src) {
   const [top, pkg, sub] = parts;
   if (top === "packages" && (pkg === "web" || pkg === "console") && sub && sub !== "dist" && sub !== "package.json") return false;
   if (top === "plugins" && sub === "ui" && parts[3] === "src") return false;
+  // The desktop app is built around the stage; its manifest stays so `npm ci` finds the workspace.
+  if (top === "packages" && pkg === "desktop" && sub && sub !== "package.json") return false;
   return true;
 }
 
@@ -89,8 +91,9 @@ function extract(archive, into) {
   mkdirSync(dirname(into), { recursive: true });
   renameSync(join(tmp, top), into);
   rmSync(tmp, { recursive: true, force: true });
-  // Not needed to run the hub or npm.
-  for (const extra of ["include", "share", "CHANGELOG.md", "README.md", "install_tools.bat", "corepack", "corepack.cmd", join("node_modules", "corepack"), join("lib", "node_modules", "corepack"), join("bin", "corepack")]) {
+  // Not needed to run the hub or npm (the hub calls npm-cli.js directly: packages/core/src/cli-tools.ts). bin/npm and
+  // bin/npx are links, which the Tauri bundler would copy as broken files.
+  for (const extra of ["include", "share", "CHANGELOG.md", "README.md", "install_tools.bat", "corepack", "corepack.cmd", join("node_modules", "corepack"), join("lib", "node_modules", "corepack"), join("bin", "corepack"), join("bin", "npm"), join("bin", "npx")]) {
     rmSync(join(into, extra), { recursive: true, force: true });
   }
 }
