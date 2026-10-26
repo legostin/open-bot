@@ -3,7 +3,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, request, type IncomingMessage, type Server } from "node:http";
-import { readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect, type AddressInfo, type Socket } from "node:net";
 import type { ToolResult } from "@openbot/shared";
@@ -87,6 +88,22 @@ describe("browser plugin (headless Chromium)", () => {
   let h: PluginHarness;
   let server: Server;
   let base: string;
+  const workspace = mkdtempSync(join(tmpdir(), "browser-ws-"));
+  /** Same contract as the hub's files.deliver (packages/core/src/core-call.ts), minus the session lookup. */
+  const fakeCore = (method: string, p: any) => {
+    if (method !== "files.deliver") return {};
+    const dir = join(workspace, "downloads");
+    mkdirSync(dir, { recursive: true });
+    let rel: string = p.path;
+    if (!rel) {
+      const dot = p.name.lastIndexOf(".");
+      let candidate = p.name;
+      for (let i = 1; existsSync(join(dir, candidate)); i++) candidate = `${p.name.slice(0, dot)} (${i})${p.name.slice(dot)}`;
+      rel = `downloads/${candidate}`;
+    }
+    appendFileSync(join(workspace, rel), Buffer.from(p.data, "base64"));
+    return { path: rel, absolutePath: join(workspace, rel) };
+  };
   const posted: Array<{ path: string; body: URLSearchParams }> = [];
   const outputs: string[] = [];
 
@@ -135,6 +152,7 @@ describe("browser plugin (headless Chromium)", () => {
       dir: PLUGIN_DIR,
       settings: { headless: "always", allowLocalNetwork: true, takeoverWaitSec: 0 },
       vault: { "site-login": { url: base, username: "alice", password: SECRET } },
+      core: fakeCore,
     });
   }, 60_000);
 
@@ -308,14 +326,17 @@ describe("browser plugin (headless Chromium)", () => {
     await ok("open", { url: base + "/" });
     const snap = await ok("snapshot");
     const byRef = await ok("download", { ref: refOf(snap, /link "Скачать отчёт"/) });
-    expect(byRef).toMatch(/Файл сохранён: .*отчёт 1\.txt \(10 Б\)/);
+    expect(byRef).toMatch(/Файл сохранён в рабочую папку: downloads\/отчёт 1\.txt \(.*, 10 Б\)/);
     const byUrl = await ok("download", { url: base + "/file.txt" });
-    expect(byUrl).toMatch(/Файл сохранён: .*отчёт 1 \(1\)\.txt/);
+    expect(byUrl).toMatch(/рабочую папку: downloads\/отчёт 1 \(1\)\.txt/);
     const dir = join(h.dataDir, "downloads");
     expect(readdirSync(dir).sort()).toEqual(["отчёт 1 (1).txt", "отчёт 1.txt"]);
     expect(readFileSync(join(dir, "отчёт 1.txt"), "utf8")).toBe("hello file");
+    // The hub copied them into the agent's workspace (see the fake files.deliver in beforeAll).
+    expect(readFileSync(join(workspace, "downloads", "отчёт 1.txt"), "utf8")).toBe("hello file");
+    expect(h.coreCalls.filter((c) => c.method === "files.deliver").every((c) => c.params.sessionId)).toBe(true);
     // Opening a file URL downloads it instead of failing.
-    expect(await ok("open", { url: base + "/file.txt" })).toMatch(/По адресу оказался файл, он скачан: .*отчёт 1 \(2\)\.txt/);
+    expect(await ok("open", { url: base + "/file.txt" })).toMatch(/По адресу оказался файл, он скачан\. Файл сохранён в рабочую папку: downloads\/отчёт 1 \(2\)\.txt/);
   });
 
   it("manages tabs", async () => {

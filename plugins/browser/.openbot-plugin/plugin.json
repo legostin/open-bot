@@ -13,7 +13,11 @@
       "properties": {
         "headless": {
           "type": "string",
-          "enum": ["auto", "always", "never"],
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
           "default": "auto",
           "title": "Режим без окна",
           "description": "auto — окно, если есть дисплей (Linux с DISPLAY, например Xvfb в Docker), иначе без окна; always — всегда без окна; never — всегда с окном"
@@ -47,9 +51,19 @@
     }
   },
   "permissions": {
-    "network": ["*"],
-    "vault": ["login:*"],
-    "core": ["ui.emit"],
-    "ui": ["pane.right", "chat.toolResult"]
+    "network": [
+      "*"
+    ],
+    "vault": [
+      "login:*"
+    ],
+    "core": [
+      "ui.emit",
+      "files.deliver"
+    ],
+    "ui": [
+      "pane.right",
+      "chat.toolResult"
+    ]
   }
 }

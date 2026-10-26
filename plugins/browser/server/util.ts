@@ -52,7 +52,12 @@ export interface ProxyConfig {
 }
 
 /** Chromium proxy from the hub's egress proxy env (the per-plugin token is in the URL userinfo). */
-export function proxyFromEnv(env: NodeJS.ProcessEnv): ProxyConfig | undefined {
+/**
+ * Proxy for Chromium. The hub's NO_PROXY (loopback) is honoured only when `keepBypass` is set: otherwise a page could
+ * reach the hub and other loopback services directly. Playwright proxies loopback too (`<-loopback>`), so it hits the
+ * egress proxy, which refuses private addresses.
+ */
+export function proxyFromEnv(env: NodeJS.ProcessEnv, keepBypass = false): ProxyConfig | undefined {
   const raw = env.HTTPS_PROXY || env.https_proxy || env.HTTP_PROXY || env.http_proxy;
   if (!raw) return undefined;
   let u: URL;
@@ -65,7 +70,7 @@ export function proxyFromEnv(env: NodeJS.ProcessEnv): ProxyConfig | undefined {
   if (u.username) out.username = decodeURIComponent(u.username);
   if (u.password) out.password = decodeURIComponent(u.password);
   const noProxy = env.NO_PROXY || env.no_proxy;
-  if (noProxy) out.bypass = noProxy;
+  if (noProxy && keepBypass) out.bypass = noProxy;
   return out;
 }
 

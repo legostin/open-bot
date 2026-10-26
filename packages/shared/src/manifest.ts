@@ -68,6 +68,7 @@ export const CORE_METHODS = [
   "vault.check", // check if a vault ref exists / is unlocked (metadata only)
   "machines.list",
   "notifications.feedback", // apply a signed feedback button press (useful / less / off)
+  "files.deliver", // write a file (in base64 chunks) into a session workspace's downloads/ folder
 ] as const;
 export type CoreMethod = (typeof CORE_METHODS)[number];
 

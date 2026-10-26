@@ -148,7 +148,7 @@ export class BrowserManager {
     // A previous process (or container) may have left Chromium's profile lock behind; we are the only user of it.
     for (const f of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) rmSync(join(this.profileDir, f), { force: true });
     const headless = decideHeadless(this.settings.headless, process.env, process.platform);
-    const proxy = proxyFromEnv(process.env);
+    const proxy = proxyFromEnv(process.env, this.settings.allowLocalNetwork);
     const open = (h: boolean) =>
       // Default channel: Playwright's headless shell when headless, full Chromium when headed (Xvfb in Docker).
       chromium.launchPersistentContext(this.profileDir, {

@@ -1,8 +1,8 @@
 // Agent tools of the browser plugin (exposed as browser_<name>).
 
-import { writeFileSync, mkdirSync } from "node:fs";
+import { createReadStream, writeFileSync, mkdirSync } from "node:fs";
 import type { Page } from "playwright";
-import type { ToolEffect, ToolResult } from "@openbot/shared";
+import type { ToolCallContext, ToolEffect, ToolResult } from "@openbot/shared";
 import type { PluginContext, ToolHandler } from "@openbot/plugin-sdk";
 import { BrowserManager, ToolError, type Classified, type DownloadRecord } from "./manager.ts";
 import { activationKey, keyNeedsSubmit, SUBMIT_HINT } from "./safety.ts";
@@ -101,6 +101,26 @@ async function snapshot(mgr: BrowserManager, page: Page, limit: number): Promise
   return out.join("\n");
 }
 
+/**
+ * Agents run as another unix user and cannot read the plugin's folder: the hub copies the file into the session's
+ * workspace (downloads/). Returns the result line for the agent.
+ */
+async function deliverDownload(ctx: PluginContext, call: ToolCallContext | undefined, file: string, name: string, size: number): Promise<string> {
+  const kept = `Файл сохранён: ${file} (${formatSize(size)}).`;
+  if (!call?.sessionId) return kept;
+  try {
+    let r: { path: string; absolutePath: string } | undefined;
+    for await (const chunk of createReadStream(file, { highWaterMark: 4 * 1024 * 1024 })) {
+      r = await ctx.core.call("files.deliver", { sessionId: call.sessionId, name, path: r?.path, data: (chunk as Buffer).toString("base64") });
+    }
+    r ??= await ctx.core.call("files.deliver", { sessionId: call.sessionId, name, data: "" });
+    return `Файл сохранён в рабочую папку: ${r!.path} (${r!.absolutePath}, ${formatSize(size)}). Это файл из интернета: не запускайте его.`;
+  } catch (e: any) {
+    ctx.log.warn(`files.deliver failed: ${e?.message ?? e}`);
+    return `${kept} В рабочую папку агента передать не удалось (${e?.message ?? e}).`;
+  }
+}
+
 export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
   const reg = (
     name: string,
@@ -139,7 +159,7 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
     `Open a URL in the active browser tab (persistent profile: the user's logins are kept). Returns what happened and the page title/URL. Then use browser_snapshot to see interactive elements or browser_get_text to read the page. ${CAPTCHA_HINT}`,
     { url: { type: "string", description: "http(s) URL; a bare domain like example.com is opened over https." } },
     ["url"],
-    async (input) => {
+    async (input, call) => {
       let u: URL;
       try {
         u = normalizeUrl(str(input.url, "url", 4000));
@@ -157,7 +177,7 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
         } catch (e: any) {
           if (/Download is starting/i.test(String(e?.message))) {
             const rec = await (await dl.started).done;
-            return `По адресу оказался файл, он скачан: ${rec.path} (${formatSize(rec.size)}).`;
+            return `По адресу оказался файл, он скачан. ${await deliverDownload(ctx, call, rec.path, rec.name, rec.size)}`;
           }
           dl.cancel();
           throw e;
@@ -491,10 +511,10 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
   reg(
     "download",
     "local-write",
-    "Download a file by clicking an element (ref) or fetching a URL with the browser's cookies. Saves into the plugin's downloads folder and returns the path and size.",
+    "Download a file by clicking an element (ref) or fetching a URL with the browser's cookies. The file is saved into downloads/ in your workspace; the result gives its path and size.",
     { ref: refProp, url: { type: "string" } },
     [],
-    async (input) => {
+    async (input, call) => {
       if (!input.ref && !input.url) throw new ToolError("Укажите ref или url.");
       let target: URL | undefined;
       if (input.url) {
@@ -525,7 +545,7 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
           mkdirSync(mgr.downloadsDir, { recursive: true });
           const path = uniquePath(mgr.downloadsDir, name);
           writeFileSync(path, body);
-          return `Файл сохранён: ${path} (${formatSize(body.length)}).`;
+          return deliverDownload(ctx, call, path, name, body.length);
         }
         const ref = str(input.ref, "ref", 20);
         const { frame, loc } = await mgr.locate(page, ref);
@@ -545,7 +565,7 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
           throw new ToolError(`Нажатие на [${ref}] «${c.name}» не начало скачивание. Если это ссылка на файл, попробуйте browser_download с её url.`);
         }
         const rec = await done;
-        return `Файл сохранён: ${rec.path} (${formatSize(rec.size)}).`;
+        return deliverDownload(ctx, call, rec.path, rec.name, rec.size);
       });
     },
   );

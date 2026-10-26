@@ -32,12 +32,9 @@ describe("settings", () => {
 
 describe("proxy", () => {
   it("takes the egress token from the URL userinfo", () => {
-    expect(proxyFromEnv({ HTTPS_PROXY: "http://tok_abc:x@127.0.0.1:8089", NO_PROXY: "127.0.0.1,localhost" })).toEqual({
-      server: "http://127.0.0.1:8089",
-      username: "tok_abc",
-      password: "x",
-      bypass: "127.0.0.1,localhost",
-    });
+    const env = { HTTPS_PROXY: "http://tok_abc:x@127.0.0.1:8089", NO_PROXY: "127.0.0.1,localhost" };
+    expect(proxyFromEnv(env)).toEqual({ server: "http://127.0.0.1:8089", username: "tok_abc", password: "x" });
+    expect(proxyFromEnv(env, true)?.bypass).toBe("127.0.0.1,localhost");
     expect(proxyFromEnv({})).toBeUndefined();
   });
 });

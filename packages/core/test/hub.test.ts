@@ -1,10 +1,11 @@
 // End-to-end tests of the hub with a scripted brain plugin (test/fixtures/plugins/fakebrain).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hub, loadConfig } from "../src/index.ts";
+import { createCoreCall } from "../src/core-call.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 
@@ -152,6 +153,19 @@ describe("hub (integration)", () => {
     const audit: any[] = await consoleClient.req("GET", "/console-api/audit?limit=200");
     expect(audit.some((e) => e.action === "tool.call" && e.target === "fake_send")).toBe(true);
     expect((await consoleClient.req("GET", "/console-api/audit/verify")).ok).toBe(true);
+  });
+
+  it("delivers plugin files into the session workspace", async () => {
+    const s = hub.db.prepare("select id from sessions order by created_at limit 1").get() as { id: string };
+    const call = createCoreCall(hub);
+    const first = (await call("fakebrain", "files.deliver", { sessionId: s.id, name: "../../evil/отчёт.txt", data: Buffer.from("hel").toString("base64") })) as any;
+    expect(first.path).toBe("downloads/отчёт.txt");
+    await call("fakebrain", "files.deliver", { sessionId: s.id, name: "x", path: first.path, data: Buffer.from("lo").toString("base64") });
+    expect(readFileSync(first.absolutePath, "utf8")).toBe("hello");
+    const second = (await call("fakebrain", "files.deliver", { sessionId: s.id, name: "отчёт.txt", data: "" })) as any;
+    expect(second.path).toBe("downloads/отчёт (1).txt");
+    await expect(call("fakebrain", "files.deliver", { sessionId: s.id, path: "downloads/../../x", data: "" })).rejects.toThrow(/invalid path/);
+    await expect(call("fakebrain", "files.deliver", { sessionId: "nope", name: "a", data: "" })).rejects.toThrow(/session not found/);
   });
 
   it("lets the security console grant a plugin extra vault items", async () => {
