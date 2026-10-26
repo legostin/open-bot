@@ -1,6 +1,6 @@
 // In-process event bus. Web clients and plugin subscribers are attached by the server and plugin host.
 
-import type { AgentDraft, BrainLoginState, TeamMember, UiEvent } from "@openbot/shared";
+import type { AgentDraft, BrainLoginState, TeamMember, UiEvent } from "@owlbot/shared";
 
 export type BusEvents = {
   "message.created": any;

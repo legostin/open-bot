@@ -1,6 +1,6 @@
 // Tools implemented by the core itself (owner "core").
 
-import type { ToolDescriptor, ToolResult } from "@openbot/shared";
+import type { ToolDescriptor, ToolResult } from "@owlbot/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { SkillIndex } from "../skills.ts";
 import type { VaultService } from "../vault/service.ts";

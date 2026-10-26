@@ -1,4 +1,4 @@
-import type { ToolResult } from "@openbot/shared";
+import type { ToolResult } from "@owlbot/shared";
 
 export function textResult(text: string, meta?: ToolResult["_meta"]): ToolResult {
   return { content: [{ type: "text", text }], ...(meta ? { _meta: meta } : {}) };

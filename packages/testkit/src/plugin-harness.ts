@@ -6,13 +6,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@openbot/shared";
-import { createRpcPeer, ndjsonTransport, readPluginLayout, type RpcPeer } from "@openbot/shared";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@owlbot/shared";
+import { createRpcPeer, ndjsonTransport, readPluginLayout, type RpcPeer } from "@owlbot/shared";
 
 const APP_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..", "..", "..");
 
 export interface HarnessOptions {
-  /** Plugin directory (contains .openbot-plugin/plugin.json). */
+  /** Plugin directory (contains .owlbot-plugin/plugin.json). */
   dir: string;
   settings?: Record<string, unknown>;
   /** Vault items by id → fields. */
@@ -64,7 +64,7 @@ export function defaultContext(over: Partial<ToolCallContext> = {}): ToolCallCon
     callId: "call_test",
     tainted: false,
     background: false,
-    workspace: over.workspace ?? mkdtempSync(join(tmpdir(), "ob-ws-")),
+    workspace: over.workspace ?? mkdtempSync(join(tmpdir(), "owl-ws-")),
     machineId: "local",
     ...over,
   };
@@ -73,7 +73,7 @@ export function defaultContext(over: Partial<ToolCallContext> = {}): ToolCallCon
 export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
   const layout = readPluginLayout(resolve(o.dir));
   if (!layout.serverEntry) throw new Error(`plugin at ${o.dir} has no server entry`);
-  const dataDir = o.dataDir ?? mkdtempSync(join(tmpdir(), `ob-plugin-${layout.manifest.id}-`));
+  const dataDir = o.dataDir ?? mkdtempSync(join(tmpdir(), `owl-plugin-${layout.manifest.id}-`));
   const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", join(APP_ROOT, "packages", "plugin-sdk", "src", "runner.ts"), layout.serverEntry], {
     cwd: layout.dir,
     env: { ...process.env, HOME: dataDir, ...o.env },

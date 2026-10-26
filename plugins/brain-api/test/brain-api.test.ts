@@ -4,8 +4,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
-import type { BrainEvent, BrainSessionOptions } from "@openbot/shared";
-import { startMockLlm, startPlugin, type MockLlm, type PluginHarness } from "@openbot/testkit";
+import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
+import { startMockLlm, startPlugin, type MockLlm, type PluginHarness } from "@owlbot/testkit";
 import { ECHO_TOOL, startFakeMcp, type FakeMcp } from "./fake-mcp.ts";
 
 const PLUGIN_DIR = join(import.meta.dirname, "..");
@@ -41,7 +41,7 @@ describe("brain-api plugin", () => {
     },
     variant: "anthropic",
     model: "sonnet",
-    workspace: mkdtempSync(join(tmpdir(), "ob-api-ws-")),
+    workspace: mkdtempSync(join(tmpdir(), "owl-api-ws-")),
     mcp: { url: mcp.url, token: mcp.token, bridgeCommand: [] },
     systemPrompt: "You are a test assistant.",
     env: {},
@@ -351,7 +351,7 @@ describe("brain-api plugin", () => {
   });
 
   it("persists history and resumes it in a new plugin process", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "ob-api-data-"));
+    const dataDir = mkdtempSync(join(tmpdir(), "owl-api-data-"));
     const h1 = await startPlugin({ dir: PLUGIN_DIR, settings, vault: VAULT, dataDir });
     llm.script([{ text: "Приятно познакомиться, Оля!" }]);
     await h1.brainCreate("api", opts("s-resume"));

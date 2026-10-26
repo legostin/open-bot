@@ -1,5 +1,5 @@
-import type { OutboundMessage } from "@openbot/shared";
-import type { RpcPeer } from "@openbot/shared";
+import type { OutboundMessage } from "@owlbot/shared";
+import type { RpcPeer } from "@owlbot/shared";
 import type { Redactor } from "./vault/redact.ts";
 import { t } from "./i18n.ts";
 

@@ -1,8 +1,8 @@
 // Brain registry: brains contributed by plugins (local) and by paired machines (remote).
 // Gives the session runner one interface regardless of where the brain runs.
 
-import type { BrainEvent, BrainLoginUpdate, BrainSessionOptions, BrainTurn, ProbeResult, BrainRef } from "@openbot/shared";
-import { formatBrainRef, parseBrainRef, type RpcPeer } from "@openbot/shared";
+import type { BrainEvent, BrainLoginUpdate, BrainSessionOptions, BrainTurn, ProbeResult, BrainRef } from "@owlbot/shared";
+import { formatBrainRef, parseBrainRef, type RpcPeer } from "@owlbot/shared";
 import { LocalizedError, t } from "./i18n.ts";
 
 export interface BrainHandle {

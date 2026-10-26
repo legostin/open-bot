@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, LogOut, Save } from "lucide-react";
-import type { Locale } from "@openbot/shared";
-import { LOCALE_NAMES } from "@openbot/shared/i18n";
+import type { Locale } from "@owlbot/shared";
+import { LOCALE_NAMES } from "@owlbot/shared/i18n";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
 import { agents, ensureAgents, hubEvents, logout, refreshBootstrap, session } from "../state/app";

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// openbot-node CLI: pair | run | status | policy
+// owlbot-node CLI: pair | run | status | policy
 
 import { existsSync, readFileSync } from "node:fs";
 import { configFile, keyFile, loadConfig, nodeHome, normalizeHubUrl, NotPairedError, UserError } from "./home.ts";
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
       return cmdPolicy();
     case "mcp-bridge":
       // Internal: the stdio MCP bridge brain CLIs spawn (keeps the single-file download self-contained).
-      await import("@openbot/mcp-bridge");
+      await import("@owlbot/mcp-bridge");
       return;
     default:
       throw new PairError(t("cli.unknownCommand", { command: cmd, help: help() }));

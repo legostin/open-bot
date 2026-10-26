@@ -3,7 +3,7 @@
   "name": "%name%",
   "version": "0.1.0",
   "description": "%description%",
-  "author": "open-bot",
+  "author": "Owlbot",
   "builtin": true,
   "server": "./server/index.ts",
   "ui": "./ui/dist/index.js",

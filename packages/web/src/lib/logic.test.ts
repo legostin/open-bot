@@ -8,7 +8,7 @@ import { slugify } from "./format";
 import { mergeClasses } from "./classes";
 import { sectionForPath } from "../components/nav";
 import { agentForPath, agentPath, teamOrder } from "./team";
-import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, parseAvatar } from "@openbot/shared/avatar";
+import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, parseAvatar } from "@owlbot/shared/avatar";
 
 describe("glob", () => {
   it("matches * and ? case-insensitively", () => {

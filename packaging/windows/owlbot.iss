@@ -1,6 +1,6 @@
-; open-bot for Windows: a per-user install (no admin rights) of the staged app (packaging/desktop/stage.mjs) with its
-; own Node, the tray app (open-bot.exe) and a Run value that starts it at sign-in. Built by packaging/windows/build.mjs:
-;   ISCC /DAppVersion=x.y.z /DStageDir=... /DOutputDir=... /DMessagesFile=... /DIconFile=... open-bot.iss
+; Owlbot for Windows: a per-user install (no admin rights) of the staged app (packaging/desktop/stage.mjs) with its
+; own Node, the tray app (Owlbot.exe) and a Run value that starts it at sign-in. Built by packaging/windows/build.mjs:
+;   ISCC /DAppVersion=x.y.z /DStageDir=... /DOutputDir=... /DMessagesFile=... /DIconFile=... owlbot.iss
 ; Options: /PORT=18080 writes the hub port to the data dir's desktop.json (for a second hub next to another one);
 ; /NOSTART leaves the tray stopped after a silent install (CI starts it itself).
 
@@ -9,14 +9,14 @@
 #endif
 
 [Setup]
-AppId={{8C2E1A55-6F0B-4B7E-9C1D-0B7A1E5F2D31}
-AppName=open-bot
+AppId={{A4A4B056-D67F-4161-9800-3232E1B068AA}
+AppName=Owlbot
 AppVersion={#AppVersion}
-AppVerName=open-bot {#AppVersion}
-AppPublisher=open-bot
+AppVerName=Owlbot {#AppVersion}
+AppPublisher=Owlbot
 VersionInfoVersion={#AppVersion}
-DefaultDirName={localappdata}\Programs\open-bot
-DefaultGroupName=open-bot
+DefaultDirName={localappdata}\Programs\Owlbot
+DefaultGroupName=Owlbot
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 DisableReadyPage=yes
@@ -24,10 +24,10 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
-OutputBaseFilename=open-bot-setup-{#AppVersion}-x64
+OutputBaseFilename=owlbot-setup-{#AppVersion}-x64
 SetupIconFile={#IconFile}
-UninstallDisplayIcon={app}\open-bot.exe
-UninstallDisplayName=open-bot
+UninstallDisplayIcon={app}\Owlbot.exe
+UninstallDisplayName=Owlbot
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -57,18 +57,18 @@ Type: filesandordirs; Name: "{app}\packaging"
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\open-bot"; Filename: "{app}\open-bot.exe"; IconFilename: "{app}\open-bot.ico"
+Name: "{autoprograms}\Owlbot"; Filename: "{app}\Owlbot.exe"; IconFilename: "{app}\owlbot.ico"
 ; Starts the tray without opening the browser; [Run] opens it through Explorer after a silent install.
-Name: "{app}\open-bot (background)"; Filename: "{app}\open-bot.exe"; Parameters: "--background"; IconFilename: "{app}\open-bot.ico"
+Name: "{app}\Owlbot (background)"; Filename: "{app}\Owlbot.exe"; Parameters: "--background"; IconFilename: "{app}\owlbot.ico"
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "open-bot"; ValueData: """{app}\open-bot.exe"" --background"; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Owlbot"; ValueData: """{app}\Owlbot.exe"" --background"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
 ; Through Explorer, not as Setup's child: processes Setup starts inherit its redirection guard, and the hub with the
 ; CLIs it runs would then not follow junctions (pnpm installs in a workspace, say) until the next sign-in.
-Filename: "{win}\explorer.exe"; Parameters: """{app}\open-bot.exe"""; Description: "{cm:setup_open}"; Flags: nowait postinstall skipifsilent
-Filename: "{win}\explorer.exe"; Parameters: """{app}\open-bot (background).lnk"""; Flags: nowait; Check: StartAfterSilentInstall
+Filename: "{win}\explorer.exe"; Parameters: """{app}\Owlbot.exe"""; Description: "{cm:setup_open}"; Flags: nowait postinstall skipifsilent
+Filename: "{win}\explorer.exe"; Parameters: """{app}\Owlbot (background).lnk"""; Flags: nowait; Check: StartAfterSilentInstall
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
@@ -79,7 +79,7 @@ const
 
 function DataDir: String;
 begin
-  Result := ExpandConstant('{localappdata}\open-bot');
+  Result := ExpandConstant('{localappdata}\Owlbot');
 end;
 
 function HasSwitch(Name: String): Boolean;
@@ -103,7 +103,7 @@ var
   Code: Integer;
   Exe: String;
 begin
-  Exe := ExpandConstant('{app}\open-bot.exe');
+  Exe := ExpandConstant('{app}\Owlbot.exe');
   if FileExists(Exe) then
     Exec(Exe, '--quit', '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
@@ -129,7 +129,7 @@ begin
     end;
   end;
   if (CurStep = ssPostInstall) and not WizardIsTaskSelected('autostart') then
-    RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'open-bot');
+    RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'Owlbot');
 end;
 
 function InitializeUninstall: Boolean;
@@ -142,7 +142,7 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'open-bot');
+    RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'Owlbot');
     { Chats, agents and the vault stay unless the user says otherwise; a silent uninstall always keeps them. }
     if (not UninstallSilent) and DirExists(DataDir) then
       if MsgBox(FmtMessage(CustomMessage('setup_deleteData'), [DataDir]), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then

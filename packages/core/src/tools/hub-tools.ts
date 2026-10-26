@@ -10,8 +10,8 @@
 //
 // The one exception is profile_update at the end: every agent may change its own profile when the user asks.
 
-import type { AgentDef, AgentDraft, JsonSchema, ToolCallContext, ToolDescriptor, ToolResult } from "@openbot/shared";
-import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, parseAvatar, parseBrainRef } from "@openbot/shared";
+import type { AgentDef, AgentDraft, JsonSchema, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, parseAvatar, parseBrainRef } from "@owlbot/shared";
 import type { Hub } from "../app.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
@@ -322,7 +322,7 @@ export function registerHubTools(hub: Hub): void {
       const url = hub.config.publicUrl;
       return text(
         `Pairing code ${c.code} (valid until ${c.expiresAt}). On the computer (Node.js 24+):\n` +
-          `curl -fsSLo openbot-node.mjs ${url}/download/openbot-node.mjs && node openbot-node.mjs pair ${url} ${c.code}`,
+          `curl -fsSLo owlbot-node.mjs ${url}/download/owlbot-node.mjs && node owlbot-node.mjs pair ${url} ${c.code}`,
       );
     },
   );

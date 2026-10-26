@@ -74,7 +74,7 @@ function DialogInner({
   return (
     <dialog
       ref={ref}
-      aria-labelledby="ob-dialog-title"
+      aria-labelledby="owl-dialog-title"
       onMouseDown={(e) => {
         downOnBackdrop.current = e.target === ref.current;
       }}
@@ -84,13 +84,13 @@ function DialogInner({
       className={cx(
         "fixed inset-x-0 bottom-0 top-auto m-0 flex max-h-[92dvh] w-full max-w-none flex-col overflow-hidden rounded-t-2xl border border-line bg-surface p-0 text-fg shadow-2xl",
         "sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[88dvh] sm:rounded-xl",
-        "backdrop:bg-slate-950/55 backdrop:backdrop-blur-[2px] ob-in",
+        "backdrop:bg-slate-950/55 backdrop:backdrop-blur-[2px] owl-in",
         width,
       )}
     >
       <div className="flex items-start gap-3 border-b border-line px-4 py-3.5 sm:px-5">
         <div className="min-w-0 flex-1">
-          <h2 id="ob-dialog-title" className="text-base font-semibold text-fg">
+          <h2 id="owl-dialog-title" className="text-base font-semibold text-fg">
             {title}
           </h2>
           {description && <div className="mt-0.5 text-sm text-muted">{description}</div>}
@@ -204,7 +204,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={item.id}
             role={item.tone === "error" ? "alert" : "status"}
             className={cx(
-              "ob-in pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border bg-surface px-3 py-2.5 text-sm text-fg shadow-lg",
+              "owl-in pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border bg-surface px-3 py-2.5 text-sm text-fg shadow-lg",
               item.tone === "error" ? "border-danger-line" : item.tone === "ok" ? "border-ok-line" : "border-line",
             )}
           >

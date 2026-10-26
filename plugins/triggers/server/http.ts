@@ -2,7 +2,7 @@
 // Errors shown by the UI carry the catalog message in the reader's language plus the code and params;
 // webhook responses go to other programs and stay in English.
 
-import type { PluginHttpRequest, PluginHttpResponse } from "@openbot/plugin-sdk";
+import type { PluginHttpRequest, PluginHttpResponse } from "@owlbot/plugin-sdk";
 import { NotFoundError, type TriggerEngine } from "./engine.ts";
 import type { TriggerError } from "./errors.ts";
 import { describeSchedule } from "./schedule.ts";

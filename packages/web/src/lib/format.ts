@@ -1,6 +1,6 @@
 // Formatting helpers: status labels, relative times and dates in the interface language.
 
-import type { NotifyLevel, TaskStatus } from "@openbot/shared";
+import type { NotifyLevel, TaskStatus } from "@owlbot/shared";
 import { formatDate, formatRelative, t, type MessageKey } from "../i18n";
 
 export type Tone = "neutral" | "success" | "warning" | "danger" | "info";

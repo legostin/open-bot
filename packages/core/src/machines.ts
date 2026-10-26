@@ -2,8 +2,8 @@
 
 import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import type { Machine, MachineInfo, ToolResult } from "@openbot/shared";
-import { createRpcPeer, newId, nowIso, wsTransport, type RpcPeer, type WsLike } from "@openbot/shared";
+import type { Machine, MachineInfo, ToolResult } from "@owlbot/shared";
+import { createRpcPeer, newId, nowIso, wsTransport, type RpcPeer, type WsLike } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { BrainRegistry } from "./brains.ts";
@@ -11,7 +11,7 @@ import type { AuditLog } from "./audit.ts";
 import type { ToolRegistry } from "./tools/registry.ts";
 import { hubLocale, LocalizedError } from "./i18n.ts";
 
-export const NODE_AUTH_PREFIX = "openbot-node-auth:";
+export const NODE_AUTH_PREFIX = "owlbot-node-auth:";
 const PAIRING_TTL = 10 * 60_000;
 
 const fromRow = (r: any, online: boolean): Machine => ({

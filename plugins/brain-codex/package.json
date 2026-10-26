@@ -1,5 +1,5 @@
 {
-  "name": "@openbot/plugin-brain-codex",
+  "name": "@owlbot/plugin-brain-codex",
   "version": "0.1.0",
   "private": true,
   "type": "module"

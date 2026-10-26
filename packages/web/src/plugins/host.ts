@@ -1,9 +1,9 @@
-// UI plugin host: builds the per-plugin OpenBotUI object and loads plugin modules listed in /api/bootstrap.
+// UI plugin host: builds the per-plugin OwlbotUI object and loads plugin modules listed in /api/bootstrap.
 
 import type { ComponentType } from "react";
-import type { Catalog } from "@openbot/shared";
-import type { OpenBotUI, SlotContribution, SlotName, SlotProps } from "@openbot/ui";
-import { translator } from "@openbot/shared/i18n";
+import type { Catalog } from "@owlbot/shared";
+import type { OwlbotUI, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
+import { translator } from "@owlbot/shared/i18n";
 import { navigate } from "wouter/use-browser-location";
 import { api, request, type Method } from "../lib/api";
 import { createStore } from "../lib/store";
@@ -26,7 +26,7 @@ function setLoad(id: string, s: PluginLoadState): void {
 }
 
 /** `messages`: the plugin's own catalog from /api/bootstrap (English plus the interface language). */
-export function createOpenBotUI(pluginId: string, messages: Catalog = {}): OpenBotUI {
+export function createOwlbotUI(pluginId: string, messages: Catalog = {}): OwlbotUI {
   const register = <P = any>(slot: SlotName, c: SlotContribution<P>): (() => void) => {
     switch (slot) {
       case "route":
@@ -108,7 +108,7 @@ async function load(entry: UiPluginEntry): Promise<void> {
     const mod = await import(/* @vite-ignore */ url);
     const activate = resolveActivate(mod);
     if (!activate) throw new Error(t("plugins.noActivate"));
-    const ret = await activate(createOpenBotUI(entry.id, entry.messages));
+    const ret = await activate(createOwlbotUI(entry.id, entry.messages));
     const cur = loaded.get(entry.id);
     if (cur) cur.cleanup = typeof ret === "function" ? ret : undefined;
     setLoad(entry.id, { name: entry.name, status: "active" });

@@ -3,9 +3,9 @@
 
 import { mkdirSync, writeFileSync, chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@openbot/shared";
-import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
-import type { Locale } from "@openbot/shared/i18n";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@owlbot/shared";
+import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
+import type { Locale } from "@owlbot/shared/i18n";
 import { capture, childEnv, runLines } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseCodexDeviceLogin, runCliLogin } from "./login.ts";
@@ -111,20 +111,20 @@ class CodexSession implements BrainSessionImpl {
     }
     // Codex reads AGENTS.md from the working directory: that is where our system prompt goes.
     const agentsFile = join(opts.workspace, "AGENTS.md");
-    const marker = "<!-- openbot:system -->";
+    const marker = "<!-- owlbot:system -->";
     const existing = existsSync(agentsFile) ? readFileSync(agentsFile, "utf8") : "";
-    const userPart = existing.includes(marker) ? existing.slice(existing.indexOf("<!-- /openbot:system -->") + 24) : existing;
-    writeFileSync(agentsFile, `${marker}\n${opts.systemPrompt}\n<!-- /openbot:system -->\n${userPart}`);
+    const userPart = existing.includes(marker) ? existing.slice(existing.indexOf("<!-- /owlbot:system -->") + 24) : existing;
+    writeFileSync(agentsFile, `${marker}\n${opts.systemPrompt}\n<!-- /owlbot:system -->\n${userPart}`);
   }
 
   private args(): string[] {
-    const [command, ...args] = this.o.mcp.bridgeCommand.length ? this.o.mcp.bridgeCommand : ["openbot-mcp-bridge"];
+    const [command, ...args] = this.o.mcp.bridgeCommand.length ? this.o.mcp.bridgeCommand : ["owlbot-mcp-bridge"];
     const sandbox = this.p.sandbox?.() ?? "danger-full-access";
     const cfg = [
-      `mcp_servers.openbot.command=${tomlString(command)}`,
-      `mcp_servers.openbot.args=[${args.map(tomlString).join(",")}]`,
-      `mcp_servers.openbot.env={OPENBOT_URL=${tomlString(this.o.mcp.url)},OPENBOT_TOKEN_FILE=${tomlString(join(this.dir, "token"))}}`,
-      `mcp_servers.openbot.tool_timeout_sec=3600`,
+      `mcp_servers.owlbot.command=${tomlString(command)}`,
+      `mcp_servers.owlbot.args=[${args.map(tomlString).join(",")}]`,
+      `mcp_servers.owlbot.env={OWLBOT_URL=${tomlString(this.o.mcp.url)},OWLBOT_TOKEN_FILE=${tomlString(join(this.dir, "token"))}}`,
+      `mcp_servers.owlbot.tool_timeout_sec=3600`,
       `approval_policy="never"`,
       `sandbox_mode=${tomlString(sandbox)}`,
     ];

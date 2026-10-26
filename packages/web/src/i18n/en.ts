@@ -110,7 +110,7 @@ export default {
   "auth.version": "version {version}",
   "auth.setup.title": "First run",
   "auth.setup.intro": "Choose a password to sign in with. To confirm it's you, enter the setup code.",
-  "auth.setup.introDesktop": "Choose a password to sign in with. open-bot runs on this computer and keeps everything here.",
+  "auth.setup.introDesktop": "Choose a password to sign in with. Owlbot runs on this computer and keeps everything here.",
   "auth.setup.codeHint": "The hub prints the setup code to its log on first start, on the line “enter the setup code”. In Docker: {command}",
   "auth.setup.code": "Setup code",
   "auth.setup.password": "New password",
@@ -438,7 +438,7 @@ export default {
   "plugins.installConfirm": "Install and enable",
   "plugins.needSource": "Enter a git URL or a folder path",
   "plugins.source": "Source",
-  "plugins.sourceHint": "A git repository (https://…, git@…) or a folder path on the hub's server. open-bot, Claude Code and Codex plugins all work.",
+  "plugins.sourceHint": "A git repository (https://…, git@…) or a folder path on the hub's server. Owlbot, Claude Code and Codex plugins all work.",
   "plugins.stagingNote": "The plugin is first downloaded to a temporary folder: you'll see the permissions it asks for and decide whether to install it.",
   "plugins.author": "Author: {name}",
   "plugins.hasServer": "has a server part",
@@ -483,7 +483,7 @@ export default {
   "machines.code": "Code:",
   "machines.expired": "expired",
   "machines.validFor": "valid for {time}",
-  "machines.otherNetwork": "If the machine is on another network, use Tailscale or set the hub's public address (OPENBOT_PUBLIC_URL).",
+  "machines.otherNetwork": "If the machine is on another network, use Tailscale or set the hub's public address (OWLBOT_PUBLIC_URL).",
   "machines.paired": "Machine “{name}” connected",
 
   // MCP servers

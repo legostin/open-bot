@@ -1,11 +1,11 @@
 {
   "name": "Claude Code",
-  "description": "Мозг на подписке Claude: запускает Claude Code в режиме без интерфейса с инструментами open-bot.",
+  "description": "Мозг на подписке Claude: запускает Claude Code в режиме без интерфейса с инструментами Owlbot.",
   "settings.tokenRef.title": "Токен (ссылка vault)",
   "settings.tokenRef.description": "Результат `claude setup-token`, сохранённый в vault. Если пусто — используется вход CLI.",
   "settings.command.title": "Команда CLI",
   "settings.allowedTools.title": "Встроенные инструменты Claude Code",
-  "settings.allowedTools.description": "Пусто — набор по умолчанию (Bash, файлы, веб, задачи, скиллы и инструменты open-bot).",
+  "settings.allowedTools.description": "Пусто — набор по умолчанию (Bash, файлы, веб, задачи, скиллы и инструменты Owlbot).",
   "setup.token.title": "Токен Claude Code",
   "setup.token.hint": "Нужен, только если Claude Code не залогинен на этом сервере: выполните `claude setup-token` на любом компьютере с вашей подпиской и вставьте токен сюда."
 }

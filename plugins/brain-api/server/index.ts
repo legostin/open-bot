@@ -4,8 +4,8 @@
 
 import { existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import type { BrainSessionOptions, ProbeResult } from "@openbot/shared";
-import type { PluginContext, PluginModule } from "@openbot/plugin-sdk";
+import type { BrainSessionOptions, ProbeResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
 import { isSafeSessionId, loadSession, type HistoryMessage } from "./history.ts";
 import { request, trimSlash } from "./http.ts";
 import { ApiBrainSession, readKey } from "./session.ts";

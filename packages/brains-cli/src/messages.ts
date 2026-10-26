@@ -1,6 +1,6 @@
 // Messages the CLI brains show to people (probe details, failures). The caller passes the language.
 
-import { DEFAULT_LOCALE, translator, type Catalog, type Locale, type Translate } from "@openbot/shared/i18n";
+import { DEFAULT_LOCALE, translator, type Catalog, type Locale, type Translate } from "@owlbot/shared/i18n";
 
 const en = {
   "claude.label": "Claude Code",
@@ -8,7 +8,7 @@ const en = {
   "claude.notInstalledShort": "Claude Code is not installed",
   "claude.notSignedIn": "Claude Code is not signed in: ask the assistant to sign in to Claude Code, or paste a token from `claude setup-token` into the chat",
   "claude.failed": "Claude Code exited with an error",
-  "claude.mcpUnavailable": "open-bot tools are unavailable in Claude Code (MCP: {status})",
+  "claude.mcpUnavailable": "Owlbot tools are unavailable in Claude Code (MCP: {status})",
   "claude.limit": "Claude: subscription limit ({kind})",
   "claude.vaultToken": "token from the vault",
   "claude.signedIn": "signed in: {method}",
@@ -32,7 +32,7 @@ const ru: Record<keyof typeof en, string> = {
   "claude.notInstalledShort": "Claude Code не установлен",
   "claude.notSignedIn": "Claude Code не авторизован: попросите ассистента войти в Claude Code или вставьте в чат токен из `claude setup-token`",
   "claude.failed": "Claude Code завершился с ошибкой",
-  "claude.mcpUnavailable": "Инструменты open-bot недоступны в Claude Code (MCP: {status})",
+  "claude.mcpUnavailable": "Инструменты Owlbot недоступны в Claude Code (MCP: {status})",
   "claude.limit": "Claude: лимит подписки ({kind})",
   "claude.vaultToken": "токен из хранилища",
   "claude.signedIn": "вход: {method}",

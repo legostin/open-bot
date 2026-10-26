@@ -1,4 +1,4 @@
-// open-bot desktop launcher: what the Windows tray app and the macOS LaunchAgent run in an installed app.
+// Owlbot desktop launcher: what the Windows tray app and the macOS LaunchAgent run in an installed app.
 //   node launch.mjs        run the hub (data in the user's profile, ports from <data>/desktop.json)
 //   node launch.mjs url    wait for the hub and print the address to open (with the setup code until the first run is done)
 // A "stop" line on stdin stops the hub cleanly: a windowless child on Windows gets no SIGTERM.
@@ -14,9 +14,9 @@ export const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "
 
 /** Where a desktop install keeps its data: the user's profile, never the app folder. */
 export function defaultDataDir(env = process.env, platform = process.platform, home = homedir()) {
-  if (platform === "win32") return join(env.LOCALAPPDATA || join(home, "AppData", "Local"), "open-bot");
-  if (platform === "darwin") return join(home, "Library", "Application Support", "open-bot");
-  return join(env.XDG_DATA_HOME || join(home, ".local", "share"), "open-bot");
+  if (platform === "win32") return join(env.LOCALAPPDATA || join(home, "AppData", "Local"), "Owlbot");
+  if (platform === "darwin") return join(home, "Library", "Application Support", "Owlbot");
+  return join(env.XDG_DATA_HOME || join(home, ".local", "share"), "owlbot");
 }
 
 /** `<data>/desktop.json`: `{ "port": 8080 }` (console port+1, egress proxy port+9 unless given). */
@@ -45,7 +45,7 @@ export function setupCode(dataDir) {
   return code;
 }
 
-/** The hook that finds @openbot/* without node_modules links (resolve.mjs), for this process's Node children. */
+/** The hook that finds @owlbot/* without node_modules links (resolve.mjs), for this process's Node children. */
 export const RESOLVE_HOOK = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "resolve.mjs")).href;
 
 /** The environment the hub runs with; what the caller already set wins. */
@@ -53,26 +53,26 @@ export function hubEnv(env, dataDir) {
   const { port, consolePort, egressPort } = desktopPorts(dataDir);
   const nodeOptions = env.NODE_OPTIONS ?? "";
   return {
-    OPENBOT_APP_ROOT: APP_ROOT,
-    OPENBOT_PORT: String(port),
-    OPENBOT_CONSOLE_PORT: String(consolePort),
-    OPENBOT_EGRESS_PORT: String(egressPort),
+    OWLBOT_APP_ROOT: APP_ROOT,
+    OWLBOT_PORT: String(port),
+    OWLBOT_CONSOLE_PORT: String(consolePort),
+    OWLBOT_EGRESS_PORT: String(egressPort),
     // Passkeys need a host name, not 127.0.0.1.
-    OPENBOT_PUBLIC_URL: `http://localhost:${port}`,
-    OPENBOT_INSTALL_CLIS: "1",
+    OWLBOT_PUBLIC_URL: `http://localhost:${port}`,
+    OWLBOT_INSTALL_CLIS: "1",
     NODE_ENV: "production",
     // The hub installs the brain CLIs; they must not try to update themselves in its folder.
     DISABLE_AUTOUPDATER: "1",
     ...env,
     // Plugins are Node processes too: they load the same hook.
     NODE_OPTIONS: nodeOptions.includes(RESOLVE_HOOK) ? nodeOptions : `${nodeOptions} --import=${RESOLVE_HOOK}`.trim(),
-    OPENBOT_DATA_DIR: dataDir,
-    OPENBOT_SETUP_TOKEN: env.OPENBOT_SETUP_TOKEN || setupCode(dataDir),
+    OWLBOT_DATA_DIR: dataDir,
+    OWLBOT_SETUP_TOKEN: env.OWLBOT_SETUP_TOKEN || setupCode(dataDir),
   };
 }
 
 async function run() {
-  const dataDir = process.env.OPENBOT_DATA_DIR || defaultDataDir();
+  const dataDir = process.env.OWLBOT_DATA_DIR || defaultDataDir();
   mkdirSync(dataDir, { recursive: true });
   await import("./resolve.mjs");
   Object.assign(process.env, hubEnv(process.env, dataDir));
@@ -115,7 +115,7 @@ export async function openUrl(dataDir, { timeoutMs = 90_000, fetchImpl = fetch }
 if (import.meta.main) {
   const cmd = process.argv[2] ?? "run";
   if (cmd === "url") {
-    const r = await openUrl(process.env.OPENBOT_DATA_DIR || defaultDataDir());
+    const r = await openUrl(process.env.OWLBOT_DATA_DIR || defaultDataDir());
     process.stdout.write(r.url + "\n");
     process.exitCode = r.ready ? 0 : 3;
   } else if (cmd === "run") {

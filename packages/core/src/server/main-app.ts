@@ -7,8 +7,8 @@ import { randomBytes } from "node:crypto";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
-import type { AgentDef, TaskStatus } from "@openbot/shared";
-import { formatBrainRef, LOCALES, localeFromEnv, normalizeLocale, parseBrainRef, type Locale } from "@openbot/shared";
+import type { AgentDef, TaskStatus } from "@owlbot/shared";
+import { formatBrainRef, LOCALES, localeFromEnv, normalizeLocale, parseBrainRef, type Locale } from "@owlbot/shared";
 import { errorText, hubLocale, localizePluginValue, LocalizedError, requestLocale, tFor } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { toUiEvent } from "../bus.ts";
@@ -17,7 +17,7 @@ import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, safeFile, securityHeaders, sendFile } from "./http.ts";
 
-const COOKIE = "ob_session";
+const COOKIE = "owlbot_session";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -27,13 +27,13 @@ declare module "fastify" {
 
 export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
   const cfg = hub.config;
-  const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, trustProxy: process.env.OPENBOT_TRUST_PROXY === "1" });
+  const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, trustProxy: process.env.OWLBOT_TRUST_PROXY === "1" });
   await app.register(fastifyCookie);
   await app.register(fastifyWebsocket, { options: { maxPayload: 4 * 1024 * 1024 } });
 
   const secure = cfg.publicUrl.startsWith("https://");
   const origins = originsFor(cfg.publicUrl, cfg.allowedHosts, cfg.port);
-  if (process.env.OPENBOT_DEV_ORIGIN) origins.push(process.env.OPENBOT_DEV_ORIGIN);
+  if (process.env.OWLBOT_DEV_ORIGIN) origins.push(process.env.OWLBOT_DEV_ORIGIN);
 
   // Keep raw text for non-JSON bodies (webhooks).
   app.addContentTypeParser("*", { parseAs: "string" }, (_req, body, done) => done(null, body));
@@ -41,7 +41,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
 
   app.addHook("onRequest", async (req, reply) => {
     if (!hostAllowed(req, cfg.allowedHosts)) {
-      reply.code(421).send({ error: "Host not allowed. Add it to OPENBOT_ALLOWED_HOSTS." });
+      reply.code(421).send({ error: "Host not allowed. Add it to OWLBOT_ALLOWED_HOSTS." });
       return reply;
     }
   });
@@ -86,8 +86,8 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     if (!originAllowed(req, origins)) throw new HttpError(403, "Origin not allowed");
     const b = req.body as { token?: string; password?: string };
     hub.auth.setup(String(b?.token ?? ""), String(b?.password ?? ""), clientIp(req));
-    // The first user's browser language becomes the hub language unless OPENBOT_LANG pins it.
-    if (!localeFromEnv({ OPENBOT_LANG: process.env.OPENBOT_LANG })) hub.settings.update({ language: requestLocale(req) });
+    // The first user's browser language becomes the hub language unless OWLBOT_LANG pins it.
+    if (!localeFromEnv({ OWLBOT_LANG: process.env.OWLBOT_LANG })) hub.settings.update({ language: requestLocale(req) });
     const { token } = hub.auth.createSession("main");
     setCookie(reply, token);
     return { ok: true };
@@ -126,7 +126,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
   app.post("/mcp", async (req, reply) => {
     const session = hub.mcp.authenticate(req.headers.authorization);
     if (!session) {
-      reply.code(401).header("www-authenticate", 'Bearer realm="openbot"');
+      reply.code(401).header("www-authenticate", 'Bearer realm="owlbot"');
       return { jsonrpc: "2.0", id: null, error: { code: -32001, message: "invalid session token" } };
     }
     const out = await hub.mcp.handle(session, req.body);
@@ -159,9 +159,9 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     hub.machines.attach(socket as any, clientIp(req));
   });
 
-  // Single-file machine daemon (public code, no secrets): `node openbot-node.mjs pair <hub> <code>`.
-  app.get("/download/openbot-node.mjs", async (_req, reply) => {
-    const file = join(cfg.appRoot, "packages", "node", "dist", "openbot-node.mjs");
+  // Single-file machine daemon (public code, no secrets): `node owlbot-node.mjs pair <hub> <code>`.
+  app.get("/download/owlbot-node.mjs", async (_req, reply) => {
+    const file = join(cfg.appRoot, "packages", "node", "dist", "owlbot-node.mjs");
     if (!existsSync(file)) throw new HttpError(404, "build.daemonMissing");
     return sendFile(reply, file, { download: true });
   });
@@ -594,7 +594,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       "react/jsx-runtime": "/shared/react-jsx-runtime.js",
       "react-dom": "/shared/react-dom.js",
       "react-dom/client": "/shared/react-dom-client.js",
-      "@openbot/ui": "/shared/openbot-ui.js",
+      "@owlbot/ui": "/shared/owlbot-ui.js",
     },
   });
   const sendIndex = (req: FastifyRequest, reply: FastifyReply) => {
@@ -620,7 +620,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     if (!existsSync(indexFile)) {
       return reply
         .type("text/html; charset=utf-8")
-        .send(`<!doctype html><meta charset="utf-8"><title>open-bot</title><body style="font-family:sans-serif;padding:2rem">${tFor(requestLocale(req))("build.webMissing")}</body>`);
+        .send(`<!doctype html><meta charset="utf-8"><title>Owlbot</title><body style="font-family:sans-serif;padding:2rem">${tFor(requestLocale(req))("build.webMissing")}</body>`);
     }
     const html = readFileSync(indexFile, "utf8").replace("<head>", `<head>\n<script type="importmap" nonce="${nonce}">${importMap}</script>`);
     return reply.type("text/html; charset=utf-8").header("cache-control", "no-cache").send(html);

@@ -1,5 +1,5 @@
-// Bundles the machine daemon (packages/node) into one file the hub serves at /download/openbot-node.mjs,
-// so another computer needs only Node.js: curl the file, then `node openbot-node.mjs pair <hub> <code>`.
+// Bundles the machine daemon (packages/node) into one file the hub serves at /download/owlbot-node.mjs,
+// so another computer needs only Node.js: curl the file, then `node owlbot-node.mjs pair <hub> <code>`.
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 await build({
   entryPoints: [join(root, "packages/node/src/cli.ts")],
-  outfile: join(root, "packages/node/dist/openbot-node.mjs"),
+  outfile: join(root, "packages/node/dist/owlbot-node.mjs"),
   bundle: true,
   platform: "node",
   target: "node24",
@@ -18,4 +18,4 @@ await build({
   legalComments: "none",
   logLevel: "warning",
 });
-console.log("built packages/node/dist/openbot-node.mjs");
+console.log("built packages/node/dist/owlbot-node.mjs");

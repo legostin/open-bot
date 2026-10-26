@@ -110,7 +110,7 @@ export default {
   "auth.version": "версия {version}",
   "auth.setup.title": "Первый запуск",
   "auth.setup.intro": "Придумайте пароль для входа. Чтобы подтвердить, что это вы, введите код установки.",
-  "auth.setup.introDesktop": "Придумайте пароль для входа. open-bot работает на этом компьютере и хранит всё здесь же.",
+  "auth.setup.introDesktop": "Придумайте пароль для входа. Owlbot работает на этом компьютере и хранит всё здесь же.",
   "auth.setup.codeHint": "Код установки печатается в логах хаба при первом запуске: строка «введите код установки». В Docker: {command}",
   "auth.setup.code": "Код установки",
   "auth.setup.password": "Новый пароль",
@@ -438,7 +438,7 @@ export default {
   "plugins.installConfirm": "Установить и включить",
   "plugins.needSource": "Укажите git-адрес или путь к папке",
   "plugins.source": "Источник",
-  "plugins.sourceHint": "Git-репозиторий (https://…, git@…) или путь к папке на сервере хаба. Подходят плагины open-bot, Claude Code и Codex.",
+  "plugins.sourceHint": "Git-репозиторий (https://…, git@…) или путь к папке на сервере хаба. Подходят плагины Owlbot, Claude Code и Codex.",
   "plugins.stagingNote": "Сначала плагин скачивается во временную папку — вы увидите права, которые он просит, и решите, ставить ли его.",
   "plugins.author": "Автор: {name}",
   "plugins.hasServer": "есть серверная часть",
@@ -483,7 +483,7 @@ export default {
   "machines.code": "Код:",
   "machines.expired": "истёк",
   "machines.validFor": "действует {time}",
-  "machines.otherNetwork": "Если машина в другой сети, используйте Tailscale или укажите публичный адрес хаба (OPENBOT_PUBLIC_URL).",
+  "machines.otherNetwork": "Если машина в другой сети, используйте Tailscale или укажите публичный адрес хаба (OWLBOT_PUBLIC_URL).",
   "machines.paired": "Машина «{name}» подключена",
 
   // MCP servers

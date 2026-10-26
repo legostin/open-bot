@@ -1,7 +1,7 @@
 // Agent avatar: a coloured shape with the agent's initial. Colour and shape are picked when the agent is created.
 
-import type { AgentAvatar as Avatar, AvatarColor, AvatarShape } from "@openbot/shared";
-import { defaultAvatar } from "@openbot/shared/avatar";
+import type { AgentAvatar as Avatar, AvatarColor, AvatarShape } from "@owlbot/shared";
+import { defaultAvatar } from "@owlbot/shared/avatar";
 import { cx } from "./ui";
 
 export const AVATAR_HEX: Record<AvatarColor, string> = {

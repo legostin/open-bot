@@ -132,7 +132,7 @@
   "ui.card.checked": "Checked:",
   "ui.card.value": "Current value:",
   "ui.card.copy": "Copy",
-  "ui.card.secret": "Secret (x-openbot-secret header):",
+  "ui.card.secret": "Secret (x-owlbot-secret header):",
   "ui.card.hide": "Hide",
   "ui.card.show": "Show",
   "ui.card.started": "Task started",

@@ -90,8 +90,8 @@ describe("hub (integration)", () => {
   beforeAll(async () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OPENBOT_PORT: String(port), OPENBOT_CONSOLE_PORT: String(consolePort), OPENBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
-      { dataDir: mkdtempSync(join(tmpdir(), "ob-hub-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents") },
+      { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-hub-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
     await hub.start();
@@ -259,7 +259,7 @@ describe("hub (integration)", () => {
 
   it("speaks the reader's language and keeps a hub language", async () => {
     expect((await web.raw("GET", "/api/tasks/nope")).json.error).toBe("Task not found");
-    expect((await web.raw("GET", "/api/tasks/nope", undefined, { "x-openbot-locale": "ru" })).json.error).toBe("Задача не найдена");
+    expect((await web.raw("GET", "/api/tasks/nope", undefined, { "x-owlbot-locale": "ru" })).json.error).toBe("Задача не найдена");
     expect((await web.raw("GET", "/api/tasks/nope", undefined, { "accept-language": "ru-RU,ru;q=0.9" })).json.error).toBe("Задача не найдена");
     const state = (await web.raw("GET", "/api/auth/state")).json;
     expect(state.locales).toEqual(["en", "ru"]);
@@ -272,9 +272,9 @@ describe("hub (integration)", () => {
 
     // Editing a translated agent in Russian changes the Russian name only.
     await web.req("PUT", "/api/agents/polyglot", { name: "Polyglot", description: "Speaks", prompt: "x", i18n: { ru: { name: "Полиглот" } } });
-    const ru = await web.raw("PUT", "/api/agents/polyglot", { name: "Полиглот 2", description: "Говорит" }, { "x-openbot-locale": "ru" });
+    const ru = await web.raw("PUT", "/api/agents/polyglot", { name: "Полиглот 2", description: "Говорит" }, { "x-owlbot-locale": "ru" });
     expect(ru.status).toBe(200);
-    const byLang = async (l: string) => ((await web.raw("GET", "/api/agents", undefined, { "x-openbot-locale": l })).json as any[]).find((a) => a.id === "polyglot");
+    const byLang = async (l: string) => ((await web.raw("GET", "/api/agents", undefined, { "x-owlbot-locale": l })).json as any[]).find((a) => a.id === "polyglot");
     expect(await byLang("en")).toMatchObject({ name: "Polyglot", description: "Speaks" });
     expect(await byLang("ru")).toMatchObject({ name: "Полиглот 2", description: "Говорит" });
     await web.req("DELETE", "/api/agents/polyglot");

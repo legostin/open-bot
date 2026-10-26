@@ -1,8 +1,8 @@
 // The user's team: every agent with its one long-lived dialog, as the web sidebar shows it.
 // Changes in a dialog (new or finished messages, turns starting and ending, the read marker) go out as "team.updated".
 
-import type { Conversation, Message, TeamMember } from "@openbot/shared";
-import { truncate } from "@openbot/shared";
+import type { Conversation, Message, TeamMember } from "@owlbot/shared";
+import { truncate } from "@owlbot/shared";
 import type { Store } from "./store.ts";
 import type { EventBus } from "./bus.ts";
 

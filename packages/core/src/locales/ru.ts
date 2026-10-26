@@ -114,7 +114,7 @@ export default {
 
   // machines
   "machines.execApproval": "Выполнить на машине {machine}: {command}",
-  "machines.revokeApproval": "Отключить компьютер {machine} от open-bot",
+  "machines.revokeApproval": "Отключить компьютер {machine} от Owlbot",
   "machines.writeApproval": "Записать файл на машине {machine}: {path}",
   "machine.badPairingCode": "Код привязки неверный или устарел",
   "machine.badPublicKey": "Неверный публичный ключ",
@@ -164,9 +164,9 @@ export default {
   "rule.notFound": "Правило не найдено",
 
   // admin CLI and logs
-  "cli.firstRun": "open-bot: первый запуск. Откройте {url}\n  и введите код установки: {code}",
+  "cli.firstRun": "Owlbot: первый запуск. Откройте {url}\n  и введите код установки: {code}",
   "cli.passwordChanged": "Пароль изменён, все сессии завершены.",
-  "cli.pairingCode": "Код привязки (действует 10 минут): {code}\nНа машине: node openbot-node.mjs pair {url} {code}",
+  "cli.pairingCode": "Код привязки (действует 10 минут): {code}\nНа машине: node owlbot-node.mjs pair {url} {code}",
   "cli.backupDone": "Резервная копия: {path} (vault остаётся зашифрованным)",
   "cli.auditOk": "Журнал цел: {count, plural, one {# запись} few {# записи} many {# записей} other {# записи}}",
   "cli.auditBroken": "Цепочка нарушена на записи {seq}",

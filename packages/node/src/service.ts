@@ -2,7 +2,7 @@
 // local policy and logged as one line (never with file contents).
 
 import type { ChildProcess } from "node:child_process";
-import type { RpcPeer } from "@openbot/shared";
+import type { RpcPeer } from "@owlbot/shared";
 import type { PolicyStore } from "./policy.ts";
 import type { BrainHost } from "./brains.ts";
 import type { GuardOptions } from "./guard.ts";

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Message, TeamMember } from "@openbot/shared";
+import type { Message, TeamMember } from "@owlbot/shared";
 import { openDb } from "../src/db.ts";
 import { EventBus } from "../src/bus.ts";
 import { Store } from "../src/store.ts";
@@ -37,7 +37,7 @@ describe("agent dialogs", () => {
 
   it("keeps the dialog of an install from before per-agent dialogs, with its history read", () => {
     // An older database: schema 3 (before per-agent dialogs), one conversation "main" and no read markers.
-    const file = join(mkdtempSync(join(tmpdir(), "ob-team-")), "openbot.db");
+    const file = join(mkdtempSync(join(tmpdir(), "owl-team-")), "owlbot.db");
     const old = openDb(file);
     old.exec("drop table agent_drafts; drop index conversations_kind_agent; alter table conversations drop column read_at; update schema_version set v = 3;");
     const t0 = "2026-10-01T10:00:00.000Z";

@@ -48,7 +48,7 @@ export function ensureBrains(): void {
   if (!brains.get()) void refreshBrains().catch(() => {});
 }
 
-/** Mirrors parseBrainRef in @openbot/shared: a ref without "@machine" runs on the hub ("@local"). */
+/** Mirrors parseBrainRef in @owlbot/shared: a ref without "@machine" runs on the hub ("@local"). */
 export function normalizeBrainRef(ref: string): string {
   const r = ref.trim();
   return r.includes("@") ? r : `${r}@local`;

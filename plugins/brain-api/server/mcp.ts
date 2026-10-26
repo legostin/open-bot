@@ -83,7 +83,7 @@ export class McpClient {
   }
 
   async rpc<T = any>(method: string, params: unknown, signal?: AbortSignal, id?: string | number): Promise<T> {
-    const msg = { jsonrpc: "2.0", id: id ?? `ob_${++this.seq}`, method, params };
+    const msg = { jsonrpc: "2.0", id: id ?? `owl_${++this.seq}`, method, params };
     const r = await this.post(msg, signal);
     if (!r) throw new McpError(`MCP: empty response to ${method}`);
     if (r.error) throw new McpError(String(r.error.message ?? "MCP error"), r.error.code);
@@ -95,7 +95,7 @@ export class McpClient {
       this.init = (async () => {
         const r = await this.rpc<{ protocolVersion?: string }>(
           "initialize",
-          { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "openbot-brain-api", version: "0.1.0" } },
+          { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "owlbot-brain-api", version: "0.1.0" } },
           signal,
         );
         if (r?.protocolVersion) this.protocolVersion = r.protocolVersion;

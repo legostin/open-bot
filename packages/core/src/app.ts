@@ -2,8 +2,8 @@
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, CoreMethod } from "@openbot/shared";
-import { DEFAULT_LOCALE, catalogLookup, localizeValue, normalizeLocale } from "@openbot/shared";
+import type { AgentDef, CoreMethod } from "@owlbot/shared";
+import { DEFAULT_LOCALE, catalogLookup, localizeValue, normalizeLocale } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
 import { EventBus } from "./bus.ts";
@@ -83,7 +83,7 @@ export class Hub {
   constructor(config: Config) {
     this.config = config;
     mkdirSync(config.dataDir, { recursive: true });
-    this.db = openDb(join(config.dataDir, "openbot.db"));
+    this.db = openDb(join(config.dataDir, "owlbot.db"));
     this.store = new Store(this.db, this.bus);
     this.settings = new Settings(this.db, config.timezone);
     configureHubLocale(() => normalizeLocale(this.settings.get().language) ?? DEFAULT_LOCALE);
@@ -187,7 +187,7 @@ export class Hub {
     this.auth = new AuthService(this.db, this.audit, {
       rpId,
       origins: [new URL(config.publicUrl).origin, new URL(config.consoleUrl).origin],
-      setupToken: process.env.OPENBOT_SETUP_TOKEN,
+      setupToken: process.env.OWLBOT_SETUP_TOKEN,
     });
     registerCoreTools({
       registry: this.tools,
@@ -373,7 +373,7 @@ export class Hub {
       const line = "═".repeat(64);
       console.log(`\n${line}\n  ${t("cli.firstRun", { url: cfg.publicUrl, code: this.auth.setupToken })}\n${line}\n`);
     } else {
-      console.log(`[openbot] ready: ${cfg.publicUrl} (console: ${cfg.consoleUrl})`);
+      console.log(`[owlbot] ready: ${cfg.publicUrl} (console: ${cfg.consoleUrl})`);
     }
   }
 

@@ -1,6 +1,6 @@
 // The team in the sidebar: order, and the route of each agent's dialog.
 
-import type { AgentDef, TeamMember } from "@openbot/shared";
+import type { AgentDef, TeamMember } from "@owlbot/shared";
 
 export interface TeamEntry {
   agent: Pick<AgentDef, "id" | "name">;

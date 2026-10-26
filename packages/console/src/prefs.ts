@@ -10,7 +10,7 @@ export interface Prefs {
   notify: boolean;
 }
 
-const KEY = "ob-console-prefs";
+const KEY = "owlbot-console-prefs";
 const DEFAULTS: Prefs = { theme: "system", sound: true, notify: true };
 
 function load(): Prefs {

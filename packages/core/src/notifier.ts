@@ -1,7 +1,7 @@
 // "Is it worth interrupting you?" — levels, quiet hours, rate limits, dedup, digests, feedback.
 
-import type { Notification, NotifyLevel } from "@openbot/shared";
-import { newId, nowIso, truncate } from "@openbot/shared";
+import type { Notification, NotifyLevel } from "@owlbot/shared";
+import { newId, nowIso, truncate } from "@owlbot/shared";
 import type { Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { Settings } from "./settings.ts";

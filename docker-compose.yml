@@ -1,27 +1,27 @@
 # docker compose up -d --build   →  http://localhost:8080 (chat) and http://localhost:8081 (security console)
 services:
-  openbot:
+  owlbot:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: openbot:latest
-    container_name: openbot
+    image: owlbot:latest
+    container_name: owlbot
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8081:8081"
     volumes:
-      - openbot-data:/data
+      - owlbot-data:/data
     environment:
-      OPENBOT_PUBLIC_URL: http://localhost:8080
-      # OPENBOT_CONSOLE_URL: http://localhost:8081
-      # OPENBOT_ALLOWED_HOSTS: my-box.tailnet.ts.net
+      OWLBOT_PUBLIC_URL: http://localhost:8080
+      # OWLBOT_CONSOLE_URL: http://localhost:8081
+      # OWLBOT_ALLOWED_HOSTS: my-box.tailnet.ts.net
       # Hard egress enforcement for agent/plugin users (needs cap_add NET_ADMIN below):
-      # OPENBOT_EGRESS_ENFORCED: iptables
+      # OWLBOT_EGRESS_ENFORCED: iptables
       # TZ: Europe/Moscow
       # Hub language (en or ru); by default it is taken from the first user's browser at setup:
-      # OPENBOT_LANG: ru
+      # OWLBOT_LANG: ru
     # cap_add: [NET_ADMIN]
     shm_size: 1gb
 volumes:
-  openbot-data: {}
+  owlbot-data: {}

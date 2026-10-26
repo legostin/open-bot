@@ -15,7 +15,7 @@ import type {
   ToolCallContext,
   ToolResult,
   ToolSpec,
-} from "@openbot/shared";
+} from "@owlbot/shared";
 
 export type ToolHandler = (input: any, ctx: ToolCallContext) => Promise<ToolResult | string> | ToolResult | string;
 
@@ -130,7 +130,7 @@ export interface PluginContext {
   settings: Record<string, any>;
   onSettingsChange(cb: (settings: Record<string, any>) => void): void;
   /**
-   * Translations from the plugin's .openbot-plugin/locales/<locale>.json. Use them for text people read
+   * Translations from the plugin's .owlbot-plugin/locales/<locale>.json. Use them for text people read
    * (channel messages, notifications, approval summaries); text for the model stays in English.
    */
   i18n: {

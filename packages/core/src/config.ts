@@ -35,23 +35,23 @@ const here = fileURLToPath(new URL(".", import.meta.url));
 export const APP_ROOT = resolve(here, "..", "..", "..");
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Partial<Config> = {}): Config {
-  const host = env.OPENBOT_HOST ?? "127.0.0.1";
-  const port = Number(env.OPENBOT_PORT ?? 8080);
-  const consolePort = Number(env.OPENBOT_CONSOLE_PORT ?? port + 1);
-  const egressPort = Number(env.OPENBOT_EGRESS_PORT ?? 8089);
+  const host = env.OWLBOT_HOST ?? "127.0.0.1";
+  const port = Number(env.OWLBOT_PORT ?? 8080);
+  const consolePort = Number(env.OWLBOT_CONSOLE_PORT ?? port + 1);
+  const egressPort = Number(env.OWLBOT_EGRESS_PORT ?? 8089);
   const displayHost = host === "0.0.0.0" || host === "::" ? "localhost" : host;
-  const publicUrl = (env.OPENBOT_PUBLIC_URL ?? `http://${displayHost}:${port}`).replace(/\/$/, "");
-  const consoleUrl = (env.OPENBOT_CONSOLE_URL ?? `http://${new URL(publicUrl).hostname}:${consolePort}`).replace(/\/$/, "");
-  const extraHosts = (env.OPENBOT_ALLOWED_HOSTS ?? "")
+  const publicUrl = (env.OWLBOT_PUBLIC_URL ?? `http://${displayHost}:${port}`).replace(/\/$/, "");
+  const consoleUrl = (env.OWLBOT_CONSOLE_URL ?? `http://${new URL(publicUrl).hostname}:${consolePort}`).replace(/\/$/, "");
+  const extraHosts = (env.OWLBOT_ALLOWED_HOSTS ?? "")
     .split(",")
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean);
   const allowedHosts = Array.from(
     new Set(["localhost", "127.0.0.1", "[::1]", displayHost.toLowerCase(), new URL(publicUrl).hostname, new URL(consoleUrl).hostname, ...extraHosts]),
   );
-  const appRoot = env.OPENBOT_APP_ROOT ?? APP_ROOT;
+  const appRoot = env.OWLBOT_APP_ROOT ?? APP_ROOT;
   const cfg: Config = {
-    dataDir: resolve(env.OPENBOT_DATA_DIR ?? join(appRoot, ".data")),
+    dataDir: resolve(env.OWLBOT_DATA_DIR ?? join(appRoot, ".data")),
     host,
     port,
     consolePort,
@@ -66,17 +66,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     webDist: join(appRoot, "packages", "web", "dist"),
     consoleDist: join(appRoot, "packages", "console", "dist"),
     isolation: {
-      users: env.OPENBOT_ISOLATION === "users",
-      hubUser: env.OPENBOT_HUB_USER ?? "openbot",
-      agentUser: env.OPENBOT_AGENT_USER ?? "agent",
-      pluginUser: env.OPENBOT_PLUGIN_USER ?? "plugin",
+      users: env.OWLBOT_ISOLATION === "users",
+      hubUser: env.OWLBOT_HUB_USER ?? "owlbot",
+      agentUser: env.OWLBOT_AGENT_USER ?? "agent",
+      pluginUser: env.OWLBOT_PLUGIN_USER ?? "plugin",
     },
-    egressEnforced: env.OPENBOT_EGRESS_ENFORCED === "iptables" ? "iptables" : "proxy",
-    installClis: env.OPENBOT_INSTALL_CLIS === "1" && env.OPENBOT_ISOLATION !== "users",
-    vaultPassphraseFile: env.OPENBOT_VAULT_PASSPHRASE_FILE && existsSync(env.OPENBOT_VAULT_PASSPHRASE_FILE) ? env.OPENBOT_VAULT_PASSPHRASE_FILE : undefined,
+    egressEnforced: env.OWLBOT_EGRESS_ENFORCED === "iptables" ? "iptables" : "proxy",
+    installClis: env.OWLBOT_INSTALL_CLIS === "1" && env.OWLBOT_ISOLATION !== "users",
+    vaultPassphraseFile: env.OWLBOT_VAULT_PASSPHRASE_FILE && existsSync(env.OWLBOT_VAULT_PASSPHRASE_FILE) ? env.OWLBOT_VAULT_PASSPHRASE_FILE : undefined,
     timezone: env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     version: "0.1.0",
-    plugins: (env.OPENBOT_PLUGINS ?? "all") === "all" ? "all" : env.OPENBOT_PLUGINS === "none" ? "none" : (env.OPENBOT_PLUGINS ?? "").split(","),
+    plugins: (env.OWLBOT_PLUGINS ?? "all") === "all" ? "all" : env.OWLBOT_PLUGINS === "none" ? "none" : (env.OWLBOT_PLUGINS ?? "").split(","),
   };
   return { ...cfg, ...overrides };
 }

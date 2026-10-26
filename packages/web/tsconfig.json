@@ -15,10 +15,10 @@
     "resolveJsonModule": true,
     "types": ["vite/client"],
     "paths": {
-      "@openbot/shared": ["./src/shared-types.ts"],
-      "@openbot/shared/i18n": ["../shared/src/i18n.ts"],
-      "@openbot/shared/avatar": ["../shared/src/avatar.ts"],
-      "@openbot/ui": ["../ui-sdk/src/index.ts"]
+      "@owlbot/shared": ["./src/shared-types.ts"],
+      "@owlbot/shared/i18n": ["../shared/src/i18n.ts"],
+      "@owlbot/shared/avatar": ["../shared/src/avatar.ts"],
+      "@owlbot/ui": ["../ui-sdk/src/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"],

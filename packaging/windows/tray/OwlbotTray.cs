@@ -1,9 +1,9 @@
-// open-bot tray app for Windows: keeps the hub running in the background with no console window, restarts it after a
+// Owlbot tray app for Windows: keeps the hub running in the background with no console window, restarts it after a
 // crash and offers Open / Start at login / Show log / Restart / Quit. The hub and everything it starts (plugins, brain
 // CLIs) run inside a job object, so they end with the tray even if it is killed.
-//   open-bot.exe               start the hub if needed and open the web UI
-//   open-bot.exe --background  start the hub, no browser (the Run key at login)
-//   open-bot.exe --quit        stop a running instance and wait for it (installer, uninstaller)
+//   Owlbot.exe               start the hub if needed and open the web UI
+//   Owlbot.exe --background  start the hub, no browser (the Run key at login)
+//   Owlbot.exe --quit        stop a running instance and wait for it (installer, uninstaller)
 // Built with the C# 5 compiler of .NET Framework 4 that ships with Windows: no newer language features.
 
 using System;
@@ -18,16 +18,16 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: System.Reflection.AssemblyTitle("open-bot")]
-[assembly: System.Reflection.AssemblyProduct("open-bot")]
+[assembly: System.Reflection.AssemblyTitle("Owlbot")]
+[assembly: System.Reflection.AssemblyProduct("Owlbot")]
 
-namespace OpenBot
+namespace Owlbot
 {
     static class Program
     {
-        const string MutexName = "Local\\open-bot-tray";
-        const string OpenEventName = "Local\\open-bot-open";
-        const string QuitEventName = "Local\\open-bot-quit";
+        const string MutexName = "Local\\owlbot-tray";
+        const string OpenEventName = "Local\\owlbot-open";
+        const string QuitEventName = "Local\\owlbot-quit";
 
         [STAThread]
         static int Main(string[] args)
@@ -90,8 +90,8 @@ namespace OpenBot
         {
             ui = new WindowsFormsSynchronizationContext();
             SynchronizationContext.SetSynchronizationContext(ui);
-            var env = Environment.GetEnvironmentVariable("OPENBOT_DATA_DIR");
-            dataDir = string.IsNullOrEmpty(env) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "open-bot") : env;
+            var env = Environment.GetEnvironmentVariable("OWLBOT_DATA_DIR");
+            dataDir = string.IsNullOrEmpty(env) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Owlbot") : env;
             logFile = Path.Combine(dataDir, "logs", "hub.log");
 
             var menu = new ContextMenuStrip();
@@ -122,7 +122,7 @@ namespace OpenBot
 
         Icon LoadIcon()
         {
-            var file = Path.Combine(appDir, "open-bot.ico");
+            var file = Path.Combine(appDir, "owlbot.ico");
             try { return new Icon(file, SystemInformation.SmallIconSize); }
             catch { return SystemIcons.Application; }
         }
@@ -136,7 +136,7 @@ namespace OpenBot
             psi.UseShellExecute = false;
             psi.CreateNoWindow = true;
             psi.WorkingDirectory = appDir;
-            psi.EnvironmentVariables["OPENBOT_DATA_DIR"] = dataDir;
+            psi.EnvironmentVariables["OWLBOT_DATA_DIR"] = dataDir;
             return psi;
         }
 
@@ -287,7 +287,7 @@ namespace OpenBot
 
         void Notify(string text, ToolTipIcon kind)
         {
-            icon.ShowBalloonTip(10000, "open-bot", text, kind);
+            icon.ShowBalloonTip(10000, "Owlbot", text, kind);
         }
 
         void Quit()
@@ -304,11 +304,11 @@ namespace OpenBot
         }
     }
 
-    /// <summary>The HKCU Run value the installer writes ("Start open-bot when I sign in").</summary>
+    /// <summary>The HKCU Run value the installer writes ("Start Owlbot when I sign in").</summary>
     static class Autostart
     {
         const string Key = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-        const string Name = "open-bot";
+        const string Name = "Owlbot";
 
         public static bool Enabled
         {

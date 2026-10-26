@@ -16,8 +16,8 @@ process.stdin.on("end", () => {
   const pick = (k) => process.env[k] ?? null;
   writeFileSync(
     "env.json",
-    JSON.stringify({ cwd: process.cwd(), args, TZ: pick("TZ"), NODE_OPTIONS: pick("NODE_OPTIONS"), ANTHROPIC_BASE_URL: pick("ANTHROPIC_BASE_URL"), OPENBOT_NODE_HOME: pick("OPENBOT_NODE_HOME") }),
+    JSON.stringify({ cwd: process.cwd(), args, TZ: pick("TZ"), NODE_OPTIONS: pick("NODE_OPTIONS"), ANTHROPIC_BASE_URL: pick("ANTHROPIC_BASE_URL"), OWLBOT_NODE_HOME: pick("OWLBOT_NODE_HOME") }),
   );
-  out({ type: "system", subtype: "init", session_id: "s-env", mcp_servers: [{ name: "openbot", status: "connected" }] });
+  out({ type: "system", subtype: "init", session_id: "s-env", mcp_servers: [{ name: "owlbot", status: "connected" }] });
   out({ type: "result", subtype: "success", is_error: false, result: "ok", session_id: "s-env", usage: {} });
 });

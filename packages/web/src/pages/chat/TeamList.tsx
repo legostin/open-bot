@@ -4,7 +4,7 @@
 import { useEffect, useMemo } from "react";
 import { Link } from "wouter";
 import { Plus } from "lucide-react";
-import type { AgentDef, TeamMember } from "@openbot/shared";
+import type { AgentDef, TeamMember } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
 import { shortTime } from "../../lib/format";
 import { agentPath, teamOrder } from "../../lib/team";

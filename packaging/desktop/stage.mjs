@@ -5,7 +5,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -115,6 +115,26 @@ export function removeLinks(app) {
   return removed;
 }
 
+/**
+ * Links whose target is gone: node_modules/.bin entries of the removed workspace links, and Node's bin/corepack
+ * (rmSync leaves a dangling link alone). codesign refuses a bundle that has one.
+ */
+export function removeDanglingLinks(dir) {
+  let removed = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const at = join(dir, e.name);
+    if (e.isSymbolicLink()) {
+      if (!existsSync(at)) {
+        unlinkSync(at);
+        removed++;
+      }
+    } else if (e.isDirectory()) {
+      removed += removeDanglingLinks(at);
+    }
+  }
+  return removed;
+}
+
 export async function stage({ target, skipBuild = false }) {
   if (!NODE_DISTS[target]) throw new Error(`unknown target ${target} (win-x64 or darwin)`);
   if (!skipBuild) npm(["run", "build"], { cwd: ROOT });
@@ -126,7 +146,7 @@ export async function stage({ target, skipBuild = false }) {
   for (const f of ["package.json", "package-lock.json"]) cpSync(join(ROOT, f), join(app, f));
   for (const d of ["agents", "packages", "plugins"]) cpSync(join(ROOT, d), join(app, d), { recursive: true, filter: wanted });
   for (const f of ["launch.mjs", "resolve.mjs"]) cpSync(join(ROOT, "packaging", "desktop", f), join(app, "packaging", "desktop", f));
-  for (const need of ["packages/web/dist/index.html", "packages/console/dist/index.html", "packages/node/dist/openbot-node.mjs"]) {
+  for (const need of ["packages/web/dist/index.html", "packages/console/dist/index.html", "packages/node/dist/owlbot-node.mjs"]) {
     if (!existsSync(join(app, need))) throw new Error(`${need} is missing: run npm run build`);
   }
 
@@ -136,6 +156,7 @@ export async function stage({ target, skipBuild = false }) {
 
   const cache = join(out, "cache");
   for (const { file, into } of NODE_DISTS[target]) extract(await nodeArchive(cache, file), join(app, into));
+  removeDanglingLinks(app);
   writeFileSync(join(app, "desktop-version.json"), JSON.stringify({ version: VERSION, node: NODE_VERSION }, null, 2) + "\n");
   console.log(`staged ${target}: ${app} (${links} workspace links removed, Node ${NODE_VERSION})`);
   return app;

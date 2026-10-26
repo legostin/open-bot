@@ -1,8 +1,8 @@
-// Machines: connected openbot-node daemons, pairing, rename, revoke.
+// Machines: connected owlbot-node daemons, pairing, rename, revoke.
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Laptop, Link2, Pencil, Trash2, X } from "lucide-react";
-import type { Machine } from "@openbot/shared";
+import type { Machine } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";
 import { hubEvents } from "../state/app";
@@ -258,11 +258,11 @@ function PairModal({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col gap-4">
           <div>
             <div className="mb-1.5 text-sm font-medium">{t("machines.step1")}</div>
-            <CodeLine>{`npx openbot-node pair ${pairing.hubUrl} ${pairing.code}`}</CodeLine>
+            <CodeLine>{`npx owlbot-node pair ${pairing.hubUrl} ${pairing.code}`}</CodeLine>
           </div>
           <div>
             <div className="mb-1.5 text-sm font-medium">{t("machines.step2")}</div>
-            <CodeLine>npx openbot-node run</CodeLine>
+            <CodeLine>npx owlbot-node run</CodeLine>
           </div>
           <div className="flex items-center gap-2 text-sm">
             {t("machines.code")} <span className="font-mono text-base font-semibold tracking-widest">{pairing.code}</span>

@@ -14,8 +14,8 @@ export const LOCALE_NAMES: Record<Locale, string> = { en: "English", ru: "Рус
 
 const DICTS: Record<Locale, Record<MessageKey, string>> = { en, ru };
 /** Shared with the main web UI. localStorage is per origin (port included), so the choice is mirrored to a cookie, which is per host. */
-export const LOCALE_KEY = "openbot.locale";
-export const LOCALE_HEADER = "x-openbot-locale";
+export const LOCALE_KEY = "owlbot.locale";
+export const LOCALE_HEADER = "x-owlbot-locale";
 
 const PLURAL_ORDER: Record<Locale, string[]> = { en: ["one", "other"], ru: ["one", "few", "many"] };
 const pluralRules: Partial<Record<Locale, Intl.PluralRules>> = {};
@@ -37,7 +37,7 @@ function readStored(): Locale | undefined {
     /* storage unavailable */
   }
   try {
-    const m = /(?:^|;\s*)openbot\.locale=([^;]*)/.exec(globalThis.document?.cookie ?? "");
+    const m = /(?:^|;\s*)owlbot\.locale=([^;]*)/.exec(globalThis.document?.cookie ?? "");
     return m ? normalizeLocale(decodeURIComponent(m[1])) : undefined;
   } catch {
     return undefined;

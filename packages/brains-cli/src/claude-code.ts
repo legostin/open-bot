@@ -4,14 +4,14 @@
 
 import { mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@openbot/shared";
-import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
-import type { Locale, Translate } from "@openbot/shared/i18n";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@owlbot/shared";
+import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
+import type { Locale, Translate } from "@owlbot/shared/i18n";
 import { capture, childEnv, runLines, textOfToolContent } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseClaudeBrowserLogin, runCliLogin } from "./login.ts";
 
-const MCP_PREFIX = "mcp__openbot__";
+const MCP_PREFIX = "mcp__owlbot__";
 
 export const DEFAULT_CLAUDE_TOOLS = [
   "Bash",
@@ -28,7 +28,7 @@ export const DEFAULT_CLAUDE_TOOLS = [
   "Task",
   "Skill",
   "NotebookEdit",
-  "mcp__openbot",
+  "mcp__owlbot",
 ];
 
 export interface ClaudeCodeOptions {
@@ -69,7 +69,7 @@ export class ClaudeStreamParser {
     switch (msg.type) {
       case "system": {
         if (msg.subtype === "init" && Array.isArray(msg.mcp_servers)) {
-          const ob = msg.mcp_servers.find((s: any) => s.name === "openbot");
+          const ob = msg.mcp_servers.find((s: any) => s.name === "owlbot");
           if (ob && ob.status !== "connected") {
             this.mcpFailed = true;
             out.push({ type: "error", message: this.t("claude.mcpUnavailable", { status: ob.status }) });
@@ -177,12 +177,12 @@ class ClaudeCodeSession implements BrainSessionImpl {
     this.resumeId = opts.resume;
     this.dir = join(p.stateDir, "sessions", opts.sessionId.replace(/[^\w-]/g, "_"));
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-    const [command, ...args] = opts.mcp.bridgeCommand.length ? opts.mcp.bridgeCommand : ["openbot-mcp-bridge"];
+    const [command, ...args] = opts.mcp.bridgeCommand.length ? opts.mcp.bridgeCommand : ["owlbot-mcp-bridge"];
     const tokenFile = join(this.dir, "token");
     writePrivate(tokenFile, opts.mcp.token);
     writePrivate(
       join(this.dir, "mcp.json"),
-      JSON.stringify({ mcpServers: { openbot: { type: "stdio", command, args, env: { OPENBOT_URL: opts.mcp.url, OPENBOT_TOKEN_FILE: tokenFile } } } }),
+      JSON.stringify({ mcpServers: { owlbot: { type: "stdio", command, args, env: { OWLBOT_URL: opts.mcp.url, OWLBOT_TOKEN_FILE: tokenFile } } } }),
     );
     writePrivate(join(this.dir, "prompt.md"), opts.systemPrompt);
   }

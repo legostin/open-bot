@@ -1,7 +1,7 @@
 // The hub's MCP endpoint (Streamable HTTP, JSON responses only). Every brain session talks to it with its
 // own bearer token; tool calls go through the ToolGateway (policy, approvals, audit, redaction).
 
-import type { ToolDescriptor } from "@openbot/shared";
+import type { ToolDescriptor } from "@owlbot/shared";
 import type { ToolGateway } from "../tools/gateway.ts";
 import type { Store, SessionRow } from "../store.ts";
 
@@ -69,8 +69,8 @@ export class McpEndpoint {
           return reply({
             protocolVersion: SUPPORTED_VERSIONS.includes(requested) ? requested : MCP_PROTOCOL_VERSION,
             capabilities: { tools: { listChanged: false } },
-            serverInfo: { name: "openbot", version: this.version },
-            instructions: "open-bot platform tools. Approval-gated tools may return status awaiting_approval: do not retry them.",
+            serverInfo: { name: "owlbot", version: this.version },
+            instructions: "Owlbot platform tools. Approval-gated tools may return status awaiting_approval: do not retry them.",
           });
         }
         case "notifications/initialized":

@@ -5,8 +5,8 @@ import { chromium } from "playwright";
 import type { BrowserContext, CDPSession, Dialog, Download, Frame, Locator, Page } from "playwright";
 import { mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { ToolResult } from "@openbot/shared";
-import type { PluginContext } from "@openbot/plugin-sdk";
+import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext } from "@owlbot/plugin-sdk";
 import { createChromiumInstaller, INSTALL_WAIT_MS, isMissingExecutableError, type ChromiumInstaller } from "./install.ts";
 import { pageCall } from "./page-script.ts";
 import { ACTION_LABEL_RE, LINK_ACTION_LABEL_RE } from "./safety.ts";
@@ -518,7 +518,7 @@ export class BrowserManager {
     if (!/^e\d+$/.test(r)) throw new ToolError(`Invalid ref "${cut(r, 40)}": use a ref from browser_snapshot, e.g. e12.`);
     for (const frame of page.frames()) {
       if (frame.isDetached()) continue;
-      const loc = frame.locator(`[data-ob-ref="${r}"]`);
+      const loc = frame.locator(`[data-owl-ref="${r}"]`);
       const n = await loc.count().catch(() => 0);
       if (n > 1) throw new ToolError(`Ref ${r} is ambiguous (the page duplicated the element). Call browser_snapshot and use the new refs.`);
       if (n === 1) return { frame, loc };

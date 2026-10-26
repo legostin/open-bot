@@ -1,7 +1,7 @@
 // Scriptable brain for core integration tests.
 // "CALL <tool> <json>" calls a hub tool over MCP; "LIMIT" makes brain `fake` hit its limit; "PROMPT?" echoes the instructions.
-import type { PluginContext } from "@openbot/plugin-sdk";
-import type { BrainEvent, BrainSessionOptions } from "@openbot/shared";
+import type { PluginContext } from "@owlbot/plugin-sdk";
+import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 
 async function mcpCall(o: BrainSessionOptions, name: string, args: unknown): Promise<{ text: string; isError: boolean }> {
   const r = await fetch(o.mcp.url, {

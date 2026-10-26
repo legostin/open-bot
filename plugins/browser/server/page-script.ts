@@ -1,6 +1,6 @@
 // Code that runs inside web pages. It is serialized with Function.prototype.toString and evaluated through CDP
 // (Runtime.evaluate), so page CSP does not block it. It must be self-contained: no references to module scope.
-// Elements get stable refs in a `data-ob-ref` attribute; the counter lives in the plugin, so refs never repeat
+// Elements get stable refs in a `data-owl-ref` attribute; the counter lives in the plugin, so refs never repeat
 // across navigations (an old ref can not silently point at a different element on a new page).
 
 declare const document: any;
@@ -31,7 +31,7 @@ export function pageScript(op: string, a: any): any {
     return out;
   }
   function byRef(ref: string) {
-    const sel = '[data-ob-ref="' + CSS.escape(ref) + '"]';
+    const sel = '[data-owl-ref="' + CSS.escape(ref) + '"]';
     const direct = document.querySelector(sel);
     if (direct) return direct;
     for (const el of allElements(document, [])) if (el.shadowRoot) {
@@ -111,7 +111,7 @@ export function pageScript(op: string, a: any): any {
     return !!el.isContentEditable || ["textbox", "searchbox", "combobox"].includes(norm(el.getAttribute("role")));
   }
   function isSecret(el: any) {
-    return el.getAttribute("data-ob-secret") === "1" || String(el.type || "").toLowerCase() === "password";
+    return el.getAttribute("data-owl-secret") === "1" || String(el.type || "").toLowerCase() === "password";
   }
   function isSearch(el: any, form: any) {
     if (el.closest && el.closest('[role="search"]')) return true;
@@ -172,10 +172,10 @@ export function pageScript(op: string, a: any): any {
     };
   }
   function assignRef(el: any) {
-    let ref = el.getAttribute("data-ob-ref");
+    let ref = el.getAttribute("data-owl-ref");
     if (!ref) {
       ref = "e" + a.seq++;
-      el.setAttribute("data-ob-ref", ref);
+      el.setAttribute("data-owl-ref", ref);
     }
     return ref;
   }
@@ -214,12 +214,12 @@ export function pageScript(op: string, a: any): any {
     const everything = allElements(document, []);
     const counts = new Map();
     for (const el of everything) {
-      const r = el.getAttribute && el.getAttribute("data-ob-ref");
+      const r = el.getAttribute && el.getAttribute("data-owl-ref");
       if (r) counts.set(r, (counts.get(r) || 0) + 1);
     }
     for (const el of everything) {
-      const r = el.getAttribute && el.getAttribute("data-ob-ref");
-      if (r && (counts.get(r) > 1 || !/^e\d+$/.test(r) || Number(r.slice(1)) >= a.seq)) el.removeAttribute("data-ob-ref");
+      const r = el.getAttribute && el.getAttribute("data-owl-ref");
+      if (r && (counts.get(r) > 1 || !/^e\d+$/.test(r) || Number(r.slice(1)) >= a.seq)) el.removeAttribute("data-owl-ref");
     }
     const els = modal ? allElements(scope, []) : everything;
     let index = 0;
@@ -258,7 +258,7 @@ export function pageScript(op: string, a: any): any {
         if (opts.length > 12) it.options.push("…+" + (opts.length - 12));
       } else if (el.isContentEditable) {
         const v = norm(el.innerText);
-        if (v && v !== c.name) it.value = el.getAttribute("data-ob-secret") === "1" ? "••••••" : cut(v, 60);
+        if (v && v !== c.name) it.value = el.getAttribute("data-owl-secret") === "1" ? "••••••" : cut(v, 60);
       } else if (["checkbox", "switch", "radio", "menuitemcheckbox", "menuitemradio"].includes(c.role)) {
         it.checked = el.getAttribute("aria-checked") === "true";
       }
@@ -347,7 +347,7 @@ export function pageScript(op: string, a: any): any {
   if (op === "markSecret") {
     const el = byRef(a.ref);
     if (!el) return false;
-    el.setAttribute("data-ob-secret", "1");
+    el.setAttribute("data-owl-secret", "1");
     if (String(el.type || "").toLowerCase() !== "password") el.style.setProperty("-webkit-text-security", "disc", "important");
     return true;
   }

@@ -1,6 +1,6 @@
 // Pure helpers for keeping a conversation's message list in sync with realtime events.
 
-import type { Message, MessagePart } from "@openbot/shared";
+import type { Message, MessagePart } from "@owlbot/shared";
 
 /** Append streamed text the same way the hub runner does: extend the last text part or start a new one. */
 export function appendDelta(parts: MessagePart[], delta: string): MessagePart[] {

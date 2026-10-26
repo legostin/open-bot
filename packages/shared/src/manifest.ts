@@ -1,4 +1,4 @@
-// Plugin manifests: our .openbot-plugin/plugin.json plus Claude Code and Codex formats.
+// Plugin manifests: our .owlbot-plugin/plugin.json plus Claude Code and Codex formats.
 
 import { z } from "zod";
 import { readFileSync, existsSync } from "node:fs";
@@ -40,7 +40,7 @@ export const SetupSecretSchema = z.object({
 });
 export type SetupSecret = z.infer<typeof SetupSecretSchema>;
 
-export const OpenbotManifestSchema = z.object({
+export const OwlbotManifestSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{1,40}$/, "id: lowercase letters, digits, dashes"),
   name: z.string().min(1),
   version: z.string().default("0.0.0"),
@@ -73,7 +73,7 @@ export const OpenbotManifestSchema = z.object({
   builtin: z.boolean().default(false),
 });
 
-export type OpenbotManifest = z.infer<typeof OpenbotManifestSchema>;
+export type OwlbotManifest = z.infer<typeof OwlbotManifestSchema>;
 export type PluginPermissions = z.infer<typeof PluginPermissionsSchema>;
 
 /** Core methods a plugin can be granted via permissions.core. */
@@ -98,8 +98,8 @@ export type CoreMethod = (typeof CORE_METHODS)[number];
 export interface PluginLayout {
   dir: string;
   /** Which manifests exist. */
-  formats: Array<"openbot" | "claude" | "codex">;
-  manifest: OpenbotManifest;
+  formats: Array<"owlbot" | "claude" | "codex">;
+  manifest: OwlbotManifest;
   serverEntry?: string;
   uiEntry?: string;
   skillsDir?: string;
@@ -107,18 +107,18 @@ export interface PluginLayout {
   agentsDir?: string;
   hooksFile?: string;
   mcpFile?: string;
-  /** Translations from .openbot-plugin/locales/<locale>.json: "%key%" strings in the manifest, ctx.i18n, ui.i18n. */
+  /** Translations from .owlbot-plugin/locales/<locale>.json: "%key%" strings in the manifest, ctx.i18n, ui.i18n. */
   messages: Catalog;
 }
 
-/** Flat key → string maps from .openbot-plugin/locales/<locale>.json; malformed files are rejected. */
+/** Flat key → string maps from .owlbot-plugin/locales/<locale>.json; malformed files are rejected. */
 export function readPluginMessages(dir: string): Catalog {
   const out: Catalog = {};
   for (const locale of LOCALES) {
-    const file = join(dir, ".openbot-plugin", "locales", `${locale}.json`);
+    const file = join(dir, ".owlbot-plugin", "locales", `${locale}.json`);
     if (!existsSync(file)) continue;
     const parsed = z.record(z.string(), z.string()).safeParse(readJson(file));
-    if (!parsed.success) throw new Error(`invalid .openbot-plugin/locales/${locale}.json: expected a flat object of strings`);
+    if (!parsed.success) throw new Error(`invalid .owlbot-plugin/locales/${locale}.json: expected a flat object of strings`);
     out[locale] = parsed.data;
   }
   return out;
@@ -149,16 +149,16 @@ function slug(s: string): string {
 /** Read a plugin directory in any supported format. Throws with a readable message on invalid manifests. */
 export function readPluginLayout(dir: string): PluginLayout {
   const formats: PluginLayout["formats"] = [];
-  const ob = join(dir, ".openbot-plugin", "plugin.json");
+  const ob = join(dir, ".owlbot-plugin", "plugin.json");
   const cl = join(dir, ".claude-plugin", "plugin.json");
   const cx = join(dir, ".codex-plugin", "plugin.json");
-  let manifest: OpenbotManifest | undefined;
+  let manifest: OwlbotManifest | undefined;
   let foreign: any;
 
   if (existsSync(ob)) {
-    formats.push("openbot");
-    const parsed = OpenbotManifestSchema.safeParse(readJson(ob));
-    if (!parsed.success) throw new Error(`invalid .openbot-plugin/plugin.json: ${parsed.error.message}`);
+    formats.push("owlbot");
+    const parsed = OwlbotManifestSchema.safeParse(readJson(ob));
+    if (!parsed.success) throw new Error(`invalid .owlbot-plugin/plugin.json: ${parsed.error.message}`);
     manifest = parsed.data;
   }
   if (existsSync(cl)) {
@@ -170,8 +170,8 @@ export function readPluginLayout(dir: string): PluginLayout {
     foreign ??= readJson(cx);
   }
   if (!manifest) {
-    if (!foreign) throw new Error("no plugin manifest found (.openbot-plugin, .claude-plugin or .codex-plugin)");
-    manifest = OpenbotManifestSchema.parse({
+    if (!foreign) throw new Error("no plugin manifest found (.owlbot-plugin, .claude-plugin or .codex-plugin)");
+    manifest = OwlbotManifestSchema.parse({
       id: slug(String(foreign.name ?? "plugin")),
       name: String(foreign.name ?? "plugin"),
       version: String(foreign.version ?? "0.0.0"),
@@ -200,6 +200,6 @@ export function readPluginLayout(dir: string): PluginLayout {
   };
 }
 
-export function toolPrefixOf(m: OpenbotManifest): string {
+export function toolPrefixOf(m: OwlbotManifest): string {
   return m.toolPrefix ?? m.id.replace(/-/g, "_");
 }

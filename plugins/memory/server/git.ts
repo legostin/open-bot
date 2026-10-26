@@ -4,10 +4,10 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-const AUTHOR = "open-bot <memory@openbot.local>";
+const AUTHOR = "Owlbot <memory@owlbot.local>";
 const CONFIG = [
-  "-c", "user.name=open-bot",
-  "-c", "user.email=memory@openbot.local",
+  "-c", "user.name=Owlbot",
+  "-c", "user.email=memory@owlbot.local",
   "-c", "commit.gpgsign=false",
   "-c", "core.autocrlf=false",
   "-c", "core.quotepath=false",

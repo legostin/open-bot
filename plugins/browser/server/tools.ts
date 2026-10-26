@@ -2,8 +2,8 @@
 
 import { createReadStream, writeFileSync, mkdirSync } from "node:fs";
 import type { Page } from "playwright";
-import type { ToolCallContext, ToolEffect, ToolResult } from "@openbot/shared";
-import type { PluginContext, ToolHandler } from "@openbot/plugin-sdk";
+import type { ToolCallContext, ToolEffect, ToolResult } from "@owlbot/shared";
+import type { PluginContext, ToolHandler } from "@owlbot/plugin-sdk";
 import { BrowserManager, ToolError, type Classified, type DownloadRecord } from "./manager.ts";
 import { activationKey, keyNeedsSubmit, SUBMIT_HINT } from "./safety.ts";
 import { cut, filenameFromDisposition, filenameFromUrl, formatSize, normalizeUrl, sanitizeFilename, sleep, totpCode, uniquePath } from "./util.ts";

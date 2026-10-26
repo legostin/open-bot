@@ -132,7 +132,7 @@
   "ui.card.checked": "Проверено:",
   "ui.card.value": "Текущее значение:",
   "ui.card.copy": "Копировать",
-  "ui.card.secret": "Секрет (заголовок x-openbot-secret):",
+  "ui.card.secret": "Секрет (заголовок x-owlbot-secret):",
   "ui.card.hide": "Скрыть",
   "ui.card.show": "Показать",
   "ui.card.started": "Задача запущена",

@@ -1,6 +1,7 @@
-// The desktop installers' shared launcher (packaging/desktop) and the text the macOS build generates (packaging/macos).
+// The desktop installers' shared launcher and stage (packaging/desktop) and the text the macOS build generates
+// (packaging/macos).
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,17 +10,19 @@ import { RESOLVE_HOOK, defaultDataDir, desktopPorts, hubEnv, openUrl, setupCode 
 // @ts-ignore
 import { resolveWorkspace, workspaces } from "../../../packaging/desktop/resolve.mjs";
 // @ts-ignore
+import { removeDanglingLinks } from "../../../packaging/desktop/stage.mjs";
+// @ts-ignore
 import { loadCatalogs } from "../../../packaging/desktop/locales.mjs";
 // @ts-ignore
-import { appleScriptText, distributionXml, installerPage, launcherScript, uninstallerScript } from "../../../packaging/macos/generate.mjs";
+import { appleScriptText, distributionXml, installerPage, launcherScript } from "../../../packaging/macos/generate.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
-const tmp = () => mkdtempSync(join(tmpdir(), "ob-desktop-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "owl-desktop-"));
 
 describe("desktop launcher", () => {
   it("keeps data in the user's profile", () => {
-    expect(defaultDataDir({ LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local" }, "win32", "C:\\Users\\u")).toBe(join("C:\\Users\\u\\AppData\\Local", "open-bot"));
-    expect(defaultDataDir({}, "darwin", "/Users/u")).toBe(join("/Users/u", "Library", "Application Support", "open-bot"));
+    expect(defaultDataDir({ LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local" }, "win32", "C:\\Users\\u")).toBe(join("C:\\Users\\u\\AppData\\Local", "Owlbot"));
+    expect(defaultDataDir({}, "darwin", "/Users/u")).toBe(join("/Users/u", "Library", "Application Support", "Owlbot"));
   });
 
   it("reads ports from desktop.json and keeps one setup code", () => {
@@ -34,12 +37,12 @@ describe("desktop launcher", () => {
 
   it("gives the hub its settings without overriding the caller's, and loads the resolve hook once", () => {
     const data = tmp();
-    const env = hubEnv({ OPENBOT_PORT: "9999", NODE_OPTIONS: "--max-old-space-size=512" }, data);
-    expect(env.OPENBOT_PORT).toBe("9999");
-    expect(env.OPENBOT_DATA_DIR).toBe(data);
-    expect(env.OPENBOT_PUBLIC_URL).toBe("http://localhost:8080");
-    expect(env.OPENBOT_INSTALL_CLIS).toBe("1");
-    expect(env.OPENBOT_SETUP_TOKEN).toBe(readFileSync(join(data, "setup-code"), "utf8").trim());
+    const env = hubEnv({ OWLBOT_PORT: "9999", NODE_OPTIONS: "--max-old-space-size=512" }, data);
+    expect(env.OWLBOT_PORT).toBe("9999");
+    expect(env.OWLBOT_DATA_DIR).toBe(data);
+    expect(env.OWLBOT_PUBLIC_URL).toBe("http://localhost:8080");
+    expect(env.OWLBOT_INSTALL_CLIS).toBe("1");
+    expect(env.OWLBOT_SETUP_TOKEN).toBe(readFileSync(join(data, "setup-code"), "utf8").trim());
     expect(env.NODE_OPTIONS).toBe(`--max-old-space-size=512 --import=${RESOLVE_HOOK}`);
     expect(hubEnv(env, data).NODE_OPTIONS).toBe(env.NODE_OPTIONS);
   });
@@ -56,12 +59,24 @@ describe("desktop launcher", () => {
     expect(await openUrl(data, { fetchImpl: down, timeoutMs: 600 })).toEqual({ ready: false, url: "http://localhost:8080/" });
   });
 
-  it("resolves @openbot/* to the workspace folders without node_modules links", () => {
+  it("resolves @owlbot/* to the workspace folders without node_modules links", () => {
     const table = workspaces(ROOT);
-    const shared = resolveWorkspace("@openbot/shared", table);
-    expect(shared && fileURLToPath(shared)).toBe(join(ROOT, "packages", "shared", table.get("@openbot/shared").exports["."] ?? table.get("@openbot/shared").exports));
-    expect(resolveWorkspace("@openbot/no-such-package", table)).toBeUndefined();
+    const shared = resolveWorkspace("@owlbot/shared", table);
+    expect(shared && fileURLToPath(shared)).toBe(join(ROOT, "packages", "shared", table.get("@owlbot/shared").exports["."] ?? table.get("@owlbot/shared").exports));
+    expect(resolveWorkspace("@owlbot/no-such-package", table)).toBeUndefined();
     expect(resolveWorkspace("react", table)).toBeUndefined();
+  });
+
+  // Windows creates links only with developer mode on.
+  it.skipIf(process.platform === "win32")("drops links whose target is gone, keeps the others", () => {
+    const app = tmp();
+    mkdirSync(join(app, "runtime", "bin"), { recursive: true });
+    writeFileSync(join(app, "runtime", "npm-cli.js"), "");
+    symlinkSync("../npm-cli.js", join(app, "runtime", "bin", "npm"));
+    symlinkSync("../lib/node_modules/corepack/dist/corepack.js", join(app, "runtime", "bin", "corepack"));
+    expect(removeDanglingLinks(app)).toBe(1);
+    expect(lstatSync(join(app, "runtime", "bin", "npm")).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(app, "runtime", "bin", "corepack"))).toBe(false);
   });
 });
 
@@ -75,26 +90,28 @@ describe("macOS installer text", () => {
     expect(appleScriptText("")).toBe('""');
   });
 
-  for (const [name, script] of [
-    ["open-bot.app", () => launcherScript(catalogs)],
-    ["Uninstall open-bot.app", () => uninstallerScript(catalogs)],
-  ] as const) {
-    it(`${name}: ASCII source, and every message it shows is defined`, () => {
-      const src: string = script();
-      expect(/^[\x09\x0a\x20-\x7e]*$/.test(src)).toBe(true);
-      const called = new Set([...src.matchAll(/my (T_\w+)\(/g)].map((m) => m[1]));
-      const defined = new Set([...src.matchAll(/^on (T_\w+)\(/gm)].map((m) => m[1]));
-      expect(called.size).toBeGreaterThan(1);
-      expect([...called].filter((h) => !defined.has(h))).toEqual([]);
-    });
-  }
+  it("Owlbot.app: ASCII source, and every message it shows is defined", () => {
+    const src: string = launcherScript(catalogs);
+    expect(/^[\x09\x0a\x20-\x7e]*$/.test(src)).toBe(true);
+    const called = new Set([...src.matchAll(/my (T_\w+)\(/g)].map((m) => m[1]));
+    const defined = new Set([...src.matchAll(/^on (T_\w+)\(/gm)].map((m) => m[1]));
+    expect(called.size).toBeGreaterThan(1);
+    expect([...called].filter((h) => !defined.has(h))).toEqual([]);
+  });
+
+  it("Owlbot.app runs the scripts inside itself and asks to be moved out of the disk image", () => {
+    const src: string = launcherScript(catalogs);
+    expect(src).toContain('(POSIX path of (path to me)) & "Contents/Resources/bin/open.sh"');
+    expect(src).toMatch(/if errNum is 4 then\n\t+display dialog my T_mac_moveFirst\(\)/);
+    expect(src).not.toContain("/Library/Application Support/Owlbot/bin");
+  });
 
   it("builds the Installer pages and distribution", () => {
     const page = installerPage(catalogs, "ru", "welcome");
     expect(page).toContain('<html lang="ru">');
-    expect(page).toContain("<h1>Добро пожаловать в open-bot</h1>");
-    const xml = distributionXml({ version: "1.2.3", componentPkg: "open-bot-app.pkg" });
-    expect(xml).toContain('<pkg-ref id="ai.openbot.pkg" version="1.2.3" onConclusion="none">open-bot-app.pkg</pkg-ref>');
+    expect(page).toContain("<h1>Добро пожаловать в Owlbot</h1>");
+    const xml = distributionXml({ version: "1.2.3", componentPkg: "owlbot-app.pkg" });
+    expect(xml).toContain('<pkg-ref id="ai.owlbot.pkg" version="1.2.3" onConclusion="none">owlbot-app.pkg</pkg-ref>');
     expect(xml).toContain('hostArchitectures="arm64,x86_64"');
   });
 });

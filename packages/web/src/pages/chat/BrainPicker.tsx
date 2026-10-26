@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Brain, Check, ChevronDown, Plus } from "lucide-react";
-import type { AgentDef } from "@openbot/shared";
+import type { AgentDef } from "@owlbot/shared";
 import { api, errorText } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import { refreshAgents } from "../../state/app";

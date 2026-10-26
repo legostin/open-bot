@@ -1,4 +1,4 @@
-// Where the daemon keeps its state: ~/.openbot-node (override with OPENBOT_NODE_HOME).
+// Where the daemon keeps its state: ~/.owlbot-node (override with OWLBOT_NODE_HOME).
 // config.json {hubUrl, machineId, name} and key.json (Ed25519 private key) are written by `pair`.
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,7 +21,7 @@ export interface NodeKey {
 }
 
 export function nodeHome(env: NodeJS.ProcessEnv = process.env): string {
-  return resolve(env.OPENBOT_NODE_HOME || join(homedir(), ".openbot-node"));
+  return resolve(env.OWLBOT_NODE_HOME || join(homedir(), ".owlbot-node"));
 }
 
 export const configFile = (home: string) => join(home, "config.json");

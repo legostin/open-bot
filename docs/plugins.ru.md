@@ -2,7 +2,7 @@
 
 [English](plugins.md)
 
-Почти всё в open-bot — плагины: мозги (Claude Code, Codex, API), каналы (Telegram), браузер, память, веб-поиск, триггеры. Ядро только связывает их и следит за безопасностью. Плагин может добавить:
+Почти всё в Owlbot — плагины: мозги (Claude Code, Codex, API), каналы (Telegram), браузер, память, веб-поиск, триггеры. Ядро только связывает их и следит за безопасностью. Плагин может добавить:
 
 | Что | Где |
 |---|---|
@@ -14,7 +14,7 @@
 | Скиллы, команды, агенты | `skills/`, `commands/`, `agents/` |
 | MCP-серверы | `.mcp.json` |
 | Интерфейс: панели, вкладки, рендер результатов, замена композера | `ui/` |
-| Переводы | `.openbot-plugin/locales/` |
+| Переводы | `.owlbot-plugin/locales/` |
 
 Плагины Claude Code (`.claude-plugin/plugin.json`) и Codex (`.codex-plugin/plugin.json`) ставятся как есть: их скиллы, команды, агенты и MCP-серверы становятся доступны. Плагины Claude Code к тому же передаются мозгу Claude Code на хабе через `--plugin-dir`, поэтому их хуки работают там.
 
@@ -22,9 +22,9 @@
 
 ```
 my-plugin/
-  .openbot-plugin/plugin.json
-  .openbot-plugin/locales/en.json   # translations, see Localization
-  .openbot-plugin/locales/ru.json
+  .owlbot-plugin/plugin.json
+  .owlbot-plugin/locales/en.json   # translations, see Localization
+  .owlbot-plugin/locales/ru.json
   server/index.ts        # backend: a separate process, JSON-RPC over stdio
   ui/src/index.tsx       # UI module (built into ui/dist/index.js)
   skills/<name>/SKILL.md
@@ -76,7 +76,7 @@ my-plugin/
 ## Бэкенд
 
 ```ts
-import type { PluginModule } from "@openbot/plugin-sdk";
+import type { PluginModule } from "@owlbot/plugin-sdk";
 
 const plugin: PluginModule = {
   async activate(ctx) {
@@ -100,7 +100,7 @@ const plugin: PluginModule = {
 export default plugin;
 ```
 
-Из `@openbot/plugin-sdk` плагины импортируют только типы (`import type`): реализацию даёт раннер, поэтому плагину не нужна зависимость от SDK во время работы. В SDK есть и помощник `definePlugin`, но это импорт значения; типизированный объект, как в примере, делает то же самое.
+Из `@owlbot/plugin-sdk` плагины импортируют только типы (`import type`): реализацию даёт раннер, поэтому плагину не нужна зависимость от SDK во время работы. В SDK есть и помощник `definePlugin`, но это импорт значения; типизированный объект, как в примере, делает то же самое.
 
 Что есть в `ctx`: `pluginId`, `pluginDir`, `dataDir` (личная папка с правом записи), `hubUrl`, `appRoot`, `settings`, `onSettingsChange`, `i18n` (см. [Локализация](#локализация)), `log`, `tools`, `brains`, `channels`, `events.on`, `hooks.on`, `http.handle`, `ui.emit` / `ui.onMessage`, `vault.get`, `storage` (хранилище ключ-значение плагина: `get`, `set`, `delete`, `list`) и `core.call`. Модуль может также экспортировать `deactivate()`.
 
@@ -116,17 +116,17 @@ export default plugin;
 
 ## Мозги
 
-Мозг — это `BrainProviderImpl`: `probe()` (установлен? есть вход?) и `createSession(opts)`. Сессия получает системный промпт, рабочую папку и MCP-доступ к инструментам хаба (`opts.mcp.url`, `opts.mcp.token`, `opts.mcp.bridgeCommand` для stdio-клиентов). `send(turn)` выдаёт события `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error`, `done`; ещё сессия реализует `interrupt()` и `close()`. При `limit_hit` ядро помечает мозг занятым до `resetAt` и переключается на следующий в списке агента. Готовые адаптеры для CLI — в `@openbot/brains-cli`. Если у мозга есть варианты (например, провайдеры API), перечислите их в `variants: ["anthropic", "openai"]` — в интерфейсе они появятся отдельными мозгами `<id>:<вариант>@local`, а вариант придёт в `probe(variant)` и `opts.variant`. Id мозгов перечисляются в `contributes.brains`.
+Мозг — это `BrainProviderImpl`: `probe()` (установлен? есть вход?) и `createSession(opts)`. Сессия получает системный промпт, рабочую папку и MCP-доступ к инструментам хаба (`opts.mcp.url`, `opts.mcp.token`, `opts.mcp.bridgeCommand` для stdio-клиентов). `send(turn)` выдаёт события `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error`, `done`; ещё сессия реализует `interrupt()` и `close()`. При `limit_hit` ядро помечает мозг занятым до `resetAt` и переключается на следующий в списке агента. Готовые адаптеры для CLI — в `@owlbot/brains-cli`. Если у мозга есть варианты (например, провайдеры API), перечислите их в `variants: ["anthropic", "openai"]` — в интерфейсе они появятся отдельными мозгами `<id>:<вариант>@local`, а вариант придёт в `probe(variant)` и `opts.variant`. Id мозгов перечисляются в `contributes.brains`.
 
 ## UI
 
-UI-модуль — ES-модуль; React и `@openbot/ui` берутся у хоста через import map, поэтому в сборку не попадают.
+UI-модуль — ES-модуль; React и `@owlbot/ui` берутся у хоста через import map, поэтому в сборку не попадают.
 
 ```tsx
-import { definePluginUI, Card } from "@openbot/ui";
-import type { OpenBotUI, ToolResultProps } from "@openbot/ui";
+import { definePluginUI, Card } from "@owlbot/ui";
+import type { OwlbotUI, ToolResultProps } from "@owlbot/ui";
 
-let ui: OpenBotUI;
+let ui: OwlbotUI;
 
 function Panel() {
   const time = ui.i18n.formatDate(Date.now(), { timeStyle: "short" });
@@ -152,7 +152,7 @@ export default definePluginUI((host) => {
 
 Слоты: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` заменяет стандартный компонент целиком. Каждый слот обёрнут в error boundary.
 
-Кроме слотов, в `ui` есть `routes.add` (отдельная страница, по желанию — в навигации), `settings.section`, `commands.register` (палитра команд), `toast`, `navigate`, `api` (REST API хаба), `plugin` (`http`, `send` и `on` — связь со своим бэкендом через `ctx.http`, `ctx.ui.onMessage` и `ctx.ui.emit`), `events.on` (события хаба в реальном времени) и `i18n`. Ещё `@openbot/ui` экспортирует компоненты `Button`, `Card`, `Badge`, `EmptyState`, `Spinner`, `Markdown`, хуки `useTasks` и `useHubEvent`, а также `api` и `locale`.
+Кроме слотов, в `ui` есть `routes.add` (отдельная страница, по желанию — в навигации), `settings.section`, `commands.register` (палитра команд), `toast`, `navigate`, `api` (REST API хаба), `plugin` (`http`, `send` и `on` — связь со своим бэкендом через `ctx.http`, `ctx.ui.onMessage` и `ctx.ui.emit`), `events.on` (события хаба в реальном времени) и `i18n`. Ещё `@owlbot/ui` экспортирует компоненты `Button`, `Card`, `Badge`, `EmptyState`, `Spinner`, `Markdown`, хуки `useTasks` и `useHubEvent`, а также `api` и `locale`.
 
 Сборка всех встроенных UI-плагинов: `npm run build:ui-plugins` (`plugins/*/ui/src/index.tsx` → `ui/dist/index.js`); одного плагина — `node scripts/build-ui-plugins.mjs path/to/my-plugin`. Собранный `ui/dist/index.js` поставляется вместе с плагином: при установке он не собирается.
 
@@ -160,11 +160,11 @@ export default definePluginUI((host) => {
 
 ## Локализация
 
-open-bot работает на английском и русском, и плагины следуют тем же правилам. Английский — основной язык и запасной вариант: если ключа нет на языке читателя, берётся английский текст, а если нет и его — сам ключ.
+Owlbot работает на английском и русском, и плагины следуют тем же правилам. Английский — основной язык и запасной вариант: если ключа нет на языке читателя, берётся английский текст, а если нет и его — сам ключ.
 
 ### Каталоги
 
-Переводы лежат в `.openbot-plugin/locales/en.json` и `ru.json` — плоских словарях «ключ → строка». Если файл некорректен, плагин не загрузится. В строках есть подстановки `{name}` и множественные формы в стиле ICU, например `{n, plural, one {# file} other {# files}}`, где `#` — число в формате языка, а `=0 {…}` срабатывает на точное значение; в русском используются категории `one`, `few`, `many` и `other`. `{kind, select, a {…} other {…}}` выбирает вариант по значению.
+Переводы лежат в `.owlbot-plugin/locales/en.json` и `ru.json` — плоских словарях «ключ → строка». Если файл некорректен, плагин не загрузится. В строках есть подстановки `{name}` и множественные формы в стиле ICU, например `{n, plural, one {# file} other {# files}}`, где `#` — число в формате языка, а `=0 {…}` срабатывает на точное значение; в русском используются категории `one`, `few`, `many` и `other`. `{kind, select, a {…} other {…}}` выбирает вариант по значению.
 
 `en.json`:
 
@@ -250,11 +250,11 @@ brains: [claude-code@local, "api:anthropic"]
 You watch the weather forecast for the user's city and warn about rain a day ahead.
 ```
 
-Файл из папки `agents/` плагина становится агентом open-bot, только если в его frontmatter есть `brains:`.
+Файл из папки `agents/` плагина становится агентом Owlbot, только если в его frontmatter есть `brains:`.
 
 ### Проверки
 
-`packages/core/test/i18n.test.ts` запускается вместе с `npm test`. Он проверяет каталоги ядра и каждый плагин из `plugins/`, у которого есть переводы: в каждом языке должны быть ровно те же ключи, что в английском, с теми же подстановками, а каждый `"%key%"` из `plugin.json` должен быть в `en.json`. Для плагина вне репозитория тот же список проблем вернёт `catalogProblems(readPluginLayout(dir).messages)` из `@openbot/shared`.
+`packages/core/test/i18n.test.ts` запускается вместе с `npm test`. Он проверяет каталоги ядра и каждый плагин из `plugins/`, у которого есть переводы: в каждом языке должны быть ровно те же ключи, что в английском, с теми же подстановками, а каждый `"%key%"` из `plugin.json` должен быть в `en.json`. Для плагина вне репозитория тот же список проблем вернёт `catalogProblems(readPluginLayout(dir).messages)` из `@owlbot/shared`.
 
 В тестах плагин запускается на нужном языке через `startPlugin({ locale })`, а `h.setLocale()` переключает язык и вызывает `ctx.i18n.onChange`:
 
@@ -265,10 +265,10 @@ h.setLocale("en");
 
 ## Тесты
 
-`@openbot/testkit` запускает плагин как настоящий процесс и эмулирует ядро:
+`@owlbot/testkit` запускает плагин как настоящий процесс и эмулирует ядро:
 
 ```ts
-import { startPlugin } from "@openbot/testkit";
+import { startPlugin } from "@owlbot/testkit";
 
 const h = await startPlugin({ dir: "plugins/weather", settings: { city: "Berlin" } });
 expect(h.tools.has("forecast")).toBe(true);

@@ -1,5 +1,5 @@
-# The hub (openbot) starts brain CLIs as "agent" and other plugins / MCP servers as "plugin".
+# The hub (owlbot) starts brain CLIs as "agent" and other plugins / MCP servers as "plugin".
 # env_reset drops the hub's environment; the hub names every variable a child gets with --preserve-env
 # (SETENV), so secrets travel in the environment and never on a command line other users could read.
-Defaults:openbot !requiretty, !lecture, env_reset
-openbot ALL=(agent,plugin) NOPASSWD:SETENV: ALL
+Defaults:owlbot !requiretty, !lecture, env_reset
+owlbot ALL=(agent,plugin) NOPASSWD:SETENV: ALL

@@ -1,9 +1,9 @@
-// Shared UI primitives. Button, Card, Badge, EmptyState and Spinner are also exposed to UI plugins (@openbot/ui).
+// Shared UI primitives. Button, Card, Badge, EmptyState and Spinner are also exposed to UI plugins (@owlbot/ui).
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { Check, Copy, Loader2, X } from "lucide-react";
-import type { BadgeProps, ButtonProps, CardProps, EmptyStateProps } from "@openbot/ui";
+import type { BadgeProps, ButtonProps, CardProps, EmptyStateProps } from "@owlbot/ui";
 import { Icon } from "./icon";
 import { mergeClasses } from "../lib/classes";
 import { t } from "../i18n";

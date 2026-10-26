@@ -2,8 +2,8 @@
 
 import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { CoreMethod } from "@openbot/shared";
-import { parseBrainRef } from "@openbot/shared";
+import type { CoreMethod } from "@owlbot/shared";
+import { parseBrainRef } from "@owlbot/shared";
 import type { Hub } from "./app.ts";
 
 /** Largest file a plugin may hand to a workspace. */

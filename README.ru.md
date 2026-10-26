@@ -1,4 +1,4 @@
-# open-bot
+# Owlbot
 
 [English](README.md)
 
@@ -21,37 +21,37 @@
 
 ### На вашем компьютере (Windows, macOS)
 
-Возьмите установщик: `open-bot-setup-<version>-x64.exe` для Windows 10 и 11, `open-bot-<version>.pkg` для macOS 13.5 и новее (Apple silicon и Intel). В нём есть всё нужное: Node.js, Docker и WSL не понадобятся. Как собрать его самому, описано в разделе [Установщики для компьютера](#установщики-для-компьютера).
+Возьмите установщик: `owlbot-setup-<version>-x64.exe` для Windows 10 и 11, `owlbot-<version>.dmg` для macOS 13.5 и новее (Apple silicon и Intel). В нём есть всё нужное: Node.js, Docker и WSL не понадобятся. Как собрать его самому, описано в разделе [Установщики для компьютера](#установщики-для-компьютера).
 
-1. Запустите установщик. В Windows он ставит open-bot только для вашего пользователя и не просит прав администратора; в macOS спросит пароль, как любой пакет.
-2. open-bot запустится в фоне и откроется в браузере. Придумайте пароль, и всё готово (код установки копировать не нужно).
-3. Дальше он запускается сам, когда вы входите в систему. В Windows он живёт в трее (Открыть, Запускать при входе в систему, Показать журнал, Перезапустить, Выйти); в macOS открывайте его из **Программы → open-bot**.
+1. В Windows запустите установщик: он ставит Owlbot только для вашего пользователя и не просит прав администратора. В macOS откройте образ диска, перетащите Owlbot в «Программы» и откройте его оттуда.
+2. Owlbot запустится в фоне и откроется в браузере. Придумайте пароль, и всё готово (код установки копировать не нужно).
+3. Дальше он запускается сам, когда вы входите в систему. В Windows он живёт в трее (Открыть, Запускать при входе в систему, Показать журнал, Перезапустить, Выйти); в macOS открывайте **Owlbot** из «Программ».
 
-Claude Code и Codex: если один из них уже установлен на компьютере, open-bot возьмёт его. Если нет, кнопка **Войти** на его карточке установит его для open-bot (разовая загрузка на несколько сотен МБ), а потом начнётся вход.
+Claude Code и Codex: если один из них уже установлен на компьютере, Owlbot возьмёт его. Если нет, кнопка **Войти** на его карточке установит его для Owlbot (разовая загрузка на несколько сотен МБ), а потом начнётся вход.
 
-Данные лежат в `%LOCALAPPDATA%\open-bot` (Windows) или `~/Library/Application Support/open-bot` (macOS); обновление их сохраняет. Удалить open-bot можно в **Параметры → Приложения** в Windows или через **Программы → open-bot → Uninstall open-bot** в macOS: оба спросят, удалять ли ваши данные. Хаб доступен только с этого компьютера; как открыть его с телефона, описано в разделе [Доступ извне](#доступ-извне).
+Данные лежат в `%LOCALAPPDATA%\Owlbot` (Windows) или `~/Library/Application Support/Owlbot` (macOS); обновление их сохраняет. Чтобы обновить Owlbot в macOS, перетащите новую версию в «Программы» и замените старую: хаб сам перезапустится на новой версии. Удалить Owlbot можно в **Параметры → Приложения** в Windows (он спросит, удалять ли ваши данные) или перетащив Owlbot из «Программ» в Корзину в macOS (данные останутся; чтобы удалить и их, удалите `~/Library/Application Support/Owlbot`). Хаб доступен только с этого компьютера; как открыть его с телефона, описано в разделе [Доступ извне](#доступ-извне).
 
-На компьютере хаб, плагины и CLI-мозги работают от вашего пользователя: отдельных Unix-пользователей и блокировки сети на уровне ядра, как в Docker-образе, здесь нет. Для самой строгой изоляции запускайте open-bot в Docker.
+На компьютере хаб, плагины и CLI-мозги работают от вашего пользователя: отдельных Unix-пользователей и блокировки сети на уровне ядра, как в Docker-образе, здесь нет. Для самой строгой изоляции запускайте Owlbot в Docker.
 
-Установщики пока не подписаны. Windows SmartScreen может написать «Система Windows защитила ваш компьютер»: нажмите **Подробнее → Выполнить в любом случае**. Если macOS не открывает пакет, щёлкните его с Control и выберите **Открыть** или разрешите его в **Системные настройки → Конфиденциальность и безопасность**.
+Установщики пока не подписаны. Windows SmartScreen может написать «Система Windows защитила ваш компьютер»: нажмите **Подробнее → Выполнить в любом случае**. Если macOS не открывает приложение, нажмите **Все равно открыть** в **Системные настройки → Конфиденциальность и безопасность** (в macOS 13 и 14 можно и щёлкнуть приложение с Control и выбрать **Открыть**).
 
 ### На сервере (Docker)
 
 ```bash
-git clone <repo> open-bot && cd open-bot
+git clone <repo> owlbot && cd owlbot
 docker compose up -d --build
-docker compose logs openbot | grep -A1 "open-bot:"
+docker compose logs owlbot | grep -A1 "Owlbot:"
 ```
 
 1. Откройте http://localhost:8080, введите **код установки** из логов и придумайте пароль. Язык вашего браузера станет языком хаба (см. [Языки](#языки)).
 2. Пока не работает ни один мозг, чат показывает карточку настройки: войдите в Claude Code или Codex по своей подписке (в установке на компьютер хаб сначала сам поставит недостающий CLI) или дайте API-ключ (см. ниже). На всё, что вы напишете в это время, ассистент ответит, как только мозг подключится.
 3. Дальше настройку в чате ведёт ассистент, по одному шагу и только с вашего согласия: Telegram, запасной мозг, другие компьютеры и знакомство с вами. «Не сейчас» пропускает шаг, «продолжим настройку» возвращает к нему. Когда для чего-то нужен ключ или токен, ассистент покажет в чате защищённое поле: значение сразу уходит в зашифрованное хранилище, а модель видит только `vault://id`. Можно и просто вставить токен в сообщение: хаб узнаёт известные форматы, вырезает токен из сообщения и сохраняет его.
 
-Данные лежат в томе `openbot-data` (`/data`): база, vault, рабочие папки, логины CLI, плагины.
+Данные лежат в томе `owlbot-data` (`/data`): база, vault, рабочие папки, логины CLI, плагины.
 
 ## Языки
 
-- **Язык хаба** берётся из браузера первого пользователя при установке. Его можно закрепить переменной `OPENBOT_LANG=en` или `OPENBOT_LANG=ru`, а позже поменять в «Настройках». На нём приходят уведомления, сообщения в Telegram и карточки подтверждения, и он же — язык интерфейса по умолчанию.
+- **Язык хаба** берётся из браузера первого пользователя при установке. Его можно закрепить переменной `OWLBOT_LANG=en` или `OWLBOT_LANG=ru`, а позже поменять в «Настройках». На нём приходят уведомления, сообщения в Telegram и карточки подтверждения, и он же — язык интерфейса по умолчанию.
 - В каждом браузере язык интерфейса можно переключить отдельно; язык хаба от этого не меняется.
 - Агенты отвечают на том языке, на котором вы им пишете.
 
@@ -93,11 +93,11 @@ docker compose logs openbot | grep -A1 "open-bot:"
 1. На странице «Машины» нажмите «Подключить машину» и получите одноразовый код (действует 10 минут).
 2. На другом компьютере (нужен только Node.js 24.5+) скачайте демон с хаба и привяжите машину; `<code>` — полученный код:
    ```bash
-   curl -fsSLo openbot-node.mjs https://your-hub-url/download/openbot-node.mjs
-   node openbot-node.mjs pair https://your-hub-url <code> --name laptop
-   node openbot-node.mjs run
+   curl -fsSLo owlbot-node.mjs https://your-hub-url/download/owlbot-node.mjs
+   node owlbot-node.mjs pair https://your-hub-url <code> --name laptop
+   node owlbot-node.mjs run
    ```
-3. Узел появится в списке. Его локальные Claude Code и Codex станут мозгами `claude-code@<машина>` и `codex@<машина>`. Что агенту можно делать на машине (папки, команды, мозги), решает владелец машины в `~/.openbot-node/policy.json`. По умолчанию команды выключены. Автозапуск через systemd, launchd и Планировщик заданий описан в [packages/node/README.ru.md](packages/node/README.ru.md).
+3. Узел появится в списке. Его локальные Claude Code и Codex станут мозгами `claude-code@<машина>` и `codex@<машина>`. Что агенту можно делать на машине (папки, команды, мозги), решает владелец машины в `~/.owlbot-node/policy.json`. По умолчанию команды выключены. Автозапуск через systemd, launchd и Планировщик заданий описан в [packages/node/README.ru.md](packages/node/README.ru.md).
 
 ## Доступ извне
 
@@ -112,8 +112,8 @@ tailscale serve --bg --https=8081 http://127.0.0.1:8081
 
 ```yaml
 environment:
-  OPENBOT_PUBLIC_URL: https://my-box.tailnet.ts.net:8080
-  OPENBOT_CONSOLE_URL: https://my-box.tailnet.ts.net:8081
+  OWLBOT_PUBLIC_URL: https://my-box.tailnet.ts.net:8080
+  OWLBOT_CONSOLE_URL: https://my-box.tailnet.ts.net:8081
 ```
 
 Для passkeys (вход без пароля) нужен HTTPS или `localhost`. `tailscale serve` получает сертификат автоматически.
@@ -121,19 +121,19 @@ environment:
 ## Модель безопасности
 
 - **Два origin.** Чат и плагины работают на `:8080`. Подтверждения, vault, правила и аудит — на `:8081`, с отдельной cookie, строгим CSP и `frame-ancestors 'none'`. Код плагинов в основной странице не может прочитать или нажать то, что в пульте.
-- **Vault.** Секреты шифруются: XChaCha20-Poly1305 с ключом данных, обёрнутым ключом из Argon2id. Модели видят только `vault://id`. Плагин получает запись, только если она объявлена в его правах **и** её область разрешает этот плагин, домен или агента. Значения секретов вырезаются из всего, что уходит модели, в каналы и в логи. После перезапуска vault запечатан, если при создании не отмечено «открывать автоматически» (тогда парольная фраза хранится в `/data/vault.passphrase`, её может прочитать только хаб) и не передан файл с паролем через `OPENBOT_VAULT_PASSPHRASE_FILE` (docker secret).
+- **Vault.** Секреты шифруются: XChaCha20-Poly1305 с ключом данных, обёрнутым ключом из Argon2id. Модели видят только `vault://id`. Плагин получает запись, только если она объявлена в его правах **и** её область разрешает этот плагин, домен или агента. Значения секретов вырезаются из всего, что уходит модели, в каналы и в логи. После перезапуска vault запечатан, если при создании не отмечено «открывать автоматически» (тогда парольная фраза хранится в `/data/vault.passphrase`, её может прочитать только хаб) и не передан файл с паролем через `OWLBOT_VAULT_PASSPHRASE_FILE` (docker secret).
 - **Политика инструментов.** У каждого инструмента есть эффект: `read`, `local-write` или `external`. Внешние действия по умолчанию требуют подтверждения. «Всегда разрешать» создаёт узкое правило (получатель, домен). Если сессия читала недоверенный контент (веб, почта), новые адресаты снова требуют подтверждения. Фоновые задачи агентов с инициативой ниже 2 могут только читать и уведомлять.
-- **Песочница.** Хаб работает от пользователя `openbot`, CLI-мозги — от `agent`, остальные плагины и MCP-серверы — от `plugin`. Трафик идёт через egress-прокси с белыми списками. С `cap_add: [NET_ADMIN]` и `OPENBOT_EGRESS_ENFORCED=iptables` прямой выход в сеть для `agent` и `plugin` закрыт на уровне ядра.
+- **Песочница.** Хаб работает от пользователя `owlbot`, CLI-мозги — от `agent`, остальные плагины и MCP-серверы — от `plugin`. Трафик идёт через egress-прокси с белыми списками. С `cap_add: [NET_ADMIN]` и `OWLBOT_EGRESS_ENFORCED=iptables` прямой выход в сеть для `agent` и `plugin` закрыт на уровне ядра.
 - **Узлы.** Узлы аутентифицируются ключом Ed25519, полученным при одноразовом спаривании. Каждое действие на машине проходит политику хаба и локальную политику узла.
-- **Аудит.** Все вызовы инструментов, решения политики, доступ к vault и входы записываются в журнал с цепочкой хэшей. Проверить целостность можно командой `docker exec openbot openbot-entrypoint audit-verify` или в пульте.
+- **Аудит.** Все вызовы инструментов, решения политики, доступ к vault и входы записываются в журнал с цепочкой хэшей. Проверить целостность можно командой `docker exec owlbot owlbot-entrypoint audit-verify` или в пульте.
 
 ## Команды контейнера
 
 ```bash
-docker exec openbot openbot-entrypoint reset-password 'new-password'
-docker exec openbot openbot-entrypoint pairing-code laptop
-docker exec openbot openbot-entrypoint backup /data/backups
-docker exec openbot openbot-entrypoint audit-verify
+docker exec owlbot owlbot-entrypoint reset-password 'new-password'
+docker exec owlbot owlbot-entrypoint pairing-code laptop
+docker exec owlbot owlbot-entrypoint backup /data/backups
+docker exec owlbot owlbot-entrypoint audit-verify
 ```
 
 - `reset-password` задаёт новый пароль (не короче 8 символов) и завершает все сессии.
@@ -145,18 +145,18 @@ docker exec openbot openbot-entrypoint audit-verify
 
 | Переменная | По умолчанию | |
 |---|---|---|
-| `OPENBOT_PUBLIC_URL` | `http://localhost:8080` | адрес чата, нужен для ссылок и проверки Origin |
-| `OPENBOT_CONSOLE_URL` | тот же хост, порт 8081 | адрес пульта |
-| `OPENBOT_ALLOWED_HOSTS` | — | дополнительные имена хоста через запятую |
-| `OPENBOT_LANG` | — | закрепить язык хаба: `en` или `ru` |
-| `OPENBOT_VAULT_PASSPHRASE_FILE` | — | автоматическая разблокировка vault |
-| `OPENBOT_EGRESS_ENFORCED` | `proxy` | `iptables` — жёсткий запрет прямого выхода (нужен `NET_ADMIN`) |
-| `OPENBOT_SETUP_TOKEN` | случайный | задать код установки заранее |
-| `OPENBOT_TRUST_PROXY` | — | `1` — доверять `X-Forwarded-*` от обратного прокси |
-| `OPENBOT_HOST` | `127.0.0.1` (в образе `0.0.0.0`) | адрес, на котором слушает хаб |
-| `OPENBOT_PORT`, `OPENBOT_CONSOLE_PORT`, `OPENBOT_EGRESS_PORT` | `8080`, `8081`, `8089` | порты чата, пульта и egress-прокси |
-| `OPENBOT_DATA_DIR` | `.data/` (в образе `/data`) | папка с данными |
-| `OPENBOT_INSTALL_CLIS` | — (`1` в установщиках для компьютера) | `1` разрешает кнопке **Войти** установить недостающий Claude Code или Codex в `<data>/tools` |
+| `OWLBOT_PUBLIC_URL` | `http://localhost:8080` | адрес чата, нужен для ссылок и проверки Origin |
+| `OWLBOT_CONSOLE_URL` | тот же хост, порт 8081 | адрес пульта |
+| `OWLBOT_ALLOWED_HOSTS` | — | дополнительные имена хоста через запятую |
+| `OWLBOT_LANG` | — | закрепить язык хаба: `en` или `ru` |
+| `OWLBOT_VAULT_PASSPHRASE_FILE` | — | автоматическая разблокировка vault |
+| `OWLBOT_EGRESS_ENFORCED` | `proxy` | `iptables` — жёсткий запрет прямого выхода (нужен `NET_ADMIN`) |
+| `OWLBOT_SETUP_TOKEN` | случайный | задать код установки заранее |
+| `OWLBOT_TRUST_PROXY` | — | `1` — доверять `X-Forwarded-*` от обратного прокси |
+| `OWLBOT_HOST` | `127.0.0.1` (в образе `0.0.0.0`) | адрес, на котором слушает хаб |
+| `OWLBOT_PORT`, `OWLBOT_CONSOLE_PORT`, `OWLBOT_EGRESS_PORT` | `8080`, `8081`, `8089` | порты чата, пульта и egress-прокси |
+| `OWLBOT_DATA_DIR` | `.data/` (в образе `/data`) | папка с данными |
+| `OWLBOT_INSTALL_CLIS` | — (`1` в установщиках для компьютера) | `1` разрешает кнопке **Войти** установить недостающий Claude Code или Codex в `<data>/tools` |
 | `TZ` | часовой пояс системы (в образе `UTC`) | часовой пояс по умолчанию для напоминаний, тихих часов и дайджеста |
 
 Большая часть поведения настраивается в «Настройках» веб-интерфейса: язык, часовой пояс, тихие часы, время дайджеста, `channelApprovalDetails` (подробности действия в Telegram) и `brainEgressAllow` (дополнительные хосты для мозгов). Для одной настройки хаба на этой странице пока нет поля: `egressPrivateAllow` — хосты локальной сети, к которым можно плагинам и мозгам (например, `searxng` или `nas.local`); её меняют через `PATCH /api/settings`.
@@ -171,16 +171,18 @@ npm test             # unit and integration tests
 npm run typecheck
 ```
 
-Нужен Node.js 24.5+ (TypeScript запускается без сборки). Вне Docker плагин браузера сам скачивает Chromium для Playwright, если при старте его нет (один раз, в кэш Playwright или в `PLAYWRIGHT_BROWSERS_PATH`); браузерные вызовы на это время ждут загрузки. Чтобы отключить это и поставить браузер самому (`npx playwright install chromium`), задайте `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`. Устройство проекта и соглашения описаны в [CLAUDE.md](CLAUDE.md), дизайн — в [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md). Сообщения ядра лежат в `packages/core/src/locales/{en,ru}.ts`, сообщения плагинов — в `.openbot-plugin/locales/{en,ru}.json`; `npm test` проверяет, что каждый перевод совпадает с английским.
+Нужен Node.js 24.5+ (TypeScript запускается без сборки). Вне Docker плагин браузера сам скачивает Chromium для Playwright, если при старте его нет (один раз, в кэш Playwright или в `PLAYWRIGHT_BROWSERS_PATH`); браузерные вызовы на это время ждут загрузки. Чтобы отключить это и поставить браузер самому (`npx playwright install chromium`), задайте `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`. Устройство проекта и соглашения описаны в [CLAUDE.md](CLAUDE.md), дизайн — в [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-open-bot-design.md). Сообщения ядра лежат в `packages/core/src/locales/{en,ru}.ts`, сообщения плагинов — в `.owlbot-plugin/locales/{en,ru}.json`; `npm test` проверяет, что каждый перевод совпадает с английским.
 
 ### Установщики для компьютера
 
 ```bash
-npm run package:win   # в Windows: dist/desktop/open-bot-setup-<version>-x64.exe
-npm run package:mac   # в macOS:   dist/desktop/open-bot-<version>.pkg
+npm run package:win   # в Windows: dist/desktop/owlbot-setup-<version>-x64.exe
+npm run package:mac   # в macOS:   dist/desktop/owlbot-<version>.dmg и .pkg
 ```
 
-Обе команды собирают интерфейсы, затем складывают хаб с production-зависимостями и официальной сборкой Node 24, сверенной с SHA-256 из релиза (`packaging/desktop/stage.mjs`; другой релиз задаёт `NODE_VERSION`). Для Windows нужен Inno Setup 6 (`winget install JRSoftware.InnoSetup`), а приложение для трея собирается компилятором C#, который есть в каждой Windows; для macOS нужны `pkgbuild`, `productbuild` и `osacompile` из самой macOS. Тексты установщиков лежат в `packaging/desktop/locales/{en,ru}.json`.
+Обе команды собирают интерфейсы, затем складывают хаб с production-зависимостями и официальной сборкой Node 24, сверенной с SHA-256 из релиза (`packaging/desktop/stage.mjs`; другой релиз задаёт `NODE_VERSION`). Для Windows нужен Inno Setup 6 (`winget install JRSoftware.InnoSetup`), а приложение для трея собирается компилятором C#, который есть в каждой Windows; для macOS нужны `osacompile`, `codesign`, `hdiutil`, `pkgbuild` и `productbuild` из самой macOS. Тексты установщиков лежат в `packaging/desktop/locales/{en,ru}.json`.
+
+В macOS `.dmg` предназначен для людей, а `.pkg` — для тихой установки (`sudo installer -pkg owlbot-<version>.pkg -target /`, по SSH или через MDM): он ставит то же приложение в «Программы» и запускает его для пользователя за компьютером. Удалить его снова можно командой `sudo /Applications/Owlbot.app/Contents/Resources/bin/uninstall.sh <uid> <home> [--delete-data]`.
 
 Установщик для Windows понимает ключ Inno Setup `/VERYSILENT`, а также `/PORT=18080` (другой порт, например для второго хаба рядом с Docker) и `/NOSTART` (не запускать после тихой установки). `.github/workflows/desktop.yml` собирает оба установщика на чистых машинах и проверяет, что они ставятся, запускают хаб и удаляются.
 

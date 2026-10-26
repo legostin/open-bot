@@ -3,8 +3,8 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, OutboundMessage, SecretRequest, Task, ToolResult } from "@openbot/shared";
-import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@openbot/shared";
+import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, OutboundMessage, SecretRequest, Task, ToolResult } from "@owlbot/shared";
+import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import type { Store, SessionRow } from "./store.ts";
 import type { Settings } from "./settings.ts";

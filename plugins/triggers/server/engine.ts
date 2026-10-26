@@ -1,7 +1,7 @@
 // Trigger engine: persistence, timers, firing tasks, watch polling, webhooks, feedback.
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@openbot/plugin-sdk";
+import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@owlbot/plugin-sdk";
 import { errorFields, TriggerError, type ErrorParams } from "./errors.ts";
 import { DEFAULT_HEARTBEAT_PROMPT, renderPrompt, type FireContext } from "./prompt.ts";
 import { computeNextRun, localDate, validTimezone, zonedParts } from "./schedule.ts";
@@ -525,7 +525,7 @@ export class TriggerEngine {
     const t = m ? this.triggers.get(m[1]) : undefined;
     if (!t || t.kind !== "event" || !t.secret) return { status: 404, body: { error: "not found" } };
     if (req.method.toUpperCase() !== "POST") return { status: 405, headers: { allow: "POST" }, body: { error: "use POST" } };
-    const given = header(req.headers, "x-openbot-secret") ?? req.query?.secret ?? "";
+    const given = header(req.headers, "x-owlbot-secret") ?? req.query?.secret ?? "";
     if (!safeEqual(String(given), t.secret)) return { status: 401, body: { error: "invalid secret" } };
     if (!t.enabled) return { status: 409, body: { error: "trigger is disabled" } };
     const { secret: _secret, ...query } = req.query ?? {};

@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readPluginLayout, translator } from "@openbot/shared";
-import { startPlugin, type PluginHarness } from "@openbot/testkit";
+import { readPluginLayout, translator } from "@owlbot/shared";
+import { startPlugin, type PluginHarness } from "@owlbot/testkit";
 
 const DIR = join(import.meta.dirname, "..");
 
@@ -179,7 +179,7 @@ describe("memory plugin", () => {
 
   it.skipIf(!hasGit())("commits every change to git", async () => {
     const log = gitLog(join(h.dataDir, "memory"));
-    expect(log.every((l) => l.startsWith("open-bot <memory@openbot.local>|memory: "))).toBe(true);
+    expect(log.every((l) => l.startsWith("Owlbot <memory@owlbot.local>|memory: "))).toBe(true);
     const subjects = log.map((l) => l.split("|")[1]);
     expect(subjects).toEqual(
       expect.arrayContaining([

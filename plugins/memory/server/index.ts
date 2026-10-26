@@ -1,8 +1,8 @@
 // Builtin plugin "memory": long-term memory about the user as markdown facts (one per file) in <dataDir>/memory,
 // versioned with git when available, searchable via SQLite FTS5. Facts written from tainted sessions wait for review.
 
-import type { PluginContext, PluginHttpRequest, PluginHttpResponse, PluginModule } from "@openbot/plugin-sdk";
-import type { ToolCallContext, ToolResult } from "@openbot/shared";
+import type { PluginContext, PluginHttpRequest, PluginHttpResponse, PluginModule } from "@owlbot/plugin-sdk";
+import type { ToolCallContext, ToolResult } from "@owlbot/shared";
 import { factNotFound, Memory } from "./memory.ts";
 import { INDEX_FILE, type Fact } from "./store.ts";
 import { NotFoundError, PathError, type MemoryError } from "./paths.ts";

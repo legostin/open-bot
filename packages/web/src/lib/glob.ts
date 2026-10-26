@@ -1,5 +1,5 @@
-// Glob matching for tool names (same semantics as @openbot/shared globToRegExp: * = any chars, ? = one char,
-// case-insensitive). Kept local because @openbot/shared's runtime pulls in Node modules.
+// Glob matching for tool names (same semantics as @owlbot/shared globToRegExp: * = any chars, ? = one char,
+// case-insensitive). Kept local because @owlbot/shared's runtime pulls in Node modules.
 
 const cache = new Map<string, RegExp>();
 

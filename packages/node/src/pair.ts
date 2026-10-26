@@ -1,7 +1,7 @@
-// `openbot-node pair <hub> <code>`: new Ed25519 identity → POST <hub>/api/node/pair → config.json + key.json.
+// `owlbot-node pair <hub> <code>`: new Ed25519 identity → POST <hub>/api/node/pair → config.json + key.json.
 
 import { existsSync } from "node:fs";
-import type { MachineInfo } from "@openbot/shared";
+import type { MachineInfo } from "@owlbot/shared";
 import { configFile, loadConfig, normalizeHubUrl, savePaired, UserError, type NodeConfig } from "./home.ts";
 import { generateKey } from "./keys.ts";
 import { nodeLocale, t } from "./messages.ts";
@@ -50,7 +50,7 @@ export async function pair(o: PairOptions): Promise<NodeConfig & { replaced?: st
   try {
     res = await fetch(`${hubUrl}/api/node/pair`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-openbot-locale": nodeLocale() },
+      headers: { "content-type": "application/json", "x-owlbot-locale": nodeLocale() },
       body: JSON.stringify({ code, publicKey: key.publicKey, name: o.name, info: o.info }),
       signal: AbortSignal.timeout(o.timeoutMs ?? 20_000),
     });
