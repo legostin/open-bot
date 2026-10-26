@@ -1,0 +1,127 @@
+// UI plugin host: builds the per-plugin OpenBotUI object and loads plugin modules listed in /api/bootstrap.
+
+import type { ComponentType } from "react";
+import type { OpenBotUI, SlotContribution, SlotName, SlotProps } from "@openbot/ui";
+import { navigate } from "wouter/use-browser-location";
+import { api, request, type Method } from "../lib/api";
+import { createStore } from "../lib/store";
+import { hubEvents, sendToHub, type UiPluginEntry } from "../state/app";
+import { toast } from "../state/toast";
+import { addCommand, addContribution, addRoute, addSettings, addStatus, normalizePath, removePlugin } from "./registry";
+import { resolveActivate } from "./activate";
+
+export interface PluginLoadState {
+  name: string;
+  status: "loading" | "active" | "error";
+  error?: string;
+}
+
+export const pluginLoad = createStore<Record<string, PluginLoadState>>({});
+
+function setLoad(id: string, s: PluginLoadState): void {
+  pluginLoad.set((all) => ({ ...all, [id]: s }));
+}
+
+export function createOpenBotUI(pluginId: string): OpenBotUI {
+  const register = <P = any>(slot: SlotName, c: SlotContribution<P>): (() => void) => {
+    switch (slot) {
+      case "route":
+        return addRoute(pluginId, {
+          path: (c as { path?: string }).path ?? `/plugins/${pluginId}/${c.id}`,
+          title: c.title ?? c.id,
+          icon: c.icon,
+          component: c.component as ComponentType<SlotProps>,
+          nav: (c as { nav?: boolean }).nav ?? true,
+        });
+      case "settings.section":
+        return addSettings(pluginId, { id: c.id, title: c.title ?? c.id, component: c.component as ComponentType<SlotProps> });
+      case "layout.statusbar":
+        return addStatus(pluginId, { id: c.id, render: c.component as ComponentType<SlotProps> });
+      default:
+        return addContribution(pluginId, slot, c as SlotContribution);
+    }
+  };
+
+  return {
+    pluginId,
+    slots: {
+      register,
+      override: (slot, component, opts) => register(slot, { id: `override:${slot}`, component, priority: opts?.priority ?? 0, match: opts?.match }),
+    },
+    routes: {
+      add: (r) => addRoute(pluginId, { ...r, path: normalizePath(r.path) }),
+    },
+    statusbar: { add: (item) => addStatus(pluginId, item) },
+    commands: { register: (c) => addCommand(pluginId, c) },
+    settings: { section: (s) => addSettings(pluginId, s) },
+    toast: (text, kind) => toast(text, kind ?? "info"),
+    navigate: (path) => navigate(path),
+    api,
+    plugin: {
+      http: (method, path, body) => {
+        const m = String(method || "GET").toUpperCase() as Method;
+        const url = `/api/plugins/${encodeURIComponent(pluginId)}/http/${String(path ?? "").replace(/^\/+/, "")}`;
+        return request(m, url, m === "GET" ? undefined : body);
+      },
+      send: (payload) => sendToHub({ type: "plugin.message", pluginId, payload }),
+      on: (channel, cb) =>
+        hubEvents.on((e) => {
+          if (e.type === "plugin.event" && e.data.pluginId === pluginId && e.data.channel === channel) cb(e.data.payload);
+        }),
+    },
+    events: { on: (cb) => hubEvents.on(cb) },
+  };
+}
+
+const loaded = new Map<string, { url: string; cleanup?: () => void }>();
+/** Plugins loaded earlier in this page: re-imports get a cache-busting query (the plugin may have been updated). */
+const everLoaded = new Set<string>();
+
+function unload(id: string): void {
+  const l = loaded.get(id);
+  loaded.delete(id);
+  try {
+    l?.cleanup?.();
+  } catch (e) {
+    console.error(`[ui-plugin ${id}] cleanup failed`, e);
+  }
+  removePlugin(id);
+  pluginLoad.set((all) => {
+    const next = { ...all };
+    delete next[id];
+    return next;
+  });
+}
+
+async function load(entry: UiPluginEntry): Promise<void> {
+  const reload = everLoaded.has(entry.id);
+  everLoaded.add(entry.id);
+  loaded.set(entry.id, { url: entry.url });
+  setLoad(entry.id, { name: entry.name, status: "loading" });
+  try {
+    const url = reload ? `${entry.url}${entry.url.includes("?") ? "&" : "?"}v=${Date.now()}` : entry.url;
+    const mod = await import(/* @vite-ignore */ url);
+    const activate = resolveActivate(mod);
+    if (!activate) throw new Error("модуль не экспортирует activate()");
+    const ret = await activate(createOpenBotUI(entry.id));
+    const cur = loaded.get(entry.id);
+    if (cur) cur.cleanup = typeof ret === "function" ? ret : undefined;
+    setLoad(entry.id, { name: entry.name, status: "active" });
+  } catch (e) {
+    removePlugin(entry.id);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[ui-plugin ${entry.id}] failed to load`, e);
+    setLoad(entry.id, { name: entry.name, status: "error", error: msg });
+    toast(`UI-плагин «${entry.name}» не загрузился: ${msg}`, "error");
+  }
+}
+
+/** Load new UI plugins and unload ones that disappeared (called after bootstrap and on plugins.updated). */
+export async function syncUiPlugins(entries: UiPluginEntry[]): Promise<void> {
+  for (const [id, l] of [...loaded]) if (!entries.some((e) => e.id === id && e.url === l.url)) unload(id);
+  await Promise.allSettled(entries.filter((e) => !loaded.has(e.id)).map(load));
+}
+
+export function unloadAllUiPlugins(): void {
+  for (const id of [...loaded.keys()]) unload(id);
+}
