@@ -32,11 +32,18 @@ export function AgentHeader({ agentId, settings = true }: { agentId?: string; se
           {agent?.description && <span className="block truncate text-xs leading-tight text-muted">{agent.description}</span>}
         </span>
       </button>
-      {agent && settings && <BrainPicker agent={agent} />}
+      {/* The avatar opens the same settings (brains included): a phone's bar leaves the room to the agent's name. */}
       {agent && settings && (
-        <IconButton label={t("agent.settings")} onClick={() => editAgent(agent.id)} className="size-8 shrink-0">
-          <SlidersHorizontal className="size-4" />
-        </IconButton>
+        <span className="hidden shrink-0 @md/top:flex">
+          <BrainPicker agent={agent} />
+        </span>
+      )}
+      {agent && settings && (
+        <span className="hidden shrink-0 @xl/top:flex">
+          <IconButton label={t("agent.settings")} onClick={() => editAgent(agent.id)} className="size-8 shrink-0">
+            <SlidersHorizontal className="size-4" />
+          </IconButton>
+        </span>
       )}
     </div>
   );
