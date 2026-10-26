@@ -93,6 +93,21 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     return { ok: true };
   });
 
+  // The desktop app's own window: a one-time ticket the app gave the hub over its stdin (desktop-login.ts).
+  app.post("/api/auth/desktop", async (req, reply) => {
+    if (!originAllowed(req, origins)) throw new HttpError(403, "Origin not allowed");
+    if (!hub.auth.hasPassword()) throw new AuthError(409, "auth.noPassword");
+    const ticket = String((req.body as { ticket?: string })?.ticket ?? "");
+    if (!hub.desktopTickets.consume(ticket)) {
+      hub.audit.append("user", "auth.failure", "desktop", { ip: clientIp(req) });
+      throw new AuthError(401, "auth.badDesktopTicket");
+    }
+    const { token } = hub.auth.createSession("main");
+    hub.audit.append("user", "auth.desktop");
+    setCookie(reply, token);
+    return { ok: true };
+  });
+
   app.post("/api/auth/login", async (req, reply) => {
     if (!originAllowed(req, origins)) throw new HttpError(403, "Origin not allowed");
     const b = req.body as { password?: string };

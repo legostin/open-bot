@@ -118,6 +118,18 @@ describe("hub (integration)", () => {
     await web.req("PATCH", "/api/settings", { approvalInlineWaitSec: 1 });
   });
 
+
+  it("signs the desktop app's window in with a one-time ticket", async () => {
+    const ticket = "t".repeat(43);
+    hub.desktopTickets.add(ticket);
+    const app = new Client(hub.config.publicUrl);
+    expect((await app.raw("POST", "/api/auth/desktop", { ticket }, { origin: "https://evil.example" })).status).toBe(403);
+    await app.req("POST", "/api/auth/desktop", { ticket });
+    expect((await app.raw("GET", "/api/bootstrap")).status).toBe(200);
+    const other = new Client(hub.config.publicUrl);
+    expect((await other.raw("POST", "/api/auth/desktop", { ticket })).status).toBe(401);
+    expect((await other.raw("POST", "/api/auth/desktop", { ticket: "nope" })).status).toBe(401);
+  });
   it("runs a chat turn on the first brain", async () => {
     await web.req("POST", `/api/conversations/${conv}/messages`, { text: "hello there" });
     const m = await lastReply(conv, /fake heard: hello there/);

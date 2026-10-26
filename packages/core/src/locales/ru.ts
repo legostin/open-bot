@@ -14,6 +14,7 @@ export default {
   "auth.passkeyNotVerified": "Passkey не подтверждён",
   "auth.noPasskeys": "Passkey не зарегистрированы",
   "auth.badSetupToken": "Неверный код установки",
+  "auth.badDesktopTicket": "Ссылка для входа устарела. Войдите с паролем.",
 
   // approvals & notifications
   "approval.notFound": "Подтверждение не найдено",

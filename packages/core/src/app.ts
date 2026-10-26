@@ -29,6 +29,7 @@ import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
 import { McpClientManager } from "./mcp/client.ts";
 import { AuthService } from "./auth.ts";
+import { DesktopTickets } from "./desktop-login.ts";
 import { MachineHub } from "./machines.ts";
 import { createCoreCall } from "./core-call.ts";
 import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, LocalizedError, t } from "./i18n.ts";
@@ -68,6 +69,8 @@ export class Hub {
   mcp: McpEndpoint;
   mcpClients: McpClientManager;
   auth: AuthService;
+  /** One-time sign-in tickets from the desktop app (see desktop-login.ts). */
+  desktopTickets = new DesktopTickets();
   machines: MachineHub;
   secrets: SecretIntake;
   agentDrafts: AgentDrafts;

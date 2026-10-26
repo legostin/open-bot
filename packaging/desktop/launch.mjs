@@ -1,13 +1,12 @@
 // Owlbot desktop launcher: what the Windows tray app and the macOS LaunchAgent run in an installed app.
 //   node launch.mjs        run the hub (data in the user's profile, ports from <data>/desktop.json)
 //   node launch.mjs url    wait for the hub and print the address to open (with the setup code until the first run is done)
-// A "stop" line on stdin stops the hub cleanly: a windowless child on Windows gets no SIGTERM.
+// The desktop app talks to the hub over its stdin (OWLBOT_DESKTOP=1, read by the core: packages/core/src/desktop-login.ts).
 
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -60,6 +59,7 @@ export function hubEnv(env, dataDir) {
     // Passkeys need a host name, not 127.0.0.1.
     OWLBOT_PUBLIC_URL: `http://localhost:${port}`,
     OWLBOT_INSTALL_CLIS: "1",
+    OWLBOT_DESKTOP: "1",
     NODE_ENV: "production",
     // The hub installs the brain CLIs; they must not try to update themselves in its folder.
     DISABLE_AUTOUPDATER: "1",
@@ -76,11 +76,6 @@ async function run() {
   mkdirSync(dataDir, { recursive: true });
   await import("./resolve.mjs");
   Object.assign(process.env, hubEnv(process.env, dataDir));
-  if (!process.stdin.isTTY) {
-    createInterface({ input: process.stdin }).on("line", (line) => {
-      if (line.trim() === "stop") process.emit("SIGTERM", "SIGTERM");
-    });
-  }
   const cli = join(APP_ROOT, "packages", "core", "src", "cli.ts");
   process.argv = [process.argv[0], cli, "start"];
   await import(pathToFileURL(cli).href);

@@ -42,6 +42,7 @@ describe("desktop launcher", () => {
     expect(env.OWLBOT_DATA_DIR).toBe(data);
     expect(env.OWLBOT_PUBLIC_URL).toBe("http://localhost:8080");
     expect(env.OWLBOT_INSTALL_CLIS).toBe("1");
+    expect(env.OWLBOT_DESKTOP).toBe("1");
     expect(env.OWLBOT_SETUP_TOKEN).toBe(readFileSync(join(data, "setup-code"), "utf8").trim());
     expect(env.NODE_OPTIONS).toBe(`--max-old-space-size=512 --import=${RESOLVE_HOOK}`);
     expect(hubEnv(env, data).NODE_OPTIONS).toBe(env.NODE_OPTIONS);

@@ -15,6 +15,7 @@ export default {
   "auth.passkeyNotVerified": "The passkey was not verified",
   "auth.noPasskeys": "No passkeys are registered",
   "auth.badSetupToken": "Wrong setup code",
+  "auth.badDesktopTicket": "This sign-in link has expired. Sign in with your password.",
 
   // approvals & notifications
   "approval.notFound": "Approval not found",
