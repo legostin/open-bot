@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // stdio ↔ HTTP bridge: lets harness CLIs (Claude Code, Codex) that speak MCP over stdio reach the hub's /mcp endpoint.
-// Env: OPENBOT_URL (e.g. http://127.0.0.1:8080/mcp), OPENBOT_TOKEN (per-session bearer token).
+// Env: OPENBOT_URL (e.g. http://127.0.0.1:8080/mcp) and the per-session bearer token in OPENBOT_TOKEN_FILE
+// (preferred: a 0600 file, so the token never shows up in process listings) or OPENBOT_TOKEN.
 
 import http from "node:http";
 import https from "node:https";
+import { readFileSync } from "node:fs";
 
 const url = new URL(process.env.OPENBOT_URL ?? "http://127.0.0.1:8080/mcp");
-const token = process.env.OPENBOT_TOKEN ?? "";
+const token = process.env.OPENBOT_TOKEN_FILE ? readFileSync(process.env.OPENBOT_TOKEN_FILE, "utf8").trim() : (process.env.OPENBOT_TOKEN ?? "");
 const client = url.protocol === "https:" ? https : http;
 
 function post(body: string): Promise<{ status: number; text: string }> {
