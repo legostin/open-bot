@@ -1,0 +1,4 @@
+# The hub (openbot) starts brain CLIs as "agent" and other plugins / MCP servers as "plugin".
+# It always passes an explicit environment with `env -i`, so nothing leaks from the hub.
+Defaults:openbot !requiretty, !lecture, env_reset
+openbot ALL=(agent,plugin) NOPASSWD: ALL

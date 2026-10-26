@@ -1,0 +1,25 @@
+# docker compose up -d --build   →  http://localhost:8080 (chat) and http://localhost:8081 (security console)
+services:
+  openbot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: openbot:latest
+    container_name: openbot
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - openbot-data:/data
+    environment:
+      OPENBOT_PUBLIC_URL: http://localhost:8080
+      # OPENBOT_CONSOLE_URL: http://localhost:8081
+      # OPENBOT_ALLOWED_HOSTS: my-box.tailnet.ts.net
+      # Hard egress enforcement for agent/plugin users (needs cap_add NET_ADMIN below):
+      # OPENBOT_EGRESS_ENFORCED: iptables
+      # TZ: Europe/Moscow
+    # cap_add: [NET_ADMIN]
+    shm_size: 1gb
+volumes:
+  openbot-data: {}

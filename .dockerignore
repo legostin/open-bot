@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+!plugins/*/ui/dist
+.data
+.git
+.claude
+**/.DS_Store
+**/*.log
+test-results
+playwright-report

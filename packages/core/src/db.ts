@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 export type Db = DatabaseSync;
@@ -37,6 +37,14 @@ const MIGRATIONS: string[] = [
 export function openDb(file: string): Db {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
+  if (file !== ":memory:") {
+    // Hub-only: plugin and agent users share the data volume. SQLite gives -wal/-shm the same mode.
+    try {
+      chmodSync(file, 0o600);
+    } catch {
+      /* windows */
+    }
+  }
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000;");
   db.exec("create table if not exists schema_version(v integer not null)");
   const row = db.prepare("select v from schema_version").get() as { v: number } | undefined;

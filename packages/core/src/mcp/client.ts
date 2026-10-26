@@ -13,7 +13,7 @@ import { sanitizeToolName } from "../tools/registry.ts";
 import type { VaultService } from "../vault/service.ts";
 import type { AuditLog } from "../audit.ts";
 import type { EgressProxy } from "../egress.ts";
-import { scrubEnv } from "../plugins/host.ts";
+import { passEnv, scrubEnv } from "../plugins/host.ts";
 
 export interface McpServerConfig {
   type?: "stdio" | "http" | "streamable-http" | "sse";
@@ -154,7 +154,7 @@ export class McpClientManager {
         let args = config.args ?? [];
         let childEnv: Record<string, string>;
         if (this.config.isolation.users) {
-          const kv = Object.entries({ ...env, PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin", HOME: join(this.config.dataDir, "home", "plugin") }).map(([k, v]) => `${k}=${v}`);
+          const kv = Object.entries({ ...passEnv(), ...env, HOME: join(this.config.dataDir, "home", "plugin") }).map(([k, v]) => `${k}=${v}`);
           args = ["-n", "-u", this.config.isolation.pluginUser, "--", "env", "-i", ...kv, command, ...args];
           command = "sudo";
           childEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };

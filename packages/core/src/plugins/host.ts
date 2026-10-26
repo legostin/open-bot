@@ -231,7 +231,7 @@ export class PluginHost {
     const nodeArgs = ["--disable-warning=ExperimentalWarning", runner, rec.layout.serverEntry];
     let child: ChildProcess;
     if (cfg.isolation.users) {
-      const kv = Object.entries({ ...env, PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin", LANG: process.env.LANG ?? "C.UTF-8" }).map(([k, v]) => `${k}=${v}`);
+      const kv = Object.entries({ ...passEnv(), ...env }).map(([k, v]) => `${k}=${v}`);
       child = spawn("sudo", ["-n", "-u", runAs, "--", "env", "-i", ...kv, process.execPath, ...nodeArgs], { cwd: rec.dir, stdio: ["pipe", "pipe", "pipe"] });
     } else {
       child = spawn(process.execPath, nodeArgs, { cwd: rec.dir, env: { ...scrubEnv(process.env), ...env }, stdio: ["pipe", "pipe", "pipe"] });
@@ -601,6 +601,13 @@ export class PluginHost {
 }
 
 /** Do not leak hub secrets into child processes when running without user isolation. */
+/** Harmless variables isolated children (run with `env -i`) still need: binaries, locale, X display, browsers. */
+export function passEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const out: Record<string, string> = { PATH: env.PATH ?? "/usr/local/bin:/usr/bin:/bin", LANG: env.LANG ?? "C.UTF-8" };
+  for (const k of ["LC_ALL", "DISPLAY", "PLAYWRIGHT_BROWSERS_PATH", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "DISABLE_AUTOUPDATER"]) if (env[k]) out[k] = env[k]!;
+  return out;
+}
+
 export function scrubEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
