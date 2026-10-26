@@ -15,6 +15,8 @@ export type BusEvents = {
   "vault.state": { state: string };
   "plugins.updated": Record<string, never>;
   "brains.updated": Record<string, never>;
+  "agents.updated": Record<string, never>;
+  "settings.updated": Record<string, unknown>;
   "machine.updated": any;
   "plugin.event": { pluginId: string; channel: string; payload: unknown };
 };
@@ -66,6 +68,8 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "notification.created":
     case "plugins.updated":
     case "brains.updated":
+    case "agents.updated":
+    case "settings.updated":
     case "machine.updated":
     case "plugin.event":
       return { type: name, data: payload } as UiEvent;

@@ -5,7 +5,7 @@ import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync
 import { join, basename } from "node:path";
 import { stringify as toYaml } from "yaml";
 import type { AgentDef, Locale } from "@openbot/shared";
-import { normalizeLocale, parseFrontmatter } from "@openbot/shared";
+import { normalizeLocale, parseAvatar, parseFrontmatter } from "@openbot/shared";
 
 export const DEFAULT_BRAINS = ["claude-code@local", "codex@local", "api:anthropic", "api:openai"];
 
@@ -30,6 +30,7 @@ export function agentFromMarkdown(id: string, text: string, source: string): Age
     },
     prompt: body.trim(),
     source,
+    avatar: parseAvatar(data.avatar),
     i18n: parseAgentI18n(data.i18n),
   };
 }
@@ -59,6 +60,7 @@ export function agentToMarkdown(a: AgentDef): string {
   const fm: Record<string, unknown> = {
     name: a.name,
     description: a.description,
+    ...(parseAvatar(a.avatar) ? { avatar: parseAvatar(a.avatar) } : {}),
     brains: a.brains,
     ...(a.model ? { model: a.model } : {}),
     initiative: a.initiative,

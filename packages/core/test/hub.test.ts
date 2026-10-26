@@ -217,6 +217,44 @@ describe("hub (integration)", () => {
     await web.req("DELETE", `/api/brains/limits/${encodeURIComponent("fake@local")}`);
   });
 
+  it("lets the default agent run the hub from chat, and nobody else", async () => {
+    const say = async (c: string, tool: string, args: unknown) => {
+      const sent = await web.req("POST", `/api/conversations/${c}/messages`, { text: `CALL ${tool} ${JSON.stringify(args)}` });
+      const reply = await until(async () => {
+        const msgs: any[] = await web.req("GET", `/api/conversations/${c}/messages`);
+        const after = msgs.slice(msgs.findIndex((m) => m.id === sent.id) + 1);
+        return after.find((m) => m.role === "assistant" && m.status !== "streaming" && m.parts.some((p: any) => p.type === "text" && /tool said:/.test(p.text)));
+      }, `reply to ${tool}`);
+      return reply.parts.find((p: any) => p.type === "text" && /tool said:/.test(p.text)).text as string;
+    };
+    const chat = (await web.req("POST", "/api/conversations", { title: "hub admin" })).id;
+
+    expect(await say(chat, "hub_settings_update", { patch: { digestTimes: ["08:30"], timezone: "Europe/Berlin" } })).toMatch(/Settings updated/);
+    expect((await web.req("GET", "/api/settings")).digestTimes).toEqual(["08:30"]);
+    expect(await say(chat, "hub_settings_update", { patch: { brainEgressAllow: ["evil.example"] } })).toMatch(/only be changed by the user/);
+    expect((await web.req("GET", "/api/settings")).brainEgressAllow).toEqual([]);
+
+    expect(await say(chat, "hub_agent_save", { name: "Helper", avatar: { color: "pink", shape: "star" }, brains: ["fake@local"], prompt: "Help." })).toMatch(/helper created/);
+    const helper = ((await web.req("GET", "/api/agents")) as any[]).find((a) => a.id === "helper");
+    expect(helper).toMatchObject({ name: "Helper", avatar: { color: "pink", shape: "star" }, source: "user" });
+    expect(await say(chat, "hub_agent_save", { id: "helper", avatar: { color: "nope", shape: "star" } })).toMatch(/Invalid avatar/);
+
+    // Another agent does not even see the hub tools.
+    const other = (await web.req("POST", "/api/conversations", { title: "helper chat", agentId: "helper" })).id;
+    expect(await say(other, "hub_settings_get", {})).toMatch(/not available to this agent/);
+
+    // A session that read outside content may look but not change anything.
+    for (const s of hub.db.prepare("select id from sessions where conversation_id = ?").all(chat) as Array<{ id: string }>) hub.store.updateSession(s.id, { tainted: true });
+    expect(await say(chat, "hub_settings_update", { patch: { digestTimes: ["07:00"] } })).toMatch(/Refused: this conversation has read outside content/);
+    expect(await say(chat, "hub_plugins_list", {})).toMatch(/fakebrain/);
+
+    // The brain of this very conversation cannot be switched off from it.
+    const fresh = (await web.req("POST", "/api/conversations", { title: "plugins" })).id;
+    expect(await say(fresh, "hub_plugin_enable", { id: "fakebrain", enabled: false })).toMatch(/runs the brain of this conversation/);
+    await web.req("DELETE", "/api/agents/helper");
+    await web.req("PATCH", "/api/settings", { digestTimes: ["09:00", "19:00"], timezone: "UTC" });
+  });
+
   it("runs background tasks to completion", async () => {
     const t = await web.req("POST", "/api/tasks", { goal: "summarize the day" });
     const done = await until(async () => {

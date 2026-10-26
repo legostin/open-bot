@@ -1,0 +1,355 @@
+// Hub administration tools ("hub_*", owner "core"): the default agent changes settings, agents, brains, plugins,
+// machines and MCP connections when the user asks for it in chat — the same operations the settings panel offers.
+//
+// Guard rails:
+// - only the default agent sees them (ToolGateway.visible), and only in interactive sessions for anything that writes;
+// - a session that has read outside content (tainted) may look but not change anything, so injected text in a web page
+//   or an email cannot reconfigure the hub;
+// - security-relevant settings (egress allowlists, approval behaviour) stay with the user in the settings panel;
+// - revoking a machine is an external effect and needs the user's approval in the security console.
+
+import type { AgentDef, JsonSchema, ToolCallContext, ToolDescriptor, ToolResult } from "@openbot/shared";
+import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, parseAvatar, parseBrainRef } from "@openbot/shared";
+import type { Hub } from "../app.ts";
+import { agentFromMarkdown } from "../agents.ts";
+import { hubLocale } from "../i18n.ts";
+
+export const HUB_TOOL_PREFIX = "hub_";
+
+/** Settings the assistant may change on request. Everything else is refused with a pointer to the settings panel. */
+export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHours", "digestTimes", "notifyRatePerHour", "brainConcurrency"] as const;
+
+const SECRET_KEY = /key|token|secret|password/i;
+
+const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
+const json = (v: unknown): ToolResult => text(JSON.stringify(v, null, 2));
+
+export function registerHubTools(hub: Hub): void {
+  const reg = (spec: Omit<ToolDescriptor, "owner" | "name"> & { name: string }, fn: (input: any, ctx: ToolCallContext) => Promise<ToolResult> | ToolResult) => {
+    const writes = spec.effect !== "read";
+    hub.tools.register({ ...(writes ? { availability: "interactive" as const } : {}), ...spec, name: HUB_TOOL_PREFIX + spec.name, owner: "core" }, async (input, ctx) => {
+      if (writes && ctx.tainted) {
+        return text(
+          "Refused: this conversation has read outside content (web pages, emails, files), so hub settings cannot be changed from it. " +
+            "Ask the user to make the change in the settings panel (gear icon) or in a fresh chat.",
+          true,
+        );
+      }
+      try {
+        return await fn(input ?? {}, ctx);
+      } catch (e: any) {
+        return text(e?.message ?? String(e), true);
+      }
+    });
+  };
+  const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema => ({ type: "object", properties, ...(required.length ? { required } : {}) });
+
+  // ---------- settings ----------
+
+  reg({ name: "settings_get", effect: "read", description: "Read the hub settings: timezone, language, default agent, quiet hours, digest times, limits.", inputSchema: obj({}) }, () => json(hub.settings.get()));
+
+  reg(
+    {
+      name: "settings_update",
+      effect: "local-write",
+      description:
+        `Change hub settings when the user asks. Allowed keys: ${AGENT_SETTABLE.join(", ")}. ` +
+        'Shapes: timezone "Europe/Berlin"; language "en"|"ru"; quietHours {enabled, start:"23:00", end:"08:00"}; digestTimes ["09:00","19:00"]; notifyRatePerHour number; brainConcurrency number; defaultAgent agent id. ' +
+        "Network allowlists and approval behaviour can only be changed by the user in the settings panel.",
+      inputSchema: obj({ patch: { type: "object", description: "Keys to change and their new values" } }, ["patch"]),
+    },
+    (i) => {
+      const patch = (i.patch && typeof i.patch === "object" ? i.patch : {}) as Record<string, unknown>;
+      const refused = Object.keys(patch).filter((k) => !(AGENT_SETTABLE as readonly string[]).includes(k));
+      if (refused.length) return text(`Refused: ${refused.join(", ")} can only be changed by the user in the settings panel (gear icon → Settings).`, true);
+      if (!Object.keys(patch).length) return text("Nothing to change.", true);
+      const err = validateSettings(patch);
+      if (err) return text(err, true);
+      const next = hub.updateSettings(patch, "agent");
+      return text(`Settings updated: ${Object.keys(patch).map((k) => `${k}=${JSON.stringify((next as any)[k])}`).join(", ")}`);
+    },
+  );
+
+  // ---------- agents ----------
+
+  reg(
+    { name: "agents_list", effect: "read", description: "List agents with their avatar, brains (in fallback order), initiative and which one is the default.", inputSchema: obj({}) },
+    () => {
+      const def = hub.settings.get().defaultAgent;
+      return json(
+        hub.agents.list().map((a) => ({
+          id: a.id,
+          name: a.name,
+          description: a.description,
+          avatar: a.avatar,
+          brains: a.brains,
+          model: a.model,
+          initiative: a.initiative,
+          source: a.source,
+          default: a.id === def,
+        })),
+      );
+    },
+  );
+
+  reg(
+    {
+      name: "agent_save",
+      effect: "local-write",
+      description:
+        "Create an agent or change one. For a new agent give at least a name (and ideally an avatar and a prompt); pass id to edit an existing one. " +
+        `avatar = {color, shape}; colors: ${AVATAR_COLORS.join(", ")}; shapes: ${AVATAR_SHAPES.join(", ")}. ` +
+        "brains is the ordered fallback list (see hub_brains_list), initiative 0 = only reacts, 1 = suggests, 2 = acts within rules.",
+      inputSchema: obj({
+        id: { type: "string", description: "Existing agent id to edit; omit to create (derived from the name)" },
+        name: { type: "string" },
+        description: { type: "string" },
+        avatar: obj({ color: { type: "string", enum: [...AVATAR_COLORS] }, shape: { type: "string", enum: [...AVATAR_SHAPES] } }),
+        brains: { type: "array", items: { type: "string" } },
+        model: { type: "string" },
+        initiative: { type: "number", enum: [0, 1, 2] },
+        prompt: { type: "string", description: "System instructions: who the agent is and how it works" },
+      }),
+    },
+    (i) => {
+      const id = String(i.id ?? slug(String(i.name ?? ""))).toLowerCase();
+      if (!/^[a-z0-9_-]{1,40}$/.test(id)) return text("Give the agent a name (or a valid id: a-z, 0-9, _ and -).", true);
+      const prev = hub.agents.get(id);
+      if (!prev && !String(i.name ?? "").trim()) return text("A new agent needs a name.", true);
+      if (i.avatar !== undefined && !parseAvatar(i.avatar)) return text(`Invalid avatar. Colors: ${AVATAR_COLORS.join(", ")}; shapes: ${AVATAR_SHAPES.join(", ")}.`, true);
+      if (i.initiative !== undefined && ![0, 1, 2].includes(Number(i.initiative))) return text("initiative must be 0, 1 or 2.", true);
+      const base: AgentDef = prev ?? agentFromMarkdown(id, "", "user");
+      const patch: Partial<AgentDef> = {};
+      if (i.description !== undefined) patch.description = String(i.description);
+      if (i.name !== undefined) patch.name = String(i.name).trim();
+      if (i.avatar !== undefined) patch.avatar = parseAvatar(i.avatar);
+      if (Array.isArray(i.brains)) patch.brains = i.brains.map(String).filter(Boolean);
+      if (i.model !== undefined) patch.model = String(i.model) || undefined;
+      if (i.initiative !== undefined) patch.initiative = Number(i.initiative) as 0 | 1 | 2;
+      if (i.prompt !== undefined) patch.prompt = String(i.prompt);
+      // A translated agent keeps its other languages: name/description edits go into the hub language's translation.
+      const tr = prev?.i18n?.[hubLocale()];
+      if (tr && (patch.name !== undefined || patch.description !== undefined)) {
+        const { name, description, ...rest } = patch;
+        Object.assign(rest, { i18n: { ...prev!.i18n, [hubLocale()]: { ...tr, ...(name !== undefined ? { name } : {}), ...(description !== undefined ? { description } : {}) } } });
+        const saved = hub.saveAgent({ ...base, ...rest, id, source: "user" }, "agent");
+        return text(`Agent ${saved.id} saved.`);
+      }
+      const saved = hub.saveAgent({ ...base, ...patch, id, source: "user" }, "agent");
+      return text(`Agent ${saved.id} ${prev ? "updated" : "created"}${saved.avatar ? ` (avatar: ${saved.avatar.color} ${saved.avatar.shape})` : ""}.`);
+    },
+  );
+
+  reg(
+    { name: "agent_delete", effect: "local-write", description: "Delete an agent the user created (built-in agents return to their defaults).", inputSchema: obj({ id: { type: "string" } }, ["id"]) },
+    (i, ctx) => {
+      const id = String(i.id);
+      if (!hub.agents.get(id)) return text(`No agent ${id}.`, true);
+      if (id === ctx.agentId) return text("You cannot delete yourself; the user can do it in the settings panel.", true);
+      hub.removeAgent(id, "agent");
+      return text(`Agent ${id} deleted.`);
+    },
+  );
+
+  // ---------- brains ----------
+
+  reg(
+    { name: "brains_list", effect: "read", description: "List brains (Claude Code, Codex, API providers on the hub and on machines) with availability, login state and rate limits.", inputSchema: obj({}) },
+    async () => {
+      const limits = new Map((hub.db.prepare("select brain_ref, until from brain_limits").all() as any[]).map((r) => [r.brain_ref, r.until]));
+      const out = await Promise.all(
+        hub.brains.list().map(async (b) => {
+          const p = await hub.brains.probe(b.ref, 5 * 60_000).catch((e) => ({ available: false, authenticated: false, detail: String(e?.message ?? e) }));
+          const until = limits.get(b.ref);
+          return { ref: b.ref, label: b.label, available: p.available, loggedIn: p.authenticated, detail: p.detail, limitedUntil: until && Date.parse(until) > Date.now() ? until : undefined };
+        }),
+      );
+      return json(out);
+    },
+  );
+
+  reg(
+    { name: "brain_check", effect: "read", description: "Re-check one brain now (after the user logged in or added a key).", inputSchema: obj({ ref: { type: "string" } }, ["ref"]) },
+    async (i) => {
+      const ref = formatBrainRef(parseBrainRef(String(i.ref)));
+      if (!hub.brains.has(ref)) return text(`Brain ${ref} is not connected. See hub_brains_list.`, true);
+      hub.brains.invalidate(ref);
+      return json(await hub.brains.probe(ref, 0));
+    },
+  );
+
+  reg(
+    { name: "brain_limit_clear", effect: "local-write", description: "Forget a recorded subscription limit so the brain is tried again before its reset time.", inputSchema: obj({ ref: { type: "string" } }, ["ref"]) },
+    (i) => {
+      const ref = formatBrainRef(parseBrainRef(String(i.ref)));
+      hub.db.prepare("delete from brain_limits where brain_ref = ?").run(ref);
+      hub.bus.emit("brains.updated", {});
+      return text(`Limit for ${ref} cleared.`);
+    },
+  );
+
+  // ---------- plugins ----------
+
+  reg(
+    { name: "plugins_list", effect: "read", description: "List plugins: id, name, enabled, status, errors, current settings and the settings they accept.", inputSchema: obj({}) },
+    () =>
+      json(
+        hub.plugins.list().map((r) => ({
+          id: r.id,
+          name: r.layout?.manifest.name ?? r.id,
+          source: r.source,
+          enabled: r.enabled,
+          status: r.status,
+          lastError: r.lastError,
+          settings: maskSecrets(r.settings),
+          settingsSchema: r.layout?.manifest.contributes.settings,
+        })),
+      ),
+  );
+
+  reg(
+    { name: "plugin_enable", effect: "local-write", description: "Turn a plugin on or off.", inputSchema: obj({ id: { type: "string" }, enabled: { type: "boolean" } }, ["id", "enabled"]) },
+    async (i, ctx) => {
+      const rec = hub.plugins.get(String(i.id));
+      if (!rec) return text(`No plugin ${i.id}. See hub_plugins_list.`, true);
+      const enabled = !!i.enabled;
+      if (!enabled && servesSession(hub, rec.id, ctx)) return text(`Refused: ${rec.id} runs the brain of this conversation. Switch brains first or ask the user to disable it in the settings panel.`, true);
+      await hub.plugins.setEnabled(rec.id, enabled);
+      const now = hub.plugins.get(rec.id)!;
+      return text(`Plugin ${rec.id} ${enabled ? "enabled" : "disabled"} (status: ${now.status}${now.lastError ? `, error: ${now.lastError}` : ""}).`);
+    },
+  );
+
+  reg(
+    {
+      name: "plugin_configure",
+      effect: "local-write",
+      description: "Change plugin settings (merged into the current ones). Secrets are never written here: pass vault://<id> references (see vault_list).",
+      inputSchema: obj({ id: { type: "string" }, settings: { type: "object" } }, ["id", "settings"]),
+    },
+    (i) => {
+      const rec = hub.plugins.get(String(i.id));
+      if (!rec) return text(`No plugin ${i.id}. See hub_plugins_list.`, true);
+      const patch = (i.settings && typeof i.settings === "object" ? i.settings : {}) as Record<string, unknown>;
+      for (const [k, v] of Object.entries(patch)) {
+        if (SECRET_KEY.test(k) && typeof v === "string" && v && !v.startsWith("vault://")) return text(`Refused: ${k} looks like a secret. Store it in the vault and pass vault://<id>.`, true);
+      }
+      hub.plugins.setSettings(rec.id, { ...rec.settings, ...patch });
+      hub.bus.emit("plugins.updated", {});
+      return text(`Settings of ${rec.id} updated: ${Object.keys(patch).join(", ")}.`);
+    },
+  );
+
+  reg(
+    { name: "plugin_restart", effect: "local-write", description: "Restart a plugin (after changing its settings or when it is stuck).", inputSchema: obj({ id: { type: "string" } }, ["id"]) },
+    async (i, ctx) => {
+      const rec = hub.plugins.get(String(i.id));
+      if (!rec) return text(`No plugin ${i.id}.`, true);
+      if (servesSession(hub, rec.id, ctx)) return text(`Refused: ${rec.id} runs the brain of this conversation; restarting it would cut this reply off.`, true);
+      await hub.plugins.restart(rec.id);
+      return text(`Plugin ${rec.id} restarted (status: ${hub.plugins.get(rec.id)!.status}).`);
+    },
+  );
+
+  // ---------- machines ----------
+
+  reg(
+    {
+      name: "machine_pairing_code",
+      effect: "local-write",
+      description: "Create a one-time code to connect one of the user's computers. Returns the command the user runs on that computer.",
+      inputSchema: obj({ name: { type: "string", description: "Optional name for the computer" } }),
+    },
+    (i) => {
+      const c = hub.machines.createPairingCode(i.name ? String(i.name) : undefined);
+      const url = hub.config.publicUrl;
+      return text(
+        `Pairing code ${c.code} (valid until ${c.expiresAt}). On the computer (Node.js 24+):\n` +
+          `curl -fsSLo openbot-node.mjs ${url}/download/openbot-node.mjs && node openbot-node.mjs pair ${url} ${c.code}`,
+      );
+    },
+  );
+
+  reg(
+    { name: "machine_rename", effect: "local-write", description: "Rename a connected computer.", inputSchema: obj({ machine: { type: "string", description: "Machine id or name" }, name: { type: "string" } }, ["machine", "name"]) },
+    (i) => {
+      const m = hub.machines.find(String(i.machine));
+      if (!m) return text(`No machine ${i.machine}. See machine_list.`, true);
+      const name = String(i.name ?? "").trim();
+      if (!name) return text("Give a new name.", true);
+      hub.machines.rename(m.id, name);
+      return text(`Machine ${m.id} renamed to “${name}”.`);
+    },
+  );
+
+  reg(
+    {
+      name: "machine_revoke",
+      effect: "external",
+      approvalSummary: "%machines.revokeApproval%",
+      description: "Disconnect a computer from the hub for good (it has to be paired again). Needs the user's approval.",
+      inputSchema: obj({ machine: { type: "string", description: "Machine id or name" } }, ["machine"]),
+    },
+    (i) => {
+      const m = hub.machines.find(String(i.machine));
+      if (!m) return text(`No machine ${i.machine}.`, true);
+      hub.machines.revoke(m.id);
+      return text(`Machine ${m.name} disconnected.`);
+    },
+  );
+
+  // ---------- MCP servers ----------
+
+  reg({ name: "mcp_list", effect: "read", description: "List connected MCP servers with their status and tools.", inputSchema: obj({}) }, () =>
+    json(hub.mcpClients.list().map((s) => ({ name: s.name, source: s.source, status: s.status, error: s.error, tools: s.tools }))),
+  );
+
+  reg({ name: "mcp_reconnect", effect: "local-write", description: "Reconnect an MCP server.", inputSchema: obj({ name: { type: "string" } }, ["name"]) }, async (i) => {
+    await hub.mcpClients.reconnect(String(i.name));
+    const s = hub.mcpClients.list().find((x) => x.name === String(i.name));
+    return text(s ? `${s.name}: ${s.status}${s.error ? ` (${s.error})` : ""}` : `No MCP server ${i.name}.`, !s);
+  });
+}
+
+function validateSettings(p: Record<string, unknown>): string | undefined {
+  const hhmm = (v: unknown) => typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  if ("timezone" in p) {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: String(p.timezone) });
+    } catch {
+      return `Unknown timezone ${p.timezone}. Use an IANA name like Europe/Berlin.`;
+    }
+  }
+  if ("quietHours" in p) {
+    const q = p.quietHours as any;
+    if (!q || typeof q !== "object" || typeof q.enabled !== "boolean" || !hhmm(q.start) || !hhmm(q.end)) return 'quietHours must be {enabled: boolean, start: "HH:MM", end: "HH:MM"}.';
+  }
+  if ("digestTimes" in p && (!Array.isArray(p.digestTimes) || !p.digestTimes.every(hhmm))) return 'digestTimes must be a list of "HH:MM".';
+  for (const k of ["notifyRatePerHour", "brainConcurrency"]) {
+    if (k in p && (!Number.isInteger(p[k]) || (p[k] as number) < 1 || (p[k] as number) > 100)) return `${k} must be a whole number from 1 to 100.`;
+  }
+  return undefined;
+}
+
+function maskSecrets(s: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(s ?? {}).map(([k, v]) => [k, SECRET_KEY.test(k) && typeof v === "string" && v && !v.startsWith("vault://") ? "•••" : v]));
+}
+
+/** Whether `pluginId` hosts the brain the calling session runs on. */
+function servesSession(hub: Hub, pluginId: string, ctx: ToolCallContext): boolean {
+  const s = hub.store.getSession(ctx.sessionId);
+  if (!s) return false;
+  const ref = formatBrainRef(parseBrainRef(s.brainRef));
+  return hub.brains.list().some((b) => b.ref === ref && b.host === `plugin:${pluginId}`);
+}
+
+function slug(s: string): string {
+  const latin = s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return latin || `agent-${Date.now().toString(36)}`;
+}

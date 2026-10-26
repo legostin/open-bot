@@ -2,13 +2,13 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { CoreMethod } from "@openbot/shared";
+import type { AgentDef, CoreMethod } from "@openbot/shared";
 import { DEFAULT_LOCALE, catalogLookup, localizeValue, normalizeLocale } from "@openbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
 import { EventBus } from "./bus.ts";
 import { Store } from "./store.ts";
-import { Settings } from "./settings.ts";
+import { Settings, type CoreSettings } from "./settings.ts";
 import { VaultService } from "./vault/service.ts";
 import { AuditLog } from "./audit.ts";
 import { RuleStore } from "./policy/rules.ts";
@@ -30,7 +30,8 @@ import { McpClientManager } from "./mcp/client.ts";
 import { AuthService } from "./auth.ts";
 import { MachineHub } from "./machines.ts";
 import { createCoreCall } from "./core-call.ts";
-import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, t } from "./i18n.ts";
+import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, LocalizedError, t } from "./i18n.ts";
+import { registerHubTools } from "./tools/hub-tools.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -160,8 +161,44 @@ export class Hub {
       createTask: (t) => this.runner.createTask(t),
     });
     this.machines.registerTools(this.tools);
+    registerHubTools(this);
     this.brains.onChange = () => this.bus.emit("brains.updated", {});
     this.wireChannelsForApprovals();
+  }
+
+  /** Every settings change (web UI or the assistant's hub tools): validation, audit, language broadcast, live UI refresh. */
+  updateSettings(patch: Record<string, unknown>, actor: string): CoreSettings {
+    const p = { ...patch };
+    if ("language" in p) {
+      const l = normalizeLocale(p.language);
+      if (!l) throw new LocalizedError("settings.badLanguage", { value: String(p.language) }, 400);
+      p.language = l;
+    }
+    if ("defaultAgent" in p && !this.agents.get(String(p.defaultAgent))) throw new LocalizedError("agent.notFound", undefined, 400);
+    const before = this.settings.get().language;
+    this.audit.append(actor, "settings.update", undefined, { keys: Object.keys(p) });
+    const next = this.settings.update(p as Partial<CoreSettings>);
+    if (next.language !== before) {
+      this.plugins.broadcastLocale(next.language);
+      this.machines.broadcastLocale(next.language);
+      this.brains.invalidateAll();
+    }
+    this.bus.emit("settings.updated", { keys: Object.keys(p) });
+    return next;
+  }
+
+  saveAgent(agent: AgentDef, actor: string): AgentDef {
+    const saved = this.agents.save(agent);
+    this.audit.append(actor, "agent.save", saved.id);
+    this.bus.emit("agents.updated", {});
+    return saved;
+  }
+
+  removeAgent(id: string, actor: string): void {
+    if (id === "assistant" && this.agents.get(id)?.source !== "user") throw new LocalizedError("agent.builtinCannotDelete", undefined, 400);
+    this.agents.remove(id);
+    this.audit.append(actor, "agent.remove", id);
+    this.bus.emit("agents.updated", {});
   }
 
   /** Skills, commands, agents and MCP servers come from enabled plugin layouts + data dir. */

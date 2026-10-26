@@ -11,6 +11,7 @@ import type { AuditLog } from "../audit.ts";
 import type { Redactor } from "../vault/redact.ts";
 import type { Settings } from "../settings.ts";
 import { BACKGROUND_ALWAYS_ALLOWED, decide } from "../policy/engine.ts";
+import { HUB_TOOL_PREFIX } from "./hub-tools.ts";
 
 export interface AgentLookup {
   get(id: string): AgentDef | undefined;
@@ -55,6 +56,8 @@ export class ToolGateway {
 
   private visible(t: ToolDescriptor, agent: AgentDef, s: SessionRow): boolean {
     if (!matchesAny(t.name, agent.tools.length ? agent.tools : ["*"])) return false;
+    // Hub administration belongs to the default agent alone (see tools/hub-tools.ts).
+    if (t.owner === "core" && t.name.startsWith(HUB_TOOL_PREFIX) && agent.id !== this.d.settings.get().defaultAgent) return false;
     if (t.availability === "background" && !s.background) return false;
     if (t.availability === "interactive" && s.background) return false;
     if (s.background && agent.initiative < 2 && t.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(t.name)) return false;

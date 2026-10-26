@@ -275,14 +275,10 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
         patch = { ...rest, i18n: { ...prev!.i18n, [locale]: edited } };
       }
       const agent: AgentDef = b.markdown ? agentFromMarkdown(id, b.markdown, "user") : { ...(prev ?? agentFromMarkdown(id, "", "user")), ...patch, id, source: "user" };
-      hub.audit.append("user", "agent.save", id);
-      return hub.agents.save(agent);
+      return hub.saveAgent(agent, "user");
     });
     api.delete("/api/agents/:id", async (req) => {
-      const id = (req.params as any).id as string;
-      if (id === "assistant" && hub.agents.get(id)?.source !== "user") throw new HttpError(400, "agent.builtinCannotDelete");
-      hub.agents.remove(id);
-      hub.audit.append("user", "agent.remove", id);
+      hub.removeAgent((req.params as any).id as string, "user");
       return { ok: true };
     });
 
@@ -421,23 +417,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
 
     // ----- settings -----
     api.get("/api/settings", async () => hub.settings.get());
-    api.patch("/api/settings", async (req) => {
-      const patch = (req.body ?? {}) as Record<string, unknown>;
-      const before = hub.settings.get().language;
-      if ("language" in patch) {
-        const l = normalizeLocale(patch.language);
-        if (!l) throw new HttpError(400, "settings.badLanguage", { value: String(patch.language) });
-        patch.language = l;
-      }
-      hub.audit.append("user", "settings.update", undefined, { keys: Object.keys(patch) });
-      const next = hub.settings.update(patch as any);
-      if (next.language !== before) {
-        hub.plugins.broadcastLocale(next.language);
-        hub.machines.broadcastLocale(next.language);
-        hub.brains.invalidateAll();
-      }
-      return next;
-    });
+    api.patch("/api/settings", async (req) => hub.updateSettings((req.body ?? {}) as Record<string, unknown>, "user"));
 
     // ----- notifications, approvals (count only; resolving happens in the console) -----
     api.get("/api/notifications", async (req) => hub.notifier.list(Math.min(Number((req.query as any).limit ?? 100), 500)));

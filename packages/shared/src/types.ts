@@ -2,6 +2,7 @@
 // This file is the contract: change it deliberately.
 
 import type { Locale } from "./i18n.ts";
+import type { AgentAvatar } from "./avatar.ts";
 
 export type ISODate = string;
 
@@ -198,6 +199,8 @@ export interface AgentDef {
   budget: { backgroundRunsPerDay: number; tokensPerDay?: number };
   prompt: string;
   source: "builtin" | "user" | string;
+  /** Colour + shape picked when the agent was created; the UI derives one from the id when absent. */
+  avatar?: AgentAvatar;
   /** Translated name / description shown in the UI ("i18n: { ru: { name: … } }" in the frontmatter). */
   i18n?: Partial<Record<Locale, { name?: string; description?: string }>>;
 }
@@ -368,6 +371,8 @@ export type UiEvent =
   | { type: "approval.pending"; data: { count: number } }
   | { type: "brains.updated"; data: Record<string, never> }
   | { type: "plugins.updated"; data: Record<string, never> }
+  | { type: "agents.updated"; data: Record<string, never> }
+  | { type: "settings.updated"; data: Record<string, unknown> }
   | { type: "machine.updated"; data: Machine }
   | { type: "vault.state"; data: { state: VaultState } }
   | { type: "plugin.event"; data: { pluginId: string; channel: string; payload: unknown } };

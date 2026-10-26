@@ -96,6 +96,7 @@ export default {
 
   // machines
   "machines.execApproval": "Выполнить на машине {machine}: {command}",
+  "machines.revokeApproval": "Отключить компьютер {machine} от open-bot",
   "machines.writeApproval": "Записать файл на машине {machine}: {path}",
   "machine.badPairingCode": "Код привязки неверный или устарел",
   "machine.badPublicKey": "Неверный публичный ключ",

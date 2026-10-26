@@ -97,6 +97,7 @@ export default {
 
   // machines
   "machines.execApproval": "Run on {machine}: {command}",
+  "machines.revokeApproval": "Disconnect the computer {machine} from open-bot",
   "machines.writeApproval": "Write a file on {machine}: {path}",
   "machine.badPairingCode": "The pairing code is wrong or has expired",
   "machine.badPublicKey": "Invalid public key",
