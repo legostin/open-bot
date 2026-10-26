@@ -26,8 +26,8 @@ docker compose logs openbot | grep -A1 "open-bot:"
 ```
 
 1. Open http://localhost:8080, enter the **setup code** from the logs and choose a password. Your browser's language becomes the hub language (see [Languages](#languages)).
-2. Open the **security console** at http://localhost:8081 (same password), go to **Vault** and create a vault with a passphrase of your own.
-3. Connect at least one brain (see below) and say hello to the assistant.
+2. The chat opens with a short checklist: connect a brain (see below), create the vault (a passphrase of your own; tick "unlock automatically" so it opens after restarts) and connect Telegram. Everything happens right there in the chat.
+3. Say hello to the assistant. When something needs a key or a token, the assistant shows a secure field in the chat: the value goes straight into the encrypted vault and the model only ever sees `vault://id`. You can also just paste a token into a message: the hub recognises known formats, takes it out of the message and stores it.
 
 Everything is stored in the `openbot-data` volume (`/data`): the database, the vault, workspaces, CLI logins and plugins.
 
@@ -46,7 +46,7 @@ Everything is stored in the `openbot-data` volume (`/data`): the database, the v
   docker exec -it -u agent openbot claude
   ```
   Run `/login`, then `/exit`.
-- Or run `claude setup-token` on your own computer and store the token in the console under Vault as an item with the id **`claude_code_token`** (type "secret", field `value`).
+- Or run `claude setup-token` on your own computer and paste the token into the chat: it is stored in the vault as **`claude_code_token`** and the Claude Code brain picks it up.
 
 **Codex (ChatGPT subscription).**
 
@@ -54,7 +54,7 @@ Everything is stored in the `openbot-data` volume (`/data`): the database, the v
 docker exec -it -u agent openbot codex login --device-auth
 ```
 
-**API keys** (fallback brains, web search) go into the vault as items with these ids:
+**API keys** (fallback brains, web search): ask the assistant ("connect Brave search") or paste the key into the chat. They are stored in the vault under these ids:
 
 | id | Used for |
 |---|---|
@@ -71,8 +71,8 @@ The **Brains** page shows the state of every brain: installed, signed in, rate-l
 
 ## Telegram
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) and store its token in the vault as `telegram_bot_token` (type "secret", field `value`). The bot connects within a minute.
-2. In the web UI, open **Settings**, find the Telegram section and send the bot the `/start <code>` command shown there. The bot only answers the private chat the code came from.
+1. Create a bot with [@BotFather](https://t.me/BotFather) and paste its token into the Telegram step of the checklist (or ask the assistant to connect Telegram). The bot connects by itself.
+2. In the same card, tap **Open the bot in Telegram** and press Start: that links your chat. The bot only answers the private chat it was linked from.
 
 Telegram receives replies, notifications, the digest, and approval cards with buttons. Chat commands: `/help`, `/tasks`, `/stop`. The full details of an action are shown only in the console unless you turn on the `channelApprovalDetails` setting.
 
@@ -109,7 +109,7 @@ Passkeys (passwordless sign-in) need HTTPS or `localhost`; `tailscale serve` tak
 ## Security model
 
 - **Two origins.** The chat and plugins live on `:8080`. Approvals, the vault, rules and the audit log live on `:8081`, with their own cookie, a strict CSP and `frame-ancestors 'none'`. Plugin code on the main page cannot read or click anything in the console.
-- **Vault.** Secrets are encrypted with XChaCha20-Poly1305 under a data key, which in turn is wrapped by a key derived with Argon2id. Models only ever see `vault://id`. A plugin gets an item only if the item is declared in its permissions **and** the item's scope allows that plugin, domain or agent. Secret values are stripped from everything that goes to models, channels and logs. After a restart the vault is sealed; to unlock it automatically, pass a passphrase file through `OPENBOT_VAULT_PASSPHRASE_FILE` (a Docker secret).
+- **Vault.** Secrets are encrypted with XChaCha20-Poly1305 under a data key, which in turn is wrapped by a key derived with Argon2id. Models only ever see `vault://id`. A plugin gets an item only if the item is declared in its permissions **and** the item's scope allows that plugin, domain or agent. Secret values are stripped from everything that goes to models, channels and logs. After a restart the vault is sealed, unless you ticked "unlock automatically" (the passphrase is then kept in `/data/vault.passphrase`, readable by the hub only) or pass a passphrase file through `OPENBOT_VAULT_PASSPHRASE_FILE` (a Docker secret).
 - **Tool policy.** Every tool has an effect: `read`, `local-write` or `external`. External actions need approval by default. "Always allow" creates a narrow rule (one recipient, one domain). Once a session has read untrusted content (web, mail), new recipients need approval again. Background tasks of agents with an initiative below 2 can only read and notify.
 - **Sandbox.** The hub runs as the `openbot` user, CLI brains as `agent`, other plugins and MCP servers as `plugin`. Their traffic goes through an egress proxy with allowlists. With `cap_add: [NET_ADMIN]` and `OPENBOT_EGRESS_ENFORCED=iptables`, the kernel blocks direct network access for `agent` and `plugin`.
 - **Nodes.** Nodes authenticate with an Ed25519 key created during one-time pairing. Every action on a machine has to pass both the hub policy and the node's local policy.
