@@ -8,7 +8,7 @@ import { useStore } from "../lib/store";
 import { mobileConversationId, mobileMode, trackVisualViewport } from "../lib/mobile";
 import { native, openOutside } from "../lib/native";
 import { setShowDetails } from "../state/prefs";
-import { agents, conversations, ensureAgents, ensureTeam, hubIsBack, session, team, useConversationMessages } from "../state/app";
+import { agents, conversations, ensureAgents, ensureGroups, ensureTeam, groups, hubIsBack, session, team, useConversationMessages, useSelector } from "../state/app";
 import { useUiPlugins } from "../plugins/host";
 import { EmptyState } from "../components/ui";
 import { SetupGate } from "../components/BrainSetupCard";
@@ -75,16 +75,21 @@ function MobileChat({ conversationId }: { conversationId: string }) {
   const members = useStore(team);
   const agentList = useStore(agents);
   const conv = useConversationMessages(conversationId);
+  const groupUnread = useSelector(groups, (list) => list?.find((g) => g.conversationId === conversationId)?.unread);
   useEffect(() => {
     ensureTeam();
     ensureAgents();
+    ensureGroups();
   }, []);
 
   const member = members?.find((m) => m.conversationId === conversationId);
-  const agentId = convs.find((c) => c.id === conversationId)?.agentId ?? member?.agentId;
+  const meta = convs.find((c) => c.id === conversationId);
+  const isGroup = meta?.kind === "group";
+  const agentId = meta?.agentId ?? member?.agentId;
   const agent = agentId ? agentList?.find((a) => a.id === agentId) : undefined;
   const isDefault = !!s && agentId === s.defaultAgent;
-  useReadMarker(conversationId, member?.unread ?? 0);
+  // An agent's dialog counts unread in the team, a group chat in the groups.
+  useReadMarker(conversationId, member?.unread ?? groupUnread ?? 0);
 
   // Once the first page of messages (or its error) is on screen.
   const told = useRef(false);
@@ -99,7 +104,7 @@ function MobileChat({ conversationId }: { conversationId: string }) {
       conversationId={conversationId}
       header={false}
       bottom={<SetupGate conversationId={conversationId} agentId={agentId} />}
-      emptyHint={agent && !isDefault ? t("agent.emptyHint", { name: agent.name }) : undefined}
+      emptyHint={agent && !isDefault && !isGroup ? t("agent.emptyHint", { name: agent.name }) : undefined}
     />
   );
 }
