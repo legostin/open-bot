@@ -50,6 +50,7 @@
       }
     }
   },
+  "integration": {"category": "browser", "icon": "globe", "connect": "none", "summary": "%integration.summary%"},
   "permissions": {
     "network": [
       "*"

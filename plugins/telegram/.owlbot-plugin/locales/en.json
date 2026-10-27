@@ -111,5 +111,6 @@
   "bot.secretStored": "🔒 Saved it to the vault and deleted your message, so the secret does not stay in this chat.",
   "bot.secretStoredDeleteYourself": "🔒 Saved it to the vault. Telegram did not let me delete your message: please delete it yourself so the secret does not stay in this chat.",
   "ui.pair.oneTap": "Last step: open {bot} in Telegram and tap Start — the chat links itself.",
-  "ui.pair.orSend": "Or send the bot this command:"
+  "ui.pair.orSend": "Or send the bot this command:",
+  "integration.summary": "Chat with your agents from your phone: replies, notifications, approvals, photos and voice messages"
 }
