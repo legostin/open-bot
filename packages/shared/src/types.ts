@@ -630,6 +630,7 @@ export type UiEvent =
   | { type: "plugins.updated"; data: Record<string, never> }
   | { type: "agents.updated"; data: Record<string, never> }
   | { type: "settings.updated"; data: Record<string, unknown> }
+  | { type: "connections.updated"; data: { provider: string } }
   | { type: "machine.updated"; data: Machine }
   | { type: "device.updated"; data: { id: string } }
   | { type: "devices.network"; data: DeviceNetwork }

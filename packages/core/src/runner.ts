@@ -1089,6 +1089,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "agent_draft") return `draft:${p.draftId}`;
   if (p.type === "brain_login") return `login:${p.ref}`;
   if (p.type === "device_pairing") return "device_pairing";
+  if (p.type === "integration") return `integration:${p.id}`;
   // Pictures and maps carry no id: the same content shown twice in one reply is one card.
   if (p.type === "images") return `images:${JSON.stringify(p.items)}`;
   if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers])}`;

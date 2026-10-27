@@ -2,7 +2,7 @@
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, CoreMethod, DeviceNetwork, DevicePairing } from "@owlbot/shared";
+import type { AgentDef, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing } from "@owlbot/shared";
 import { DEFAULT_LOCALE, catalogLookup, localizeValue, normalizeLocale } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
@@ -44,6 +44,7 @@ import { CliTools } from "./cli-tools.ts";
 import { UserPath } from "./user-path.ts";
 import { SetupGuide } from "./setup.ts";
 import { MediaService } from "./media.ts";
+import { Connections } from "./connections.ts";
 import { cleanTranscription, Transcriber } from "./transcribe.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
@@ -92,6 +93,7 @@ export class Hub {
   setup: SetupGuide;
   /** External images and OpenStreetMap tiles the web UI shows, fetched and cached by the hub. */
   media: MediaService;
+  connections: Connections;
   transcriber: Transcriber;
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
@@ -215,6 +217,14 @@ export class Hub {
     });
     this.mcp = new McpEndpoint(this.gateway, this.store, config.version);
     this.media = new MediaService({ dataDir: config.dataDir, version: config.version, resolve: (host) => this.egress.resolveTarget(host) });
+    this.connections = new Connections({
+      google: config.google,
+      vault: this.vault,
+      settings: this.settings,
+      bus: this.bus,
+      audit: this.audit,
+      redirectUri: () => `${this.config.internalUrl}/oauth/callback`,
+    });
     const rpId = new URL(config.publicUrl).hostname;
     this.auth = new AuthService(this.db, this.audit, {
       rpId,
@@ -245,6 +255,13 @@ export class Hub {
       this.bus.emit("brains.updated", {});
     });
     this.wireChannelsForApprovals();
+  }
+
+  /** A Google account was connected: the agent whose chat showed the card hears it and carries on. */
+  connectionDone(account: ConnectionAccount, origin?: { integration?: string; conversationId?: string }): void {
+    if (!origin?.conversationId || !this.store.getConversation(origin.conversationId)) return;
+    const what = origin.integration ? ` (${origin.integration})` : "";
+    this.runner.tellAgent(origin.conversationId, `[System] The user connected Google as ${account.account}${what}; it works now. Carry on with what it was needed for.`);
   }
 
   /** Every settings change (web UI or the assistant's hub tools): validation, audit, language broadcast, live UI refresh. */

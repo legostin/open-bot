@@ -140,6 +140,12 @@ export function createCoreCall(hub: Hub) {
         }
         return { path: rel, absolutePath: join(hub.runner.workspacePath(s), rel) };
       }
+      case "connections.token": {
+        // Only for the account its own integration connects with: a Google integration gets Google's token.
+        const integ = hub.plugins.get(pluginId)?.layout?.manifest.integration;
+        if (integ?.connect !== "google" || (p.provider ?? "google") !== "google") throw new Error("this plugin's integration does not use a Google connection");
+        return hub.connections.token("google");
+      }
       default:
         throw new Error(`unknown core method ${method}`);
     }

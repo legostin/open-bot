@@ -1,9 +1,12 @@
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
+import { BUILTIN_GOOGLE_CLIENT, GOOGLE_ENDPOINTS, type GoogleClientConfig } from "./connections.ts";
 
 export interface Config {
   dataDir: string;
+  /** Google sign-in (connections.ts): Owlbot's client unless OWLBOT_GOOGLE_* says otherwise. */
+  google: GoogleClientConfig;
   host: string;
   port: number;
   consolePort: number;
@@ -81,6 +84,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     publicUrl,
     consoleUrl,
     internalUrl: `http://127.0.0.1:${port}`,
+    google: {
+      clientId: env.OWLBOT_GOOGLE_CLIENT_ID ?? BUILTIN_GOOGLE_CLIENT.clientId,
+      clientSecret: env.OWLBOT_GOOGLE_CLIENT_SECRET ?? BUILTIN_GOOGLE_CLIENT.clientSecret,
+      authUrl: env.OWLBOT_GOOGLE_AUTH_URL ?? GOOGLE_ENDPOINTS.authUrl,
+      tokenUrl: env.OWLBOT_GOOGLE_TOKEN_URL ?? GOOGLE_ENDPOINTS.tokenUrl,
+      revokeUrl: env.OWLBOT_GOOGLE_REVOKE_URL ?? GOOGLE_ENDPOINTS.revokeUrl,
+      userinfoUrl: env.OWLBOT_GOOGLE_USERINFO_URL ?? GOOGLE_ENDPOINTS.userinfoUrl,
+    },
     allowedHosts,
     appRoot,
     builtinPluginsDir: join(appRoot, "plugins"),

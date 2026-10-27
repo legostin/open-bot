@@ -1,0 +1,10 @@
+{
+  "id": "fakecal",
+  "name": "Fake calendar",
+  "description": "A calendar for the integrations tests",
+  "builtin": true,
+  "server": "./server/index.ts",
+  "contributes": { "tools": true, "hooks": ["digest.compose"] },
+  "integration": { "category": "calendar", "icon": "calendar", "connect": "google", "scopes": ["https://www.googleapis.com/auth/calendar.events"] },
+  "permissions": { "core": ["connections.token"] }
+}
