@@ -1,26 +1,24 @@
-// The card the assistant's hub_device_pairing tool puts in the chat: the switch while phones cannot reach the hub,
-// then the QR on request. The card stays in the history, so the one-time code is made only when the user asks for it.
+// The card the assistant's hub_device_pairing tool puts in the chat: the QR on request, or why phones cannot reach the
+// hub. The card stays in the history, so the one-time code is made only when the user asks for it.
 
 import { useCallback, useEffect, useState } from "react";
 import { CircleCheck, QrCode, Smartphone } from "lucide-react";
 import type { Device } from "@owlbot/shared";
 import { PairingBlock, PhoneAccess, useDevices } from "../../components/DevicePairing";
 import { Button, Spinner, cx } from "../../components/ui";
+import { useRemote } from "../../state/remote";
 import { t } from "../../i18n";
 
 export function DevicePairingCard() {
-  const { devices, network, setNetwork, error } = useDevices();
+  const { devices, network, error } = useDevices();
   const [open, setOpen] = useState(false);
   const [paired, setPaired] = useState<string>();
-  // Once shown the switch stays, so turning it on does not pull it away from under the cursor.
-  const [showSwitch, setShowSwitch] = useState(false);
-  const listening = !!network?.listening;
+  const remote = useRemote();
+  // A phone pairs over the home network's port or through the link.
+  const canPair = !!network?.listening || (remote?.state === "running" && !!remote.deviceUrl);
   useEffect(() => {
-    if (network && !listening) {
-      setShowSwitch(true);
-      setOpen(false);
-    }
-  }, [network, listening]);
+    if (network && !canPair) setOpen(false);
+  }, [network, canPair]);
   const onPaired = useCallback((d: Device) => {
     setOpen(false);
     setPaired(d.name);
@@ -33,13 +31,13 @@ export function DevicePairingCard() {
         <Smartphone className={cx("size-4", open ? "text-accent-text" : "text-muted")} />
         <span className="text-sm font-semibold">{t("devices.connect")}</span>
       </div>
-      {(showSwitch || !listening) && <PhoneAccess network={network} onChange={setNetwork} />}
+      {!canPair && <PhoneAccess network={network} />}
       {paired && !open && (
         <div className="flex items-center gap-1.5 text-sm text-success">
           <CircleCheck className="size-4 shrink-0" /> {t("devices.paired", { name: paired })}
         </div>
       )}
-      {listening &&
+      {canPair &&
         (open ? (
           <PairingBlock devices={devices} onPaired={onPaired} onClose={() => setOpen(false)} />
         ) : (

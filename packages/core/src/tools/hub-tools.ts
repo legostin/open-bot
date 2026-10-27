@@ -543,19 +543,24 @@ export function registerHubTools(hub: Hub): void {
       name: "device_pairing",
       effect: "local-write",
       description:
-        "Show a card in this chat for connecting the user's phone (the Owlbot iOS app): it has the switch that lets phones reach the hub " +
-        "and makes a one-time QR code and link. Use it whenever the user wants Owlbot on their phone; never send them to settings pages for it.",
+        "Show a card in this chat for connecting the user's phone (the Owlbot iOS app): it makes a one-time QR code and link with every " +
+        "address the phone can use. Use it whenever the user wants Owlbot on their phone; never send them to settings pages for it.",
       inputSchema: obj({}),
     },
     (_i, ctx) => {
       hub.runner.attachPart(ctx.conversationId, { type: "device_pairing" });
-      const n = hub.deviceNetwork();
+      const urls = hub.phoneUrls();
+      const link = hub.remote.deviceLink();
       const paired = hub.devices.list().map((d) => d.name);
       return text(
         [
           "A card for connecting a phone is shown in the chat: the user opens the Owlbot app and scans its QR code (or opens its link on the phone).",
-          n.listening ? `Phones can reach the hub at ${n.urls.join(", ") || "no address (the computer is not on a network)"}.` : "Phone access is off; the card has the switch.",
-          "Away from the home network the phone and this computer both need Tailscale.",
+          urls.length
+            ? `The QR gives the phone these addresses, and it uses whichever answers: ${urls.join(", ")}.`
+            : "Phones cannot reach the hub: the computer has no network address and access from anywhere is off.",
+          link
+            ? "Away from home the phone uses the hub's link (access from anywhere)."
+            : "Away from home the phone needs access from anywhere (the remote-access integration) for a permanent link.",
           `Paired phones: ${paired.join(", ") || "none"}.`,
         ].join("\n"),
       );

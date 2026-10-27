@@ -144,11 +144,10 @@ describe("device port", () => {
     await hub?.stop();
   });
 
-  it("is off until the web UI turns it on, and refuses to pair while off", async () => {
-    expect(hub.deviceNetwork()).toMatchObject({ enabled: false, listening: false, port: devicePort });
-    expect((await web.req("POST", "/api/devices/pairing", {})).status).toBe(409);
-    const on = await web.req("PUT", "/api/devices/network", { enabled: true });
-    expect(on.json).toMatchObject({ enabled: true, listening: true });
+  it("listens from the start, with no switch to turn", async () => {
+    expect(hub.deviceNetwork()).toMatchObject({ enabled: true, listening: true, port: devicePort });
+    expect((await web.req("GET", "/api/devices")).json.network).toMatchObject({ enabled: true, listening: true });
+    expect((await web.req("PUT", "/api/devices/network", { enabled: false })).status).toBe(404);
   });
 
   it("pairs a phone from the QR and serves the hub API to its token only", async () => {
@@ -245,9 +244,26 @@ describe("device port", () => {
     expect((await pageRequest(devicePort, fp, "GET", "/api/bootstrap", undefined, { cookie })).status).toBe(401);
   });
 
-  it("stops when the switch goes off", async () => {
-    const off = await web.req("PUT", "/api/devices/network", { enabled: false });
-    expect(off.json).toMatchObject({ enabled: false, listening: false });
-    await expect(phoneRequest(devicePort, "x", "GET", "/api/device/hello")).rejects.toThrow();
+});
+
+describe("device port closed by OWLBOT_DEVICES=0", () => {
+  it("does not listen, and pairing needs the link", async () => {
+    const [port, consolePort, egressPort, devicePort] = [await freePort(), await freePort(), await freePort(), await freePort()];
+    const config = loadConfig(
+      { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_DEVICE_PORT: String(devicePort), OWLBOT_DEVICE_HOST: "127.0.0.1", OWLBOT_DEVICES: "0", TZ: "UTC" },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-dev-off-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
+    );
+    const hub = new Hub(config);
+    await hub.start();
+    try {
+      expect(hub.deviceNetwork()).toMatchObject({ enabled: false, listening: false });
+      await expect(phoneRequest(devicePort, "x", "GET", "/api/device/hello")).rejects.toThrow();
+      const web = new Web(config.publicUrl);
+      await web.req("POST", "/api/auth/setup", { token: hub.auth.setupToken, password: "device-test-pass" });
+      web.csrf = (await web.req("GET", "/api/bootstrap")).json.csrf;
+      expect((await web.req("POST", "/api/devices/pairing", {})).status).toBe(409);
+    } finally {
+      await hub.stop();
+    }
   });
 });

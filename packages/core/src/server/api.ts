@@ -510,13 +510,9 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     }
   });
 
-  // ----- phones: the web UI pairs, renames and revokes them and opens the device port; a phone manages only itself -----
+  // ----- phones: the web UI pairs, renames and revokes them; a phone manages only itself -----
   if (opts.kind === "web") {
     api.get("/api/devices", async () => ({ devices: hub.devices.list(), network: hub.deviceNetwork() }));
-    api.put("/api/devices/network", async (req) => {
-      hub.updateSettings({ devicesLan: (req.body as { enabled?: unknown } | undefined)?.enabled === true }, "user");
-      return hub.syncDeviceServer();
-    });
     api.post("/api/devices/pairing", async () => hub.devicePairing());
     // Access from anywhere (remote.ts): the switch, and forgetting the node.
     const remoteView = (req: FastifyRequest) => {

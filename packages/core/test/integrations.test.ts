@@ -91,6 +91,7 @@ describe("integrations and the Google sign-in", () => {
     const config = loadConfig(
       {
         OWLBOT_PORT: String(port),
+        OWLBOT_DEVICES: "0",
         OWLBOT_CONSOLE_PORT: String(consolePort),
         OWLBOT_EGRESS_PORT: String(egressPort),
         TZ: "UTC",

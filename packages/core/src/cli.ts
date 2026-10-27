@@ -75,7 +75,7 @@ async function main(): Promise<void> {
       const link = pairingLink({ code, hubName: hubName(), fingerprint: deviceTls(config.dataDir).fingerprint, urls: deviceUrls(config.devicePort, config.deviceUrls) });
       console.log(`${qrText(link)}\n`);
       console.log(T("cli.devicePair", { link, code }));
-      if (!config.devicesForced && !new Settings(db, config.timezone).get().devicesLan) console.log(`\n${T("cli.devicesOff")}`);
+      if (config.devicesOff) console.log(`\n${T("cli.devicesOff")}`);
       return;
     }
     case "backup": {

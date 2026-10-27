@@ -1,5 +1,5 @@
-// Devices: phones with the Owlbot app. The switch that lets them reach the hub, the link for away from home, pairing
-// by QR, rename, revoke.
+// Devices: phones with the Owlbot app. Where they reach the hub at home and away (the link), pairing by QR, rename,
+// revoke.
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Pencil, QrCode, Smartphone, Trash2, X } from "lucide-react";
@@ -14,7 +14,7 @@ import { PairingBlock, PhoneAccess, useDevices } from "../components/DevicePairi
 import { Button, EmptyState, ErrorNote, IconButton, Input, Loading, Modal, Page } from "../components/ui";
 
 export function DevicesPage() {
-  const { devices, network, setNetwork, error, load } = useDevices();
+  const { devices, network, error, load } = useDevices();
   const [pairOpen, setPairOpen] = useState(false);
   const [revoking, setRevoking] = useState<Device | null>(null);
   const remote = useRemote();
@@ -43,7 +43,7 @@ export function DevicesPage() {
         {!network && !error && <Loading />}
         {network && (
           <section className="rounded-2xl border border-border bg-surface p-4 shadow-card">
-            <PhoneAccess network={network} onChange={setNetwork} />
+            <PhoneAccess network={network} />
           </section>
         )}
         {remote?.available && (

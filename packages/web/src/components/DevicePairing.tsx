@@ -1,4 +1,4 @@
-// Connecting phones (the Owlbot app): the switch that opens the phones' own HTTPS port, and the one-time QR, link and
+// Connecting phones (the Owlbot app): where the phones' own HTTPS port listens at home, and the one-time QR, link and
 // code. Used by the Devices section and by the chat card the assistant shows when the user wants Owlbot on the phone.
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -9,7 +9,7 @@ import { countdown, groupedCode } from "../lib/format";
 import { hubEvents, reconnected } from "../state/app";
 import { useRemote } from "../state/remote";
 import { toast } from "../state/toast";
-import { Badge, Button, CopyButton, ErrorNote, Spinner, Toggle, cx } from "./ui";
+import { Badge, Button, CopyButton, ErrorNote, Spinner, cx } from "./ui";
 import { t } from "../i18n";
 
 /** The paired phones and the device port's state, kept current by `device.updated` and `devices.network`. */
@@ -42,50 +42,37 @@ export function useDevices() {
     };
   }, [load]);
 
-  return { devices, network, setNetwork, error, load };
+  return { devices, network, error, load };
 }
 
-/** "Phones on the network": opens or closes the device port live. OWLBOT_DEVICES=1 keeps it on (the switch is locked). */
-export function PhoneAccess({ network, onChange }: { network: DeviceNetwork; onChange: (n: DeviceNetwork) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const set = async (enabled: boolean) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      onChange(await api.put<DeviceNetwork>("/api/devices/network", { enabled }));
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+/** The device port on the home network: its addresses, or why phones cannot use it (OWLBOT_DEVICES=0, a busy port). */
+export function PhoneAccess({ network }: { network: DeviceNetwork }) {
+  const link = useRemote()?.deviceUrl;
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <Toggle checked={network.enabled} disabled={busy || network.forced} onChange={(v) => void set(v)} label={<span className="font-medium">{t("devices.network")}</span>} />
-        {busy && <Spinner size={14} />}
-      </div>
-      <p className="text-xs leading-relaxed text-muted">{t("devices.networkHint")}</p>
-      {network.forced && <p className="text-xs text-muted">{t("devices.networkForced")}</p>}
-      {network.listening &&
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium">{t("devices.home")}</span>
+      {!network.enabled ? (
+        <p className="text-xs text-muted">{t("devices.homeOff")}</p>
+      ) : (
+        network.listening &&
         (network.urls.length ? (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium">{t("devices.addresses")}</span>
+          <>
             <div className="flex flex-wrap gap-1.5">
-              {network.urls.map((u) => (
-                <code key={u} className="rounded-lg bg-surface-2 px-2 py-0.5 font-mono text-xs">
-                  {u}
-                </code>
-              ))}
+              {network.urls
+                .filter((u) => u !== link)
+                .map((u) => (
+                  <code key={u} className="rounded-lg bg-surface-2 px-2 py-0.5 font-mono text-xs">
+                    {u}
+                  </code>
+                ))}
             </div>
-            <p className="text-xs text-muted">{t("devices.firewall", { port: network.port })}</p>
-          </div>
+            <p className="text-xs leading-relaxed text-muted">{t("devices.homeHint", { port: network.port })}</p>
+          </>
         ) : (
           <p className="text-xs text-warning">{t("devices.noAddress")}</p>
-        ))}
+        ))
+      )}
       {network.error && <ErrorNote>{network.error}</ErrorNote>}
-      {error && <ErrorNote>{error}</ErrorNote>}
     </div>
   );
 }
