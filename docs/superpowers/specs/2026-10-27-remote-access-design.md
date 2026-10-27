@@ -79,7 +79,7 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
   computer's own sign-in is not affected), writes `auth.remotePaused` to the audit log and notifies the user.
   Passkeys are bound to the computer's address and do not work through the link (password only, for now).
 - **Addresses for phones**: `deviceUrls()` puts the link's `deviceUrl` after the private addresses and before the
-  raw tailnet ones. A new authenticated `GET /api/device/addresses` → `{ urls }` gives paired phones the current list.
+  raw tailnet ones. A new authenticated `GET /api/devices/addresses` → `{ urls }` gives paired phones the current list.
 - **API** (main app and gateway, behind the session): `GET /api/remote`, `POST /api/remote/enable`,
   `POST /api/remote/disable`, `POST /api/remote/forget`. `enable` answers 409 `remote.unavailable` without the
   binary and `auth.noPassword` without a password.
@@ -100,7 +100,7 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
 
 ## The iOS app (`~/claude-projects/owlbot-ios`)
 
-- After connecting, `HubSession` calls `GET /api/device/addresses` and stores the new list in `PairedHub.urls`
+- After connecting, `HubSession` calls `GET /api/devices/addresses` and stores the new list in `PairedHub.urls`
   (the last working address stays first in `candidates`). Nothing else changes: the link's port presents the same
   certificate the app pins.
 
@@ -125,7 +125,7 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
 - Go: the line protocol, the proxies set `Host`, `X-Forwarded-For` and `X-Forwarded-Proto`.
 - Core, with a fake node (a Node script speaking the same lines, `OWLBOT_TAILNET_BIN`): state transitions and
   restarts; the gateways answer 404 on setup, desktop, MCP, OAuth callback and hooks; `clientIp()` comes from the
-  forwarded header; the shared remote failure budget and that local sign-in still works; `/api/device/addresses`;
+  forwarded header; the shared remote failure budget and that local sign-in still works; `/api/devices/addresses`;
   the library entry; enable without a password or without the binary.
 - Web: the card's steps and actions.
 - By hand on the user's tailnet: sign in, allow Funnel, open the link from a phone off the Wi-Fi, the phone app
