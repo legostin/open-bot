@@ -174,6 +174,23 @@ describe("group chats (integration)", () => {
     expect(textOf(r[1])).toContain("[System] It is your turn to reply to the user's message above.");
   });
 
+  it("gives every member answering the files, copied into its own workspace", async () => {
+    const id = await group();
+    const r = await fetch(`${hub.config.publicUrl}/api/conversations/${id}/attachments?name=plan.png`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", origin: hub.config.publicUrl, cookie: web.cookie, "x-csrf": web.csrf },
+      body: Buffer.from("png"),
+    });
+    const part = await r.json();
+    expect(part.path).toBe(`assistant/${id}/attachments/plan.png`);
+    await web.req("POST", `/api/conversations/${id}/messages`, { text: "@all look", attachments: [part.path] });
+    const replied = await replies(id, 2);
+    expect(replied.map((m) => [m.agentId, textOf(m).split(" | ")[0]])).toEqual([
+      ["assistant", "fake files: attachments/plan.png:here"],
+      ["scout", "fake files: attachments/plan.png:here"],
+    ]);
+  });
+
   it("hands the floor to a member an agent mentions, who then knows what was said", async () => {
     const id = await group();
     await say(id, "@scout HANDOFF assistant");

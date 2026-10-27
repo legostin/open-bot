@@ -112,7 +112,7 @@ What `ctx` offers: `pluginId`, `pluginDir`, `dataDir` (a private writable folder
 
 **HTTP.** `ctx.http.handle` serves `/api/plugins/<id>/http/*` to the signed-in web UI (`ui.plugin.http`). The same handler is also reachable **without authentication** at `/hooks/<id>/*` for webhooks: such requests have `req.public === true`, and the plugin has to check a secret itself.
 
-**Channels.** A channel is `{ id, label, send(message), status?() }`. `send` receives replies, notifications, approval cards (with approve and deny tokens) and the digest. Incoming user messages go to the hub through `ctx.core.call("channels.inbound", { text, channel })`.
+**Channels.** A channel is `{ id, label, send(message), status?() }`. `send` receives replies, notifications, approval cards (with approve and deny tokens) and the digest. Incoming user messages go to the hub through `ctx.core.call("channels.inbound", { text, channel, files? })`. `files` are what the user sent along: `{ name?, mimeType?, data (base64), kind?: "photo" | "voice" | "audio" | "video" | "file", durationSec? }`, at most 10 per message and 25 MB each. The hub saves them in the conversation's workspace (`attachments/`) and the agent gets their paths; text may be empty when there are files. `context` (English, at most 2000 characters) goes to the model before the user's words and is not shown in the chat: where a forward came from, what the message replies to.
 
 ## Brains
 

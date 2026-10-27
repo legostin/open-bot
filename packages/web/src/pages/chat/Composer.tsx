@@ -1,19 +1,23 @@
 // Message composer: Enter = send, Shift+Enter = newline (on the phone Return is a newline, the button sends), /command
-// autocomplete, @member autocomplete in group chats, Stop while streaming (in a group: while members answer).
+// autocomplete, @member autocomplete in group chats, files from the paperclip, the clipboard or a drop on the chat
+// (uploaded at once, sent with the message), Stop while streaming (in a group: while members answer).
 // Inside the iOS app an empty field shows a hold-to-talk mic (the app's on-device dictation).
 // Plugins may wrap/replace it (chat.composer) and add buttons (chat.composerActions).
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { ArrowUp, Mic, Square, UsersRound } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { ArrowUp, Mic, Paperclip, Square, UsersRound } from "lucide-react";
 import { api, errorText } from "../../lib/api";
 import { mobileMode } from "../../lib/mobile";
 import { native, nativeErrorText, type NativeBridge } from "../../lib/native";
 import { applyCommand, filterCommands, slashQuery, type CommandInfo } from "../../lib/commands";
 import { applyMention, filterMentions, mentionQuery, type MentionOption } from "../../lib/mentions";
+import { canSend, readyPaths } from "../../lib/attachments";
 import { isStreaming } from "../../lib/messages";
 import { useStore } from "../../lib/store";
 import { agents, conversations, groups, interrupt, sendMessage, useConversationMessages, useSelector } from "../../state/app";
 import { toast } from "../../state/toast";
+import { addFiles, removeFiles, usePendingFiles } from "../../state/attachments";
+import { AttachmentChips } from "./AttachmentChips";
 import { AgentAvatar } from "../../components/AgentAvatar";
 import { cx } from "../../components/ui";
 import { t } from "../../i18n";
@@ -53,10 +57,10 @@ function loadCommands(): Promise<CommandInfo[]> {
 
 export function useSend(conversationId: string) {
   return useCallback(
-    async (text: string) => {
+    async (text: string, attachments: string[] = []) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
-      await sendMessage(conversationId, trimmed);
+      if (!trimmed && !attachments.length) return;
+      await sendMessage(conversationId, trimmed, attachments);
     },
     [conversationId],
   );
@@ -189,6 +193,9 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
   const [listening, setListening] = useState(false);
   const [micNote, setMicNote] = useState<{ text: string; error: boolean } | null>(null);
   const ta = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const files = usePendingFiles(conversationId);
+  const sendable = canSend(text, files);
 
   useEffect(() => {
     setText(drafts.get(conversationId) ?? "");
@@ -226,11 +233,13 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
   }, [query, mention?.start, mention?.query]);
 
   const submit = async (value: string = text) => {
-    if (!value.trim() || busy) return;
+    if (!canSend(value, files) || busy) return;
+    const sent = files.filter((f) => f.status === "ready");
     setBusy(true);
     setText("");
     try {
-      await send(value);
+      await send(value, readyPaths(sent));
+      removeFiles(conversationId, sent.map((f) => f.id));
     } catch (e) {
       setText(value);
       toast(errorText(e), "error");
@@ -247,7 +256,8 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
     // A short tap explains the gesture; a hold that brought no words says so instead of doing nothing.
     setMicNote((n) => n ?? { text: t(tap ? "composer.holdToTalk" : "composer.notHeard"), error: false });
   };
-  const showMic = !!native && (!text.trim() || listening);
+  // Typed words or files waiting: the send button instead of the mic.
+  const showMic = !!native && ((!text.trim() && !files.length) || listening);
 
   const stop = async () => {
     setStopping(true);
@@ -275,6 +285,14 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
       ta.current?.focus();
       ta.current?.setSelectionRange(next.caret, next.caret);
     });
+  };
+
+  // A screenshot or a copied file: attached; text that came with it is pasted as usual.
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = [...e.clipboardData.files];
+    if (!pasted.length) return;
+    if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+    addFiles(conversationId, pasted);
   };
 
   const pick = (i: number) => (suggestions.length ? choose(suggestions[i]) : chooseMention(mentions[i]));
@@ -363,60 +381,83 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
           })}
         </div>
       )}
-      <div className="composer-box flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3 shadow-card transition focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20">
-        <textarea
-          ref={ta}
-          rows={1}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setCaret(e.target.selectionStart ?? e.target.value.length);
-            setMicNote(null);
-          }}
-          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-          onKeyDown={onKeyDown}
-          readOnly={listening}
-          placeholder={listening ? t("composer.listening") : isGroup ? t("composer.groupPlaceholder") : mobileMode ? t("composer.placeholderShort") : t("composer.placeholder")}
-          aria-label={t("composer.message")}
-          className="max-h-[40vh] min-h-9 flex-1 resize-none overflow-hidden bg-transparent py-2 text-[15px] leading-relaxed outline-none focus-visible:outline-none placeholder:text-muted/80"
-        />
-        <div className="flex shrink-0 items-center gap-1 pb-0.5">
-          <ComposerActions conversationId={conversationId} />
-          {native && showMic && (
-            <MicButton
-              bridge={native}
-              onListening={(on) => {
-                setListening(on);
-                if (on) setMicNote(null);
-              }}
-              onWords={setText}
-              onDone={dictated}
-              onError={(reason) => setMicNote({ text: t("composer.micFailed", { reason }), error: true })}
-            />
-          )}
-          {streaming ? (
-            <button
-              type="button"
-              onClick={() => void stop()}
-              disabled={stopping}
-              title={t("composer.stop")}
-              aria-label={t("composer.stop")}
-              className="inline-flex size-9 items-center justify-center rounded-xl bg-fg text-bg transition hover:opacity-90 disabled:opacity-50"
-            >
-              <Square className="size-3.5 fill-current" />
-            </button>
-          ) : showMic ? null : (
-            <button
-              type="button"
-              onClick={() => void submit()}
-              disabled={!text.trim() || busy}
-              title={t("composer.sendTitle")}
-              aria-label={t("composer.send")}
-              className="inline-flex size-9 items-center justify-center rounded-xl bg-accent text-accent-fg transition hover:brightness-110 disabled:opacity-40"
-            >
-              <ArrowUp className="size-[18px]" />
-            </button>
-          )}
+      <div className="composer-box rounded-2xl border border-border bg-surface p-1.5 shadow-card transition focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20">
+        {files.length > 0 && <AttachmentChips files={files} onRemove={(id) => removeFiles(conversationId, [id])} />}
+        <div className="flex items-end gap-1">
+          <button
+            type="button"
+            onClick={() => picker.current?.click()}
+            title={t("composer.attach")}
+            aria-label={t("composer.attach")}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-fg"
+          >
+            <Paperclip className="size-[18px]" />
+          </button>
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              addFiles(conversationId, [...(e.target.files ?? [])]);
+              e.target.value = "";
+            }}
+          />
+          <textarea
+            ref={ta}
+            rows={1}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCaret(e.target.selectionStart ?? e.target.value.length);
+              setMicNote(null);
+            }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            readOnly={listening}
+            placeholder={listening ? t("composer.listening") : isGroup ? t("composer.groupPlaceholder") : mobileMode ? t("composer.placeholderShort") : t("composer.placeholder")}
+            aria-label={t("composer.message")}
+            className="max-h-[40vh] min-h-9 flex-1 resize-none overflow-hidden bg-transparent py-2 text-[15px] leading-relaxed outline-none focus-visible:outline-none placeholder:text-muted/80"
+          />
+          <div className="flex shrink-0 items-center gap-1 pb-0.5">
+            <ComposerActions conversationId={conversationId} />
+            {native && showMic && (
+              <MicButton
+                bridge={native}
+                onListening={(on) => {
+                  setListening(on);
+                  if (on) setMicNote(null);
+                }}
+                onWords={setText}
+                onDone={dictated}
+                onError={(reason) => setMicNote({ text: t("composer.micFailed", { reason }), error: true })}
+              />
+            )}
+            {streaming ? (
+              <button
+                type="button"
+                onClick={() => void stop()}
+                disabled={stopping}
+                title={t("composer.stop")}
+                aria-label={t("composer.stop")}
+                className="inline-flex size-9 items-center justify-center rounded-xl bg-fg text-bg transition hover:opacity-90 disabled:opacity-50"
+              >
+                <Square className="size-3.5 fill-current" />
+              </button>
+            ) : showMic ? null : (
+              <button
+                type="button"
+                onClick={() => void submit()}
+                disabled={!sendable || busy}
+                title={t("composer.sendTitle")}
+                aria-label={t("composer.send")}
+                className="inline-flex size-9 items-center justify-center rounded-xl bg-accent text-accent-fg transition hover:brightness-110 disabled:opacity-40"
+              >
+                <ArrowUp className="size-[18px]" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
       {micNote && (

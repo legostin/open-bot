@@ -181,7 +181,8 @@ export type MessagePart =
   | { type: "approval"; approvalId: string; summary: string; status: ApprovalStatus }
   | { type: "notification"; level: NotifyLevel; title: string; body: string }
   | { type: "error"; message: string }
-  | { type: "attachment"; path: string; name: string; mimeType?: string }
+  /** A file the user sent (or a plugin attached): `path` is relative to the workspaces root, `size` in bytes. */
+  | { type: "attachment"; path: string; name: string; mimeType?: string; size?: number; kind?: AttachmentKind; durationSec?: number; transcript?: string }
   /** A secret the user types into the chat card; the value goes straight to the vault and never into the conversation. */
   | { type: "secret_request"; requestId: string; vaultId: string; title: string; status: SecretRequestStatus }
   /** A plugin's setup card: its secrets and its own setup UI (e.g. Telegram pairing), live. */
@@ -198,6 +199,9 @@ export type MessagePart =
   | { type: "images"; items: ImageItem[] }
   /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers. */
   | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[] };
+
+/** What a sent file is: a voice note and a photo are told apart from an audio file or a document by the channel. */
+export type AttachmentKind = "photo" | "voice" | "audio" | "video" | "file";
 
 /** `src` is an http(s) URL (shown through the hub's image proxy) or `file:<path relative to the workspaces root>`. */
 export interface ImageItem {

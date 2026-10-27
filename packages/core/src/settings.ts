@@ -1,5 +1,6 @@
 import { DEFAULT_LOCALE, localeFromEnv, type Locale } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
+import { DEFAULT_TRANSCRIPTION, type TranscriptionSettings } from "./transcribe.ts";
 
 export interface CoreSettings {
   timezone: string;
@@ -24,6 +25,8 @@ export interface CoreSettings {
   language: Locale;
   /** Phones may reach the hub: the device port listens on the network. */
   devicesLan: boolean;
+  /** Speech to text for voice messages (transcribe.ts). */
+  transcription: TranscriptionSettings;
 }
 
 export const DEFAULT_BRAIN_EGRESS = [
@@ -66,6 +69,7 @@ export function defaultSettings(timezone: string, language: Locale = localeFromE
     approvalExpireHours: 24,
     language,
     devicesLan: false,
+    transcription: DEFAULT_TRANSCRIPTION,
   };
 }
 

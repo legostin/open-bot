@@ -3,7 +3,7 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, Conversation, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, ToolResult } from "@owlbot/shared";
+import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, ToolResult } from "@owlbot/shared";
 import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import type { Store, SessionRow } from "./store.ts";
@@ -26,6 +26,9 @@ import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
 import { MAX_IMAGE_BYTES, readWorkspaceImage } from "./media.ts";
+import { TurnClock } from "./clock.ts";
+import { attachmentNote, forSession, isSpeech, SPEECH_NOT_SET_UP, type AttachmentPart, type SessionFile } from "./attachments.ts";
+import { MAX_AUTO_TRANSCRIBE_SEC, type Transcriber } from "./transcribe.ts";
 import { firstSpeakers, groupTurn, groupTurnText, handOff, MAX_HANDOFFS, USER_LABEL } from "./group-chat.ts";
 
 export interface RunnerDeps {
@@ -50,9 +53,11 @@ export interface RunnerDeps {
   secrets: SecretIntake;
   /** First-run setup (set by the hub): keeps messages written while no brain works and adds the prompt section. */
   setup?: {
-    hold(conversationId: string, agentId: string, prompt: string, opts: { replyChannel?: string; quote?: string }): void;
+    hold(conversationId: string, agentId: string, prompt: string, opts: { replyChannel?: string; quote?: string; attachments?: AttachmentPart[]; speech?: Record<string, string> }): void;
     promptBlock(agentId: string): Promise<string | undefined>;
   };
+  /** Speech to text for voice messages (set by the hub). */
+  transcriber?: Transcriber;
 }
 
 /** What the web UI passes as the channel of a typed message (not a registered channel). */
@@ -66,6 +71,10 @@ interface TurnOpts {
   quote?: string;
   /** The member who answers (group chats; default: the conversation's agent). */
   agentId?: string;
+  /** Files that came with the user's message: the brain gets their paths and a note. */
+  attachments?: AttachmentPart[];
+  /** Voice notes without a transcript, by path: why (the note tells the agent). */
+  speech?: Record<string, string>;
   /** Group chats: the user message this round answers, and why the member has the floor if not addressed by it. */
   group?: { triggerId?: string; floorNote?: string };
 }
@@ -101,6 +110,8 @@ export class SessionRunner {
   private activeTurns = new Map<string, { sessionId: string; handle: BrainHandle }>();
   private runningTasks = new Set<string>();
   private brainLoad = new Map<string, number>();
+  /** When each live session last got the current time (clock.ts). */
+  private clock = new TurnClock();
   private timer?: NodeJS.Timeout;
   private kickoff?: NodeJS.Timeout;
   private streamingMessage = new Map<string, string>(); // conversationId -> messageId
@@ -152,13 +163,19 @@ export class SessionRunner {
     const l = this.live.get(id);
     this.live.delete(id);
     this.d.egress.revokeOwner(`brain:${id}`);
+    this.clock.forget(id);
     await l?.handle.close().catch(() => {});
   }
 
   // ---------- public entry points ----------
 
   /** A user message arrived (web, Telegram, ...). Returns the stored user message. */
-  async userMessage(conversationId: string, text: string, opts: { channel?: string; onCapture?: (c: CaptureResult) => void } = {}): Promise<Message> {
+  /** `context`: lines for the model only, before the user's words (a channel's "forwarded from…", "in reply to…"). */
+  async userMessage(
+    conversationId: string,
+    text: string,
+    opts: { channel?: string; attachments?: AttachmentPart[]; context?: string; onCapture?: (c: CaptureResult) => void } = {},
+  ): Promise<Message> {
     const conv = this.d.store.getConversation(conversationId);
     if (!conv) throw new LocalizedError("conversation.notFound");
     // Secrets come out first: message hooks, the stored message and the model only see vault:// references.
@@ -168,7 +185,9 @@ export class SessionRunner {
     const hooked = await this.d.hooks.run("message.in", { conversationId, text, channel: opts.channel }, (p, r) =>
       r.block ? { blocked: r.block } : r.text !== undefined ? { ...p, text: r.text } : p,
     );
-    const msg = this.d.store.addMessage({ conversationId, role: "user", parts: [{ type: "text", text }], status: "complete", channel: opts.channel });
+    const attachments = opts.attachments ?? [];
+    const parts: MessagePart[] = [...(text || !attachments.length ? [{ type: "text" as const, text }] : []), ...attachments];
+    const msg = this.d.store.addMessage({ conversationId, role: "user", parts, status: "complete", channel: opts.channel });
     if (cap.withheld) this.d.store.addMessage({ conversationId, role: "system", parts: [{ type: "error", message: t("secrets.withheld") }], status: "complete" });
     if (hooked.blocked) {
       this.d.store.addMessage({ conversationId, role: "system", parts: [{ type: "error", message: t("message.blocked", { reason: hooked.blocked }) }], status: "complete" });
@@ -178,15 +197,52 @@ export class SessionRunner {
     if (cap.answered?.waited && text.trim() === `vault://${cap.answered.request.vaultId}`) return msg;
     const note = captureNote(cap);
     const expanded = this.d.skills.expandCommand(hooked.payload.text) ?? hooked.payload.text;
-    const prompt = note ? `${expanded}\n\n${note}` : expanded;
+    const prompt = [opts.context?.trim(), note ? `${expanded}\n\n${note}` : expanded].filter(Boolean).join("\n");
     // From the web UI: the user's words travel with a mirrored reply, so the phone shows the exchange.
     const fromWeb = !opts.channel || opts.channel === WEB_CHANNEL;
+    const files = attachments.length ? { attachments } : {};
     if (conv.kind === "group") {
-      this.startGroupRound(conv, hooked.payload.text, prompt, msg.id, { replyChannel: opts.channel });
+      this.startGroupRound(conv, hooked.payload.text, prompt, msg.id, { replyChannel: opts.channel, ...files });
       return msg;
     }
-    void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { replyChannel: opts.channel, ...(fromWeb ? { quote: text } : {}) }));
+    const quote = [text, ...attachments.map((a) => `📎 ${a.name}`)].filter(Boolean).join("\n");
+    // Voice notes become words first, in the queue: the turn waits for them, later messages wait for the turn.
+    void this.enqueue(conversationId, async () =>
+      this.runTurn(conv, prompt, { replyChannel: opts.channel, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}), ...(fromWeb ? { quote } : {}) }),
+    );
     return msg;
+  }
+
+  /** Voice notes and audio files in a user message become words: stored on the parts (the chat shows them), and why not when they cannot. */
+  private async transcribeParts(messageId: string, parts: AttachmentPart[]): Promise<{ attachments: AttachmentPart[]; speech: Record<string, string> }> {
+    const speech: Record<string, string> = {};
+    const todo = parts.filter((p) => isSpeech(p) && p.transcript === undefined);
+    if (!todo.length) return { attachments: parts, speech };
+    const t = this.d.transcriber;
+    if (!t?.engine()) {
+      for (const p of todo) speech[p.path] = SPEECH_NOT_SET_UP;
+      return { attachments: parts, speech };
+    }
+    const root = join(this.d.config.dataDir, "workspaces");
+    const out: AttachmentPart[] = [];
+    for (const p of parts) {
+      if (!todo.includes(p)) out.push(p);
+      else if (p.durationSec !== undefined && p.durationSec > MAX_AUTO_TRANSCRIBE_SEC) {
+        speech[p.path] = "not transcribed: longer than 10 minutes (transcribe_audio can do it if the user wants)";
+        out.push(p);
+      } else {
+        try {
+          out.push({ ...p, transcript: await t.transcribe(join(root, p.path), p.mimeType) });
+        } catch (e: any) {
+          speech[p.path] = `could not transcribe it: ${e?.message ?? e}`;
+          out.push(p);
+        }
+      }
+    }
+    const done = new Map(out.filter((p) => p.transcript !== undefined).map((p) => [p.path, p.transcript!]));
+    const m = done.size ? this.d.store.getMessage(messageId) : undefined;
+    if (m) this.d.store.updateMessage(m.id, { parts: m.parts.map((p) => (p.type === "attachment" && done.has(p.path) ? { ...p, transcript: done.get(p.path) } : p)) });
+    return { attachments: out, speech };
   }
 
   // ---------- group chats ----------
@@ -213,15 +269,23 @@ export class SessionRunner {
   }
 
   /** The user wrote in a group: the members it mentions answer one after another (or the lead), in the conversation queue. */
-  private startGroupRound(conv: Conversation, text: string, prompt: string, triggerId: string, opts: { replyChannel?: string }): void {
+  private startGroupRound(conv: Conversation, text: string, prompt: string, triggerId: string, opts: { replyChannel?: string; attachments?: AttachmentPart[] }): void {
     const epoch = this.groupEpoch.get(conv.id) ?? 0;
     const speakers = firstSpeakers(text, this.groupMembers(conv));
     void this.enqueue(conv.id, () => this.runGroupRound(conv.id, epoch, speakers, prompt, triggerId, opts));
   }
 
-  private async runGroupRound(conversationId: string, epoch: number, speakers: string[], prompt: string, triggerId: string, opts: { replyChannel?: string }): Promise<void> {
+  private async runGroupRound(
+    conversationId: string,
+    epoch: number,
+    speakers: string[],
+    prompt: string,
+    triggerId: string,
+    opts: { replyChannel?: string; attachments?: AttachmentPart[]; speech?: Record<string, string> },
+  ): Promise<void> {
     const stopped = () => (this.groupEpoch.get(conversationId) ?? 0) !== epoch;
     if (stopped()) return;
+    if (opts.attachments?.length) opts = { ...opts, ...(await this.transcribeParts(triggerId, opts.attachments)) };
     const queue = [...speakers];
     const handedBy = new Map<string, string>();
     let handoffs = 0;
@@ -320,7 +384,7 @@ export class SessionRunner {
   }
 
   /** Messages kept while no brain worked: the agent answers them now. */
-  resume(conversationId: string, prompt: string, opts: { replyChannel?: string; quote?: string }): void {
+  resume(conversationId: string, prompt: string, opts: { replyChannel?: string; quote?: string; attachments?: AttachmentPart[]; speech?: Record<string, string> }): void {
     const conv = this.d.store.getConversation(conversationId);
     if (!conv) return;
     void this.enqueue(conv.id, () => this.runTurn(conv, prompt, opts));
@@ -818,7 +882,7 @@ export class SessionRunner {
       // No brain of the agent is set up yet: the setup card instead of an error, and the message waits for a brain.
       // (A group chat's round goes on with the next member instead.)
       if (!ref && setupOnly && !tried.size && !task && this.d.setup && conv.kind !== "group") {
-        this.d.setup.hold(conv.id, agent.id, prompt, { replyChannel: opts.replyChannel, quote: opts.quote });
+        this.d.setup.hold(conv.id, agent.id, prompt, { replyChannel: opts.replyChannel, quote: opts.quote, attachments: opts.attachments, speech: opts.speech });
         this.addSetupCard(conv.id);
         return { text: "", error: t("chat.needsBrain"), awaitingApproval: false };
       }
@@ -864,9 +928,20 @@ export class SessionRunner {
         handoff = false;
       }
 
+      let paths: string[] = [];
+      if (opts.attachments?.length) {
+        const local = parseBrainRef(row!.brainRef).machineId === "local";
+        const seen = local ? forSession(opts.attachments, join(this.d.config.dataDir, "workspaces"), this.workspacePath(row!)) : opts.attachments.map((part): SessionFile => ({ part }));
+        const files = seen.map((f) => (opts.speech?.[f.part.path] ? { ...f, speech: opts.speech[f.part.path] } : f));
+        text = [text, attachmentNote(files, { remote: !local })].filter(Boolean).join("\n\n");
+        paths = files.flatMap((f) => (f.path ? [f.path] : []));
+      }
+      const now = this.clock.line(row!.id, this.d.settings.get().timezone);
+      if (now) text = `${now}\n${text}`;
+
       this.brainLoad.set(key, (this.brainLoad.get(key) ?? 0) + 1);
       try {
-        const r = await this.streamTurn(conv, row!, live!, agent, text, task, opts.replyChannel);
+        const r = await this.streamTurn(conv, row!, live!, agent, { text, ...(paths.length ? { attachments: paths } : {}) }, task, opts.replyChannel);
         if (r.retry) {
           lastError = r.error ?? lastError;
           if (r.limited) earliestReset = r.limited.resetAt ?? earliestReset;
@@ -888,7 +963,7 @@ export class SessionRunner {
     row: SessionRow,
     live: Live,
     agent: AgentDef,
-    text: string,
+    turn: BrainTurn,
     task: Task | undefined,
     replyChannel?: string,
   ): Promise<TurnResult & { retry?: boolean }> {
@@ -965,7 +1040,7 @@ export class SessionRunner {
     };
 
     try {
-      await live.handle.send({ text }, onEvent);
+      await live.handle.send(turn, onEvent);
     } catch (e: any) {
       error = e.message;
       fatal = true;

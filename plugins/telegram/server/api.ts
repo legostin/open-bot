@@ -113,6 +113,26 @@ export class TelegramApi {
     return body.result as T;
   }
 
+  /** A file the user sent, by its file_id: getFile, then the download (bots get files up to 20 MB). */
+  async download(fileId: string, opts: { maxBytes: number; signal?: AbortSignal }): Promise<{ data: Uint8Array; path: string }> {
+    const f = await this.call<{ file_path?: string; file_size?: number }>("getFile", { file_id: fileId }, { signal: opts.signal });
+    if (!f.file_path) throw new TelegramError(400, "the file is not available for download");
+    if (f.file_size && f.file_size > opts.maxBytes) throw new TelegramError(400, "file is too big");
+    const signals = [AbortSignal.timeout(120_000)];
+    if (opts.signal) signals.push(opts.signal);
+    let res: Response;
+    try {
+      res = await fetch(`${this.base}/file/bot${this.token}/${f.file_path}`, { signal: AbortSignal.any(signals) });
+    } catch (e: any) {
+      // Never include the URL (it contains the token).
+      throw new TelegramError(0, `download failed${e?.cause?.code ? ` (${e.cause.code})` : ""}`);
+    }
+    if (!res.ok) throw new TelegramError(res.status, `download failed (HTTP ${res.status})`);
+    const data = new Uint8Array(await res.arrayBuffer());
+    if (data.length > opts.maxBytes) throw new TelegramError(400, "file is too big");
+    return { data, path: f.file_path };
+  }
+
   /** Same as call() (upload() when there are files), but waits and retries once when Telegram asks to slow down (429). */
   async send<T = any>(method: string, params: Record<string, unknown>, files: UploadFile[] = []): Promise<T> {
     const go = () => (files.length ? this.upload<T>(method, params, files) : this.call<T>(method, params));

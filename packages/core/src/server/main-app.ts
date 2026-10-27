@@ -206,6 +206,7 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
       kind: "web",
       bootstrap: (req) => ({ csrf: req.authSession!.csrf }),
       wsAllowed: (req) => originAllowed(req, origins),
+      authenticate: guard,
     });
   });
 

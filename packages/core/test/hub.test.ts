@@ -1,6 +1,7 @@
 // End-to-end tests of the hub with a scripted brain plugin (test/fixtures/plugins/fakebrain).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
+import { createServer as createHttpServer, request } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -68,6 +69,20 @@ class Client {
     }
     return { status: r.status, json };
   }
+  /** Raw bytes, as the web's file upload sends them. */
+  async upload(path: string, data: Buffer, headers: Record<string, string> = {}): Promise<{ status: number; json: any }> {
+    const r = await fetch(this.base + path, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", origin: this.origin, cookie: this.cookie, "x-csrf": this.csrf, ...headers },
+      body: data,
+    });
+    const text = await r.text();
+    try {
+      return { status: r.status, json: JSON.parse(text) };
+    } catch {
+      return { status: r.status, json: text };
+    }
+  }
   async req(method: string, path: string, body?: unknown): Promise<any> {
     const r = await this.raw(method, path, body);
     if (r.status >= 400) throw new Error(`${method} ${path} → ${r.status} ${JSON.stringify(r.json)}`);
@@ -134,6 +149,144 @@ describe("hub (integration)", () => {
     await web.req("POST", `/api/conversations/${conv}/messages`, { text: "hello there" });
     const m = await lastReply(conv, /fake heard: hello there/);
     expect(m.brainRef).toBe("fake@local");
+  });
+
+  it("tells a brain session the current time on its first turn, not on every turn", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "time" });
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { text: "TIME?" });
+    await lastReply(c.id, /^fake time: \[Now: \w+day, \d{1,2} \w+ \d{4}, \d\d:\d\d \([^)]+\)\]$/);
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { text: "TIME?" });
+    await lastReply(c.id, /^fake time: none$/);
+  });
+
+  it("takes files with a message and hands the brain their paths and a note", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "files" });
+    const up = await web.upload(`/api/conversations/${c.id}/attachments?name=${encodeURIComponent("чек.jpg")}&type=image/jpeg`, Buffer.from("jpeg bytes"));
+    expect(up.status).toBe(200);
+    expect(up.json).toEqual({ type: "attachment", path: `assistant/${c.id}/attachments/чек.jpg`, name: "чек.jpg", mimeType: "image/jpeg", size: 10 });
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { text: "what is this?", attachments: [up.json.path] });
+    const r = await lastReply(c.id, /fake files:/);
+    expect(r.parts.find((p: any) => p.type === "text").text).toBe(
+      "fake files: attachments/чек.jpg:here | note: [The user attached a file, saved in your working folder: / - attachments/чек.jpg (image/jpeg, 10 B) / Open it with your file tools when the request needs it.]",
+    );
+    const msgs: any[] = await web.req("GET", `/api/conversations/${c.id}/messages`);
+    expect(msgs.find((m) => m.role === "user").parts).toEqual([{ type: "text", text: "what is this?" }, up.json]);
+    expect((await web.raw("GET", `/api/files?path=${encodeURIComponent(up.json.path)}`)).json).toBe("jpeg bytes");
+  });
+
+  it("sends files without words, and refuses files that are not the conversation's, too many or too large", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "only files" });
+    const other = await web.req("POST", "/api/conversations", { title: "other" });
+    const a = (await web.upload(`/api/conversations/${c.id}/attachments?name=a.pdf`, Buffer.from("%PDF"))).json;
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { attachments: [a.path] });
+    await lastReply(c.id, /^fake files: attachments\/a\.pdf:here \| note: \[The user attached a file/);
+    const refused = async (id: string, body: unknown) => (await web.raw("POST", `/api/conversations/${id}/messages`, body)).json.error;
+    expect(await refused(other.id, { attachments: [a.path] })).toBe("This file is not an attachment of the conversation");
+    expect(await refused(c.id, { attachments: [`assistant/${c.id}/attachments/../../x`] })).toBe("This file is not an attachment of the conversation");
+    expect(await refused(c.id, { attachments: Array.from({ length: 11 }, (_, i) => `p${i}`) })).toBe("At most 10 files per message");
+    expect(await refused(c.id, { text: "  " })).toBe("The message is empty");
+    // The hub answers from the declared length, before the body: send its start only.
+    const big = await new Promise<{ status: number; json: any }>((resolve, reject) => {
+      const req = request(
+        `${hub.config.publicUrl}/api/conversations/${c.id}/attachments?name=big.bin`,
+        { method: "POST", headers: { "content-type": "application/octet-stream", "content-length": String(25 * 1024 * 1024 + 1), origin: web.origin, cookie: web.cookie, "x-csrf": web.csrf } },
+        (res) => {
+          let body = "";
+          res.on("data", (d) => (body += d));
+          res.on("end", () => {
+            req.destroy();
+            resolve({ status: res.statusCode!, json: JSON.parse(body) });
+          });
+        },
+      );
+      req.on("error", reject);
+      req.write(Buffer.alloc(1024));
+    });
+    expect(big).toEqual({ status: 413, json: { error: "The file is larger than 25 MB" } });
+    expect((await web.upload(`/api/conversations/${c.id}/attachments?name=x.txt`, Buffer.from("x"), { "x-csrf": "wrong" })).status).toBe(403);
+    expect((await web.upload(`/api/conversations/${c.id}/attachments?name=x.txt`, Buffer.alloc(0))).json.error).toBe("The file is empty");
+    expect((await web.upload("/api/conversations/nope/attachments?name=x.txt", Buffer.from("x"))).status).toBe(404);
+  });
+
+  it("serves workspace files sandboxed: an uploaded page cannot run script on the hub's origin", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "page" });
+    const page = (await web.upload(`/api/conversations/${c.id}/attachments?name=evil.html`, Buffer.from("<script>fetch('/api/bootstrap')</script>"))).json;
+    const r = await fetch(`${hub.config.publicUrl}/api/files?path=${encodeURIComponent(page.path)}`, { headers: { cookie: web.cookie } });
+    expect(r.headers.get("content-security-policy")).toMatch(/^sandbox; default-src 'none'/);
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+    const pdf = (await web.upload(`/api/conversations/${c.id}/attachments?name=doc.pdf`, Buffer.from("%PDF-1.4"))).json;
+    const p = await fetch(`${hub.config.publicUrl}/api/files?path=${encodeURIComponent(pdf.path)}`, { headers: { cookie: web.cookie } });
+    expect(p.headers.get("content-type")).toBe("application/pdf");
+    expect(p.headers.get("content-security-policy")).toBeNull();
+  });
+
+  it("takes a channel's files inline (a Telegram voice note)", async () => {
+    const call = createCoreCall(hub);
+    const voice = { data: Buffer.from("OggS voice").toString("base64"), mimeType: "audio/ogg", kind: "voice", durationSec: 12 };
+    const r = (await call("fakebrain", "channels.inbound", { channel: "test", text: "", files: [voice] })) as any;
+    const m = await lastReply(r.conversationId, /^fake files: attachments\/voice-\d{8}-\d{6}\.ogg:here \| note: .*\(audio\/ogg, 10 B, voice message 0:12\)/);
+    expect(m.channel).toBe("test");
+    const huge = { data: Buffer.alloc(25 * 1024 * 1024 + 1).toString("base64") };
+    await expect(call("fakebrain", "channels.inbound", { channel: "test", text: "x", files: [huge] })).rejects.toThrow(/too large/);
+    expect(await call("fakebrain", "channels.inbound", { channel: "test", text: " ", files: [] })).toEqual({ ignored: true });
+    // Context for the model only: the brain reads it before the words, the chat shows the words alone.
+    const own = await web.req("POST", "/api/conversations", { title: "forwarded" });
+    const fwd = (await call("fakebrain", "channels.inbound", { channel: "test", conversationId: own.id, text: "ECHO? forwarded", context: "[Forwarded from Оля]" })) as any;
+    await lastReply(fwd.conversationId, /^fake saw: \[Forwarded from Оля\]$/);
+    const msgs: any[] = await web.req("GET", `/api/conversations/${fwd.conversationId}/messages`);
+    expect(msgs.find((m) => m.id === fwd.messageId).parts).toEqual([{ type: "text", text: "ECHO? forwarded" }]);
+  });
+
+  it("transcribes voice messages before the agent's turn, says why when it cannot, and lets the agent ask again", async () => {
+    // A fake OpenAI-compatible speech-to-text server: "heard <file name>", or 401 for the model "broken".
+    const stt = createHttpServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        const body = Buffer.concat(chunks).toString("latin1");
+        res.setHeader("content-type", "application/json");
+        if (body.includes("broken")) return res.writeHead(401).end(JSON.stringify({ error: { message: "Invalid API key" } }));
+        res.end(JSON.stringify({ text: `heard ${/filename="([^"]+)"/.exec(body)?.[1]}` }));
+      });
+    });
+    await new Promise<void>((r) => stt.listen(0, "127.0.0.1", r));
+    const sttUrl = `http://127.0.0.1:${(stt.address() as any).port}/v1`;
+    try {
+      const call = createCoreCall(hub);
+      const voice = { data: Buffer.from("OggS").toString("base64"), mimeType: "audio/ogg", kind: "voice", durationSec: 3 };
+      const say = async (title: string) => {
+        const c = await web.req("POST", "/api/conversations", { title });
+        await call("fakebrain", "channels.inbound", { channel: "test", conversationId: c.id, text: "", files: [voice] });
+        const m = await lastReply(c.id, /^fake files:/);
+        return { id: c.id, reply: m.parts.find((p: any) => p.type === "text").text as string };
+      };
+      expect((await web.raw("PATCH", "/api/settings", { transcription: { provider: "loud" } })).json.error).toMatch(/^Speech-to-text settings are wrong: transcription.provider must be one of/);
+
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "custom", baseUrl: sttUrl, model: "small" } });
+      const ok = await say("voice");
+      expect(ok.reply).toMatch(/- attachments\/(voice-\d{8}-\d{6}\.ogg) \(audio\/ogg, 4 B, voice message 0:03\), transcript: "heard voice-\d{8}-\d{6}\.ogg"/);
+      const stored: any[] = await web.req("GET", `/api/conversations/${ok.id}/messages`);
+      expect(stored.find((m) => m.role === "user").parts[0].transcript).toMatch(/^heard voice-/);
+
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "custom", baseUrl: sttUrl, model: "broken" } });
+      expect((await say("voice, failing")).reply).toContain("voice message 0:03), could not transcribe it: 127.0.0.1:");
+      expect((await say("voice, failing 2")).reply).toContain("answered 401: Invalid API key");
+
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "off" } });
+      const none = await say("voice, nothing set up");
+      expect(none.reply).toContain("voice message 0:03), no speech-to-text is set up / You cannot hear voice messages until speech-to-text is set up.");
+
+      // The agent asks again once it is set up.
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "custom", baseUrl: sttUrl, model: "small" } });
+      await web.upload(`/api/conversations/${none.id}/attachments?name=memo.m4a`, Buffer.from("m4a"));
+      await web.req("POST", `/api/conversations/${none.id}/messages`, { text: 'CALL transcribe_audio {"path":"attachments/memo.m4a"}' });
+      await lastReply(none.id, /^tool said: Transcript: heard memo\.m4a$/);
+      await web.req("POST", `/api/conversations/${none.id}/messages`, { text: 'CALL transcribe_audio {"path":"../../etc/passwd"}' });
+      await lastReply(none.id, /^tool said: \.\.\/\.\.\/etc\/passwd: (outside your workspace|no such file in your workspace)$/);
+    } finally {
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "auto" } });
+      stt.close();
+    }
   });
 
   it("routes channel messages to the default agent's dialog and shows it in the team", async () => {

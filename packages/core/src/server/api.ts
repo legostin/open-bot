@@ -13,6 +13,7 @@ import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
+import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
 
 export interface ApiOptions {
   kind: "web" | "device";
@@ -22,6 +23,8 @@ export interface ApiOptions {
   wsAllowed(req: FastifyRequest): boolean;
   /** Every realtime socket as it opens (the device port closes a revoked phone's sockets). */
   onSocket?(socket: WebSocket, req: FastifyRequest): void;
+  /** The caller's auth hook: a file upload runs it before its body (up to 25 MB) is read. */
+  authenticate(req: FastifyRequest): Promise<void>;
 }
 
 export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptions): Promise<void> {
@@ -102,10 +105,41 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     return hub.store.listMessages((req.params as any).id, { before: q.before, limit: Math.min(Number(q.limit ?? 100), 500) });
   });
   api.post("/api/conversations/:id/messages", async (req) => {
-    const b = (req.body ?? {}) as { text?: string };
+    const id = (req.params as any).id;
+    const b = (req.body ?? {}) as { text?: string; attachments?: unknown };
     const text = String(b.text ?? "").trim();
-    if (!text) throw new HttpError(400, "message.empty");
-    return hub.runner.userMessage((req.params as any).id, text, { channel: opts.kind === "device" ? "app" : "web" });
+    // Paths from POST .../attachments: only this conversation's own files.
+    const paths = Array.isArray(b.attachments) ? [...new Set(b.attachments)] : [];
+    if (paths.length > MAX_ATTACHMENTS) throw new HttpError(400, "attachment.tooMany", { max: MAX_ATTACHMENTS });
+    const attachments: AttachmentPart[] = [];
+    if (paths.length) {
+      const conv = hub.store.getConversation(id);
+      if (!conv) throw new HttpError(404, "conversation.notFound");
+      for (const p of paths) {
+        const part = attachmentFromPath(join(cfg.dataDir, "workspaces"), conv, p);
+        if (!part) throw new HttpError(400, "attachment.invalid");
+        attachments.push(part);
+      }
+    }
+    if (!text && !attachments.length) throw new HttpError(400, "message.empty");
+    return hub.runner.userMessage(id, text, { channel: opts.kind === "device" ? "app" : "web", ...(attachments.length ? { attachments } : {}) });
+  });
+  // A file for the next message: raw bytes, saved in the conversation's workspace (attachments/).
+  await api.register(async (up) => {
+    // Signed in before a 25 MB body is read, not after.
+    up.addHook("onRequest", opts.authenticate);
+    up.addContentTypeParser("application/octet-stream", { parseAs: "buffer", bodyLimit: MAX_ATTACHMENT_BYTES }, (_req, body, done) => done(null, body));
+    up.setErrorHandler((err: any) => {
+      throw err?.code === "FST_ERR_CTP_BODY_TOO_LARGE" ? new HttpError(413, "attachment.tooLarge", { max: formatSize(MAX_ATTACHMENT_BYTES) }) : err;
+    });
+    up.post("/api/conversations/:id/attachments", { bodyLimit: MAX_ATTACHMENT_BYTES }, async (req) => {
+      const conv = hub.store.getConversation((req.params as any).id);
+      if (!conv) throw new HttpError(404, "conversation.notFound");
+      if (!Buffer.isBuffer(req.body)) throw new HttpError(415, "attachment.notBytes");
+      if (!req.body.length) throw new HttpError(400, "attachment.empty");
+      const q = req.query as { name?: string; type?: string };
+      return saveAttachment(join(cfg.dataDir, "workspaces"), conv, { name: q.name, mimeType: q.type, data: req.body });
+    });
   });
   api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
 
@@ -392,6 +426,11 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   // ----- settings -----
   api.get("/api/settings", async () => hub.settings.get());
   api.patch("/api/settings", async (req) => hub.updateSettings((req.body ?? {}) as Record<string, unknown>, "user"));
+  // Which speech-to-text service voice messages go to now (none: not set up).
+  api.get("/api/transcription", async () => {
+    const e = hub.transcriber.engine();
+    return { engine: e ? { label: e.label, model: e.model } : null };
+  });
 
   // ----- notifications, approvals (count only; resolving happens in the console) -----
   api.get("/api/notifications", async (req) => hub.notifier.list(Math.min(Number((req.query as any).limit ?? 100), 500)));
@@ -404,6 +443,10 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     const p = String((req.query as any).path ?? "");
     const file = safeFile(join(cfg.dataDir, "workspaces"), p);
     if (!file) throw new HttpError(404, "file.notFound");
+    // Files come from agents, web pages and whoever writes to the user: one opened in a tab (a page, an SVG)
+    // gets an opaque origin without script. A PDF keeps the browser's own viewer, which never runs as the hub.
+    reply.header("x-content-type-options", "nosniff");
+    if (!/\.pdf$/i.test(file)) reply.header("content-security-policy", "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'");
     return sendFile(reply, file, { download: (req.query as any).download === "1" });
   });
 

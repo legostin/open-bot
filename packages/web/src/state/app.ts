@@ -394,9 +394,11 @@ export async function loadOlder(id: string): Promise<void> {
   }
 }
 
-export async function sendMessage(id: string, text: string): Promise<void> {
-  const m = await api.post<Message>(`/api/conversations/${encodeURIComponent(id)}/messages`, { text });
-  if (m && m.id) patchConv(id, (c) => ({ ...c, messages: upsertMessage(c.messages, m) }));
+/** A message with the paths of files uploaded for it (state/attachments.ts). */
+export async function sendMessage(id: string, text: string, attachments: string[] = []): Promise<void> {
+  const m = await api.post<Message>(`/api/conversations/${encodeURIComponent(id)}/messages`, attachments.length ? { text, attachments } : { text });
+  // The live events may already have a newer copy (a voice note's transcript): the reply only fills a gap.
+  if (m && m.id) patchConv(id, (c) => (c.messages.some((x) => x.id === m.id) ? c : { ...c, messages: upsertMessage(c.messages, m) }));
 }
 
 export async function interrupt(id: string): Promise<boolean> {

@@ -92,7 +92,7 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls): Promise<FastifyI
   app.addHook("onClose", async () => offRevoke());
 
   await app.register(async (api) => {
-    api.addHook("preHandler", async (req) => {
+    const authenticate = async (req: FastifyRequest) => {
       const device = hub.devices.authenticate(req.headers.authorization);
       if (device) {
         req.device = device;
@@ -106,9 +106,11 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls): Promise<FastifyI
       }
       req.device = web.device;
       req.webCsrf = web.csrf;
-    });
+    };
+    api.addHook("preHandler", authenticate);
 
     await registerApi(api, hub, {
+      authenticate,
       kind: "device",
       bootstrap: (req) => ({ device: req.device, hubName: hubName(), ...(req.webCsrf ? { csrf: req.webCsrf } : {}) }),
       // The app's socket carries its token; the page's carries the cookie and must come from the page itself.

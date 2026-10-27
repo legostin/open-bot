@@ -2,18 +2,31 @@
 
 import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { CoreMethod } from "@owlbot/shared";
+import type { AttachmentKind, CoreMethod } from "@owlbot/shared";
 import { parseBrainRef } from "@owlbot/shared";
 import type { Hub } from "./app.ts";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, safeFileName, saveAttachment, type IncomingFile } from "./attachments.ts";
 
 /** Largest file a plugin may hand to a workspace. */
 const MAX_DELIVER_BYTES = 1024 * 1024 * 1024;
 
-/** Plain file name: no path separators, control characters or leading dots. */
-export function safeFileName(name: string): string {
-  const base = String(name ?? "").split(/[\\/]/).pop() ?? "";
-  const clean = base.replace(/[\u0000-\u001f<>:"|?*]/g, "_").replace(/^[.\s]+/, "").trim().slice(0, 150);
-  return clean || "file";
+const KINDS = new Set<AttachmentKind>(["photo", "voice", "audio", "video", "file"]);
+
+/** Files a channel passes with a message (base64), checked against the same limits as the web's uploads. */
+function incomingFiles(raw: unknown): IncomingFile[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new Error("files must be an array");
+  if (raw.length > MAX_ATTACHMENTS) throw new Error(`at most ${MAX_ATTACHMENTS} files per message`);
+  return raw.map((f: any) => {
+    const data = Buffer.from(String(f?.data ?? ""), "base64");
+    if (data.length > MAX_ATTACHMENT_BYTES) throw new Error(`file too large (over ${MAX_ATTACHMENT_BYTES} bytes)`);
+    const out: IncomingFile = { data };
+    if (typeof f?.name === "string") out.name = f.name;
+    if (typeof f?.mimeType === "string") out.mimeType = f.mimeType;
+    if (KINDS.has(f?.kind)) out.kind = f.kind;
+    if (typeof f?.durationSec === "number" && Number.isFinite(f.durationSec)) out.durationSec = f.durationSec;
+    return out;
+  });
 }
 
 export function createCoreCall(hub: Hub) {
@@ -32,10 +45,17 @@ export function createCoreCall(hub: Hub) {
         const conv = p.conversationId ? hub.store.getConversation(p.conversationId) : hub.store.agentConversation(hub.settings.get().defaultAgent);
         if (!conv) throw new Error("conversation not found");
         const text = String(p.text ?? "").trim();
-        if (!text) return { ignored: true };
-        if (text === "/stop") return { interrupted: hub.runner.interrupt(conv.id) };
+        const files = incomingFiles(p.files);
+        if (!text && !files.length) return { ignored: true };
+        if (text === "/stop" && !files.length) return { interrupted: hub.runner.interrupt(conv.id) };
+        const attachments = files.map((f) => saveAttachment(join(hub.config.dataDir, "workspaces"), conv, f));
         let secrets = 0;
-        const m = await hub.runner.userMessage(conv.id, text, { channel: String(p.channel ?? pluginId), onCapture: (c) => (secrets = c.stored.length + c.withheld) });
+        const m = await hub.runner.userMessage(conv.id, text, {
+          channel: String(p.channel ?? pluginId),
+          ...(attachments.length ? { attachments } : {}),
+          ...(typeof p.context === "string" && p.context.trim() ? { context: p.context.slice(0, 2000) } : {}),
+          onCapture: (c) => (secrets = c.stored.length + c.withheld),
+        });
         // secrets > 0: the channel should delete the user's original message, it still holds the value.
         return { messageId: m.id, conversationId: conv.id, ...(secrets ? { secrets } : {}) };
       }
