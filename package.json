@@ -22,6 +22,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "build:node": "node scripts/build-node-bundle.mjs",
+    "build:tailnet": "node scripts/build-tailnet.mjs",
     "package:desktop": "node packaging/desktop/build.mjs"
   },
   "devDependencies": {
