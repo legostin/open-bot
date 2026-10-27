@@ -160,6 +160,8 @@ export class EgressProxy {
     });
 
     server.on("connect", (req, clientSocket: net.Socket, head) => {
+      // A client may reset the connection at any moment, a refused one too: never let that error go unheard.
+      clientSocket.on("error", () => {});
       const raw = req.url ?? "";
       const sep = raw.lastIndexOf(":");
       const host = (sep > 0 ? raw.slice(0, sep) : raw).replace(/^\[|\]$/g, "");
@@ -171,7 +173,6 @@ export class EgressProxy {
         clientSocket.end(`HTTP/1.1 ${token ? "403 Forbidden" : "407 Proxy Authentication Required"}\r\nProxy-Authenticate: Basic realm=owlbot\r\n\r\n`);
         return;
       }
-      clientSocket.on("error", () => {});
       this.resolveTarget(host).then(
         (addrs) => {
           const upstream = net.connect({ host, port, lookup: pinnedLookup(addrs), autoSelectFamily: true }, () => {
