@@ -1,18 +1,20 @@
 // One integration of the library, on its page and in the chat (hub_integration_connect): its status and the button
 // that moves it forward. Google ones sign in through the hub (a new tab; a pasted return address when the browser
-// cannot reach the hub on 127.0.0.1), setup ones open their plugin's setup card, an off one turns on.
+// cannot reach the hub on 127.0.0.1), setup ones open their plugin's setup card, an off one turns on, and access from
+// anywhere shows its own steps (RemoteAccessCard).
 
 import { useState } from "react";
 import { CheckCircle2, ExternalLink } from "lucide-react";
 import type { IntegrationView } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
+import { openExternal } from "../lib/external";
 import { primaryAction, STATUS_TONE } from "../lib/integrations";
-import { native } from "../lib/native";
 import { loadIntegrations, useIntegrations } from "../state/integrations";
 import { toast } from "../state/toast";
 import { t, type MessageKey } from "../i18n";
 import { Icon } from "./icon";
 import { PluginSetupCard, VaultGate } from "./SecretCards";
+import { RemoteAccessCard } from "./RemoteAccessCard";
 import { Badge, Button, cx, Input, Spinner } from "./ui";
 
 const STATUS_LABEL: Record<IntegrationView["status"], MessageKey> = {
@@ -23,15 +25,6 @@ const STATUS_LABEL: Record<IntegrationView["status"], MessageKey> = {
   unavailable: "integrations.status.unavailable",
 };
 
-/** Opens the sign-in where the user can finish it: the system browser in the apps, a new tab in a browser. */
-function openSignIn(url: string): void {
-  if (native) {
-    native.openURL(url).catch((e: unknown) => toast(errorText(e), "error"));
-    return;
-  }
-  window.open(url, "_blank", "noopener");
-}
-
 function GoogleSignIn({ view, conversationId }: { view: IntegrationView; conversationId?: string }) {
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
@@ -40,7 +33,7 @@ function GoogleSignIn({ view, conversationId }: { view: IntegrationView; convers
     setBusy(true);
     try {
       const { url } = await api.post<{ url: string }>("/api/connections/google/start", { integration: view.id, conversationId });
-      openSignIn(url);
+      openExternal(url);
       setWaiting(true);
     } catch (e) {
       toast(errorText(e), "error");
@@ -117,16 +110,18 @@ export function IntegrationCard({ view, conversationId, className }: { view: Int
             </Badge>
           </div>
           <p className="mt-0.5 text-sm text-muted">{view.summary}</p>
-          {view.account && (
+          {/* Access from anywhere shows its link and steps in its own body. */}
+          {view.account && view.connect !== "remote" && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">
               {view.status === "connected" && <CheckCircle2 className="size-3.5 text-success" />}
               <span className="truncate">{view.account}</span>
             </p>
           )}
-          {view.detail && view.status !== "connected" && <p className="mt-1 text-xs text-muted">{view.detail}</p>}
+          {view.detail && view.status !== "connected" && (view.connect !== "remote" || view.status === "unavailable") && <p className="mt-1 text-xs text-muted">{view.detail}</p>}
         </div>
       </div>
 
+      {view.connect === "remote" && <RemoteAccessCard />}
       {action === "turnOn" && (
         <div>
           <Button size="sm" loading={busy} onClick={() => void run(() => api.post(`/api/integrations/${encodeURIComponent(view.id)}/enabled`, { enabled: true }))}>

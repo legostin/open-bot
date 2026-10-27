@@ -595,6 +595,8 @@ export interface RemoteView {
   keyExpiry?: string;
   /** Why it is unavailable or failing (in the reader's language). */
   error?: string;
+  /** The link as a QR code (SVG), from GET /api/remote while it is up. */
+  qrSvg?: string;
 }
 
 // ---------- Vault ----------

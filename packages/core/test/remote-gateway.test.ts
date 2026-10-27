@@ -209,9 +209,14 @@ describe("the link's gateways", () => {
     expect((await viaLink(ports.device, "GET", "/api/devices/addresses", { host: `${LINK}:8443` })).status).toBe(401);
   });
 
-  it("shows the link in the library", async () => {
+  it("shows the link in the library, as a QR, and offers it to other machines", async () => {
     const lib = await web.req("GET", "/api/integrations");
     expect(lib.json[0]).toMatchObject({ id: "remote-access", status: "connected", account: `https://${LINK}` });
+    const remote = await web.req("GET", "/api/remote");
+    expect(remote.json).toMatchObject({ state: "running", url: `https://${LINK}`, account: "anna@example.com" });
+    expect(remote.json.qrSvg).toMatch(/^<svg/);
+    const machine = await web.req("POST", "/api/machines/pairing-code", {});
+    expect(machine.json.hubUrl).toBe(`https://${LINK}`);
   });
 
   it("pauses sign-in through the link after 30 failures from anywhere, while the computer's own works", async () => {
