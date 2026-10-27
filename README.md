@@ -104,6 +104,14 @@ Change a group's name and members with the button next to its name. Group chats 
 
 Telegram receives replies (with formatting: bold, lists, code, tables), notifications, the digest, and approval cards with buttons. Pictures in a reply arrive as photos or an album, a map as a location pin. Send the bot photos, albums, files and voice messages up to 20 MB (Telegram's limit for bots) or share a place: the agent gets them in its working folder. A forwarded message or a reply tells the agent where it came from or what it answers. Chat commands: `/help`, `/tasks`, `/stop`. The full details of an action are shown only in the console unless you turn on the `channelApprovalDetails` setting.
 
+## Integrations
+
+**Settings → Integrations** lists the services your agents work with, as cards: Google Calendar, Telegram, web search and the browser for now. Each card shows its status and the one button that moves it forward. You can also just ask the assistant ("connect my Google Calendar"): it shows the same card in the chat.
+
+**Google Calendar.** Press **Connect with Google**, choose your account and allow access. Google sends the browser back to the hub. If the hub runs on a server or you sign in on a phone, the return page does not open: copy its address from the browser's address bar into the card. The sign-in is kept in the vault, so create or unlock the vault first (the card offers it). Then the agents see your events and free time, can book, move and delete events (each change asks for your approval), and the morning digest lists the day's plan, a later digest tomorrow's.
+
+Owlbot signs in with its own Google client. To use your own instead, create one in [Google Cloud](https://console.cloud.google.com/): a project with the Google Calendar API enabled, the OAuth consent screen (External, In production), and an OAuth client of type **Desktop app**. Then set `OWLBOT_GOOGLE_CLIENT_ID` and `OWLBOT_GOOGLE_CLIENT_SECRET`. Until Google verifies a client's calendar access, the sign-in shows an "unverified app" warning.
+
 ## Other computers
 
 1. On the **Machines** page, connect a new machine to get a one-time code (valid for 10 minutes).
@@ -186,6 +194,7 @@ docker exec owlbot owlbot-entrypoint audit-verify
 | `OWLBOT_DEVICE_URLS` | detected | addresses for the pairing QR, comma-separated, ahead of the detected ones |
 | `OWLBOT_DATA_DIR` | `.data/` (`/data` in the image) | data directory |
 | `OWLBOT_INSTALL_CLIS` | — (`1` in the desktop installers) | `1` lets **Sign in** install a missing Claude Code or Codex into `<data>/tools` |
+| `OWLBOT_GOOGLE_CLIENT_ID`, `OWLBOT_GOOGLE_CLIENT_SECRET` | Owlbot's client | your own Google OAuth client (type Desktop app) for Google integrations |
 | `TZ` | system time zone (`UTC` in the image) | default time zone for reminders, quiet hours and the digest |
 
 Most behaviour is configured in **Settings** in the web UI: language, time zone, quiet hours, digest times, `channelApprovalDetails` (full action details in Telegram) and `brainEgressAllow` (extra hosts brains may reach). One hub setting has no field on that page yet: `egressPrivateAllow`, the local-network hosts plugins and brains may reach (for example `searxng` or `nas.local`); set it through `PATCH /api/settings`.

@@ -18,5 +18,6 @@
   "setup.brave.title": "API-ключ Brave Search",
   "setup.brave.hint": "Необязательно: поиск станет лучше. Бесплатный ключ — в кабинете Brave Search API.",
   "setup.tavily.title": "API-ключ Tavily",
-  "setup.tavily.hint": "Необязательно: поиск, заточенный под агентов. Ключ — на app.tavily.com."
+  "setup.tavily.hint": "Необязательно: поиск, заточенный под агентов. Ключ — на app.tavily.com.",
+  "integration.summary": "Поиск в интернете и чтение страниц; ключи Brave или Tavily по желанию, DuckDuckGo работает без ключа"
 }

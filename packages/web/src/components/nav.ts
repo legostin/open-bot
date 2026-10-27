@@ -2,10 +2,10 @@
 // Old page URLs (/brains, /plugins, …) still work: they open the matching panel section over the chat.
 
 import type { ComponentType } from "react";
-import { Bell, Bot, Brain, Laptop, ListChecks, Puzzle, Server, SlidersHorizontal, Smartphone, Sparkles, type LucideProps } from "lucide-react";
+import { Bell, Blocks, Bot, Brain, Laptop, ListChecks, Puzzle, Server, SlidersHorizontal, Smartphone, Sparkles, type LucideProps } from "lucide-react";
 import type { MessageKey } from "../i18n";
 
-export type CoreSection = "settings" | "agents" | "brains" | "plugins" | "machines" | "devices" | "mcp" | "skills" | "tasks" | "notifications";
+export type CoreSection = "settings" | "agents" | "brains" | "integrations" | "plugins" | "machines" | "devices" | "mcp" | "skills" | "tasks" | "notifications";
 /** A core section, or "plugin:<route key>" for a page a UI plugin added to the navigation. */
 export type PanelSection = CoreSection | `plugin:${string}`;
 
@@ -24,6 +24,7 @@ export const SECTIONS: SectionDef[] = [
   { id: "skills", path: "/skills", label: "nav.skills", hint: "panel.hint.skills", icon: Sparkles, group: "assistant" },
   { id: "tasks", path: "/tasks", label: "nav.tasks", hint: "panel.hint.tasks", icon: ListChecks, group: "activity" },
   { id: "notifications", path: "/notifications", label: "nav.notifications", hint: "panel.hint.notifications", icon: Bell, group: "activity" },
+  { id: "integrations", path: "/integrations", label: "nav.integrations", hint: "panel.hint.integrations", icon: Blocks, group: "connections" },
   { id: "brains", path: "/brains", label: "nav.brains", hint: "panel.hint.brains", icon: Brain, group: "connections" },
   { id: "plugins", path: "/plugins", label: "nav.plugins", hint: "panel.hint.plugins", icon: Puzzle, group: "connections" },
   { id: "machines", path: "/machines", label: "nav.machines", hint: "panel.hint.machines", icon: Laptop, group: "connections" },

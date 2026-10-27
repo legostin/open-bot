@@ -18,5 +18,6 @@
   "setup.brave.title": "Brave Search API key",
   "setup.brave.hint": "Optional: better web search. Get a free key in the Brave Search API dashboard.",
   "setup.tavily.title": "Tavily API key",
-  "setup.tavily.hint": "Optional: search tuned for agents. Get a key on app.tavily.com."
+  "setup.tavily.hint": "Optional: search tuned for agents. Get a key on app.tavily.com.",
+  "integration.summary": "Web search and reading pages; Brave or Tavily keys are optional, DuckDuckGo works without one"
 }

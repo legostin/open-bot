@@ -65,5 +65,6 @@
   "ui.error.urlEmpty": "Пустой адрес",
   "ui.error.urlScheme": "Схема адреса не поддерживается: {scheme}",
   "ui.error.urlInvalid": "Некорректный адрес: {url}",
-  "ui.error.urlProtocol": "Можно открывать только http(s) адреса, а не {protocol}"
+  "ui.error.urlProtocol": "Можно открывать только http(s) адреса, а не {protocol}",
+  "integration.summary": "Настоящий браузер для агента: сайты, формы, скриншоты, живой экран, который можно перехватить"
 }

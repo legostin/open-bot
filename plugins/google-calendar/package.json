@@ -1,0 +1,7 @@
+{
+  "name": "@owlbot/plugin-google-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Google Calendar: events, free time, creating and changing events, the day's events in the digest"
+}

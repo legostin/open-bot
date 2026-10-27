@@ -1,0 +1,8 @@
+{
+  "id": "fakeset",
+  "name": "Fake chat app",
+  "builtin": true,
+  "contributes": { "setup": { "secrets": [{ "vault": "fakeset_token", "title": "Token", "required": true }] } },
+  "integration": { "category": "messaging", "icon": "send", "connect": "setup" },
+  "permissions": { "vault": ["fakeset_token"] }
+}

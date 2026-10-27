@@ -21,6 +21,7 @@ import { PluginSetupCard, SecretRequestCard } from "../../components/SecretCards
 import { AgentDraftCard } from "./AgentDraftCard";
 import { BrainLoginCard } from "../../components/BrainLoginCard";
 import { BrainSetupCard } from "../../components/BrainSetupCard";
+import { IntegrationChatCard } from "../../components/IntegrationCard";
 import { ImagesCard } from "./ImagesCard";
 import { MapCard } from "./MapCard";
 import { DevicePairingCard } from "./DevicePairingCard";
@@ -124,7 +125,8 @@ function NotificationCard({ part }: { part: Extract<MessagePart, { type: "notifi
         <span className="text-sm font-semibold">{part.title}</span>
         <Badge tone={lvl.tone}>{lvl.label}</Badge>
       </div>
-      {part.body && <Markdown text={part.body} className="mt-1.5 text-sm" />}
+      {/* The hub's own lines (a digest's items, a calendar section) keep their breaks. */}
+      {part.body && <Markdown text={part.body} className="mt-1.5 text-sm" user />}
     </div>
   );
 }
@@ -241,6 +243,8 @@ function Parts({ message }: { message: Message }) {
             return <AgentDraftCard key={it.key} draftId={p.draftId} messageId={message.id} />;
           case "brain_login":
             return <BrainLoginCard key={it.key} brainRef={p.ref} />;
+          case "integration":
+            return <IntegrationChatCard key={it.key} id={p.id} conversationId={message.conversationId} />;
           case "brain_setup":
             return <BrainSetupCard key={it.key} conversationId={message.conversationId} />;
           case "device_pairing":

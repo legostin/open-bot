@@ -61,7 +61,7 @@ export interface ChannelImpl {
   status?(): Promise<{ connected: boolean; detail?: string }>;
 }
 
-export type HookName = "session.start" | "tool.before" | "tool.after" | "message.in" | "notify.before";
+export type HookName = "session.start" | "tool.before" | "tool.after" | "message.in" | "notify.before" | "digest.compose";
 
 export interface HookPayloads {
   "session.start": { sessionId: string; agentId: string; conversationId: string; taskId?: string; background: boolean };
@@ -69,6 +69,8 @@ export interface HookPayloads {
   "tool.after": { tool: string; input: unknown; result: ToolResult; context: ToolCallContext };
   "message.in": { conversationId: string; text: string; channel?: string };
   "notify.before": { level: NotifyLevel; title: string; body: string; agentId?: string; triggerId?: string };
+  /** A digest is going out: `date` (YYYY-MM-DD) and `time` (HH:MM) are local in `timezone`. */
+  "digest.compose": { date: string; time: string; timezone: string };
 }
 
 export interface HookResults {
@@ -77,6 +79,8 @@ export interface HookResults {
   "tool.after": { result?: ToolResult } | void;
   "message.in": { block?: string; text?: string } | void;
   "notify.before": { block?: string; level?: NotifyLevel } | void;
+  /** A section of the digest (in the hub language), or nothing. */
+  "digest.compose": { title: string; body: string } | void;
 }
 
 export type EventName =

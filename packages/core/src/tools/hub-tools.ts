@@ -16,6 +16,7 @@ import type { Hub } from "../app.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { hubLocale } from "../i18n.ts";
+import { listIntegrations } from "../integrations.ts";
 import { isSetupStep, SETUP_STEPS } from "../setup.ts";
 
 export const HUB_TOOL_PREFIX = "hub_";
@@ -26,7 +27,7 @@ export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHou
 const SECRET_KEY = /key|token|secret|password/i;
 
 /** Tools that only put a card in front of the user, who then decides: fine even after outside content was read. */
-const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft", "brain_login", "device_pairing"]);
+const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft", "brain_login", "device_pairing", "integration_connect"]);
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 const json = (v: unknown): ToolResult => text(JSON.stringify(v, null, 2));
@@ -395,6 +396,55 @@ export function registerHubTools(hub: Hub): void {
       return text(
         `A secure input card for ${r.title} is shown in the chat${locked ? " (the vault is locked: the card asks the user to unlock it first)" : ""}. ` +
           "The user has not filled it in yet. Do not ask for the value in a message; tell the user briefly what to enter and where to get it. You will get a system note when it is saved.",
+      );
+    },
+  );
+
+  reg(
+    {
+      name: "integrations_list",
+      effect: "read",
+      description:
+        "The integrations library: services the user can connect (Google Calendar, Telegram, web search, the browser…) with their status " +
+        "(connected and as whom, needs-setup, off, broken, unavailable). Check it before saying something cannot be done.",
+      inputSchema: obj({}),
+    },
+    async () => {
+      const list = await listIntegrations(hub, hubLocale());
+      return text(
+        list.map((i) => `${i.id} — ${i.name} [${i.category}]: ${i.status}${i.account ? ` (${i.account})` : ""}${i.detail ? `; ${i.detail}` : ""}`).join("\n") ||
+          "No integrations are installed.",
+      );
+    },
+  );
+
+  reg(
+    {
+      name: "integration_connect",
+      effect: "local-write",
+      description:
+        "Show an integration's card in this chat so the user can connect it (e.g. Google Calendar: a Connect button that signs in with Google; " +
+        "Telegram: its setup steps). Use it whenever the user wants to connect a service, or a tool says it is not connected. Ids: see hub_integrations_list.",
+      inputSchema: obj({ id: { type: "string", description: "Integration id" } }, ["id"]),
+    },
+    async (i, ctx) => {
+      const id = String(i.id ?? "");
+      const view = (await listIntegrations(hub, hubLocale())).find((x) => x.id === id);
+      if (!view) return text(`No integration "${id}". Known: ${(await listIntegrations(hub, hubLocale())).map((x) => x.id).join(", ")}.`, true);
+      hub.runner.attachPart(ctx.conversationId, { type: "integration", id });
+      const state =
+        view.status === "connected"
+          ? `already connected${view.account ? ` (${view.account})` : ""}; the card shows it`
+          : view.status === "unavailable"
+            ? `unavailable in this build: ${view.detail ?? ""}`
+            : view.status === "off"
+              ? "turned off; the card has a switch"
+              : view.status === "broken"
+                ? "its sign-in stopped working; the card has Reconnect"
+                : "not connected yet";
+      return text(
+        `The ${view.name} card is shown in the chat: ${state}. ` +
+          (view.status === "connected" ? "" : "Tell the user in a sentence to press the button on it; you get a system note once it is connected."),
       );
     },
   );

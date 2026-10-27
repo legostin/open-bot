@@ -13,6 +13,7 @@ import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
+import { googleScopes, listIntegrations } from "../integrations.ts";
 import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
 
 export interface ApiOptions {
@@ -421,6 +422,31 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   api.post("/api/mcp-servers/:name/reconnect", async (req) => {
     await hub.mcpClients.reconnect((req.params as any).name);
     return hub.mcpClients.list();
+  });
+
+  // ----- integrations: the library's cards, and the hub's Google sign-in -----
+  api.get("/api/integrations", async (req) => listIntegrations(hub, requestLocale(req)));
+  api.post("/api/integrations/:id/enabled", async (req) => {
+    const id = (req.params as any).id as string;
+    if (!hub.plugins.get(id)?.layout?.manifest.integration) throw new HttpError(404, "connections.notFound", { id });
+    await hub.plugins.setEnabled(id, !!(req.body as any)?.enabled);
+    hub.bus.emit("connections.updated", { provider: id });
+    return (await listIntegrations(hub, requestLocale(req))).find((i) => i.id === id);
+  });
+  api.get("/api/connections", async () => ({ google: { available: hub.connections.available("google"), account: hub.connections.get("google") ?? null } }));
+  api.post("/api/connections/google/start", async (req) => {
+    const b = (req.body ?? {}) as { integration?: string; conversationId?: string };
+    return hub.connections.start("google", googleScopes(hub), { integration: b.integration, conversationId: b.conversationId });
+  });
+  // The return address pasted by hand: a hub the browser cannot reach on 127.0.0.1 (a VPS, a phone).
+  api.post("/api/connections/google/complete", async (req) => {
+    const r = await hub.connections.complete(String((req.body as any)?.url ?? ""));
+    hub.connectionDone(r.account, r.origin);
+    return r.account;
+  });
+  api.delete("/api/connections/google", async () => {
+    await hub.connections.disconnect("google");
+    return { ok: true };
   });
 
   // ----- settings -----

@@ -200,24 +200,37 @@ export class Notifier {
     return n;
   }
 
-  /** Combine pending digest items into one message. */
+  /** Sections plugins add to a digest going out now (digest.compose): the day's events and the like, lines kept. */
+  private async digestSections(timezone: string): Promise<string[]> {
+    const now = new Date();
+    const date = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    const r = await this.hooks.run("digest.compose", { date, time: localHHMM(timezone, now), timezone }, (p) => p);
+    return r.results
+      .filter((x): x is { title: string; body: string } => !!x && typeof x.title === "string" && typeof x.body === "string" && !!x.body.trim())
+      .map((x) => `**${x.title.trim()}**\n${truncate(x.body.trim(), 1500)}`);
+  }
+
+  /** Combine pending digest items, and the plugins' sections, into one message. */
   async flushDigest(): Promise<number> {
     const rows = this.db.prepare("select * from notifications where level = 'digest' and digested = 0 order by created_at").all().map(fromRow);
-    if (rows.length === 0) return 0;
     const s = this.settings.get();
-    const body = rows.map((n) => `• ${n.title}${n.body ? ` — ${truncate(n.body.replace(/\s+/g, " "), 300)}` : ""}`).join("\n");
+    const sections = await this.digestSections(s.timezone);
+    if (rows.length === 0 && sections.length === 0) return 0;
+    const items = rows.map((n) => `• ${n.title}${n.body ? ` — ${truncate(n.body.replace(/\s+/g, " "), 300)}` : ""}`).join("\n");
+    const body = [...sections, items].filter(Boolean).join("\n\n");
+    const title = t("notify.digestTitle", { count: rows.length + sections.length });
     // The digest gathers the whole team's items: it goes to the default agent's dialog.
     const dialog = this.store.agentConversation(s.defaultAgent);
     this.store.addMessage({
       conversationId: dialog.id,
       role: "assistant",
-      parts: [{ type: "notification", level: "digest", title: t("notify.digestTitle", { count: rows.length }), body }],
+      parts: [{ type: "notification", level: "digest", title, body }],
       status: "complete",
     });
-    await this.channels.broadcast({ kind: "digest", text: `${t("notify.digestTitle", { count: rows.length })}\n\n${truncate(body, 3800)}`, link: this.publicUrl });
+    await this.channels.broadcast({ kind: "digest", text: `${title}\n\n${truncate(body, 3800)}`, link: this.publicUrl });
     const st = this.db.prepare("update notifications set digested = 1, delivered_at = ? where id = ?");
     for (const n of rows) st.run(nowIso(), n.id);
-    return rows.length;
+    return rows.length + sections.length;
   }
 
   startDigestTimer(): void {

@@ -46,6 +46,7 @@
       }
     }
   },
+  "integration": {"category": "search", "icon": "search", "connect": "setup", "summary": "%integration.summary%"},
   "permissions": {
     "network": ["*"],
     "vault": ["brave_api_key", "tavily_api_key"]

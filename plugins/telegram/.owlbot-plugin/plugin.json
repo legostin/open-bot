@@ -45,6 +45,7 @@
       }
     }
   },
+  "integration": {"category": "messaging", "icon": "send", "connect": "setup", "summary": "%integration.summary%"},
   "permissions": {
     "network": ["api.telegram.org"],
     "vault": ["telegram_bot_token"],

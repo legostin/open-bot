@@ -7,7 +7,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
 import { LOCALES, localeFromEnv } from "@owlbot/shared";
-import { errorText, hubLocale, LocalizedError, requestLocale } from "../i18n.ts";
+import { errorText, hubLocale, LocalizedError, requestLocale, tFor } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, sendFile } from "./http.ts";
@@ -196,6 +196,28 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     reply.code(r.status ?? 200);
     for (const [k, v] of Object.entries(r.headers ?? {})) if (!/^(set-cookie|content-security-policy)$/i.test(k)) reply.header(k, v);
     return reply.send(r.body ?? "");
+  });
+
+  // ---------- Google sends the browser back here after the sign-in (state is the proof, no session needed) ----------
+
+  app.get("/oauth/callback", async (req, reply) => {
+    const t = tFor(requestLocale(req));
+    let ok = true;
+    let detail = "";
+    try {
+      const r = await hub.connections.complete(new URLSearchParams((req.url.split("?")[1] ?? "")));
+      hub.connectionDone(r.account, r.origin);
+      detail = r.account.account;
+    } catch (e) {
+      ok = false;
+      detail = errorText(e, requestLocale(req));
+    }
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+    const title = t(ok ? "oauth.doneTitle" : "oauth.failedTitle");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#111}h1{font-size:1.4rem}a{color:inherit}</style></head>
+<body><h1>${esc(title)}</h1><p>${esc(ok ? `${detail}. ${t("oauth.doneText")}` : detail)}</p><p><a href="${esc(cfg.publicUrl)}">${esc(t("oauth.back"))}</a></p></body></html>`;
+    return reply.code(ok ? 200 : 400).header("content-type", "text/html; charset=utf-8").header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'").send(html);
   });
 
   // ---------- authenticated API ----------

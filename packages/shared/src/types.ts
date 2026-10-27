@@ -195,6 +195,8 @@ export type MessagePart =
   | { type: "brain_setup" }
   /** Connect a phone: the card makes a one-time QR and link when the user asks for it. */
   | { type: "device_pairing" }
+  /** An integration's card from the library (integration_connect), live: connect, set up, turn on. */
+  | { type: "integration"; id: string }
   /** Pictures the agent shows (show_images): one item is a single image, two or more a carousel. */
   | { type: "images"; items: ImageItem[] }
   /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers. */
@@ -630,6 +632,7 @@ export type UiEvent =
   | { type: "plugins.updated"; data: Record<string, never> }
   | { type: "agents.updated"; data: Record<string, never> }
   | { type: "settings.updated"; data: Record<string, unknown> }
+  | { type: "connections.updated"; data: { provider: string } }
   | { type: "machine.updated"; data: Machine }
   | { type: "device.updated"; data: { id: string } }
   | { type: "devices.network"; data: DeviceNetwork }
@@ -638,3 +641,33 @@ export type UiEvent =
   | { type: "agent_draft.updated"; data: AgentDraft }
   | { type: "brain.login"; data: BrainLoginState }
   | { type: "plugin.event"; data: { pluginId: string; channel: string; payload: unknown } };
+
+// ---------- Integrations ----------
+
+export type IntegrationStatus = "connected" | "needs-setup" | "off" | "unavailable" | "broken";
+
+/** A card of the integrations library (GET /api/integrations). */
+export interface IntegrationView {
+  /** The plugin's id. */
+  id: string;
+  name: string;
+  summary: string;
+  category: string;
+  icon: string;
+  connect: "google" | "setup" | "none";
+  status: IntegrationStatus;
+  /** The connected account (e.g. an email), when there is one. */
+  account?: string;
+  /** Why it is broken or unavailable (in the reader's language). */
+  detail?: string;
+}
+
+/** A connected account of a provider (Google), as the hub keeps it. */
+export interface ConnectionAccount {
+  provider: "google";
+  account: string;
+  scopes: string[];
+  connectedAt: ISODate;
+  /** The provider refused the refresh token: the user must connect again. */
+  broken?: boolean;
+}

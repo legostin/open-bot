@@ -1,0 +1,32 @@
+{
+  "id": "google-calendar",
+  "name": "%name%",
+  "version": "0.1.0",
+  "description": "%description%",
+  "author": "Owlbot",
+  "builtin": true,
+  "server": "./server/index.ts",
+  "toolPrefix": "calendar",
+  "contributes": {
+    "tools": true,
+    "hooks": ["digest.compose"],
+    "settings": {
+      "type": "object",
+      "properties": {
+        "digest": { "type": "boolean", "title": "%settings.digest.title%", "description": "%settings.digest.description%", "default": true },
+        "apiBaseUrl": { "type": "string", "title": "%settings.apiBaseUrl.title%", "default": "https://www.googleapis.com/calendar/v3" }
+      }
+    }
+  },
+  "integration": {
+    "category": "calendar",
+    "icon": "calendar-days",
+    "connect": "google",
+    "scopes": ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"],
+    "summary": "%integration.summary%"
+  },
+  "permissions": {
+    "network": ["www.googleapis.com"],
+    "core": ["connections.token", "settings.get"]
+  }
+}

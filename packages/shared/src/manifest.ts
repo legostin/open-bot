@@ -40,6 +40,20 @@ export const SetupSecretSchema = z.object({
 });
 export type SetupSecret = z.infer<typeof SetupSecretSchema>;
 
+/** A plugin shown in the integrations library: how it is connected and what it looks like. */
+export const IntegrationSchema = z.object({
+  category: z.string().default("other"),
+  /** A lucide icon name. */
+  icon: z.string().default("puzzle"),
+  /** google: the hub's Google sign-in; setup: the plugin's setup card; none: works as it is. */
+  connect: z.enum(["google", "setup", "none"]).default("none"),
+  /** OAuth scopes the plugin needs from the provider (connect: google). */
+  scopes: z.array(z.string()).default([]),
+  /** One line under the name in the library ("%key%" for a translation). */
+  summary: z.string().optional(),
+});
+export type IntegrationInfo = z.infer<typeof IntegrationSchema>;
+
 export const OwlbotManifestSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{1,40}$/, "id: lowercase letters, digits, dashes"),
   name: z.string().min(1),
@@ -69,6 +83,8 @@ export const OwlbotManifestSchema = z.object({
     })
     .default({ tools: false, brains: [], channels: [], triggers: [], hooks: [], http: false }),
   permissions: PluginPermissionsSchema,
+  /** Shown as a card in the integrations library. */
+  integration: IntegrationSchema.optional(),
   /** Built-in plugins start enabled; third-party ones need confirmation. */
   builtin: z.boolean().default(false),
 });
@@ -92,6 +108,7 @@ export const CORE_METHODS = [
   "machines.list",
   "notifications.feedback", // apply a signed feedback button press (useful / less / off)
   "files.deliver", // write a file (in base64 chunks) into a session workspace's downloads/ folder
+  "connections.token", // an access token of the hub's connection the plugin's integration uses (e.g. Google)
 ] as const;
 export type CoreMethod = (typeof CORE_METHODS)[number];
 
