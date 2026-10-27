@@ -31,7 +31,8 @@ function useSetupState(agentId: string | undefined) {
   useEffect(() => {
     load();
     return hubEvents.on((e) => {
-      if (e.type === "brains.updated" || e.type === "plugins.updated" || e.type === "vault.state" || (e.type === "brain.login" && e.data.status === "succeeded")) load();
+      // agents.updated: the user picked a brain for the agent in the chat header.
+      if (e.type === "brains.updated" || e.type === "agents.updated" || e.type === "plugins.updated" || e.type === "vault.state" || (e.type === "brain.login" && e.data.status === "succeeded")) load();
     });
   }, [load]);
   const refresh = async () => {

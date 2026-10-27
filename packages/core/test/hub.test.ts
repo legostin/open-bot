@@ -327,6 +327,18 @@ describe("hub (integration)", () => {
     await web.req("DELETE", `/api/brains/limits/${encodeURIComponent("fake@local")}`);
   });
 
+  it("moves an open conversation to the brain the user picks", async () => {
+    await web.req("PUT", "/api/agents/picker", { name: "Picker", description: "Switches", brains: ["fake@local", "fake2@local"], prompt: "Pick." });
+    const chat = (await web.req("POST", "/api/conversations", { title: "pick a brain", agentId: "picker" })).id;
+    await web.req("POST", `/api/conversations/${chat}/messages`, { text: "first" });
+    expect((await lastReply(chat, /heard: first/)).brainRef).toBe("fake@local");
+    // The brain picker in the chat header puts the chosen brain first.
+    await web.req("PUT", "/api/agents/picker", { brains: ["fake2@local", "fake@local"] });
+    await web.req("POST", `/api/conversations/${chat}/messages`, { text: "second" });
+    expect(await lastReply(chat, /heard: second/)).toMatchObject({ brainRef: "fake2@local", parts: [expect.objectContaining({ text: "fake2 heard: second" })] });
+    await web.req("DELETE", "/api/agents/picker");
+  });
+
   it("lets the default agent run the hub from chat, and nobody else", async () => {
     const say = async (c: string, tool: string, args: unknown) => {
       const sent = await web.req("POST", `/api/conversations/${c}/messages`, { text: `CALL ${tool} ${JSON.stringify(args)}` });

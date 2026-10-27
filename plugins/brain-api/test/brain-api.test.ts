@@ -336,7 +336,16 @@ describe("brain-api plugin", () => {
       expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ available: true, authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as anthropic_api_key)" });
       expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ available: true, authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as openrouter_api_key)" });
       expect(await bare.brainProbe("api")).toMatchObject({ authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as anthropic_api_key)" });
-      expect(await bare.brainProbe("api", "custom")).toMatchObject({ available: true, authenticated: true });
+      // A server on this machine must have the model: the mock lists gpt-mock, not the default llama3.1.
+      expect(await bare.brainProbe("api", "custom")).toMatchObject({
+        available: true,
+        authenticated: false,
+        model: "llama3.1",
+        models: expect.arrayContaining(["gpt-mock"]),
+        detail: expect.stringMatching(/has no model "llama3\.1"\. It has: .*gpt-mock.*ollama pull llama3\.1$/),
+      });
+      bare.setSettings({ ...settings, customModel: "gpt-mock" });
+      expect(await bare.brainProbe("api", "custom")).toMatchObject({ available: true, authenticated: true, model: "gpt-mock", detail: `${llm.url}/v1` });
       expect(await bare.brainProbe("api", "nope")).toMatchObject({ available: false, authenticated: false, detail: 'Unknown variant "nope". Available: anthropic, openai, openrouter, custom' });
       // Probe details are shown on the Brains page in the hub language.
       bare.setLocale("ru");
