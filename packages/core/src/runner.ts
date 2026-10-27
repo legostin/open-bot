@@ -165,7 +165,12 @@ export class SessionRunner {
   // ---------- public entry points ----------
 
   /** A user message arrived (web, Telegram, ...). Returns the stored user message. */
-  async userMessage(conversationId: string, text: string, opts: { channel?: string; attachments?: AttachmentPart[]; onCapture?: (c: CaptureResult) => void } = {}): Promise<Message> {
+  /** `context`: lines for the model only, before the user's words (a channel's "forwarded from…", "in reply to…"). */
+  async userMessage(
+    conversationId: string,
+    text: string,
+    opts: { channel?: string; attachments?: AttachmentPart[]; context?: string; onCapture?: (c: CaptureResult) => void } = {},
+  ): Promise<Message> {
     const conv = this.d.store.getConversation(conversationId);
     if (!conv) throw new LocalizedError("conversation.notFound");
     // Secrets come out first: message hooks, the stored message and the model only see vault:// references.
@@ -187,7 +192,7 @@ export class SessionRunner {
     if (cap.answered?.waited && text.trim() === `vault://${cap.answered.request.vaultId}`) return msg;
     const note = captureNote(cap);
     const expanded = this.d.skills.expandCommand(hooked.payload.text) ?? hooked.payload.text;
-    const prompt = note ? `${expanded}\n\n${note}` : expanded;
+    const prompt = [opts.context?.trim(), note ? `${expanded}\n\n${note}` : expanded].filter(Boolean).join("\n");
     // From the web UI: the user's words travel with a mirrored reply, so the phone shows the exchange.
     const fromWeb = !opts.channel || opts.channel === WEB_CHANNEL;
     const files = attachments.length ? { attachments } : {};

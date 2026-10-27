@@ -5,6 +5,7 @@ import { randomInt } from "node:crypto";
 import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@owlbot/plugin-sdk";
 import type { OutboundMedia, OutboundMessage, Params, Task, TaskStatus } from "@owlbot/shared";
 import { TelegramApi, TelegramError, type InlineButton, type TgCallbackQuery, type TgChat, type TgMessage, type TgUpdate, type TgUser, type UploadFile } from "./api.ts";
+import { MAX_DOWNLOAD_BYTES, messageContext, messageFile, messageWords } from "./inbound.ts";
 import { TELEGRAM_LIMIT, entitiesToHtml, escapeAttr, escapeHtml, htmlToPlain, isPublicHttpUrl, markdownToHtml, splitMarkdown } from "./format.ts";
 
 export interface TelegramSettings {
@@ -43,6 +44,8 @@ const TYPING_MAX_MS = 120_000;
 const TYPING_EVERY_MS = 4_500;
 const MAX_FAILS_PER_CHAT = 5;
 const MAX_FAILS_TOTAL = 20;
+/** An album arrives as one update per picture: wait this long after the last one, then pass them on together. */
+const ALBUM_WAIT_MS = 1500;
 
 /** Bot commands handled here; their descriptions (cmd.<name>) go to the Telegram command menu. */
 const COMMANDS = ["tasks", "stop", "help"] as const;
@@ -112,6 +115,7 @@ export class TelegramBot {
   private pairingFails = new Map<number, number>();
   private pairingFailsTotal = 0;
   private lastEmitted = "";
+  private albums = new Map<string, { messages: TgMessage[]; timer: NodeJS.Timeout }>();
 
   constructor(ctx: PluginContext) {
     this.ctx = ctx;
@@ -144,6 +148,8 @@ export class TelegramBot {
     this.ctrl.abort();
     this.wake?.();
     this.stopTyping();
+    for (const a of this.albums.values()) clearTimeout(a.timer);
+    this.albums.clear();
     if (this.loopDone) await Promise.race([this.loopDone, new Promise((r) => setTimeout(r, 3000))]);
   }
 
@@ -365,12 +371,7 @@ export class TelegramBot {
 
   private async onOwner(m: TgMessage): Promise<void> {
     const chatId = m.chat.id;
-    if (typeof m.text !== "string") {
-      await this.sendHtml(chatId, this.t("bot.textOnly"));
-      return;
-    }
-    const text = m.text.trim();
-    if (!text) return;
+    const text = typeof m.text === "string" ? m.text.trim() : "";
     const cmd = /^\/([a-z0-9_]+)(?:@(\w+))?(?:\s+([\s\S]*))?$/i.exec(text);
     if (cmd) {
       if (cmd[2] && this.botUser?.username && cmd[2].toLowerCase() !== this.botUser.username.toLowerCase()) return;
@@ -397,16 +398,76 @@ export class TelegramBot {
       }
       // Other slash commands go to the assistant as text (skills and commands).
     }
+    if (typeof m.media_group_id === "string") return this.collectAlbum(m);
+    await this.forward([m]);
+  }
+
+  /** The pictures of an album come one update each: they go on as one message once no more arrive. */
+  private collectAlbum(m: TgMessage): void {
+    const id = m.media_group_id as string;
+    const album = this.albums.get(id) ?? { messages: [], timer: undefined as unknown as NodeJS.Timeout };
+    clearTimeout(album.timer);
+    album.messages.push(m);
+    album.timer = setTimeout(() => {
+      this.albums.delete(id);
+      void this.forward(album.messages.sort((a, b) => a.message_id - b.message_id));
+    }, ALBUM_WAIT_MS);
+    this.albums.set(id, album);
+  }
+
+  /** The owner's message (or album) to the assistant: words, files downloaded from Telegram, context for the model. */
+  private async forward(messages: TgMessage[]): Promise<void> {
+    const chatId = messages[0].chat.id;
+    const text = messages.map(messageWords).filter(Boolean).join("\n");
+    const context = messageContext(messages[0], this.botUser?.id).join("\n");
+    const refs = messages.flatMap((m) => {
+      const f = messageFile(m);
+      return f ? [f] : [];
+    });
+    if (!text && !refs.length) {
+      await this.sendHtml(chatId, this.t("bot.unsupported"));
+      return;
+    }
     this.startTyping();
+    const files: Array<{ name?: string; mimeType?: string; data: string; kind: string; durationSec?: number }> = [];
+    for (const f of refs) {
+      const label = escapeHtml(f.name ?? this.t(`file.${f.kind}`));
+      if (f.size !== undefined && f.size > MAX_DOWNLOAD_BYTES) {
+        await this.sendHtml(chatId, this.t("bot.fileTooLarge", { name: label }));
+        continue;
+      }
+      try {
+        const { data, path } = await this.api!.download(f.fileId, { maxBytes: MAX_DOWNLOAD_BYTES, signal: this.ctrl.signal });
+        // Telegram's own path keeps the extension of files that come without a name (voice/file_12.oga).
+        const name = f.name ?? (f.kind === "photo" || f.kind === "voice" ? undefined : path.split("/").pop());
+        files.push({ ...(name ? { name } : {}), ...(f.mimeType ? { mimeType: f.mimeType } : {}), data: Buffer.from(data).toString("base64"), kind: f.kind, ...(f.durationSec !== undefined ? { durationSec: f.durationSec } : {}) });
+      } catch (e: any) {
+        const tooBig = /too big/i.test(e?.message ?? "");
+        await this.sendHtml(chatId, this.t(tooBig ? "bot.fileTooLarge" : "bot.downloadFailed", { name: label, error: escapeHtml(e?.message ?? String(e)) }));
+      }
+    }
+    if (!text && !files.length) {
+      this.stopTyping();
+      return;
+    }
     try {
-      const r = await this.ctx.core.call<{ ignored?: boolean; secrets?: number }>("channels.inbound", { channel: "telegram", text });
+      const r = await this.ctx.core.call<{ ignored?: boolean; secrets?: number }>("channels.inbound", {
+        channel: "telegram",
+        text,
+        ...(files.length ? { files } : {}),
+        ...(context ? { context } : {}),
+      });
       if (r?.ignored) this.stopTyping();
       // The hub took a secret out of this message (it is in the vault now): the copy in Telegram goes too.
       if (r?.secrets) {
-        const gone = await this.api!.send("deleteMessage", { chat_id: chatId, message_id: m.message_id }).then(
-          () => true,
-          () => false,
-        );
+        let gone = true;
+        for (const m of messages.filter((x) => messageWords(x))) {
+          gone =
+            (await this.api!.send("deleteMessage", { chat_id: chatId, message_id: m.message_id }).then(
+              () => true,
+              () => false,
+            )) && gone;
+        }
         await this.sendHtml(chatId, this.t(gone ? "bot.secretStored" : "bot.secretStoredDeleteYourself")).catch(() => {});
       }
     } catch (e: any) {

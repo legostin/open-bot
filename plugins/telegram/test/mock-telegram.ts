@@ -27,6 +27,8 @@ export interface MockTelegram {
   callsOf(method: string, pred?: (params: any) => boolean): MockCall[];
   /** Make the next call of `method` fail with this Telegram error. */
   failNext(method: string, code: number, description: string): void;
+  /** A file the user "sent": getFile answers with its path and size, /file/bot<token>/<path> serves it. */
+  addFile(fileId: string, data: Uint8Array, opts?: { path?: string; size?: number }): void;
   close(): Promise<void>;
 }
 
@@ -36,6 +38,7 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
   const calls: MockCall[] = [];
   const updates: Array<Record<string, unknown> & { update_id: number }> = [];
   const failures = new Map<string, { code: number; description: string }>();
+  const files = new Map<string, { data: Uint8Array; path: string; size: number }>();
   let nextUpdate = 1000;
   let nextMessage = 1;
   let pollWaiters: Array<() => void> = [];
@@ -80,6 +83,12 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
         return ok({ message_id: nextMessage++, chat: { id: Number(params.chat_id), type: "private" }, date: Math.floor(Date.now() / 1000) });
       case "sendMediaGroup":
         return ok((params.media as unknown[]).map(() => ({ message_id: nextMessage++, chat: { id: Number(params.chat_id), type: "private" }, date: Math.floor(Date.now() / 1000) })));
+      case "getFile": {
+        const f = files.get(String(params.file_id));
+        if (!f) return { status: 400, body: { ok: false, error_code: 400, description: "Bad Request: invalid file_id" } };
+        if (f.size > 20 * 1024 * 1024) return { status: 400, body: { ok: false, error_code: 400, description: "Bad Request: file is too big" } };
+        return ok({ file_id: params.file_id, file_unique_id: `u${params.file_id}`, file_size: f.size, file_path: f.path });
+      }
       case "editMessageText":
       case "editMessageReplyMarkup":
       case "answerCallbackQuery":
@@ -98,6 +107,13 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
     req.on("end", async () => {
       const raw = Buffer.concat(chunks);
       const type = req.headers["content-type"] ?? "";
+      const file = /^\/file\/bot([^/]+)\/(.+)$/.exec(req.url ?? "");
+      if (file) {
+        const f = file[1] === token ? [...files.values()].find((x) => x.path === decodeURIComponent(file[2])) : undefined;
+        res.writeHead(f ? 200 : 404, { "content-type": "application/octet-stream" });
+        res.end(f ? Buffer.from(f.data) : "");
+        return;
+      }
       const m = /^\/bot([^/]+)\/(\w+)$/.exec(req.url ?? "");
       let status = 404;
       let body: unknown = { ok: false, error_code: 404, description: "Not Found" };
@@ -147,6 +163,9 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
     },
     failNext(method, code, description) {
       failures.set(method, { code, description });
+    },
+    addFile(fileId, data, opts = {}) {
+      files.set(fileId, { data, path: opts.path ?? `files/${fileId}`, size: opts.size ?? data.length });
     },
     close: () =>
       new Promise<void>((r) => {

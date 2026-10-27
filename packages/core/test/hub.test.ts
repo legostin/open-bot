@@ -229,6 +229,12 @@ describe("hub (integration)", () => {
     const huge = { data: Buffer.alloc(25 * 1024 * 1024 + 1).toString("base64") };
     await expect(call("fakebrain", "channels.inbound", { channel: "test", text: "x", files: [huge] })).rejects.toThrow(/too large/);
     expect(await call("fakebrain", "channels.inbound", { channel: "test", text: " ", files: [] })).toEqual({ ignored: true });
+    // Context for the model only: the brain reads it before the words, the chat shows the words alone.
+    const own = await web.req("POST", "/api/conversations", { title: "forwarded" });
+    const fwd = (await call("fakebrain", "channels.inbound", { channel: "test", conversationId: own.id, text: "ECHO? forwarded", context: "[Forwarded from Оля]" })) as any;
+    await lastReply(fwd.conversationId, /^fake saw: \[Forwarded from Оля\]$/);
+    const msgs: any[] = await web.req("GET", `/api/conversations/${fwd.conversationId}/messages`);
+    expect(msgs.find((m) => m.id === fwd.messageId).parts).toEqual([{ type: "text", text: "ECHO? forwarded" }]);
   });
 
   it("routes channel messages to the default agent's dialog and shows it in the team", async () => {

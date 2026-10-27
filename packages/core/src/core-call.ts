@@ -53,6 +53,7 @@ export function createCoreCall(hub: Hub) {
         const m = await hub.runner.userMessage(conv.id, text, {
           channel: String(p.channel ?? pluginId),
           ...(attachments.length ? { attachments } : {}),
+          ...(typeof p.context === "string" && p.context.trim() ? { context: p.context.slice(0, 2000) } : {}),
           onCapture: (c) => (secrets = c.stored.length + c.withheld),
         });
         // secrets > 0: the channel should delete the user's original message, it still holds the value.

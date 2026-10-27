@@ -160,9 +160,74 @@ describe("telegram plugin", () => {
     expect(tasks.params.text).toBe("<b>In progress</b>\n• Отчёт &lt;Q3&gt; — <i>running</i>\n\n<b>Recently finished</b>\n• Купить билеты — <i>done</i>");
 
     from = tg.calls.length;
-    tg.push(privateMsg(OWNER, undefined, { photo: [{ file_id: "x", width: 1, height: 1 }] }));
-    const photo = await tg.waitFor("sendMessage", (p) => p.chat_id === OWNER, { from });
-    expect(photo.params.text).toContain("only understand text messages");
+    tg.push(privateMsg(OWNER, undefined, { sticker: { file_id: "st", width: 1, height: 1 } }));
+    const sticker = await tg.waitFor("sendMessage", (p) => p.chat_id === OWNER, { from });
+    expect(sticker.params.text).toContain("I can read text, photos, files, voice messages and places");
+  });
+
+  const inbound = (pred: (p: any) => boolean) => until(() => h.coreCalls.find((c) => c.method === "channels.inbound" && pred(c.params))?.params);
+  const b64 = (s: string) => Buffer.from(s).toString("base64");
+
+  it("passes a photo with its caption, in its largest size", async () => {
+    tg.addFile("ph-big", new TextEncoder().encode("big jpeg"), { path: "photos/file_1.jpg" });
+    tg.push(privateMsg(OWNER, undefined, { caption: "чек за обед", photo: [{ file_id: "ph-small", width: 90, height: 90, file_size: 10 }, { file_id: "ph-big", width: 1280, height: 960, file_size: 8 }] }));
+    expect(await inbound((p) => p.text === "чек за обед")).toEqual({
+      channel: "telegram",
+      text: "чек за обед",
+      files: [{ mimeType: "image/jpeg", data: b64("big jpeg"), kind: "photo" }],
+    });
+  });
+
+  it("collects an album into one message", async () => {
+    for (const id of ["al1", "al2", "al3"]) tg.addFile(id, new TextEncoder().encode(id), { path: `photos/${id}.jpg` });
+    const album = (id: string, n: number, caption?: string) =>
+      privateMsg(OWNER, undefined, { message_id: 900 + n, media_group_id: "album-1", photo: [{ file_id: id, width: 10, height: 10 }], ...(caption ? { caption } : {}) });
+    tg.push(album("al1", 1, "отпуск"));
+    tg.push(album("al2", 2));
+    tg.push(album("al3", 3));
+    const p = await inbound((x) => x.text === "отпуск");
+    expect(p.files.map((f: any) => f.data)).toEqual([b64("al1"), b64("al2"), b64("al3")]);
+    await new Promise((r) => setTimeout(r, 1700));
+    expect(h.coreCalls.filter((c) => c.method === "channels.inbound" && c.params.files?.some((f: any) => f.data === b64("al2")))).toHaveLength(1);
+  });
+
+  it("passes a voice message with its length, a document with its name", async () => {
+    tg.addFile("vo1", new TextEncoder().encode("OggS"), { path: "voice/file_7.oga" });
+    tg.push(privateMsg(OWNER, undefined, { voice: { file_id: "vo1", duration: 12, mime_type: "audio/ogg", file_size: 4 } }));
+    expect((await inbound((p) => p.files?.[0]?.kind === "voice")).files).toEqual([{ mimeType: "audio/ogg", data: b64("OggS"), kind: "voice", durationSec: 12 }]);
+    tg.addFile("doc1", new TextEncoder().encode("%PDF"), { path: "documents/file_8.pdf" });
+    tg.push(privateMsg(OWNER, undefined, { document: { file_id: "doc1", file_name: "договор.pdf", mime_type: "application/pdf", file_size: 4 } }));
+    expect((await inbound((p) => p.files?.[0]?.name === "договор.pdf")).files[0]).toEqual({ name: "договор.pdf", mimeType: "application/pdf", data: b64("%PDF"), kind: "file" });
+  });
+
+  it("refuses files over 20 MB and says why", async () => {
+    const from = tg.calls.length;
+    const before = h.coreCalls.length;
+    tg.addFile("huge", new Uint8Array(1), { size: 25 * 1024 * 1024 });
+    tg.push(privateMsg(OWNER, undefined, { document: { file_id: "huge", file_name: "фильм.mkv", file_size: 25 * 1024 * 1024 } }));
+    const said = await tg.waitFor("sendMessage", (p) => p.chat_id === OWNER && p.text.includes("over 20 MB"), { from });
+    expect(said.params.text).toContain("фильм.mkv is over 20 MB");
+    // Telegram's own size was unknown: the download says it is too big.
+    tg.addFile("huge2", new Uint8Array(1), { size: 21 * 1024 * 1024 });
+    tg.push(privateMsg(OWNER, undefined, { document: { file_id: "huge2", file_name: "архив.zip" } }));
+    await tg.waitFor("sendMessage", (p) => p.text.includes("архив.zip is over 20 MB"), { from });
+    expect(h.coreCalls.slice(before).filter((c) => c.method === "channels.inbound")).toHaveLength(0);
+  });
+
+  it("passes a place as a pin, and tells the model about forwards and replies", async () => {
+    tg.push(privateMsg(OWNER, undefined, { location: { latitude: 43.238949, longitude: 76.889709 } }));
+    expect(await inbound((p) => p.text?.startsWith("📍"))).toEqual({ channel: "telegram", text: "📍 (43.23895, 76.88971)" });
+    tg.push(
+      privateMsg(OWNER, "что думаешь?", {
+        forward_origin: { type: "user", sender_user: { id: 9, first_name: "Оля" } },
+        reply_to_message: { message_id: 5, date: 0, chat: { id: OWNER, type: "private" }, from: { id: 4242, is_bot: true, first_name: "Owlbot" }, text: "Напомнить про созвон?" },
+      }),
+    );
+    expect(await inbound((p) => p.text === "что думаешь?")).toEqual({
+      channel: "telegram",
+      text: "что думаешь?",
+      context: '[Forwarded from Оля]\n[In reply to your message: "Напомнить про созвон?"]',
+    });
   });
 
   it("splits long messages and respects silent", async () => {
