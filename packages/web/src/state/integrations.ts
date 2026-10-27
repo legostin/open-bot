@@ -22,7 +22,7 @@ export function useIntegrations(): IntegrationView[] | undefined {
   if (!wired) {
     wired = true;
     hubEvents.on((e) => {
-      if (e.type === "connections.updated" || e.type === "plugins.updated" || e.type === "vault.state" || e.type === "plugin.event") void loadIntegrations().catch(() => {});
+      if (e.type === "connections.updated" || e.type === "plugins.updated" || e.type === "vault.state" || e.type === "plugin.event" || e.type === "remote.updated") void loadIntegrations().catch(() => {});
     });
   }
   const list = useStore(integrations);

@@ -14,6 +14,8 @@ import { draftPatch } from "../agent-drafts.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
 import { googleScopes, listIntegrations } from "../integrations.ts";
+import { qrSvg } from "../pairing.ts";
+import { isLocalHost } from "../config.ts";
 import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
 
 export interface ApiOptions {
@@ -340,7 +342,11 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
 
   // ----- machines -----
   api.get("/api/machines", async () => hub.machines.list());
-  api.post("/api/machines/pairing-code", async (req) => ({ ...hub.machines.createPairingCode((req.body as any)?.name), hubUrl: cfg.publicUrl }));
+  // A hub only this computer can reach gives other machines its link, when it has one.
+  api.post("/api/machines/pairing-code", async (req) => {
+    const link = hub.remote.view().state === "running" ? hub.remote.view().url : undefined;
+    return { ...hub.machines.createPairingCode((req.body as any)?.name), hubUrl: link && isLocalHost(new URL(cfg.publicUrl).hostname) ? link : cfg.publicUrl };
+  });
   api.patch("/api/machines/:id", async (req) => hub.machines.rename((req.params as any).id, String((req.body as any)?.name ?? "")));
   api.delete("/api/machines/:id", async (req) => {
     hub.machines.revoke((req.params as any).id);
@@ -512,6 +518,27 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
       return hub.syncDeviceServer();
     });
     api.post("/api/devices/pairing", async () => hub.devicePairing());
+    // Access from anywhere (remote.ts): the switch, and forgetting the node.
+    const remoteView = (req: FastifyRequest) => {
+      const v = hub.remote.view(requestLocale(req));
+      return v.state === "running" && v.url ? { ...v, qrSvg: qrSvg(v.url) } : v;
+    };
+    api.get("/api/remote", async (req) => remoteView(req));
+    api.post("/api/remote/enable", async (req) => {
+      await hub.remote.enable();
+      hub.audit.append("user", "remote.enable");
+      return remoteView(req);
+    });
+    api.post("/api/remote/disable", async (req) => {
+      await hub.remote.disable();
+      hub.audit.append("user", "remote.disable");
+      return remoteView(req);
+    });
+    api.post("/api/remote/forget", async (req) => {
+      await hub.remote.forget();
+      hub.audit.append("user", "remote.forget");
+      return remoteView(req);
+    });
     api.patch("/api/devices/:id", async (req) => hub.devices.rename((req.params as any).id, String((req.body as any)?.name ?? "")));
     api.delete("/api/devices/:id", async (req) => {
       hub.devices.revoke((req.params as any).id, "user");

@@ -25,6 +25,8 @@ export interface CoreSettings {
   language: Locale;
   /** Phones may reach the hub: the device port listens on the network. */
   devicesLan: boolean;
+  /** Access from anywhere: the hub runs its Tailscale node and the Funnel link (remote.ts). */
+  remoteAccess: boolean;
   /** Speech to text for voice messages (transcribe.ts). */
   transcription: TranscriptionSettings;
 }
@@ -69,6 +71,7 @@ export function defaultSettings(timezone: string, language: Locale = localeFromE
     approvalExpireHours: 24,
     language,
     devicesLan: false,
+    remoteAccess: false,
     transcription: DEFAULT_TRANSCRIPTION,
   };
 }

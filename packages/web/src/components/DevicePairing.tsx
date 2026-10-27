@@ -7,6 +7,7 @@ import type { Device, DeviceNetwork, DevicePairing } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { countdown, groupedCode } from "../lib/format";
 import { hubEvents, reconnected } from "../state/app";
+import { useRemote } from "../state/remote";
 import { toast } from "../state/toast";
 import { Badge, Button, CopyButton, ErrorNote, Spinner, Toggle, cx } from "./ui";
 import { t } from "../i18n";
@@ -98,6 +99,7 @@ const announced = new Set<string>();
  */
 export function PairingBlock({ devices, onPaired, onClose }: { devices: Device[] | null; onPaired: (d: Device) => void; onClose?: () => void }) {
   const [pairing, setPairing] = useState<DevicePairing | null>(null);
+  const remote = useRemote();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [now, setNow] = useState(Date.now());
@@ -182,7 +184,7 @@ export function PairingBlock({ devices, onPaired, onClose }: { devices: Device[]
             {expired ? <Badge tone="danger">{t("devices.expired")}</Badge> : <Badge tone="info">{t("devices.validFor", { time: countdown(left) })}</Badge>}
           </div>
         </div>
-        <p className="text-xs text-muted">{t("devices.sameNetwork")}</p>
+        <p className="text-xs text-muted">{t(remote?.state === "running" ? "devices.anywhere" : "devices.sameNetwork")}</p>
         {error && <ErrorNote>{error}</ErrorNote>}
         {(expired || onClose) && (
           <div className="flex flex-wrap gap-2">

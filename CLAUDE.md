@@ -21,5 +21,6 @@ Self-hosted personal agent platform. Spec: `docs/superpowers/specs/2026-10-26-op
 - `npm run typecheck` — TypeScript 7 (`tsc --noEmit`)
 - `npm test` — vitest (unit + integration)
 - `npm run build` — web UI, console and UI plugins (Vite / esbuild)
+- `npm run build:tailnet` — the hub's own Tailscale node `packages/tailnet` (Go, not an npm workspace; `go test ./...` there)
 - `npm start` — hub on :8080 (UI/API/MCP), :8081 (security console), :8089 (egress proxy)
 - Docker is in WSL here: `wsl -u root -e sh -lc "cd /mnt/c/... && docker ..."`

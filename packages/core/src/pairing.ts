@@ -36,9 +36,9 @@ const isPhysical = (name: string) => /^(en|eth|wlan|wl|Wi-?Fi|Ethernet)/i.test(n
 
 /**
  * Where a phone can reach the device port, best first: `extra` (OWLBOT_DEVICE_URLS, e.g. for Docker), the computer's
- * Wi-Fi/Ethernet addresses, other private addresses, then Tailscale.
+ * Wi-Fi/Ethernet addresses, other private addresses, the hub's link (`link`, remote.ts), then Tailscale.
  */
-export function deviceUrls(port: number, extra: string[] = [], interfaces: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces()): string[] {
+export function deviceUrls(port: number, extra: string[] = [], interfaces: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces(), link?: string): string[] {
   const ranked: Array<{ url: string; rank: number }> = [];
   for (const [name, list] of Object.entries(interfaces)) {
     for (const i of list ?? []) {
@@ -49,6 +49,7 @@ export function deviceUrls(port: number, extra: string[] = [], interfaces: NodeJ
       ranked.push({ url: `https://${i.address}:${port}`, rank });
     }
   }
+  if (link) ranked.push({ url: link, rank: 2.5 });
   ranked.sort((a, b) => a.rank - b.rank);
   return [...new Set([...extra, ...ranked.map((r) => r.url)])];
 }

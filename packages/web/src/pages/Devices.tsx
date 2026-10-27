@@ -1,4 +1,5 @@
-// Devices: phones with the Owlbot app. The switch that lets them reach the hub, pairing by QR, rename, revoke.
+// Devices: phones with the Owlbot app. The switch that lets them reach the hub, the link for away from home, pairing
+// by QR, rename, revoke.
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Pencil, QrCode, Smartphone, Trash2, X } from "lucide-react";
@@ -6,6 +7,8 @@ import type { Device } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";
 import { toast } from "../state/toast";
+import { useRemote } from "../state/remote";
+import { openPanel } from "../state/panel";
 import { t } from "../i18n";
 import { PairingBlock, PhoneAccess, useDevices } from "../components/DevicePairing";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Loading, Modal, Page } from "../components/ui";
@@ -14,20 +17,23 @@ export function DevicesPage() {
   const { devices, network, setNetwork, error, load } = useDevices();
   const [pairOpen, setPairOpen] = useState(false);
   const [revoking, setRevoking] = useState<Device | null>(null);
-  const listening = !!network?.listening;
+  const remote = useRemote();
+  const linkUp = remote?.state === "running" && !!remote.deviceUrl;
+  // A phone pairs over the home network's port or through the link.
+  const canPair = !!network?.listening || linkUp;
   const closePairing = useCallback(() => setPairOpen(false), []);
 
-  // The QR points at the port that is open now: closing it closes the block.
+  // The QR points at the addresses open now: when none is, the block closes.
   useEffect(() => {
-    if (!listening) setPairOpen(false);
-  }, [listening]);
+    if (!canPair) setPairOpen(false);
+  }, [canPair]);
 
   return (
     <Page
       title={t("nav.devices")}
       subtitle={t("devices.subtitle")}
       actions={
-        <Button variant="primary" icon={<QrCode className="size-4" />} disabled={!listening || pairOpen} onClick={() => setPairOpen(true)}>
+        <Button variant="primary" icon={<QrCode className="size-4" />} disabled={!canPair || pairOpen} onClick={() => setPairOpen(true)}>
           {t("devices.connect")}
         </Button>
       }
@@ -40,7 +46,24 @@ export function DevicesPage() {
             <PhoneAccess network={network} onChange={setNetwork} />
           </section>
         )}
-        {pairOpen && listening && (
+        {remote?.available && (
+          <section className="rounded-2xl border border-border bg-surface p-4 shadow-card">
+            {linkUp ? (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">{t("remote.devicesAway")}</span>
+                <code className="w-fit max-w-full truncate rounded-lg bg-surface-2 px-2 py-0.5 font-mono text-xs">{remote.deviceUrl}</code>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <p className="min-w-0 flex-1 text-sm text-muted">{t("remote.devicesOff")}</p>
+                <Button size="sm" onClick={() => openPanel("integrations")}>
+                  {t("remote.devicesSetUp")}
+                </Button>
+              </div>
+            )}
+          </section>
+        )}
+        {pairOpen && canPair && (
           <section className="animate-in rounded-2xl border border-accent/25 bg-surface p-4 shadow-card">
             <div className="mb-3 font-semibold">{t("devices.connect")}</div>
             <PairingBlock devices={devices} onPaired={closePairing} onClose={closePairing} />

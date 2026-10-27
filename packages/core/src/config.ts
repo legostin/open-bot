@@ -21,6 +21,10 @@ export interface Config {
   deviceUrls: string[];
   /** URL users and nodes use to reach the main UI / API. */
   publicUrl: string;
+  /** The hub's Tailscale node (remote.ts): OWLBOT_TAILNET_BIN, else packages/tailnet/bin/<platform>-<arch>/ in the app. */
+  tailnetBin: string;
+  /** The node's name in the tailnet, the link's first label (OWLBOT_TAILNET_HOSTNAME, default "owlbot"). */
+  tailnetHostname: string;
   /** URL of the isolated security console. */
   consoleUrl: string;
   /** URL that local child processes (plugins, brains) use to reach the hub. */
@@ -83,6 +87,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
       .filter(Boolean),
     publicUrl,
     consoleUrl,
+    tailnetBin:
+      env.OWLBOT_TAILNET_BIN ?? join(appRoot, "packages", "tailnet", "bin", `${process.platform}-${process.arch}`, process.platform === "win32" ? "owlbot-tailnet.exe" : "owlbot-tailnet"),
+    tailnetHostname: env.OWLBOT_TAILNET_HOSTNAME?.trim() || "owlbot",
     internalUrl: `http://127.0.0.1:${port}`,
     google: {
       clientId: env.OWLBOT_GOOGLE_CLIENT_ID ?? BUILTIN_GOOGLE_CLIENT.clientId,

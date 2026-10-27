@@ -46,6 +46,7 @@ import { SetupGuide } from "./setup.ts";
 import { MediaService } from "./media.ts";
 import { Connections } from "./connections.ts";
 import { cleanTranscription, Transcriber } from "./transcribe.ts";
+import { RemoteAccess } from "./remote.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import { buildDeviceApp } from "./server/device-app.ts";
@@ -95,6 +96,10 @@ export class Hub {
   media: MediaService;
   connections: Connections;
   transcriber: Transcriber;
+  /** Access from anywhere: the hub's Tailscale node and its link (remote.ts). */
+  remote: RemoteAccess;
+  /** The link's gateways on loopback: the web UI and the phones, behind the node. */
+  private remoteGateways?: { web: FastifyInstance; device: FastifyInstance; ports: { web: number; device: number } };
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -231,6 +236,19 @@ export class Hub {
       origins: [new URL(config.publicUrl).origin, new URL(config.consoleUrl).origin],
       setupToken: process.env.OWLBOT_SETUP_TOKEN,
     });
+    this.auth.onRemotePause = () => {
+      void this.notifier.notify({ level: "notify", title: t("remote.pausedTitle"), body: t("remote.pausedBody") }).catch(() => {});
+    };
+    this.remote = new RemoteAccess({
+      config,
+      settings: this.settings,
+      bus: this.bus,
+      deviceTls: () => this.deviceTls(),
+      gateways: { start: () => this.startRemoteGateways(), stop: () => this.stopRemoteGateways() },
+      hasPassword: () => this.auth.hasPassword(),
+    });
+    // The link is one of the phones' addresses: the Devices page follows it.
+    this.bus.on("remote.updated", () => this.bus.emit("devices.network", this.deviceNetwork()));
     registerCoreTools({
       registry: this.tools,
       skills: this.skills,
@@ -303,7 +321,7 @@ export class Hub {
       forced: this.config.devicesForced,
       listening: !!this.deviceApp,
       port: this.config.devicePort,
-      urls: deviceUrls(this.config.devicePort, this.config.deviceUrls),
+      urls: deviceUrls(this.config.devicePort, this.config.deviceUrls, undefined, this.remote.deviceLink()),
       ...(this.deviceError ? { error: this.deviceError } : {}),
     };
   }
@@ -337,15 +355,48 @@ export class Hub {
     return next;
   }
 
-  /** A one-time code and the QR for a phone; the device port must be on. */
+  /** Where a phone can reach the hub now: the device port's addresses while it listens, and the link while it is up. */
+  phoneUrls(): string[] {
+    const link = this.remote.deviceLink();
+    if (this.deviceApp) return deviceUrls(this.config.devicePort, this.config.deviceUrls, undefined, link);
+    return link ? [link] : [];
+  }
+
+  /** A one-time code and the QR for a phone; the device port or the link must be up. */
   devicePairing(): DevicePairing {
     const network = this.deviceNetwork();
-    if (!network.listening) throw new LocalizedError("device.networkOff", undefined, 409);
-    if (!network.urls.length) throw new LocalizedError("device.noAddress", undefined, 409);
+    if (!network.listening && !this.remote.deviceLink()) throw new LocalizedError("device.networkOff", undefined, 409);
+    const urls = this.phoneUrls();
+    if (!urls.length) throw new LocalizedError("device.noAddress", undefined, 409);
     const { fingerprint } = this.deviceTls();
     const { code, expiresAt } = this.devices.createPairingCode();
-    const link = pairingLink({ code, hubName: hubName(), fingerprint, urls: network.urls });
-    return { code, expiresAt, link, qrSvg: qrSvg(link), urls: network.urls, fingerprint };
+    const link = pairingLink({ code, hubName: hubName(), fingerprint, urls });
+    return { code, expiresAt, link, qrSvg: qrSvg(link), urls, fingerprint };
+  }
+
+  /** The link's gateways (remote.ts): the web UI and the phones' API on loopback ports only the node is told. */
+  private async startRemoteGateways(): Promise<{ web: number; device: number }> {
+    if (this.remoteGateways) return this.remoteGateways.ports;
+    const web = await buildMainApp(this, { remote: { host: () => this.remote.linkHost() } });
+    const device = await buildDeviceApp(this, this.deviceTls(), { remote: true });
+    try {
+      await web.listen({ host: "127.0.0.1", port: 0 });
+      await device.listen({ host: "127.0.0.1", port: 0 });
+    } catch (e) {
+      await web.close().catch(() => {});
+      await device.close().catch(() => {});
+      throw e;
+    }
+    const port = (app: FastifyInstance) => (app.server.address() as { port: number }).port;
+    this.remoteGateways = { web, device, ports: { web: port(web), device: port(device) } };
+    return this.remoteGateways.ports;
+  }
+
+  private async stopRemoteGateways(): Promise<void> {
+    const g = this.remoteGateways;
+    this.remoteGateways = undefined;
+    await g?.web.close();
+    await g?.device.close();
   }
 
   /** Where "unlock automatically after restarts" keeps the vault passphrase (hub-only file, like a Docker secret). */
@@ -474,6 +525,7 @@ export class Hub {
       await this.mainApp.listen({ host: cfg.host, port: cfg.port });
       await this.consoleApp.listen({ host: cfg.host, port: cfg.consolePort });
       await this.syncDeviceServer();
+      await this.remote.start();
     }
 
     // Desktop installs run from launchd or a tray app; a terminal's `npm start` already has the user's PATH.
@@ -507,6 +559,7 @@ export class Hub {
     this.machines.closeAll();
     await this.plugins.stopAll();
     await this.mcpClients.closeAll();
+    await this.remote.stop();
     await this.mainApp?.close();
     await this.consoleApp?.close();
     await this.deviceSync;

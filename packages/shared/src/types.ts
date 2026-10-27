@@ -573,6 +573,32 @@ export interface DeviceNetwork {
   error?: string;
 }
 
+/** Access from anywhere: the hub's own Tailscale node and its Funnel link (remote.ts). */
+export type RemoteState = "off" | "starting" | "needs-login" | "needs-funnel" | "running" | "error";
+
+export interface RemoteView {
+  /** The node program is in this build. */
+  available: boolean;
+  enabled: boolean;
+  state: RemoteState;
+  /** The permanent link: https://owlbot.<tailnet>.ts.net */
+  url?: string;
+  /** The phones' address behind the link (port 8443). */
+  deviceUrl?: string;
+  /** Tailscale's sign-in page (needs-login). */
+  authUrl?: string;
+  /** Tailscale's page that allows Funnel in the tailnet (needs-funnel). */
+  enableUrl?: string;
+  /** The tailnet account the node belongs to. */
+  account?: string;
+  /** When the node's key expires (ISO); absent when expiry is off. */
+  keyExpiry?: string;
+  /** Why it is unavailable or failing (in the reader's language). */
+  error?: string;
+  /** The link as a QR code (SVG), from GET /api/remote while it is up. */
+  qrSvg?: string;
+}
+
 // ---------- Vault ----------
 
 export type VaultState = "uninitialized" | "sealed" | "unlocked";
@@ -636,6 +662,7 @@ export type UiEvent =
   | { type: "machine.updated"; data: Machine }
   | { type: "device.updated"; data: { id: string } }
   | { type: "devices.network"; data: DeviceNetwork }
+  | { type: "remote.updated"; data: RemoteView }
   | { type: "vault.state"; data: { state: VaultState } }
   | { type: "secret.request"; data: SecretRequest }
   | { type: "agent_draft.updated"; data: AgentDraft }
@@ -648,13 +675,14 @@ export type IntegrationStatus = "connected" | "needs-setup" | "off" | "unavailab
 
 /** A card of the integrations library (GET /api/integrations). */
 export interface IntegrationView {
-  /** The plugin's id. */
+  /** The plugin's id, or a core entry's ("remote-access"). */
   id: string;
   name: string;
   summary: string;
   category: string;
   icon: string;
-  connect: "google" | "setup" | "none";
+  /** "remote": the core's access from anywhere (RemoteView). */
+  connect: "google" | "setup" | "none" | "remote";
   status: IntegrationStatus;
   /** The connected account (e.g. an email), when there is one. */
   account?: string;

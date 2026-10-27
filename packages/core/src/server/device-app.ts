@@ -2,7 +2,8 @@
 // The app calls the API with its bearer token; its chat screen is the web UI's chat (/m/*) in a WebView, signed in by
 // a one-time ticket the app trades for a cookie session, so the token never reaches the page. No password sign-in,
 // no MCP, no desktop pages. It listens on the network (home Wi-Fi, Tailscale) while the web UI and the security
-// console stay on their own host.
+// console stay on their own host. In remote mode the same app is the link's phone gateway (remote.ts): plain HTTP on
+// loopback behind the hub's Tailscale node, which presents this port's certificate to the phones itself.
 
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
@@ -27,9 +28,11 @@ declare module "fastify" {
   }
 }
 
-export async function buildDeviceApp(hub: Hub, tls: DeviceTls): Promise<FastifyInstance> {
+export async function buildDeviceApp(hub: Hub, tls: DeviceTls, opts: { remote?: boolean } = {}): Promise<FastifyInstance> {
   const cfg = hub.config;
-  const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, https: { key: tls.key, cert: tls.cert } });
+  const app: FastifyInstance = opts.remote
+    ? Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, trustProxy: "127.0.0.1" })
+    : (Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, https: { key: tls.key, cert: tls.cert } }) as unknown as FastifyInstance);
   await app.register(fastifyCookie);
   await app.register(fastifyWebsocket, { options: { maxPayload: 4 * 1024 * 1024 } });
 
@@ -125,6 +128,8 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls): Promise<FastifyI
     });
 
     api.get("/api/devices/me", async (req) => req.device);
+    // Where the app can find the hub now (the link may have come after the pairing): it keeps the list.
+    api.get("/api/devices/addresses", async () => ({ urls: hub.phoneUrls() }));
     // Only the app (its token) gets tickets for its chat page; the page cannot mint more.
     api.post("/api/devices/web-ticket", async (req) => {
       if (req.webCsrf) throw new HttpError(403, "auth.required");

@@ -28,6 +28,10 @@ describe("desktop launcher", () => {
     expect(wanted(join(ROOT, "packages", "desktop", "src-tauri", "target", "release", "owlbot"))).toBe(false);
     expect(wanted(join(ROOT, "packages", "desktop", "ui", "src", "main.ts"))).toBe(false);
     expect(wanted(join(ROOT, "packages", "core", "test", "hub.test.ts"))).toBe(false);
+    // The Tailscale node ships as the target's binaries only (stage() copies them), not its Go sources.
+    expect(wanted(join(ROOT, "packages", "tailnet"))).toBe(true);
+    expect(wanted(join(ROOT, "packages", "tailnet", "main.go"))).toBe(false);
+    expect(wanted(join(ROOT, "packages", "tailnet", "bin", "linux-x64", "owlbot-tailnet"))).toBe(false);
   });
 
   it("keeps data in the user's profile", () => {

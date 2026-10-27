@@ -8,3 +8,4 @@
 **/*.log
 test-results
 playwright-report
+packages/tailnet/bin

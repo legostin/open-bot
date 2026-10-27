@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["packaging/**", "packages/desktop/**", "package.json", "package-lock.json", ".github/workflows/desktop.yml"]
+    paths: ["packaging/**", "packages/desktop/**", "packages/tailnet/**", "package.json", "package-lock.json", ".github/workflows/desktop.yml"]
   pull_request:
-    paths: ["packaging/**", "packages/desktop/**", "package.json", "package-lock.json", ".github/workflows/desktop.yml"]
+    paths: ["packaging/**", "packages/desktop/**", "packages/tailnet/**", "package.json", "package-lock.json", ".github/workflows/desktop.yml"]
 
 jobs:
   windows:
@@ -20,6 +20,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # The hub's Tailscale node (packages/tailnet) is Go; staging builds it for the installer's architectures.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tailnet/go.mod
+          cache-dependency-path: packages/tailnet/go.sum
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -80,6 +85,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # The hub's Tailscale node (packages/tailnet) is Go; staging builds it for the installer's architectures.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tailnet/go.mod
+          cache-dependency-path: packages/tailnet/go.sum
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
