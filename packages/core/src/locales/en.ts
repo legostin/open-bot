@@ -134,6 +134,7 @@ export default {
   // settings, files, builds
   "settings.secretInPlainText": "{field}: keep secrets in the vault and reference them as vault://<id>",
   "settings.badLanguage": "Unsupported language: {value}",
+  "settings.badTranscription": "Speech-to-text settings are wrong: {reason}",
   "file.notFound": "File not found",
   "media.badUrl": "Only http and https image addresses can be shown",
   "media.private": "This image address points into a private network",

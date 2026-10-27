@@ -182,7 +182,7 @@ export type MessagePart =
   | { type: "notification"; level: NotifyLevel; title: string; body: string }
   | { type: "error"; message: string }
   /** A file the user sent (or a plugin attached): `path` is relative to the workspaces root, `size` in bytes. */
-  | { type: "attachment"; path: string; name: string; mimeType?: string; size?: number; kind?: AttachmentKind; durationSec?: number }
+  | { type: "attachment"; path: string; name: string; mimeType?: string; size?: number; kind?: AttachmentKind; durationSec?: number; transcript?: string }
   /** A secret the user types into the chat card; the value goes straight to the vault and never into the conversation. */
   | { type: "secret_request"; requestId: string; vaultId: string; title: string; status: SecretRequestStatus }
   /** A plugin's setup card: its secrets and its own setup UI (e.g. Telegram pairing), live. */

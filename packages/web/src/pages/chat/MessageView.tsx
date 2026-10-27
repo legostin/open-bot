@@ -107,6 +107,7 @@ function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" 
         <span className="min-w-0 truncate font-medium">{voice ? t("message.voice") : part.name || part.path}</span>
         {meta && <span className="shrink-0 text-xs text-muted">{meta}</span>}
       </a>
+      {part.transcript && <p className="mt-1.5 max-w-prose whitespace-pre-wrap">{part.transcript}</p>}
     </div>
   );
 }

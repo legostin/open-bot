@@ -10,6 +10,8 @@ import type { Store } from "../store.ts";
 import type { Notifier } from "../notifier.ts";
 import type { AgentRegistry } from "../agents.ts";
 import { imageTypeOf, MAX_IMAGE_BYTES, parseImageUrl } from "../media.ts";
+import { mimeOf } from "../attachments.ts";
+import type { Transcriber } from "../transcribe.ts";
 
 export interface CoreToolDeps {
   registry: ToolRegistry;
@@ -23,6 +25,8 @@ export interface CoreToolDeps {
   attachPart: (conversationId: string, part: MessagePart) => void;
   /** <dataDir>/workspaces: `file:` image sources are relative to it. */
   workspacesRoot: string;
+  /** Speech to text (transcribe.ts). */
+  transcriber?: Transcriber;
 }
 
 const MAX_IMAGES = 10;
@@ -38,6 +42,20 @@ function coord(v: unknown, name: string, min: number, max: number): number | str
   const n = typeof v === "string" && v.trim() ? Number(v) : v;
   if (typeof n !== "number" || !Number.isFinite(n) || n < min || n > max) return `${name} must be a number from ${min} to ${max}`;
   return n;
+}
+
+/** `path` (relative to the agent's workspace) as a real file inside it, or an error text. */
+function workspaceFile(path: string, workspace: string, root: string): string | { error: string } {
+  if (isAbsolute(path)) return { error: `${path}: give the path relative to your workspace` };
+  let real: string;
+  try {
+    real = realpathSync(resolve(workspace, path));
+    const inside = (dir: string) => real === dir || real.startsWith(dir + sep);
+    if (!inside(realpathSync(workspace)) || !inside(realpathSync(root))) return { error: `${path}: outside your workspace` };
+  } catch {
+    return { error: `${path}: no such file in your workspace` };
+  }
+  return statSync(real).isFile() ? real : { error: `${path}: not a file` };
 }
 
 /** `path` (relative to the agent's workspace) as a `file:` source under the workspaces root, or an error text. */
@@ -159,6 +177,35 @@ export function registerCoreTools(d: CoreToolDeps): void {
     (i) => {
       const s = d.skills.load(String(i.name));
       return s ? text(s) : text(`Skill ${i.name} not found`, true);
+    },
+  );
+
+  reg(
+    {
+      name: "transcribe_audio",
+      description:
+        "Turn speech in an audio file from your workspace into text: a voice message the user sent (attachments/…), a recording you downloaded. " +
+        "Voice messages usually arrive already transcribed; use this when a note says it could not be done, after speech-to-text was set up, or for other audio. " +
+        "Formats: ogg/opus, mp3, m4a, wav, webm, flac, mp4; up to 25 MB.",
+      effect: "read",
+      inputSchema: { type: "object", properties: { path: { type: "string", description: "Audio file in your workspace, relative to it" } }, required: ["path"] },
+    },
+    async (i, ctx) => {
+      if (ctx.machineId !== "local") return text(`Files on ${ctx.machineId} cannot be transcribed by the hub.`, true);
+      if (typeof i.path !== "string" || !i.path.trim()) return text("Give path: the audio file, relative to your workspace.", true);
+      const file = workspaceFile(i.path.trim(), ctx.workspace, d.workspacesRoot);
+      if (typeof file !== "string") return text(file.error, true);
+      if (!d.transcriber?.engine())
+        return text(
+          "No speech-to-text is set up. Offer the user a Groq API key (free tier, https://console.groq.com/keys) or an OpenAI API key, asked for with secret_request as groq_api_key or openai_api_key, then try again.",
+          true,
+        );
+      try {
+        const words = await d.transcriber.transcribe(file, mimeOf(file));
+        return text(words ? `Transcript: ${words}` : "No speech in the recording.");
+      } catch (e: any) {
+        return text(`Could not transcribe it: ${e?.message ?? e}`, true);
+      }
     },
   );
 

@@ -1,7 +1,7 @@
 // End-to-end tests of the hub with a scripted brain plugin (test/fixtures/plugins/fakebrain).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
-import { request } from "node:http";
+import { createServer as createHttpServer, request } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -235,6 +235,58 @@ describe("hub (integration)", () => {
     await lastReply(fwd.conversationId, /^fake saw: \[Forwarded from Оля\]$/);
     const msgs: any[] = await web.req("GET", `/api/conversations/${fwd.conversationId}/messages`);
     expect(msgs.find((m) => m.id === fwd.messageId).parts).toEqual([{ type: "text", text: "ECHO? forwarded" }]);
+  });
+
+  it("transcribes voice messages before the agent's turn, says why when it cannot, and lets the agent ask again", async () => {
+    // A fake OpenAI-compatible speech-to-text server: "heard <file name>", or 401 for the model "broken".
+    const stt = createHttpServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        const body = Buffer.concat(chunks).toString("latin1");
+        res.setHeader("content-type", "application/json");
+        if (body.includes("broken")) return res.writeHead(401).end(JSON.stringify({ error: { message: "Invalid API key" } }));
+        res.end(JSON.stringify({ text: `heard ${/filename="([^"]+)"/.exec(body)?.[1]}` }));
+      });
+    });
+    await new Promise<void>((r) => stt.listen(0, "127.0.0.1", r));
+    const sttUrl = `http://127.0.0.1:${(stt.address() as any).port}/v1`;
+    try {
+      const call = createCoreCall(hub);
+      const voice = { data: Buffer.from("OggS").toString("base64"), mimeType: "audio/ogg", kind: "voice", durationSec: 3 };
+      const say = async (title: string) => {
+        const c = await web.req("POST", "/api/conversations", { title });
+        await call("fakebrain", "channels.inbound", { channel: "test", conversationId: c.id, text: "", files: [voice] });
+        const m = await lastReply(c.id, /^fake files:/);
+        return { id: c.id, reply: m.parts.find((p: any) => p.type === "text").text as string };
+      };
+      expect((await web.raw("PATCH", "/api/settings", { transcription: { provider: "loud" } })).json.error).toMatch(/^Speech-to-text settings are wrong: transcription.provider must be one of/);
+
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "custom", baseUrl: sttUrl, model: "small" } });
+      const ok = await say("voice");
+      expect(ok.reply).toMatch(/- attachments\/(voice-\d{8}-\d{6}\.ogg) \(audio\/ogg, 4 B, voice message 0:03\), transcript: "heard voice-\d{8}-\d{6}\.ogg"/);
+      const stored: any[] = await web.req("GET", `/api/conversations/${ok.id}/messages`);
+      expect(stored.find((m) => m.role === "user").parts[0].transcript).toMatch(/^heard voice-/);
+
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "custom", baseUrl: sttUrl, model: "broken" } });
+      expect((await say("voice, failing")).reply).toContain("voice message 0:03), could not transcribe it: 127.0.0.1:");
+      expect((await say("voice, failing 2")).reply).toContain("answered 401: Invalid API key");
+
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "off" } });
+      const none = await say("voice, nothing set up");
+      expect(none.reply).toContain("voice message 0:03), no speech-to-text is set up / You cannot hear voice messages until speech-to-text is set up.");
+
+      // The agent asks again once it is set up.
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "custom", baseUrl: sttUrl, model: "small" } });
+      await web.upload(`/api/conversations/${none.id}/attachments?name=memo.m4a`, Buffer.from("m4a"));
+      await web.req("POST", `/api/conversations/${none.id}/messages`, { text: 'CALL transcribe_audio {"path":"attachments/memo.m4a"}' });
+      await lastReply(none.id, /^tool said: Transcript: heard memo\.m4a$/);
+      await web.req("POST", `/api/conversations/${none.id}/messages`, { text: 'CALL transcribe_audio {"path":"../../etc/passwd"}' });
+      await lastReply(none.id, /^tool said: \.\.\/\.\.\/etc\/passwd: (outside your workspace|no such file in your workspace)$/);
+    } finally {
+      await web.req("PATCH", "/api/settings", { transcription: { provider: "auto" } });
+      stt.close();
+    }
   });
 
   it("routes channel messages to the default agent's dialog and shows it in the team", async () => {

@@ -28,7 +28,24 @@ interface CoreSettings {
   approvalExpireHours: number;
   /** Hub language: notifications, channels, approval cards, agent replies; the UI default. */
   language: Locale;
+  /** Speech to text for voice messages. */
+  transcription: Transcription;
 }
+
+interface Transcription {
+  provider: "auto" | "openai" | "groq" | "custom" | "off";
+  model?: string;
+  baseUrl?: string;
+  keyRef?: string;
+}
+
+const VOICE_PROVIDERS: Array<{ id: Transcription["provider"]; label: MessageKey }> = [
+  { id: "auto", label: "settings.voice.auto" },
+  { id: "groq", label: "settings.voice.groq" },
+  { id: "openai", label: "settings.voice.openai" },
+  { id: "custom", label: "settings.voice.custom" },
+  { id: "off", label: "settings.voice.off" },
+];
 
 type NumKey = "notifyRatePerHour" | "brainConcurrency" | "approvalInlineWaitSec" | "approvalExpireHours";
 
@@ -48,13 +65,20 @@ export function SettingsPage() {
   const [nums, setNums] = useState<Record<NumKey, string>>({ notifyRatePerHour: "", brainConcurrency: "", approvalInlineWaitSec: "", approvalExpireHours: "" });
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [voiceEngine, setVoiceEngine] = useState<{ label: string; model: string } | null>();
 
+  const loadVoiceEngine = () =>
+    void api.get<{ engine: { label: string; model: string } | null }>("/api/transcription").then(
+      (x) => setVoiceEngine(x.engine),
+      () => setVoiceEngine(undefined),
+    );
   const load = async () => {
     setError(undefined);
     try {
       const r = await api.get<CoreSettings>("/api/settings");
       setOrig(r);
       setForm(r);
+      loadVoiceEngine();
       setNums({
         notifyRatePerHour: String(r.notifyRatePerHour),
         brainConcurrency: String(r.brainConcurrency),
@@ -118,6 +142,7 @@ export function SettingsPage() {
     const badTime = next.digestTimes.find((x) => !TIME_RE.test(x));
     if (badTime) return { error: t("settings.error.digestTime", { value: badTime }) };
     if (zones.length && !zones.includes(next.timezone) && next.timezone !== "UTC") return { error: t("settings.error.timezone", { value: next.timezone }) };
+    if (next.transcription.provider === "custom" && (!next.transcription.baseUrl?.trim() || !next.transcription.model?.trim())) return { error: t("settings.error.voiceServer") };
     return { next };
   };
 
@@ -136,6 +161,7 @@ export function SettingsPage() {
       if ("language" in patch && !explicitLocale() && saved.language !== locale) return location.reload();
       setOrig(saved);
       setForm(saved);
+      if ("transcription" in patch) loadVoiceEngine();
       toast(t("common.settingsSaved"), "success");
       void refreshBootstrap();
     } catch (e) {
@@ -247,6 +273,36 @@ export function SettingsPage() {
             <Field group label={t("settings.egress")} hint={t("settings.egressHint")}>
               <TagInput value={form.brainEgressAllow} onChange={(v) => set("brainEgressAllow", v)} placeholder="api.example.com" />
             </Field>
+          </div>
+        </Card>
+
+        <Card title={t("settings.voice.title")}>
+          <p className="mb-3 text-sm text-muted">{t("settings.voice.hint")}</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t("settings.voice.provider")} hint={voiceEngine ? t("settings.voice.now", { engine: `${voiceEngine.label} · ${voiceEngine.model}` }) : voiceEngine === null ? t("settings.voice.none") : undefined}>
+              <Select value={form.transcription.provider} onChange={(e) => set("transcription", { provider: e.target.value as Transcription["provider"] })}>
+                {VOICE_PROVIDERS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {t(p.label)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {form.transcription.provider !== "off" && form.transcription.provider !== "auto" && (
+              <Field label={t("settings.voice.model")} hint={form.transcription.provider === "custom" ? undefined : t("settings.voice.modelHint")}>
+                <Input value={form.transcription.model ?? ""} onChange={(e) => set("transcription", { ...form.transcription, model: e.target.value })} placeholder={form.transcription.provider === "groq" ? "whisper-large-v3-turbo" : form.transcription.provider === "openai" ? "gpt-4o-mini-transcribe" : "Systran/faster-whisper-small"} />
+              </Field>
+            )}
+            {form.transcription.provider === "custom" && (
+              <>
+                <Field label={t("settings.voice.baseUrl")} hint={t("settings.voice.baseUrlHint")}>
+                  <Input value={form.transcription.baseUrl ?? ""} onChange={(e) => set("transcription", { ...form.transcription, baseUrl: e.target.value })} placeholder="http://127.0.0.1:8000/v1" />
+                </Field>
+                <Field label={t("settings.voice.keyRef")} hint={t("settings.voice.keyRefHint")}>
+                  <Input value={form.transcription.keyRef ?? ""} onChange={(e) => set("transcription", { ...form.transcription, keyRef: e.target.value })} placeholder="vault://my_stt_key" />
+                </Field>
+              </>
+            )}
           </div>
         </Card>
 

@@ -36,6 +36,7 @@ interface ReplyOpts {
   replyChannel?: string;
   quote?: string;
   attachments?: AttachmentPart[];
+  speech?: Record<string, string>;
 }
 
 interface Held {
@@ -186,7 +187,8 @@ export class SetupGuide {
     const fresh = prev && Date.now() - prev.at < HOLD_MS ? prev : undefined;
     // The files of every waiting message go with the one turn that answers them.
     const attachments = [...(fresh?.opts.attachments ?? []), ...(opts.attachments ?? [])];
-    const kept = { ...(fresh?.opts ?? opts), ...(attachments.length ? { attachments } : {}) };
+    const speech = { ...fresh?.opts.speech, ...opts.speech };
+    const kept = { ...(fresh?.opts ?? opts), ...(attachments.length ? { attachments } : {}), ...(Object.keys(speech).length ? { speech } : {}) };
     this.held.set(conversationId, { agentId, prompts: [...(fresh?.prompts ?? []), prompt], opts: kept, at: Date.now() });
   }
 

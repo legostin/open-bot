@@ -133,6 +133,7 @@ export default {
   // settings, files, builds
   "settings.secretInPlainText": "{field}: храните секреты в vault и указывайте ссылку vault://<id>",
   "settings.badLanguage": "Неподдерживаемый язык: {value}",
+  "settings.badTranscription": "Неверные настройки расшифровки речи: {reason}",
   "file.notFound": "Файл не найден",
   "media.badUrl": "Показать можно только изображения по адресам http и https",
   "media.private": "Адрес изображения ведёт во внутреннюю сеть",

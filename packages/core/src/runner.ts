@@ -27,7 +27,8 @@ import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
 import { MAX_IMAGE_BYTES, readWorkspaceImage } from "./media.ts";
 import { TurnClock } from "./clock.ts";
-import { attachmentNote, forSession, type AttachmentPart, type SessionFile } from "./attachments.ts";
+import { attachmentNote, forSession, isSpeech, SPEECH_NOT_SET_UP, type AttachmentPart, type SessionFile } from "./attachments.ts";
+import { MAX_AUTO_TRANSCRIBE_SEC, type Transcriber } from "./transcribe.ts";
 import { firstSpeakers, groupTurn, groupTurnText, handOff, MAX_HANDOFFS, USER_LABEL } from "./group-chat.ts";
 
 export interface RunnerDeps {
@@ -52,9 +53,11 @@ export interface RunnerDeps {
   secrets: SecretIntake;
   /** First-run setup (set by the hub): keeps messages written while no brain works and adds the prompt section. */
   setup?: {
-    hold(conversationId: string, agentId: string, prompt: string, opts: { replyChannel?: string; quote?: string; attachments?: AttachmentPart[] }): void;
+    hold(conversationId: string, agentId: string, prompt: string, opts: { replyChannel?: string; quote?: string; attachments?: AttachmentPart[]; speech?: Record<string, string> }): void;
     promptBlock(agentId: string): Promise<string | undefined>;
   };
+  /** Speech to text for voice messages (set by the hub). */
+  transcriber?: Transcriber;
 }
 
 /** What the web UI passes as the channel of a typed message (not a registered channel). */
@@ -70,6 +73,8 @@ interface TurnOpts {
   agentId?: string;
   /** Files that came with the user's message: the brain gets their paths and a note. */
   attachments?: AttachmentPart[];
+  /** Voice notes without a transcript, by path: why (the note tells the agent). */
+  speech?: Record<string, string>;
   /** Group chats: the user message this round answers, and why the member has the floor if not addressed by it. */
   group?: { triggerId?: string; floorNote?: string };
 }
@@ -201,8 +206,43 @@ export class SessionRunner {
       return msg;
     }
     const quote = [text, ...attachments.map((a) => `📎 ${a.name}`)].filter(Boolean).join("\n");
-    void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { replyChannel: opts.channel, ...files, ...(fromWeb ? { quote } : {}) }));
+    // Voice notes become words first, in the queue: the turn waits for them, later messages wait for the turn.
+    void this.enqueue(conversationId, async () =>
+      this.runTurn(conv, prompt, { replyChannel: opts.channel, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}), ...(fromWeb ? { quote } : {}) }),
+    );
     return msg;
+  }
+
+  /** Voice notes and audio files in a user message become words: stored on the parts (the chat shows them), and why not when they cannot. */
+  private async transcribeParts(messageId: string, parts: AttachmentPart[]): Promise<{ attachments: AttachmentPart[]; speech: Record<string, string> }> {
+    const speech: Record<string, string> = {};
+    const todo = parts.filter((p) => isSpeech(p) && p.transcript === undefined);
+    if (!todo.length) return { attachments: parts, speech };
+    const t = this.d.transcriber;
+    if (!t?.engine()) {
+      for (const p of todo) speech[p.path] = SPEECH_NOT_SET_UP;
+      return { attachments: parts, speech };
+    }
+    const root = join(this.d.config.dataDir, "workspaces");
+    const out: AttachmentPart[] = [];
+    for (const p of parts) {
+      if (!todo.includes(p)) out.push(p);
+      else if (p.durationSec !== undefined && p.durationSec > MAX_AUTO_TRANSCRIBE_SEC) {
+        speech[p.path] = "not transcribed: longer than 10 minutes (transcribe_audio can do it if the user wants)";
+        out.push(p);
+      } else {
+        try {
+          out.push({ ...p, transcript: await t.transcribe(join(root, p.path), p.mimeType) });
+        } catch (e: any) {
+          speech[p.path] = `could not transcribe it: ${e?.message ?? e}`;
+          out.push(p);
+        }
+      }
+    }
+    const done = new Map(out.filter((p) => p.transcript !== undefined).map((p) => [p.path, p.transcript!]));
+    const m = done.size ? this.d.store.getMessage(messageId) : undefined;
+    if (m) this.d.store.updateMessage(m.id, { parts: m.parts.map((p) => (p.type === "attachment" && done.has(p.path) ? { ...p, transcript: done.get(p.path) } : p)) });
+    return { attachments: out, speech };
   }
 
   // ---------- group chats ----------
@@ -241,10 +281,11 @@ export class SessionRunner {
     speakers: string[],
     prompt: string,
     triggerId: string,
-    opts: { replyChannel?: string; attachments?: AttachmentPart[] },
+    opts: { replyChannel?: string; attachments?: AttachmentPart[]; speech?: Record<string, string> },
   ): Promise<void> {
     const stopped = () => (this.groupEpoch.get(conversationId) ?? 0) !== epoch;
     if (stopped()) return;
+    if (opts.attachments?.length) opts = { ...opts, ...(await this.transcribeParts(triggerId, opts.attachments)) };
     const queue = [...speakers];
     const handedBy = new Map<string, string>();
     let handoffs = 0;
@@ -343,7 +384,7 @@ export class SessionRunner {
   }
 
   /** Messages kept while no brain worked: the agent answers them now. */
-  resume(conversationId: string, prompt: string, opts: { replyChannel?: string; quote?: string; attachments?: AttachmentPart[] }): void {
+  resume(conversationId: string, prompt: string, opts: { replyChannel?: string; quote?: string; attachments?: AttachmentPart[]; speech?: Record<string, string> }): void {
     const conv = this.d.store.getConversation(conversationId);
     if (!conv) return;
     void this.enqueue(conv.id, () => this.runTurn(conv, prompt, opts));
@@ -841,7 +882,7 @@ export class SessionRunner {
       // No brain of the agent is set up yet: the setup card instead of an error, and the message waits for a brain.
       // (A group chat's round goes on with the next member instead.)
       if (!ref && setupOnly && !tried.size && !task && this.d.setup && conv.kind !== "group") {
-        this.d.setup.hold(conv.id, agent.id, prompt, { replyChannel: opts.replyChannel, quote: opts.quote, attachments: opts.attachments });
+        this.d.setup.hold(conv.id, agent.id, prompt, { replyChannel: opts.replyChannel, quote: opts.quote, attachments: opts.attachments, speech: opts.speech });
         this.addSetupCard(conv.id);
         return { text: "", error: t("chat.needsBrain"), awaitingApproval: false };
       }
@@ -890,7 +931,8 @@ export class SessionRunner {
       let paths: string[] = [];
       if (opts.attachments?.length) {
         const local = parseBrainRef(row!.brainRef).machineId === "local";
-        const files = local ? forSession(opts.attachments, join(this.d.config.dataDir, "workspaces"), this.workspacePath(row!)) : opts.attachments.map((part): SessionFile => ({ part }));
+        const seen = local ? forSession(opts.attachments, join(this.d.config.dataDir, "workspaces"), this.workspacePath(row!)) : opts.attachments.map((part): SessionFile => ({ part }));
+        const files = seen.map((f) => (opts.speech?.[f.part.path] ? { ...f, speech: opts.speech[f.part.path] } : f));
         text = [text, attachmentNote(files, { remote: !local })].filter(Boolean).join("\n\n");
         paths = files.flatMap((f) => (f.path ? [f.path] : []));
       }

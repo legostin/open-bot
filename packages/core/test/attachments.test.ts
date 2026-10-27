@@ -9,7 +9,9 @@ import {
   defaultName,
   formatSize,
   forSession,
+  isSpeech,
   mimeOf,
+  SPEECH_NOT_SET_UP,
   safeFileName,
   saveAttachment,
 } from "../src/attachments.ts";
@@ -111,6 +113,18 @@ describe("attachments", () => {
       "[The user attached 2 files. They are stored on the hub, not on this machine: receipt.jpg (image/jpeg, 1.2 MB); voice.ogg (audio/ogg, 47 KB, voice message 1:12).]",
     );
     expect(attachmentNote([])).toBe("");
+  });
+
+  it("puts what a voice message says into the note, or why it cannot", () => {
+    const voice = { type: "attachment" as const, path: "a/c/attachments/v.ogg", name: "v.ogg", mimeType: "audio/ogg", size: 2048, kind: "voice" as const, durationSec: 5 };
+    expect(isSpeech(voice)).toBe(true);
+    expect(isSpeech({ ...voice, kind: "video" as const, mimeType: "video/mp4" })).toBe(false);
+    expect(isSpeech({ type: "attachment", path: "x", name: "song.mp3", mimeType: "audio/mpeg" })).toBe(true);
+    expect(attachmentNote([{ part: { ...voice, transcript: "купи хлеба" }, path: "attachments/v.ogg" }])).toContain('- attachments/v.ogg (audio/ogg, 2 KB, voice message 0:05), transcript: "купи хлеба"');
+    expect(attachmentNote([{ part: { ...voice, transcript: "" }, path: "attachments/v.ogg" }])).toContain("voice message 0:05), transcript: (no speech)");
+    const none = attachmentNote([{ part: voice, path: "attachments/v.ogg", speech: SPEECH_NOT_SET_UP }]);
+    expect(none).toContain("voice message 0:05), no speech-to-text is set up\nYou cannot hear voice messages until speech-to-text is set up.");
+    expect(attachmentNote([{ part: voice, path: "attachments/v.ogg", speech: "could not transcribe it: Groq answered 429" }])).not.toContain("You cannot hear");
   });
 
   it("formats sizes", () => {

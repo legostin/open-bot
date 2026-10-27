@@ -35,6 +35,19 @@ export interface IncomingFile {
 export interface SessionFile {
   part: AttachmentPart;
   path?: string;
+  /** A voice note without a transcript: why (SPEECH_NOT_SET_UP, or the reason it failed). */
+  speech?: string;
+}
+
+/** A voice note's status when the hub has no speech-to-text: the note then tells the agent how to set it up. */
+export const SPEECH_NOT_SET_UP = "no speech-to-text is set up";
+const SPEECH_SETUP_HINT =
+  "You cannot hear voice messages until speech-to-text is set up. Offer the user to set it up: a Groq API key (free tier, https://console.groq.com/keys) " +
+  "or an OpenAI API key, asked for with secret_request as groq_api_key or openai_api_key. Then call transcribe_audio on the file.";
+
+/** A recording the hub transcribes: a voice note or an audio file. */
+export function isSpeech(p: AttachmentPart): boolean {
+  return p.kind === "voice" || p.kind === "audio" || (!p.kind && !!p.mimeType?.startsWith("audio/"));
 }
 
 const TYPES: Record<string, string> = {
@@ -181,7 +194,14 @@ function describe(p: AttachmentPart): string {
   const bits = [p.mimeType ?? "unknown type"];
   if (p.size !== undefined) bits.push(formatSize(p.size));
   if (p.durationSec !== undefined) bits.push(p.kind === "voice" ? `voice message ${formatDuration(p.durationSec)}` : formatDuration(p.durationSec));
+  else if (p.kind === "voice") bits.push("voice message");
   return bits.join(", ");
+}
+
+/** What the file says, when it is a recording: its transcript, or why there is none. */
+function heard(f: SessionFile): string {
+  if (f.part.transcript !== undefined) return f.part.transcript ? `, transcript: "${f.part.transcript}"` : ", transcript: (no speech)";
+  return f.speech ? `, ${f.speech}` : "";
 }
 
 /** The English note that tells the brain which files came with the user's message and where they are. */
@@ -190,10 +210,11 @@ export function attachmentNote(files: SessionFile[], opts: { remote?: boolean } 
   const one = files.length === 1;
   const what = one ? "a file" : `${files.length} files`;
   if (opts.remote) {
-    const list = files.map((f) => `${f.part.name} (${describe(f.part)})`).join("; ");
+    const list = files.map((f) => `${f.part.name} (${describe(f.part)})${heard(f)}`).join("; ");
     return `[The user attached ${what}. ${one ? "It is" : "They are"} stored on the hub, not on this machine: ${list}.]`;
   }
-  const lines = files.map((f) => (f.path ? `- ${f.path} (${describe(f.part)})` : `- ${f.part.name} (no longer available)`));
+  const lines = files.map((f) => (f.path ? `- ${f.path} (${describe(f.part)})${heard(f)}` : `- ${f.part.name} (no longer available)`));
   const them = one ? "it" : "them";
-  return [`[The user attached ${what}, saved in your working folder:`, ...lines, `Open ${them} with your file tools when the request needs ${them}.]`].join("\n");
+  const setup = files.some((f) => f.speech === SPEECH_NOT_SET_UP) ? [SPEECH_SETUP_HINT] : [];
+  return [`[The user attached ${what}, saved in your working folder:`, ...lines, ...setup, `Open ${them} with your file tools when the request needs ${them}.]`].join("\n");
 }

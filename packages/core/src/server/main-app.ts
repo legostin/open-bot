@@ -604,6 +604,11 @@ export async function buildMainApp(hub: Hub): Promise<FastifyInstance> {
     // ----- settings -----
     api.get("/api/settings", async () => hub.settings.get());
     api.patch("/api/settings", async (req) => hub.updateSettings((req.body ?? {}) as Record<string, unknown>, "user"));
+    // Which speech-to-text service voice messages go to now (none: not set up).
+    api.get("/api/transcription", async () => {
+      const e = hub.transcriber.engine();
+      return { engine: e ? { label: e.label, model: e.model } : null };
+    });
 
     // ----- notifications, approvals (count only; resolving happens in the console) -----
     api.get("/api/notifications", async (req) => hub.notifier.list(Math.min(Number((req.query as any).limit ?? 100), 500)));

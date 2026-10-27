@@ -41,6 +41,7 @@ import { CliTools } from "./cli-tools.ts";
 import { UserPath } from "./user-path.ts";
 import { SetupGuide } from "./setup.ts";
 import { MediaService } from "./media.ts";
+import { cleanTranscription, Transcriber } from "./transcribe.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import type { FastifyInstance } from "fastify";
@@ -82,6 +83,7 @@ export class Hub {
   setup: SetupGuide;
   /** External images and OpenStreetMap tiles the web UI shows, fetched and cached by the hub. */
   media: MediaService;
+  transcriber: Transcriber;
   mainApp?: FastifyInstance;
   consoleApp?: FastifyInstance;
   private timers: NodeJS.Timeout[] = [];
@@ -136,6 +138,12 @@ export class Hub {
     this.agentDrafts = new AgentDrafts({ db: this.db, bus: this.bus });
     this.cliTools = new CliTools(config.dataDir, config.installClis);
     this.brainLogins = new BrainLogins({ brains: this.brains, bus: this.bus, egress: this.egress, audit: this.audit, egressPort: () => this.config.egressPort, tools: this.cliTools });
+    // The vault holds the keys; a sealed vault means no speech-to-text until it is unlocked.
+    this.transcriber = new Transcriber({
+      settings: () => this.settings.get().transcription,
+      hasSecret: (id) => this.vault.state() === "unlocked" && !!this.vault.getMeta(id),
+      secret: (ref) => this.vault.access(ref, { actor: "core:transcription" }).value ?? "",
+    });
     this.runner = new SessionRunner({
       config,
       store: this.store,
@@ -155,6 +163,7 @@ export class Hub {
       claudePluginDirs: () => this.plugins.enabledLayouts().filter((l) => l.formats.includes("claude") && !l.manifest.builtin).map((l) => l.dir),
       machineName: (id) => this.machines.name(id),
       secrets: this.secrets,
+      transcriber: this.transcriber,
     });
     this.setup = new SetupGuide({
       brains: this.brains,
@@ -212,6 +221,7 @@ export class Hub {
       createTask: (t) => this.runner.createTask(t),
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
       workspacesRoot: join(config.dataDir, "workspaces"),
+      transcriber: this.transcriber,
     });
     this.machines.registerTools(this.tools);
     registerHubTools(this);
@@ -236,6 +246,11 @@ export class Hub {
       p.language = l;
     }
     if ("defaultAgent" in p && !this.agents.get(String(p.defaultAgent))) throw new LocalizedError("agent.notFound", undefined, 400);
+    if ("transcription" in p) {
+      const t = cleanTranscription(p.transcription);
+      if (typeof t === "string") throw new LocalizedError("settings.badTranscription", { reason: t }, 400);
+      p.transcription = t;
+    }
     const before = this.settings.get().language;
     this.audit.append(actor, "settings.update", undefined, { keys: Object.keys(p) });
     const next = this.settings.update(p as Partial<CoreSettings>);
