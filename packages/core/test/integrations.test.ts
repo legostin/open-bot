@@ -189,7 +189,7 @@ describe("integrations and the Google sign-in", () => {
     const digest = hub.store.listMessages(dialog.id).find((m) => m.parts.some((p) => p.type === "notification" && p.level === "digest"))!;
     const part = digest.parts.find((p) => p.type === "notification") as any;
     expect(part.title).toBe("Digest (1)");
-    expect(part.body).toMatch(/^Today\n09:00 Standup\n11:00 Lunch \(\d{4}-\d\d-\d\d UTC\)$/);
+    expect(part.body).toMatch(/^\*\*Today\*\*\n09:00 Standup\n11:00 Lunch \(\d{4}-\d\d-\d\d UTC\)$/);
   });
 
   it("disconnects: revokes at Google, forgets the token and the account", async () => {

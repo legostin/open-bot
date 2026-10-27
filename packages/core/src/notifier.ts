@@ -207,7 +207,7 @@ export class Notifier {
     const r = await this.hooks.run("digest.compose", { date, time: localHHMM(timezone, now), timezone }, (p) => p);
     return r.results
       .filter((x): x is { title: string; body: string } => !!x && typeof x.title === "string" && typeof x.body === "string" && !!x.body.trim())
-      .map((x) => `${x.title.trim()}\n${truncate(x.body.trim(), 1500)}`);
+      .map((x) => `**${x.title.trim()}**\n${truncate(x.body.trim(), 1500)}`);
   }
 
   /** Combine pending digest items, and the plugins' sections, into one message. */
