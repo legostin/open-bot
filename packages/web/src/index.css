@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* The iOS app's chat page (/m/*): <html class="owl-mobile">, set by lib/mobile.ts. `mobile:` utilities apply only there. */
+@custom-variant mobile (&:where(.owl-mobile, .owl-mobile *));
+
 /* Semantic color tokens, Owlbot's ink-on-paper style after the 0_0 mark: neutral greys, black (light) or white
    (dark) as the accent, muted semantic colours. Light by default, dark via prefers-color-scheme. */
 :root {
@@ -215,6 +218,9 @@
     border: 1px solid var(--border);
     padding: 0.35em 0.7em;
     text-align: left;
+    /* Cells keep whole words and the table scrolls sideways; "anywhere" would squeeze them letter by letter. */
+    overflow-wrap: break-word;
+    min-width: 4.5em;
   }
   .md th {
     background: var(--surface-2);
@@ -412,4 +418,111 @@
 }
 .owl-map .leaflet-tooltip-top.owl-map-label::before {
   border-top-color: var(--border);
+}
+
+/*
+ * The iOS app's chat page (/m/chat/:id in a WKWebView, html.owl-mobile). Unlayered, so these win over utilities;
+ * nothing here applies to the desktop UI.
+ */
+/* iOS system colors, monochrome like the app around the page: no seam under the native header. */
+html.owl-mobile {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f2f2f7;
+  --surface-3: #e5e5ea;
+  --fg: #111113;
+  --muted: #8a8a8e;
+  --border: #e5e5ea;
+  --accent: #1c1c1e;
+  --accent-fg: #ffffff;
+  --accent-soft: #f2f2f7;
+  --accent-text: #1c1c1e;
+  --user-bubble: #f2f2f7;
+  --code-bg: #f6f6f8;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 6px 20px rgb(0 0 0 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  html.owl-mobile {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --surface-3: #3a3a3c;
+    --fg: #f5f5f7;
+    --muted: #98989f;
+    --border: #2c2c2e;
+    --accent: #f2f2f7;
+    --accent-fg: #000000;
+    --accent-soft: #2c2c2e;
+    --accent-text: #f5f5f7;
+    --user-bubble: #262628;
+    --code-bg: #141416;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
+  }
+}
+
+html.owl-mobile,
+html.owl-mobile body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html.owl-mobile body {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif, "Apple Color Emoji";
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The page follows the visual viewport (lib/mobile.ts trackVisualViewport): the composer stays above the keyboard. */
+.owl-mobile .mobile-shell {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  height: var(--owl-vvh, 100dvh);
+  transform: translateY(var(--owl-vvtop, 0px));
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Messages scroll under the app's (translucent) header and stop at the home indicator. */
+.owl-mobile .chat-scroll {
+  padding-top: env(safe-area-inset-top);
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.owl-mobile .chat-dock {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+html.owl-mobile[data-keyboard="open"] .chat-dock {
+  padding-bottom: 0.5rem;
+}
+
+/* The caret says where typing goes; no glowing ring around the composer, as in Messages. */
+.owl-mobile .composer-box:focus-within {
+  border-color: var(--surface-3);
+  box-shadow: var(--shadow);
+}
+
+/* 16px fields: iOS zooms into anything smaller when it gets focus. */
+.owl-mobile input:not([type="checkbox"], [type="radio"], [type="range"]),
+.owl-mobile textarea,
+.owl-mobile select {
+  font-size: 16px;
+}
+
+.owl-mobile button,
+.owl-mobile a,
+.owl-mobile [role="button"] {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+
+/* Hold-to-talk: no scrolling, selection or callout while the finger is down. */
+.owl-mobile .mic-button {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

@@ -359,8 +359,8 @@ describe("group chats (storage)", () => {
   it("adds the members column to an older database, keeping its conversations", () => {
     const file = join(mkdtempSync(join(tmpdir(), "owl-group-db-")), "owlbot.db");
     const old = openDb(file);
-    // Schema 5: before group chats.
-    old.exec("alter table conversations drop column members; update schema_version set v = 5;");
+    // Schema 6: phones' devices, before group chats.
+    old.exec("alter table conversations drop column members; update schema_version set v = 6;");
     old.prepare("insert into conversations(id, kind, title, agent_id, created_at, updated_at) values ('c1', 'chat', 'Old', 'assistant', ?, ?)").run("2026-10-01T10:00:00.000Z", "2026-10-01T10:00:00.000Z");
     old.close();
 
@@ -369,5 +369,20 @@ describe("group chats (storage)", () => {
     const g = store.createConversation({ kind: "group", title: "New", agentId: "assistant", members: ["assistant", "scout"] });
     expect(store.getConversation(g.id)?.members).toEqual(["assistant", "scout"]);
     store.db.close();
+  });
+
+  it("repairs a database from the desktop builds that ran the group chats' migration before the phones' one", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "owl-group-db-")), "owlbot.db");
+    const old = openDb(file);
+    // What those builds left: version 6 with the members column, no phones' tables.
+    old.exec("drop table devices; drop table device_pairing_codes; update schema_version set v = 6;");
+    old.prepare("insert into conversations(id, kind, title, agent_id, members, created_at, updated_at) values ('g1', 'group', 'Trip', 'assistant', ?, ?, ?)").run('["assistant","scout"]', "2026-10-27T01:00:00.000Z", "2026-10-27T01:00:00.000Z");
+    old.close();
+
+    const db = openDb(file);
+    expect(db.prepare("select v from schema_version").get()).toEqual({ v: 7 });
+    expect(db.prepare("select count(*) as n from devices").get()).toEqual({ n: 0 });
+    expect(new Store(db, new EventBus()).getConversation("g1")?.members).toEqual(["assistant", "scout"]);
+    db.close();
   });
 });

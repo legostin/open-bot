@@ -7,6 +7,7 @@ import { ImageIcon, Lock } from "lucide-react";
 import { t } from "../i18n";
 import { mediaSrc } from "../lib/media";
 import { remarkUserText } from "../lib/user-markdown";
+import { openOutside } from "../lib/native";
 import { CopyButton, cx } from "./ui";
 
 type MdNode = { type: string; value?: string; children?: MdNode[] };
@@ -29,9 +30,10 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
+// Inside the iOS app, links that leave the hub open in Safari (openOutside); in a browser, in a new tab.
 const components: Components = {
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer nofollow">
+    <a href={href} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => openOutside(e, href)}>
       {children}
     </a>
   ),
@@ -42,7 +44,7 @@ const components: Components = {
     const shown = s ? mediaSrc(s) : undefined;
     if (shown) return <img src={shown} alt={alt ?? ""} className="my-2 inline-block max-h-96 max-w-full rounded-xl border border-border" loading="lazy" decoding="async" />;
     return (
-      <a href={s} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1">
+      <a href={s} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => openOutside(e, s)} className="inline-flex items-center gap-1">
         <ImageIcon className="inline size-4" />
         {alt || t("common.image")}
       </a>
@@ -51,7 +53,7 @@ const components: Components = {
   pre: ({ children }) => (
     <div className="group relative">
       <pre>{children}</pre>
-      <CopyButton text={textOf(children).replace(/\n$/, "")} label="" className="absolute top-1.5 right-1.5 bg-surface/80 opacity-0 transition group-hover:opacity-100 focus:opacity-100" />
+      <CopyButton text={textOf(children).replace(/\n$/, "")} label="" className="absolute top-1.5 right-1.5 bg-surface/80 opacity-0 transition group-hover:opacity-100 focus:opacity-100 mobile:opacity-100" />
     </div>
   ),
   input: ({ checked, type }) => (type === "checkbox" ? <input type="checkbox" checked={!!checked} readOnly disabled /> : null),

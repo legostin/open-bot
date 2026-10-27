@@ -4,7 +4,7 @@ import { useStore } from "./lib/store";
 import { agentPath } from "./lib/team";
 import { conversations, init, phase, session, team } from "./state/app";
 import { openPanel } from "./state/panel";
-import { syncUiPlugins, unloadAllUiPlugins } from "./plugins/host";
+import { useUiPlugins } from "./plugins/host";
 import { matchRoute } from "./plugins/registry";
 import { usePluginRegistry } from "./plugins/slots";
 import { PluginBoundary } from "./plugins/boundary";
@@ -16,6 +16,8 @@ import { sectionForPath, type PanelSection } from "./components/nav";
 import { ChatPage } from "./pages/chat/ChatPage";
 import { AgentPage } from "./pages/chat/AgentPage";
 import { TaskDetailPage } from "./pages/TaskDetail";
+import { MobileApp, useMobileReadyOnError } from "./pages/MobileApp";
+import { mobileMode } from "./lib/mobile";
 import { t } from "./i18n";
 
 export function App() {
@@ -23,12 +25,18 @@ export function App() {
   useEffect(() => {
     void init();
   }, []);
+  useMobileReadyOnError(p.kind === "error");
 
   return (
     <>
       {p.kind === "loading" && (
         <div className="flex h-dvh items-center justify-center">
           <Loading text={t("app.connecting")} />
+        </div>
+      )}
+      {p.kind === "reauth" && (
+        <div className="flex h-dvh items-center justify-center">
+          <Loading text={t("app.reauth")} />
         </div>
       )}
       {p.kind === "error" && (
@@ -40,22 +48,14 @@ export function App() {
         </div>
       )}
       {(p.kind === "setup" || p.kind === "login") && <AuthScreen mode={p.kind} auth={p.auth} />}
-      {p.kind === "ready" && <ReadyApp />}
+      {p.kind === "ready" && (mobileMode ? <MobileApp /> : <ReadyApp />)}
       <Toasts />
     </>
   );
 }
 
 function ReadyApp() {
-  const s = useStore(session);
-  const uiPlugins = s?.uiPlugins;
-  const key = JSON.stringify(uiPlugins ?? []);
-  useEffect(() => {
-    void syncUiPlugins(uiPlugins ?? []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-  useEffect(() => () => unloadAllUiPlugins(), []);
-
+  useUiPlugins();
   return (
     <Layout>
       <Routes />

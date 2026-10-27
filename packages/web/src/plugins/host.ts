@@ -1,13 +1,13 @@
 // UI plugin host: builds the per-plugin OwlbotUI object and loads plugin modules listed in /api/bootstrap.
 
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import type { Catalog } from "@owlbot/shared";
 import type { OwlbotUI, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
 import { translator } from "@owlbot/shared/i18n";
 import { navigate } from "wouter/use-browser-location";
 import { api, request, type Method } from "../lib/api";
-import { createStore } from "../lib/store";
-import { hubEvents, sendToHub, type UiPluginEntry } from "../state/app";
+import { createStore, useStore } from "../lib/store";
+import { hubEvents, sendToHub, session, type UiPluginEntry } from "../state/app";
 import { toast } from "../state/toast";
 import { formatDate, formatNumber, locale, t } from "../i18n";
 import { addCommand, addContribution, addRoute, addSettings, addStatus, normalizePath, removePlugin } from "./registry";
@@ -129,4 +129,15 @@ export async function syncUiPlugins(entries: UiPluginEntry[]): Promise<void> {
 
 export function unloadAllUiPlugins(): void {
   for (const id of [...loaded.keys()]) unload(id);
+}
+
+/** Load the UI plugins the hub lists, follow changes, and unload them when the signed-in view goes away. */
+export function useUiPlugins(): void {
+  const uiPlugins = useStore(session)?.uiPlugins;
+  const key = JSON.stringify(uiPlugins ?? []);
+  useEffect(() => {
+    void syncUiPlugins(uiPlugins ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  useEffect(() => () => unloadAllUiPlugins(), []);
 }

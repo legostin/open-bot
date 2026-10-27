@@ -40,7 +40,7 @@ describe("agent dialogs", () => {
     const file = join(mkdtempSync(join(tmpdir(), "owl-team-")), "owlbot.db");
     const old = openDb(file);
     old.exec(
-      "drop table agent_drafts; drop index conversations_kind_agent; alter table conversations drop column read_at; alter table conversations drop column members; update schema_version set v = 3;",
+      "drop table devices; drop table device_pairing_codes; drop table agent_drafts; drop index conversations_kind_agent; alter table conversations drop column read_at; alter table conversations drop column members; update schema_version set v = 3;",
     );
     const t0 = "2026-10-01T10:00:00.000Z";
     old.prepare("insert into conversations(id, kind, title, agent_id, created_at, updated_at) values ('main', 'main', 'Main', 'assistant', ?, ?)").run(t0, "2026-10-01T10:00:02.000Z");

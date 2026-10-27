@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, Check, Pencil, X } from "lucide-react";
 import { useStore } from "../../lib/store";
+import { stickAfterScroll } from "../../lib/stick";
 import { errorText } from "../../lib/api";
 import { agents, conversations, ensureAgents, loadMessages, loadOlder, updateConversation, useConversationMessages } from "../../state/app";
 import { toast } from "../../state/toast";
@@ -86,6 +87,9 @@ export function ChatView({
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const prevHeight = useRef<number | null>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const lastId = useRef<string | undefined>(undefined);
+  const lastTop = useRef(0);
   const [showDown, setShowDown] = useState(false);
 
   useEffect(() => {
@@ -98,11 +102,29 @@ export function ChatView({
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
+    // The person's own new message brings the view down, wherever they were reading.
+    const last = conv.messages[conv.messages.length - 1];
+    if (last && lastId.current !== undefined && last.id !== lastId.current && last.role === "user") stick.current = true;
+    lastId.current = last?.id;
     if (prevHeight.current !== null) {
       el.scrollTop += el.scrollHeight - prevHeight.current;
       prevHeight.current = null;
     } else if (stick.current) el.scrollTop = el.scrollHeight;
   }, [conv.messages]);
+
+  // Content that grows after it rendered (plugin cards, images) and a list that shrinks (the phone's keyboard) keep
+  // a pinned view at the bottom.
+  useEffect(() => {
+    const el = scroller.current;
+    const inner = content.current;
+    if (!el || !inner || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (stick.current && prevHeight.current === null) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, []);
 
   const older = () => {
     if (!scroller.current) return;
@@ -117,7 +139,8 @@ export function ChatView({
     const el = scroller.current;
     if (!el) return;
     const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stick.current = fromBottom < 120;
+    stick.current = stickAfterScroll(stick.current, lastTop.current, el);
+    lastTop.current = el.scrollTop;
     setShowDown(fromBottom > 400);
     if (el.scrollTop < 60 && conv.hasMore && !conv.loadingOlder && prevHeight.current === null) older();
   };
@@ -144,8 +167,8 @@ export function ChatView({
         </TopBar>
       )}
 
-      <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-3 py-5 sm:px-6">
+      <div ref={scroller} onScroll={onScroll} className="chat-scroll relative min-h-0 flex-1 overflow-y-auto">
+        <div ref={content} className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-3 py-5 sm:px-6">
           {top}
           {conv.hasMore && (
             <div className="flex justify-center">
@@ -186,7 +209,7 @@ export function ChatView({
         )}
       </div>
 
-      <div className="shrink-0 px-3 pt-1 pb-3 sm:px-6">
+      <div className="chat-dock shrink-0 px-3 pt-1 pb-3 sm:px-6">
         <div className="mx-auto w-full max-w-3xl">
           <Composer key={conversationId} conversationId={conversationId} />
         </div>

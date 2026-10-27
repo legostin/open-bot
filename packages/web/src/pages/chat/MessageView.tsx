@@ -1,16 +1,17 @@
 // Rendering of one message and its parts. Plugins can override whole messages (chat.message) or tool cards
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
-import { memo } from "react";
-import { Bell, CircleAlert, ExternalLink, FileText, ShieldAlert } from "lucide-react";
+import { memo, useState } from "react";
+import { Bell, Check, CircleAlert, ExternalLink, FileText, ShieldAlert, X } from "lucide-react";
 import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
 import { formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
+import { native, nativeErrorText, type NativeBridge } from "../../lib/native";
 import { session } from "../../state/app";
 import { showDetails } from "../../state/prefs";
 import { Markdown } from "../../components/markdown";
-import { Badge, cx } from "../../components/ui";
+import { Badge, Button, cx } from "../../components/ui";
 import { AgentAvatar } from "../../components/AgentAvatar";
 import { PluginBoundary } from "../../plugins/boundary";
 import { pickMessageRenderer, pickToolRenderer } from "../../plugins/registry";
@@ -22,7 +23,9 @@ import { BrainLoginCard } from "../../components/BrainLoginCard";
 import { BrainSetupCard } from "../../components/BrainSetupCard";
 import { ImagesCard } from "./ImagesCard";
 import { MapCard } from "./MapCard";
+import { DevicePairingCard } from "./DevicePairingCard";
 import { t, type MessageKey } from "../../i18n";
+import { mobileMode } from "../../lib/mobile";
 
 const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
   pending: { label: "approvalStatus.pending", tone: "warning" },
@@ -32,6 +35,55 @@ const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "s
   executed: { label: "approvalStatus.executed", tone: "success" },
   failed: { label: "approvalStatus.failed", tone: "danger" },
 };
+
+type Answer = "approve" | "deny";
+
+/**
+ * Inside the iOS app: answer the approval on the phone. The app loads it from the hub, asks for Face ID and signs
+ * the answer; backing out of Face ID ({ cancelled }) just puts the buttons back. The card's status follows once the
+ * hub has the answer.
+ */
+function NativeApprovalActions({ approvalId, bridge }: { approvalId: string; bridge: NativeBridge }) {
+  const [busy, setBusy] = useState<Answer | null>(null);
+  const [sent, setSent] = useState<Answer | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const answer = async (kind: Answer) => {
+    setBusy(kind);
+    setError(null);
+    try {
+      const r = kind === "approve" ? await bridge.approve(approvalId) : await bridge.deny(approvalId);
+      if (r.ok) setSent(kind);
+    } catch (e) {
+      setError(t("message.approval.failed", { error: nativeErrorText(e) }));
+    } finally {
+      setBusy(null);
+    }
+  };
+  if (sent)
+    return (
+      <div className={cx("mt-2 flex items-center gap-1.5 text-[13px] font-medium", sent === "approve" ? "text-success" : "text-danger")} role="status">
+        {sent === "approve" ? <Check className="size-4" /> : <X className="size-4" />}
+        {sent === "approve" ? t("message.approval.approvedHere") : t("message.approval.deniedHere")}
+      </div>
+    );
+  return (
+    <div className="mt-2.5 flex flex-col gap-1.5">
+      <div className="flex gap-2">
+        <Button variant="primary" className="flex-1" loading={busy === "approve"} disabled={busy !== null} onClick={() => void answer("approve")}>
+          {t("message.approval.approve")}
+        </Button>
+        <Button variant="secondary" className="flex-1" loading={busy === "deny"} disabled={busy !== null} onClick={() => void answer("deny")}>
+          {t("message.approval.deny")}
+        </Button>
+      </div>
+      {error && (
+        <div className="text-xs break-words text-danger" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" }> }) {
   const s = useStore(session);
@@ -43,10 +95,13 @@ function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" 
       <div className="flex flex-wrap items-center gap-2">
         <ShieldAlert className={cx("size-4", pending ? "text-warning" : "text-muted")} />
         <span className="text-sm font-semibold">{pending ? t("message.approval.titlePending") : t("message.approval.title")}</span>
-        <Badge tone={st.tone}>{st.label}</Badge>
+        {/* "Awaiting approval" is already the title. */}
+        {!pending && <Badge tone={st.tone}>{st.label}</Badge>}
       </div>
       <div className="mt-1.5 text-sm break-words">{part.summary}</div>
-      {s && (
+      {/* On the phone the answer is given here (Face ID); the security console stays on the computer. */}
+      {native && pending && <NativeApprovalActions approvalId={part.approvalId} bridge={native} />}
+      {s && !native && (
         <a
           href={`${s.consoleUrl}/#/approvals/${encodeURIComponent(part.approvalId)}`}
           target="_blank"
@@ -183,6 +238,8 @@ function Parts({ message }: { message: Message }) {
             return <BrainLoginCard key={it.key} brainRef={p.ref} />;
           case "brain_setup":
             return <BrainSetupCard key={it.key} conversationId={message.conversationId} />;
+          case "device_pairing":
+            return <DevicePairingCard key={it.key} />;
           default:
             return null;
         }
@@ -190,6 +247,12 @@ function Parts({ message }: { message: Message }) {
       {streaming && (items.length === 0 || items[items.length - 1].kind !== "part") && <TypingDots />}
     </>
   );
+}
+
+/** Where a person's message came from, before its time: nothing for the web UI, and on the phone nothing for the phone. */
+function channelLabel(channel: string | undefined): string {
+  if (!channel || channel === "web" || (channel === "app" && mobileMode)) return "";
+  return `${channel === "app" ? t("message.fromPhone") : channel} · `;
 }
 
 /** Core rendering of a message (also passed to chat.message overrides as `Default`). */
@@ -204,7 +267,7 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName,
         <div className="max-w-[88%] rounded-2xl rounded-br-md bg-user-bubble px-3.5 py-2 text-user-bubble-fg text-[15px] leading-relaxed sm:max-w-[75%]">
           <Parts message={message} />
           <div className="mt-0.5 text-right text-[11px] text-muted">
-            {message.channel && message.channel !== "web" ? `${message.channel} · ` : ""}
+            {channelLabel(message.channel)}
             {formatTime(message.createdAt)}
           </div>
         </div>

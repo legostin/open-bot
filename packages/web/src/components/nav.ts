@@ -2,10 +2,10 @@
 // Old page URLs (/brains, /plugins, …) still work: they open the matching panel section over the chat.
 
 import type { ComponentType } from "react";
-import { Bell, Bot, Brain, Laptop, ListChecks, Puzzle, Server, SlidersHorizontal, Sparkles, type LucideProps } from "lucide-react";
+import { Bell, Bot, Brain, Laptop, ListChecks, Puzzle, Server, SlidersHorizontal, Smartphone, Sparkles, type LucideProps } from "lucide-react";
 import type { MessageKey } from "../i18n";
 
-export type CoreSection = "settings" | "agents" | "brains" | "plugins" | "machines" | "mcp" | "skills" | "tasks" | "notifications";
+export type CoreSection = "settings" | "agents" | "brains" | "plugins" | "machines" | "devices" | "mcp" | "skills" | "tasks" | "notifications";
 /** A core section, or "plugin:<route key>" for a page a UI plugin added to the navigation. */
 export type PanelSection = CoreSection | `plugin:${string}`;
 
@@ -27,6 +27,7 @@ export const SECTIONS: SectionDef[] = [
   { id: "brains", path: "/brains", label: "nav.brains", hint: "panel.hint.brains", icon: Brain, group: "connections" },
   { id: "plugins", path: "/plugins", label: "nav.plugins", hint: "panel.hint.plugins", icon: Puzzle, group: "connections" },
   { id: "machines", path: "/machines", label: "nav.machines", hint: "panel.hint.machines", icon: Laptop, group: "connections" },
+  { id: "devices", path: "/devices", label: "nav.devices", hint: "panel.hint.devices", icon: Smartphone, group: "connections" },
   { id: "mcp", path: "/mcp-servers", label: "nav.mcp", hint: "panel.hint.mcp", icon: Server, group: "connections" },
   { id: "settings", path: "/settings", label: "nav.general", hint: "panel.hint.settings", icon: SlidersHorizontal, group: "general" },
 ];

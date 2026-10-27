@@ -32,7 +32,7 @@ const fromRow = (r: any): Approval => ({
 export type Decision = "approve" | "deny";
 
 export interface ResolveOptions {
-  via: "console" | "telegram" | "rule" | "timeout";
+  via: "console" | "telegram" | "device" | "rule" | "timeout";
   /** Create an "always allow" rule from this approval. */
   remember?: boolean;
   /** Custom rule conditions (console can edit before saving). */

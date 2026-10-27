@@ -8,6 +8,8 @@ import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";
 import { applyDelta, mergeFetched, prependOlder, upsertMessage } from "../lib/messages";
 import { desktopTicketFrom } from "../lib/desktop";
+import { mobileMode } from "../lib/mobile";
+import { native } from "../lib/native";
 import { adoptHubLocale, t } from "../i18n";
 import { toast } from "./toast";
 
@@ -54,7 +56,13 @@ export interface AuthState {
   locales?: Locale[];
 }
 
-export type Phase = { kind: "loading" } | { kind: "error"; message: string } | { kind: "setup" | "login"; auth: AuthState } | { kind: "ready" };
+/** `reauth`: the phone app's page lost its session and waits for the app to sign it in again (and reload it). */
+export type Phase =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "setup" | "login"; auth: AuthState }
+  | { kind: "ready" }
+  | { kind: "reauth" };
 
 export interface ConvMessages {
   messages: Message[];
@@ -110,6 +118,7 @@ let desktopTicket = (() => {
 
 export async function init(): Promise<void> {
   phase.set({ kind: "loading" });
+  if (mobileMode) return initMobile();
   const ticket = desktopTicket;
   desktopTicket = undefined;
   // A used or expired ticket just leaves the usual sign-in form.
@@ -127,6 +136,31 @@ export async function init(): Promise<void> {
   }
 }
 
+/**
+ * The phone app's chat page (/m/*): the device port has no /api/auth/state, the page's cookie session comes from
+ * the app, and /api/bootstrap there returns its CSRF token. The interface follows the phone's language
+ * (navigator.language), like the app around it, rather than the hub language.
+ */
+async function initMobile(): Promise<void> {
+  try {
+    await bootstrap();
+    phase.set({ kind: "ready" });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) return signInAgain();
+    phase.set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** The session is gone: inside the app, the app signs the page in again; elsewhere, the usual sign-in screen. */
+async function signInAgain(): Promise<void> {
+  if (!(mobileMode && native)) return showLogin();
+  if (phase.get().kind === "reauth") return;
+  stopSocket();
+  session.set(null);
+  phase.set({ kind: "reauth" });
+  native.reauth();
+}
+
 async function showLogin(): Promise<void> {
   stopSocket();
   session.set(null);
@@ -139,10 +173,10 @@ async function showLogin(): Promise<void> {
 }
 
 onUnauthorized(() => {
-  if (phase.get().kind === "ready") {
-    toast(t("app.sessionExpired"), "info");
-    void showLogin();
-  }
+  if (phase.get().kind !== "ready") return;
+  if (mobileMode && native) return void signInAgain();
+  toast(t("app.sessionExpired"), "info");
+  void showLogin();
 });
 
 export async function bootstrap(): Promise<Bootstrap> {
@@ -200,7 +234,9 @@ function startSocket(): void {
       reconnected.emit();
     },
     onRepeatedFailure: async () => {
-      // A failed upgrade may mean the session expired.
+      // A failed upgrade may mean the session expired. The device port has no auth/state: a 401 from the
+      // bootstrap reaches onUnauthorized.
+      if (mobileMode) return refreshBootstrap();
       try {
         const auth = await request<AuthState>("GET", "/api/auth/state");
         if (!auth.authenticated && phase.get().kind === "ready") {
@@ -213,6 +249,16 @@ function startSocket(): void {
     },
   });
   socket.start();
+}
+
+/**
+ * The phone app says the hub answers again: reconnect now, and check the session (a restarted hub forgot it;
+ * the 401 has the app sign the page in again).
+ */
+export function hubIsBack(): void {
+  if (!socket) return;
+  socket.retryNow();
+  void refreshBootstrap();
 }
 
 function stopSocket(): void {
