@@ -23,8 +23,6 @@ export interface CoreSettings {
   approvalExpireHours: number;
   /** Hub language: notifications, channels, approval cards and the default for the UI. */
   language: Locale;
-  /** Phones may reach the hub: the device port listens on the network. */
-  devicesLan: boolean;
   /** Access from anywhere: the hub runs its Tailscale node and the Funnel link (remote.ts). */
   remoteAccess: boolean;
   /** Speech to text for voice messages (transcribe.ts). */
@@ -70,7 +68,6 @@ export function defaultSettings(timezone: string, language: Locale = localeFromE
     approvalInlineWaitSec: 45,
     approvalExpireHours: 24,
     language,
-    devicesLan: false,
     remoteAccess: false,
     transcription: DEFAULT_TRANSCRIPTION,
   };

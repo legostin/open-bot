@@ -564,9 +564,8 @@ export interface DevicePairing {
 
 /** The device port: whether phones can reach the hub, and where. */
 export interface DeviceNetwork {
+  /** False only when OWLBOT_DEVICES=0 closed the port: phones then use the link alone. */
   enabled: boolean;
-  /** Turned on by OWLBOT_DEVICES=1: the switch in the web UI cannot turn it off. */
-  forced: boolean;
   listening: boolean;
   port: number;
   urls: string[];

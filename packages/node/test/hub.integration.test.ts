@@ -77,6 +77,7 @@ beforeAll(async () => {
   const config = loadConfig({
     OWLBOT_DATA_DIR: join(root, "hub-data"),
     OWLBOT_PORT: String(port),
+    OWLBOT_DEVICES: "0",
     OWLBOT_CONSOLE_PORT: String(consolePort),
     OWLBOT_EGRESS_PORT: String(egressPort),
     OWLBOT_PLUGINS: "none",

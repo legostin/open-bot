@@ -15,8 +15,8 @@ export interface Config {
   devicePort: number;
   /** Where the device port listens: every interface by default, so phones reach it over Wi-Fi and Tailscale. */
   deviceHost: string;
-  /** OWLBOT_DEVICES=1: the device port runs whatever the web UI switch says. */
-  devicesForced: boolean;
+  /** OWLBOT_DEVICES=0 closes the device port: phones then reach the hub only through the link. */
+  devicesOff: boolean;
   /** OWLBOT_DEVICE_URLS: addresses for the pairing QR ahead of the detected ones (Docker, reverse proxies). */
   deviceUrls: string[];
   /** URL users and nodes use to reach the main UI / API. */
@@ -80,7 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     egressPort,
     devicePort,
     deviceHost: env.OWLBOT_DEVICE_HOST ?? "0.0.0.0",
-    devicesForced: env.OWLBOT_DEVICES === "1",
+    devicesOff: env.OWLBOT_DEVICES === "0",
     deviceUrls: (env.OWLBOT_DEVICE_URLS ?? "")
       .split(",")
       .map((u) => u.trim().replace(/\/$/, ""))

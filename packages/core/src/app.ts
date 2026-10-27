@@ -305,20 +305,17 @@ export class Hub {
       this.brains.invalidateAll();
     }
     this.bus.emit("settings.updated", { keys: Object.keys(p) });
-    if ("devicesLan" in p && this.started) void this.syncDeviceServer();
     return next;
   }
 
-  /** The device port's identity (made on first use) and state, for the web UI's switch and the pairing QR. */
+  /** The device port's identity (made on first use) and state, for the web UI and the pairing QR. */
   deviceTls(): DeviceTls {
     return deviceTls(this.config.dataDir);
   }
 
   deviceNetwork(): DeviceNetwork {
-    const enabled = this.config.devicesForced || this.settings.get().devicesLan;
     return {
-      enabled,
-      forced: this.config.devicesForced,
+      enabled: !this.config.devicesOff,
       listening: !!this.deviceApp,
       port: this.config.devicePort,
       urls: deviceUrls(this.config.devicePort, this.config.deviceUrls, undefined, this.remote.deviceLink()),
@@ -326,10 +323,10 @@ export class Hub {
     };
   }
 
-  /** Start or stop the device port to match the switch (and OWLBOT_DEVICES); calls are serialized. */
+  /** Start the device port unless OWLBOT_DEVICES=0 closed it; calls are serialized. */
   syncDeviceServer(): Promise<DeviceNetwork> {
     const run = async () => {
-      const want = this.config.devicesForced || this.settings.get().devicesLan;
+      const want = !this.config.devicesOff;
       if (want && !this.deviceApp) {
         this.deviceError = undefined;
         const app = await buildDeviceApp(this, this.deviceTls());

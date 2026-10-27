@@ -128,11 +128,10 @@ Owlbot signs in with its own Google client. To use your own instead, create one 
 
 The Owlbot iOS app (repository `owlbot-ios`) is the hub in your pocket: your team of agents, the chats with every card, tasks, notifications, and approvals that need Face ID. The phone runs no brains; it connects to this hub.
 
-1. In **Settings → Devices**, turn on **Phones on the network**. Only the phones' own HTTPS port opens to the network (the hub's port + 2: 41782 in the desktop app, 8082 on a server; `OWLBOT_DEVICE_PORT`); the web UI stays where it was. With [access from anywhere](#access-from-anywhere) on, the phone can also pair and work through the link alone.
-2. Press **Connect a phone** and scan the QR code with the app, or open its link on the phone. You can also ask the assistant to "connect my phone", or run `owlbot devices pair` on the server to get the QR in the terminal.
-3. Confirm on the phone with Face ID.
+1. In **Settings → Devices**, press **Connect a phone** and scan the QR code with the app, or open its link on the phone. You can also ask the assistant to "connect my phone", or run `owlbot devices pair` on the server to get the QR in the terminal.
+2. Confirm on the phone with Face ID.
 
-At home the phone uses the Wi-Fi; away from home, the hub's link from [access from anywhere](#access-from-anywhere) (a phone paired before the link learns it on its next connection), or Tailscale on both the phone and the hub. The phone pins the hub's own certificate from the QR, so no domain or CA is involved. Its token is revoked in one click in **Devices**; approving an action needs a signature by a key that stays in the phone's Secure Enclave, so a stolen token cannot approve anything. Rules, the vault's items and the audit stay in the security console. In Docker, publish the device port and list the addresses phones should use: `OWLBOT_DEVICE_URLS=https://192.168.1.10:8082`.
+The QR gives the phone every address it can use, and the phone takes whichever answers: the hub's own HTTPS port for phones on the home network (the hub's port + 2: 41782 in the desktop app, 8082 on a server; `OWLBOT_DEVICE_PORT`; only this port opens to the network, the web UI stays where it was), the computer's Tailscale address, and the link from [access from anywhere](#access-from-anywhere) (a phone paired before the link learns it on its next connection). `OWLBOT_DEVICES=0` closes the home-network port; phones then use the link alone. The phone pins the hub's own certificate from the QR, so no domain or CA is involved. Its token is revoked in one click in **Devices**; approving an action needs a signature by a key that stays in the phone's Secure Enclave, so a stolen token cannot approve anything. Rules, the vault's items and the audit stay in the security console. In Docker, publish the device port and list the addresses phones should use: `OWLBOT_DEVICE_URLS=https://192.168.1.10:8082`.
 
 ## Access from anywhere
 
@@ -203,7 +202,7 @@ docker exec owlbot owlbot-entrypoint audit-verify
 | `OWLBOT_HOST` | `127.0.0.1` (`0.0.0.0` in the image) | listen address |
 | `OWLBOT_PORT`, `OWLBOT_CONSOLE_PORT`, `OWLBOT_EGRESS_PORT` | `8080`, `8081`, `8089` | ports of the chat UI, the console and the egress proxy |
 | `OWLBOT_DEVICE_PORT`, `OWLBOT_DEVICE_HOST` | port + 2 (`8082`), `0.0.0.0` | the phones' HTTPS port and where it listens |
-| `OWLBOT_DEVICES` | — | `1` keeps the phones' port on regardless of the switch in **Devices** |
+| `OWLBOT_DEVICES` | — | `0` closes the phones' port on the network: phones then reach the hub only through the link |
 | `OWLBOT_DEVICE_URLS` | detected | addresses for the pairing QR, comma-separated, ahead of the detected ones |
 | `OWLBOT_DATA_DIR` | `.data/` (`/data` in the image) | data directory |
 | `OWLBOT_INSTALL_CLIS` | — (`1` in the desktop installers) | `1` lets **Sign in** install a missing Claude Code or Codex into `<data>/tools` |
