@@ -1,7 +1,7 @@
 // Main web app (port 8080): sign-in, the hub API (server/api.ts) behind cookie sessions, MCP endpoint for brains,
 // node daemon endpoints, plugin webhooks and the SPA. The same app in remote mode is the link's gateway (remote.ts):
 // on loopback behind the hub's Tailscale node, the link's host only, no first-run setup, desktop sign-in, passkeys,
-// MCP, Google's return page or webhooks.
+// Google's return page or webhooks.
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -159,22 +159,20 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
     return { ok: true };
   });
 
-  // ---------- public: MCP for brains ----------
+  // ---------- public: MCP for brains (a session's bearer token; machines paired through the link use it too) ----------
 
-  if (!remote) {
-    app.post("/mcp", async (req, reply) => {
-      const session = hub.mcp.authenticate(req.headers.authorization);
-      if (!session) {
-        reply.code(401).header("www-authenticate", 'Bearer realm="owlbot"');
-        return { jsonrpc: "2.0", id: null, error: { code: -32001, message: "invalid session token" } };
-      }
-      const out = await hub.mcp.handle(session, req.body);
-      if (out === undefined) return reply.code(202).send();
-      return out;
-    });
-    app.get("/mcp", async (_req, reply) => reply.code(405).header("allow", "POST").send());
-    app.delete("/mcp", async () => ({}));
-  }
+  app.post("/mcp", async (req, reply) => {
+    const session = hub.mcp.authenticate(req.headers.authorization);
+    if (!session) {
+      reply.code(401).header("www-authenticate", 'Bearer realm="owlbot"');
+      return { jsonrpc: "2.0", id: null, error: { code: -32001, message: "invalid session token" } };
+    }
+    const out = await hub.mcp.handle(session, req.body);
+    if (out === undefined) return reply.code(202).send();
+    return out;
+  });
+  app.get("/mcp", async (_req, reply) => reply.code(405).header("allow", "POST").send());
+  app.delete("/mcp", async () => ({}));
 
   // ---------- public: machine nodes ----------
 
@@ -251,7 +249,7 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   }
 
   // The local-only routes do not exist on the link: say so instead of serving the page.
-  if (remote) for (const path of ["/mcp", "/hooks/*", "/oauth/callback"]) app.all(path, async () => Promise.reject(new HttpError(404, "not found")));
+  if (remote) for (const path of ["/hooks/*", "/oauth/callback"]) app.all(path, async () => Promise.reject(new HttpError(404, "not found")));
 
   // ---------- authenticated API ----------
 

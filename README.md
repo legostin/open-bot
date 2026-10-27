@@ -17,6 +17,7 @@ A friendly, proactive personal agent that lives on your own hardware. Owlbot is 
 - **Security.** A vault for passwords and personal data: the model only ever sees `vault://` references. External actions need your approval in a separate console. Plugins and CLI brains run in a sandbox under dedicated Unix users, and all their traffic goes through an egress filter. The audit log is protected by a hash chain.
 - **Everything is a plugin, including the UI.** Panels, tabs, tool-result renderers, the composer, channels, brains, tools. See [docs/plugins.md](docs/plugins.md).
 - **Channels.** The app for Windows and macOS, the iPhone app (see [Phone](#phone)), the web UI and Telegram.
+- **Access from anywhere.** One permanent link to your hub for any browser and the phone app, through Owlbot's own Tailscale node: nothing to install on the phone, no ports to open (see [Access from anywhere](#access-from-anywhere)).
 
 ## Quick start
 
@@ -106,7 +107,7 @@ Telegram receives replies (with formatting: bold, lists, code, tables), notifica
 
 ## Integrations
 
-**Settings → Integrations** lists the services your agents work with, as cards: Google Calendar, Telegram, web search and the browser for now. Each card shows its status and the one button that moves it forward. You can also just ask the assistant ("connect my Google Calendar"): it shows the same card in the chat.
+**Settings → Integrations** lists the services your agents work with, as cards: access from anywhere, Google Calendar, Telegram, web search and the browser for now. Each card shows its status and the one button that moves it forward. You can also just ask the assistant ("connect my Google Calendar"): it shows the same card in the chat.
 
 **Google Calendar.** Press **Connect with Google**, choose your account and allow access. Google sends the browser back to the hub. If the hub runs on a server or you sign in on a phone, the return page does not open: copy its address from the browser's address bar into the card. The sign-in is kept in the vault, so create or unlock the vault first (the card offers it). Then the agents see your events and free time, can book, move and delete events (each change asks for your approval), and the morning digest lists the day's plan, a later digest tomorrow's.
 
@@ -127,15 +128,27 @@ Owlbot signs in with its own Google client. To use your own instead, create one 
 
 The Owlbot iOS app (repository `owlbot-ios`) is the hub in your pocket: your team of agents, the chats with every card, tasks, notifications, and approvals that need Face ID. The phone runs no brains; it connects to this hub.
 
-1. In **Settings → Devices**, turn on **Phones on the network**. Only the phones' own HTTPS port opens to the network (the hub's port + 2: 41782 in the desktop app, 8082 on a server; `OWLBOT_DEVICE_PORT`); the web UI stays where it was.
+1. In **Settings → Devices**, turn on **Phones on the network**. Only the phones' own HTTPS port opens to the network (the hub's port + 2: 41782 in the desktop app, 8082 on a server; `OWLBOT_DEVICE_PORT`); the web UI stays where it was. With [access from anywhere](#access-from-anywhere) on, the phone can also pair and work through the link alone.
 2. Press **Connect a phone** and scan the QR code with the app, or open its link on the phone. You can also ask the assistant to "connect my phone", or run `owlbot devices pair` on the server to get the QR in the terminal.
 3. Confirm on the phone with Face ID.
 
-At home the phone uses the Wi-Fi; away from home, Tailscale on both the phone and the hub (the QR carries the Tailscale address too). The phone pins the hub's own certificate from the QR, so no domain or CA is involved. Its token is revoked in one click in **Devices**; approving an action needs a signature by a key that stays in the phone's Secure Enclave, so a stolen token cannot approve anything. Rules, the vault's items and the audit stay in the security console. In Docker, publish the device port and list the addresses phones should use: `OWLBOT_DEVICE_URLS=https://192.168.1.10:8082`.
+At home the phone uses the Wi-Fi; away from home, the hub's link from [access from anywhere](#access-from-anywhere) (a phone paired before the link learns it on its next connection), or Tailscale on both the phone and the hub. The phone pins the hub's own certificate from the QR, so no domain or CA is involved. Its token is revoked in one click in **Devices**; approving an action needs a signature by a key that stays in the phone's Secure Enclave, so a stolen token cannot approve anything. Rules, the vault's items and the audit stay in the security console. In Docker, publish the device port and list the addresses phones should use: `OWLBOT_DEVICE_URLS=https://192.168.1.10:8082`.
 
-## Remote access
+## Access from anywhere
 
-Don't publish the ports to the internet directly. The easiest option is [Tailscale](https://tailscale.com): install it on the host and let `tailscale serve` put HTTPS in front of both ports (HTTPS certificates must be enabled for your tailnet):
+**Settings → Integrations → Access from anywhere** gives the hub one permanent link, `https://owlbot.<your-tailnet>.ts.net`. It opens the web UI in any browser and serves the phone app away from home; nothing needs installing on the phone or that other computer. Owlbot runs its own [Tailscale](https://tailscale.com) node (`packages/tailnet`) and opens the link with Tailscale Funnel.
+
+1. Press **Turn on**.
+2. **Sign in to Tailscale**: a free account (Google, Apple, GitHub or Microsoft) is enough. The `owlbot` node joins your tailnet.
+3. **Allow Funnel**: Tailscale asks the tailnet's admin once.
+
+Through the link come the web UI (sign in with your Owlbot password: passkeys belong to the computer's own address), the phone app and other machines (`owlbot-node pair <link> <code>`). Never through it: the first-run setup, the security console and plugin webhooks; brains on machines paired through the link reach the hub's tools there with their own session tokens. Wrong passwords are counted per address and, through the link, also together: 30 within an hour pause signing in from outside for an hour and notify you, while signing in on the computer keeps working. The node keeps its keys in `<data>/tailnet`; **Forget the node** signs it out of Tailscale and deletes them. Tailscale asks a node to sign in again after 180 days by default: the card warns two weeks ahead, and you can turn key expiry off for `owlbot` in Tailscale's admin console. Owlbot does not send Tailscale its node logs.
+
+The desktop app and the Docker image include the node. When you run from source, build it with `npm run build:tailnet` (needs Go); without it the card says it is unavailable.
+
+### Your own Tailscale or proxy
+
+Don't publish the ports to the internet directly. To reach the security console from elsewhere too, install [Tailscale](https://tailscale.com) on the host and let `tailscale serve` put HTTPS in front of both ports (HTTPS certificates must be enabled for your tailnet):
 
 ```bash
 tailscale serve --bg --https=8080 http://127.0.0.1:8080
@@ -195,6 +208,8 @@ docker exec owlbot owlbot-entrypoint audit-verify
 | `OWLBOT_DATA_DIR` | `.data/` (`/data` in the image) | data directory |
 | `OWLBOT_INSTALL_CLIS` | — (`1` in the desktop installers) | `1` lets **Sign in** install a missing Claude Code or Codex into `<data>/tools` |
 | `OWLBOT_GOOGLE_CLIENT_ID`, `OWLBOT_GOOGLE_CLIENT_SECRET` | Owlbot's client | your own Google OAuth client (type Desktop app) for Google integrations |
+| `OWLBOT_TAILNET_BIN` | `packages/tailnet/bin/<platform>-<arch>/owlbot-tailnet` | the hub's Tailscale node for access from anywhere |
+| `OWLBOT_TAILNET_HOSTNAME` | `owlbot` | the node's name in your tailnet: the link's first label |
 | `TZ` | system time zone (`UTC` in the image) | default time zone for reminders, quiet hours and the digest |
 
 Most behaviour is configured in **Settings** in the web UI: language, time zone, quiet hours, digest times, `channelApprovalDetails` (full action details in Telegram) and `brainEgressAllow` (extra hosts brains may reach). One hub setting has no field on that page yet: `egressPrivateAllow`, the local-network hosts plugins and brains may reach (for example `searxng` or `nas.local`); set it through `PATCH /api/settings`.
@@ -204,6 +219,7 @@ Most behaviour is configured in **Settings** in the web UI: language, time zone,
 ```bash
 npm install
 npm run build        # web UI, console, UI plugins, node daemon bundle
+npm run build:tailnet  # the hub's Tailscale node (Go; --all for every platform)
 npm run dev          # hub on :8080 / :8081, egress proxy on :8089 (data in .data/)
 npm test             # unit and integration tests
 npm run typecheck

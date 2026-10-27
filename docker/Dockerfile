@@ -8,6 +8,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 COPY . .
 RUN npm ci --no-audit --no-fund && npm run build
 
+# The hub's own Tailscale node (access from anywhere, packages/tailnet): a static binary for this image's architecture.
+FROM golang:1.27-bookworm AS tailnet
+# The image pins its own Go; the module may ask for a newer patch release, which Go then fetches.
+ENV GOTOOLCHAIN=auto
+WORKDIR /src
+COPY packages/tailnet/go.mod packages/tailnet/go.sum ./
+RUN go mod download
+COPY packages/tailnet/*.go ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/owlbot-tailnet .
+
 FROM node:24-bookworm-slim AS runtime-base
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -33,6 +43,7 @@ RUN chmod 0440 /etc/sudoers.d/owlbot && visudo -c
 
 FROM runtime-base
 COPY --from=build --chown=root:root /app /app
+COPY --from=tailnet /out/owlbot-tailnet /usr/local/bin/owlbot-tailnet
 WORKDIR /app
 COPY docker/entrypoint.sh /usr/local/bin/owlbot-entrypoint
 RUN chmod 0755 /usr/local/bin/owlbot-entrypoint
@@ -44,6 +55,7 @@ ENV NODE_ENV=production \
     OWLBOT_PORT=8080 \
     OWLBOT_CONSOLE_PORT=8081 \
     OWLBOT_ISOLATION=users \
+    OWLBOT_TAILNET_BIN=/usr/local/bin/owlbot-tailnet \
     DISPLAY=:99 \
     DISABLE_AUTOUPDATER=1 \
     LANG=C.UTF-8

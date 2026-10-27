@@ -14,6 +14,9 @@ export const ROOT = resolve(import.meta.dirname, "..", "..");
 export const NODE_VERSION = process.env.NODE_VERSION || "24.16.0";
 export const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 
+/** The hub's Tailscale node (packages/tailnet, Go) for every architecture the target runs on. */
+export const TAILNET_TARGETS = { "win-x64": ["win32-x64"], darwin: ["darwin-arm64", "darwin-x64"] };
+
 const NODE_DISTS = {
   "win-x64": [{ file: `node-v${NODE_VERSION}-win-x64.zip`, into: "runtime" }],
   darwin: [
@@ -34,6 +37,8 @@ export function wanted(src) {
   if (top === "plugins" && sub === "ui" && parts[3] === "src") return false;
   // The desktop app is built around the stage; its manifest stays so `npm ci` finds the workspace.
   if (top === "packages" && pkg === "desktop" && sub && sub !== "package.json") return false;
+  // The Tailscale node's Go sources stay behind; stage() copies the target's binaries.
+  if (top === "packages" && pkg === "tailnet" && sub) return false;
   return true;
 }
 
@@ -140,7 +145,10 @@ export function removeDanglingLinks(dir) {
 
 export async function stage({ target, skipBuild = false }) {
   if (!NODE_DISTS[target]) throw new Error(`unknown target ${target} (win-x64 or darwin)`);
-  if (!skipBuild) npm(["run", "build"], { cwd: ROOT });
+  if (!skipBuild) {
+    npm(["run", "build"], { cwd: ROOT });
+    run(process.execPath, [join(ROOT, "scripts", "build-tailnet.mjs"), ...TAILNET_TARGETS[target].flatMap((t) => ["--target", t])], { cwd: ROOT });
+  }
   const out = join(ROOT, "dist", "desktop");
   const app = join(out, `stage-${target}`, "app");
   rmSync(dirname(app), { recursive: true, force: true });
@@ -151,6 +159,11 @@ export async function stage({ target, skipBuild = false }) {
   for (const f of ["launch.mjs", "resolve.mjs"]) cpSync(join(ROOT, "packaging", "desktop", f), join(app, "packaging", "desktop", f));
   for (const need of ["packages/web/dist/index.html", "packages/console/dist/index.html", "packages/node/dist/owlbot-node.mjs"]) {
     if (!existsSync(join(app, need))) throw new Error(`${need} is missing: run npm run build`);
+  }
+  for (const t of TAILNET_TARGETS[target]) {
+    const from = join(ROOT, "packages", "tailnet", "bin", t);
+    if (!existsSync(from)) throw new Error(`packages/tailnet/bin/${t} is missing: run npm run build:tailnet -- --target ${t}`);
+    cpSync(from, join(app, "packages", "tailnet", "bin", t), { recursive: true });
   }
 
   npm(["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"], { cwd: app });

@@ -67,7 +67,7 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
   - emits `remote.updated` with the view on every change.
 - **The gateways**: requests from the link never reach the computer's own port.
   - `buildMainApp(hub, { remote: true })` on `127.0.0.1:0` (a port only the node is told). It drops
-    `/api/auth/setup`, `/api/auth/desktop`, `/mcp`, `/oauth/callback` and `/hooks/*` (they answer 404); it allows
+    `/api/auth/setup`, `/api/auth/desktop`, the passkey routes, `/oauth/callback` and `/hooks/*` (they answer 404); `/mcp` stays, behind its sessions' bearer tokens, for brains on machines paired through the link; it allows
     the host and origin of the link only; cookies are `secure`; `trustProxy` is `127.0.0.1`, so `clientIp()` is the
     real client. Everything else (sign-in, the API behind the session, the SPA, machines' pairing and `/node/ws`)
     is as on the main port. The security console is a separate app and never has a gateway.
@@ -124,7 +124,7 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
 
 - Go: the line protocol, the proxies set `Host`, `X-Forwarded-For` and `X-Forwarded-Proto`.
 - Core, with a fake node (a Node script speaking the same lines, `OWLBOT_TAILNET_BIN`): state transitions and
-  restarts; the gateways answer 404 on setup, desktop, MCP, OAuth callback and hooks; `clientIp()` comes from the
+  restarts; the gateways answer 404 on setup, desktop, passkeys, OAuth callback and hooks; `clientIp()` comes from the
   forwarded header; the shared remote failure budget and that local sign-in still works; `/api/devices/addresses`;
   the library entry; enable without a password or without the binary.
 - Web: the card's steps and actions.

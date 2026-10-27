@@ -180,7 +180,9 @@ The log goes to `%USERPROFILE%\.owlbot-node\node.log`. The task starts when you 
 
 ## Machines on different networks: Tailscale
 
-If the hub and this machine are on different networks, the simplest fix is to join them with [Tailscale](https://tailscale.com):
+If the hub and this machine are on different networks, the simplest fix is the hub's **access from anywhere** (Settings → Integrations in the hub): the hub gets a permanent link, `https://owlbot.<tailnet>.ts.net`, and the Machines page puts it into the pairing command. Pair with that link and nothing else is needed on this machine.
+
+Or join both machines to [Tailscale](https://tailscale.com) yourself:
 
 1. Install Tailscale on the hub machine and on this one, and sign both in to the same tailnet (`tailscale up`).
 2. On the hub, make it listen on its tailnet address and know its name, for example

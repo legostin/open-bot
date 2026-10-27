@@ -161,18 +161,20 @@ describe("the link's gateways", () => {
     expect((await viaLink(ports.web, "GET", "/api/bootstrap")).status).toBe(401);
   });
 
-  it("never has the first-run setup, desktop sign-in, passkeys, MCP, Google's return page or webhooks", async () => {
+  it("never has the first-run setup, desktop sign-in, passkeys, Google's return page or webhooks", async () => {
     for (const [method, path] of [
       ["POST", "/api/auth/setup"],
       ["POST", "/api/auth/desktop"],
       ["POST", "/api/auth/passkey/options"],
       ["POST", "/api/auth/passkey/verify"],
-      ["POST", "/mcp"],
       ["GET", "/oauth/callback?state=x&code=y"],
       ["POST", "/hooks/telegram/update"],
     ]) {
       expect((await viaLink(ports.web, method, path, { body: method === "POST" ? {} : undefined })).status, `${method} ${path}`).toBe(404);
     }
+    // MCP stays: brains on machines paired through the link reach the hub's tools there, with their session's token.
+    const mcp = await viaLink(ports.web, "POST", "/mcp", { body: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    expect(mcp.status).toBe(401);
   });
 
   it("signs in with the password, with a secure cookie, and counts failures by the client's real address", async () => {
