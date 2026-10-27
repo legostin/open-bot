@@ -347,6 +347,8 @@ export interface ProbeResult {
   authenticated: boolean;
   version?: string;
   models?: string[];
+  /** The model the brain answers with when the agent names none, for people to see. */
+  model?: string;
   detail?: string;
 }
 

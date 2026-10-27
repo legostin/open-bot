@@ -30,6 +30,8 @@
   "variant.custom": "OpenAI-совместимый сервер",
   "probe.unknownVariant": "Неизвестный вариант «{variant}». Доступны: {variants}",
   "probe.serverDown": "Сервер не отвечает по адресу {url}: запустите его или укажите адрес в настройках API-мозга",
+  "probe.modelMissing": "На сервере {url} нет модели «{model}». Там есть: {models}. Выберите одну из них в настройке «Модель OpenAI-совместимого сервера» мозга API или скачайте эту: ollama pull {model}",
+  "probe.noModels": "На сервере {url} пока нет моделей. Скачайте какую-нибудь, например: ollama pull {model}",
   "key.missing": "Нет ключа API: вставьте его в чат (он сохранится как {id})",
   "key.noAccess": "Нет доступа к ключу {id}: {detail}",
   "error.unknownVariant": "Неизвестный вариант API-мозга: {variant}",

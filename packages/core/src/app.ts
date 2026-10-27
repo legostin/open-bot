@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentDef, CoreMethod, DeviceNetwork, DevicePairing } from "@owlbot/shared";
-import { DEFAULT_LOCALE, catalogLookup, localizeValue, normalizeLocale } from "@owlbot/shared";
+import { DEFAULT_LOCALE, catalogLookup, formatBrainRef, localizeValue, normalizeLocale, parseBrainRef } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
 import { EventBus } from "./bus.ts";
@@ -355,7 +355,10 @@ export class Hub {
   }
 
   saveAgent(agent: AgentDef, actor: string): AgentDef {
+    const refs = (a: AgentDef | undefined) => a?.brains.map((b) => formatBrainRef(parseBrainRef(b))).join("\n");
+    const before = this.agents.get(agent.id);
     const saved = this.agents.save(agent);
+    if (before && refs(before) !== refs(saved)) this.runner.brainsChanged(saved.id);
     this.audit.append(actor, "agent.save", saved.id);
     this.bus.emit("agents.updated", {});
     return saved;

@@ -100,6 +100,8 @@ export interface TurnResult {
 /** Harness built-in tools whose results come from the outside world. */
 const NATIVE_SOURCE_TOOLS = /^(WebFetch|WebSearch|web_search|fetch)$/i;
 const MAX_TASK_CONCURRENCY = 4;
+/** Settings key: agent id → when the user last changed that agent's brains. */
+const BRAINS_CHANGED_KEY = "brainsChangedAt";
 /** Workspace images a channel gets inline with one reply, in all. */
 const MAX_INLINE_MEDIA_BYTES = 4 * MAX_IMAGE_BYTES;
 
@@ -651,6 +653,12 @@ export class SessionRunner {
 
   /** Brains of the agent in preference order that are connected, not rate-limited and not saturated. */
   /** Brains to try, in order; `reasons` explain the skipped ones and `hard` counts skips that waiting won't fix. */
+  /** The user changed the agent's brains: its open conversations take the new order from their next turn. */
+  brainsChanged(agentId: string): void {
+    const at = this.d.settings.getKey<Record<string, string>>(BRAINS_CHANGED_KEY, {});
+    this.d.settings.setKey(BRAINS_CHANGED_KEY, { ...at, [agentId]: nowIso() });
+  }
+
   private async candidates(agent: AgentDef, preferred?: string): Promise<{ usable: string[]; earliestReset?: string; reasons: string[]; hard: number; setupOnly: boolean }> {
     const ordered = preferred ? [preferred, ...agent.brains.filter((b) => formatBrainRef(parseBrainRef(b)) !== formatBrainRef(parseBrainRef(preferred)))] : agent.brains;
     const usable: string[] = [];
@@ -870,13 +878,16 @@ export class SessionRunner {
     const agent = this.d.agents.get(opts.agentId ?? conv.agentId) ?? this.d.agents.get(this.d.settings.get().defaultAgent)!;
     const task = opts.task ?? (conv.taskId ? this.d.store.getTask(conv.taskId) : undefined);
     const prior = this.d.store.activeSession(conv.id, agent.id);
+    // The conversation stays on the brain it fell back to, until the user changes the agent's brains after that.
+    const changedAt = this.d.settings.getKey<Record<string, string>>(BRAINS_CHANGED_KEY, {})[agent.id];
+    const stay = prior && !(changedAt && changedAt > prior.createdAt) ? prior.brainRef : undefined;
     const tried = new Set<string>();
     let handoff = false;
     let lastError = "";
     let earliestReset: string | undefined;
 
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons, hard, setupOnly } = await this.candidates(agent, prior?.brainRef);
+      const { usable, earliestReset: reset, reasons, hard, setupOnly } = await this.candidates(agent, stay);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
       // No brain of the agent is set up yet: the setup card instead of an error, and the message waits for a brain.
