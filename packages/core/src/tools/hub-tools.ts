@@ -405,7 +405,7 @@ export function registerHubTools(hub: Hub): void {
       name: "integrations_list",
       effect: "read",
       description:
-        "The integrations library: services the user can connect (Google Calendar, Telegram, web search, the browser…) with their status " +
+        "The integrations library: services the user can connect (access from anywhere, Google Calendar, Telegram, web search, the browser…) with their status " +
         "(connected and as whom, needs-setup, off, broken, unavailable). Check it before saying something cannot be done.",
       inputSchema: obj({}),
     },
@@ -424,7 +424,8 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         "Show an integration's card in this chat so the user can connect it (e.g. Google Calendar: a Connect button that signs in with Google; " +
-        "Telegram: its setup steps). Use it whenever the user wants to connect a service, or a tool says it is not connected. Ids: see hub_integrations_list.",
+        "Telegram: its setup steps; remote-access: a permanent link to Owlbot from anywhere, through Tailscale). " +
+        "Use it whenever the user wants to connect a service, or a tool says it is not connected. Ids: see hub_integrations_list.",
       inputSchema: obj({ id: { type: "string", description: "Integration id" } }, ["id"]),
     },
     async (i, ctx) => {

@@ -152,7 +152,7 @@ export default {
   "remote.stepFunnel": "Allow Funnel in your tailnet",
   "remote.starting": "Starting…",
   "remote.pausedTitle": "Someone is guessing your password",
-  "remote.pausedBody": "30 wrong passwords came through your Owlbot link within an hour, so signing in from outside is paused for an hour. If it was not you, change the password in Settings → Security.",
+  "remote.pausedBody": "30 wrong passwords came through your Owlbot link within an hour, so signing in from outside is paused for an hour. If it was not you, change the password in the security console on this computer.",
   "connections.unavailable": "Google sign-in is not set up in this build of Owlbot",
   "connections.vaultLocked": "Create or unlock the vault first: the Google sign-in is kept there",
   "connections.denied": "You declined access in Google",

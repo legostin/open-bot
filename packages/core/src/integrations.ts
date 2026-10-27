@@ -1,13 +1,13 @@
 // The integrations library: plugins whose manifest has an `integration` block, as cards with a live status.
 // `google` ones depend on the hub's Google connection, `setup` ones on their setup card (secrets, channels),
-// `none` ones only on being enabled.
+// `none` ones only on being enabled. The core adds its own card first: access from anywhere (`remote`, remote.ts).
 
 import type { IntegrationView, Locale } from "@owlbot/shared";
 import type { Hub } from "./app.ts";
 import { localizePluginValue, tFor } from "./i18n.ts";
 
 /** Library order: what people connect first. */
-const CATEGORY_ORDER = ["calendar", "mail", "messaging", "search", "browser", "files", "other"];
+const CATEGORY_ORDER = ["access", "calendar", "mail", "messaging", "search", "browser", "files", "other"];
 
 /** The scopes every enabled Google integration needs: one sign-in covers them all. */
 export function googleScopes(hub: Hub): string[] {
@@ -21,7 +21,7 @@ export function googleScopes(hub: Hub): string[] {
 
 export async function listIntegrations(hub: Hub, locale: Locale): Promise<IntegrationView[]> {
   const t = tFor(locale);
-  const views: IntegrationView[] = [];
+  const views: IntegrationView[] = [remoteIntegration(hub, locale)];
   for (const r of hub.plugins.list()) {
     const integ = r.layout?.manifest.integration;
     if (!integ || !r.layout) continue;
@@ -55,4 +55,25 @@ export async function listIntegrations(hub: Hub, locale: Locale): Promise<Integr
   }
   const rank = (c: string) => (CATEGORY_ORDER.indexOf(c) < 0 ? CATEGORY_ORDER.length : CATEGORY_ORDER.indexOf(c));
   return views.sort((a, b) => rank(a.category) - rank(b.category) || a.name.localeCompare(b.name));
+}
+
+/** The core's card: the hub's Tailscale node and its link. */
+function remoteIntegration(hub: Hub, locale: Locale): IntegrationView {
+  const t = tFor(locale);
+  const r = hub.remote.view(locale);
+  const view: IntegrationView = {
+    id: "remote-access",
+    name: t("remote.name"),
+    summary: t("remote.summary"),
+    category: "access",
+    icon: "globe",
+    connect: "remote",
+    status: "connected",
+  };
+  if (!r.available) return { ...view, status: "unavailable", ...(r.error ? { detail: r.error } : {}) };
+  if (!r.enabled) return { ...view, status: "off" };
+  if (r.state === "running") return { ...view, ...(r.url ? { account: r.url } : {}) };
+  if (r.state === "error") return { ...view, status: "broken", ...(r.error ? { detail: r.error } : {}) };
+  const step = r.state === "needs-login" ? t("remote.stepLogin") : r.state === "needs-funnel" ? t("remote.stepFunnel") : t("remote.starting");
+  return { ...view, status: "needs-setup", detail: r.error ?? step };
 }

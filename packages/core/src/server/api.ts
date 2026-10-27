@@ -512,6 +512,23 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
       return hub.syncDeviceServer();
     });
     api.post("/api/devices/pairing", async () => hub.devicePairing());
+    // Access from anywhere (remote.ts): the switch, and forgetting the node.
+    api.get("/api/remote", async (req) => hub.remote.view(requestLocale(req)));
+    api.post("/api/remote/enable", async (req) => {
+      await hub.remote.enable();
+      hub.audit.append("user", "remote.enable");
+      return hub.remote.view(requestLocale(req));
+    });
+    api.post("/api/remote/disable", async (req) => {
+      await hub.remote.disable();
+      hub.audit.append("user", "remote.disable");
+      return hub.remote.view(requestLocale(req));
+    });
+    api.post("/api/remote/forget", async (req) => {
+      await hub.remote.forget();
+      hub.audit.append("user", "remote.forget");
+      return hub.remote.view(requestLocale(req));
+    });
     api.patch("/api/devices/:id", async (req) => hub.devices.rename((req.params as any).id, String((req.body as any)?.name ?? "")));
     api.delete("/api/devices/:id", async (req) => {
       hub.devices.revoke((req.params as any).id, "user");
