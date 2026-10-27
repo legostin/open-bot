@@ -31,6 +31,7 @@ import { McpClientManager } from "./mcp/client.ts";
 import { AuthService } from "./auth.ts";
 import { DesktopTickets } from "./desktop-login.ts";
 import { MachineHub } from "./machines.ts";
+import { MachineActivityFeed } from "./activity.ts";
 import { DeviceRegistry } from "./devices.ts";
 import { deviceTls, type DeviceTls } from "./devices-tls.ts";
 import { deviceUrls, hubName, pairingLink, qrSvg } from "./pairing.ts";
@@ -80,6 +81,8 @@ export class Hub {
   /** One-time sign-in tickets from the desktop app (see desktop-login.ts). */
   desktopTickets = new DesktopTickets();
   machines: MachineHub;
+  /** What every machine is doing now, for the machines block (activity.ts). */
+  activity: MachineActivityFeed;
   /** Phones paired with the hub (the Owlbot app) and the device port they talk to. */
   devices: DeviceRegistry;
   deviceApp?: FastifyInstance;
@@ -150,6 +153,7 @@ export class Hub {
         owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),
     });
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit });
+    this.activity = new MachineActivityFeed(this.bus, this.machines);
     this.devices = new DeviceRegistry({ db: this.db, bus: this.bus, audit: this.audit });
     this.secrets = new SecretIntake({ db: this.db, bus: this.bus, audit: this.audit, vault: this.vault, plugins: () => this.plugins });
     this.agentDrafts = new AgentDrafts({ db: this.db, bus: this.bus });
@@ -179,6 +183,7 @@ export class Hub {
       egress: this.egress,
       claudePluginDirs: () => this.plugins.enabledLayouts().filter((l) => l.formats.includes("claude") && !l.manifest.builtin).map((l) => l.dir),
       machineName: (id) => this.machines.name(id),
+      activity: this.activity,
       secrets: this.secrets,
       transcriber: this.transcriber,
     });
@@ -554,6 +559,7 @@ export class Hub {
     this.setup.stop();
     await this.runner.stop();
     this.machines.closeAll();
+    this.activity.close();
     await this.plugins.stopAll();
     await this.mcpClients.closeAll();
     await this.remote.stop();

@@ -342,6 +342,8 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
 
   // ----- machines -----
   api.get("/api/machines", async () => hub.machines.list());
+  // The hub's computer and the paired machines with the turns running there now; "machines.activity" keeps it current.
+  api.get("/api/machines/activity", async () => hub.activity.view());
   // A hub only this computer can reach gives other machines its link, when it has one.
   api.post("/api/machines/pairing-code", async (req) => {
     const link = hub.remote.view().state === "running" ? hub.remote.view().url : undefined;

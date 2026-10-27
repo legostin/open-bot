@@ -536,6 +536,35 @@ export interface Machine {
   createdAt: ISODate;
 }
 
+/**
+ * What a brain is doing in a turn right now: thinking (nothing streamed yet, or between tool calls), writing the
+ * answer, running a command, reading or editing files, on the web, calling another tool, or waiting for the user to
+ * approve a call.
+ */
+export type WorkStep = "thinking" | "writing" | "command" | "reading" | "editing" | "web" | "tool" | "approval";
+
+/** One turn in progress on a machine. */
+export interface MachineWork {
+  agentId: string;
+  conversationId: string;
+  /** The task the turn works on. */
+  taskId?: string;
+  /** What the turn is about when the agent's name does not say it: the task's goal or the group chat's title. */
+  title?: string;
+  brainId: string;
+  step: WorkStep;
+  startedAt: ISODate;
+}
+
+/** A computer agents run on and what they do there now (GET /api/machines/activity, "machines.activity"). */
+export interface MachineActivity {
+  /** "local" for the hub's own computer. */
+  id: string;
+  name: string;
+  online: boolean;
+  work: MachineWork[];
+}
+
 // ---------- Devices (phones running the Owlbot app) ----------
 
 export interface Device {
@@ -659,6 +688,7 @@ export type UiEvent =
   | { type: "settings.updated"; data: Record<string, unknown> }
   | { type: "connections.updated"; data: { provider: string } }
   | { type: "machine.updated"; data: Machine }
+  | { type: "machines.activity"; data: MachineActivity[] }
   | { type: "device.updated"; data: { id: string } }
   | { type: "devices.network"; data: DeviceNetwork }
   | { type: "remote.updated"; data: RemoteView }

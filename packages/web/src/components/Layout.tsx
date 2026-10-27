@@ -1,5 +1,6 @@
-// App shell, kept minimal: the team on the left (each agent with its dialog, then group chats; a drawer on phones), the current view,
-// and the settings panel beside it. Views put their own slim top bar (TopBar) with the shared header actions.
+// App shell, kept minimal: the team on the left (each agent with its dialog, then group chats, then the machines and what
+// runs there; a drawer on phones), the current view, and the settings panel beside it. Views put their own slim top bar
+// (TopBar) with the shared header actions.
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
@@ -14,6 +15,7 @@ import { cx, IconButton } from "./ui";
 import { ApprovalsBadge, ConnectionBadge, VaultBadge } from "./StatusBadges";
 import { CommandPalette } from "./CommandPalette";
 import { SettingsPanel } from "./SettingsPanel";
+import { MachinesBlock } from "./MachinesBlock";
 import { TeamList } from "../pages/chat/TeamList";
 import { t } from "../i18n";
 
@@ -50,6 +52,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="min-h-0 flex-1">
         <TeamList activeAgentId={agentForPath(loc, s?.defaultAgent)} activeConversationId={chatForPath(loc)} onNavigate={onNavigate} />
       </div>
+      <MachinesBlock onNavigate={onNavigate} />
       <div className="flex flex-col gap-2 px-3 empty:hidden">
         <PluginSidebarItems />
         <SidebarPanels />

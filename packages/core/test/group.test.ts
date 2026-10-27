@@ -5,7 +5,7 @@ import { mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentDef, Message } from "@owlbot/shared";
+import type { AgentDef, MachineActivity, Message } from "@owlbot/shared";
 import { parseMentions } from "@owlbot/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { openDb } from "../src/db.ts";
@@ -221,6 +221,19 @@ describe("group chats (integration)", () => {
     // The next message is answered as usual.
     await say(id, "@scout still there?");
     expect((await replies(id, 2))[1]).toMatchObject({ agentId: "scout" });
+  });
+
+  it("shows the member answering on the hub's computer, and what it does", async () => {
+    const id = await group(["assistant", "scout"], "Standup");
+    await say(id, "SLOW");
+    const here = await until(
+      async () => ((await web.req("GET", "/api/machines/activity")) as MachineActivity[]).find((m) => m.id === "local" && m.work.some((w) => w.conversationId === id && w.step === "writing")),
+      "the lead's turn on the hub's computer",
+    );
+    expect(here.online).toBe(true);
+    expect(here.work.find((w) => w.conversationId === id)).toMatchObject({ agentId: "assistant", title: "Standup", brainId: "fake" });
+    await web.req("POST", `/api/conversations/${id}/interrupt`, {});
+    await until(async () => !((await web.req("GET", "/api/machines/activity")) as MachineActivity[]).some((m) => m.work.some((w) => w.conversationId === id)), "the turn to end");
   });
 
   it("keeps group chats out of the channels and shows them in the sidebar", async () => {
