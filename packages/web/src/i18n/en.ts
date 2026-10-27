@@ -601,6 +601,7 @@ export default {
   "devices.validFor": "valid for {time}",
   "devices.expired": "The code has expired",
   "devices.newCode": "New code",
+  "devices.anywhere": "At home the phone reaches Owlbot over the Wi-Fi, anywhere else through the link.",
   "devices.sameNetwork": "The phone needs the same Wi-Fi as this computer, or Tailscale on both.",
   "devices.paired": "Phone “{name}” connected",
   "devices.showQr": "Show QR code",

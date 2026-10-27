@@ -601,6 +601,7 @@ export default {
   "devices.validFor": "действует ещё {time}",
   "devices.expired": "Код истёк",
   "devices.newCode": "Новый код",
+  "devices.anywhere": "Дома телефон подключается к Owlbot через Wi-Fi, в любом другом месте — по ссылке.",
   "devices.sameNetwork": "Телефон должен быть в той же сети Wi-Fi, что и этот компьютер, или на обоих должен работать Tailscale.",
   "devices.paired": "Телефон «{name}» подключён",
   "devices.showQr": "Показать QR-код",
