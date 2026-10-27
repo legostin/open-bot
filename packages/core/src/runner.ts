@@ -19,6 +19,7 @@ import type { EventBus } from "./bus.ts";
 import type { Redactor } from "./vault/redact.ts";
 import type { ToolGateway } from "./tools/gateway.ts";
 import type { ApprovalService } from "./approvals.ts";
+import { stepOfTool, type MachineActivityFeed } from "./activity.ts";
 import type { EgressProxy } from "./egress.ts";
 import { DEFAULT_BRAIN_EGRESS } from "./settings.ts";
 import { buildSystemPrompt } from "./prompt.ts";
@@ -50,6 +51,8 @@ export interface RunnerDeps {
   /** Claude Code-format plugin dirs to pass to Claude Code sessions. */
   claudePluginDirs: () => string[];
   machineName: (machineId: string) => string | undefined;
+  /** Turns in progress by machine, for the machines block (set by the hub). */
+  activity?: MachineActivityFeed;
   secrets: SecretIntake;
   /** First-run setup (set by the hub): keeps messages written while no brain works and adds the prompt section. */
   setup?: {
@@ -981,6 +984,14 @@ export class SessionRunner {
     const msg = this.d.store.addMessage({ conversationId: conv.id, role: "assistant", parts: [], status: "streaming", agentId: agent.id, taskId: task?.id, brainRef: live.brainRef, channel: replyChannel });
     this.streamingMessage.set(conv.id, msg.id);
     this.activeTurns.set(conv.id, { sessionId: row.id, handle: live.handle });
+    const activity = this.d.activity;
+    activity?.start(msg.id, {
+      brainRef: live.brainRef,
+      agentId: agent.id,
+      conversationId: conv.id,
+      taskId: task?.id,
+      title: task ? task.title : conv.kind === "group" ? conv.title : undefined,
+    });
 
     let parts: MessagePart[] = [];
     let fullText = "";
@@ -1013,6 +1024,7 @@ export class SessionRunner {
           if (last && last.type === "text") parts[parts.length - 1] = { type: "text", text: last.text + delta };
           else parts.push({ type: "text", text: delta });
           this.d.bus.emit("message.delta", { id: msg.id, conversationId: conv.id, delta });
+          activity?.step(msg.id, "writing");
           flush();
           break;
         }
@@ -1023,6 +1035,7 @@ export class SessionRunner {
             this.d.store.updateSession(row.id, { tainted: true });
             row.tainted = true;
           }
+          activity?.step(msg.id, stepOfTool(e.name));
           flush(true);
           break;
         }
@@ -1030,6 +1043,7 @@ export class SessionRunner {
           const out = this.d.redactor.text(e.output);
           if (/awaiting_approval/.test(out)) awaitingApproval = true;
           parts.push({ type: "tool_result", id: e.id, output: truncate(out, 4000), isError: e.isError });
+          activity?.step(msg.id, "thinking");
           flush(true);
           break;
         }
@@ -1058,6 +1072,7 @@ export class SessionRunner {
     } finally {
       this.activeTurns.delete(conv.id);
       this.streamingMessage.delete(conv.id);
+      activity?.end(msg.id);
     }
 
     if (resumeToken) this.d.store.updateSession(row.id, { resumeToken });

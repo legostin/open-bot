@@ -2,7 +2,7 @@
 // conversations, messages, tasks.
 
 import { useSyncExternalStore } from "react";
-import type { AgentDef, Catalog, Conversation, GroupChat, Locale, Message, Task, TeamMember, UiEvent, VaultState } from "@owlbot/shared";
+import type { AgentDef, Catalog, Conversation, GroupChat, Locale, MachineActivity, Message, Task, TeamMember, UiEvent, VaultState } from "@owlbot/shared";
 import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
 import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";
@@ -86,6 +86,8 @@ export const agents = createStore<AgentDef[] | null>(null);
 export const team = createStore<TeamMember[] | null>(null);
 /** Group chats and what happens there (`/api/groups`, kept current by "group.updated"). */
 export const groups = createStore<GroupChat[] | null>(null);
+/** The hub's computer and the paired machines with what runs there (`/api/machines/activity`, "machines.activity"). */
+export const machineActivity = createStore<MachineActivity[] | null>(null);
 export const messages = createStore<Record<string, ConvMessages>>({});
 
 /** Every realtime event from the hub. */
@@ -213,6 +215,7 @@ export async function logout(): Promise<void> {
   agents.set(null);
   team.set(null);
   groups.set(null);
+  machineActivity.set(null);
   conversations.set([]);
   await showLogin();
 }
@@ -230,6 +233,7 @@ function startSocket(): void {
       void refreshTeam();
       void refreshGroups();
       if (tasks.get()) void refreshTasks();
+      if (machineActivity.get()) void refreshMachineActivity();
       for (const id of Object.keys(messages.get())) if (messages.get()[id].loaded) void loadMessages(id, true);
       reconnected.emit();
     },
@@ -320,6 +324,9 @@ function handleEvent(e: UiEvent): void {
       break;
     case "task.updated":
       tasks.set((list) => (list ? upsertById(list, e.data) : list));
+      break;
+    case "machines.activity":
+      machineActivity.set(e.data);
       break;
     case "approval.pending":
       session.set((s) => (s ? { ...s, pendingApprovals: e.data.count } : s));
@@ -514,4 +521,18 @@ export async function refreshAgents(): Promise<AgentDef[]> {
 
 export function ensureAgents(): void {
   if (!agents.get()) void refreshAgents().catch(() => {});
+}
+
+// ---------- machines ----------
+
+export async function refreshMachineActivity(): Promise<void> {
+  try {
+    machineActivity.set(await api.get<MachineActivity[]>("/api/machines/activity"));
+  } catch {
+    /* the next "machines.activity" brings it */
+  }
+}
+
+export function ensureMachineActivity(): void {
+  if (!machineActivity.get()) void refreshMachineActivity();
 }
