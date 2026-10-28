@@ -29,6 +29,7 @@ import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts
 import { MAX_IMAGE_BYTES, readWorkspaceImage } from "./media.ts";
 import { clockTime, TurnClock } from "./clock.ts";
 import { busy, situation, TASK_STATE } from "./situation.ts";
+import type { UserLocations } from "./user-location.ts";
 import { attachmentNote, forSession, isSpeech, SPEECH_NOT_SET_UP, type AttachmentPart, type SessionFile } from "./attachments.ts";
 import { MAX_AUTO_TRANSCRIBE_SEC, type Transcriber } from "./transcribe.ts";
 import { firstSpeakers, groupTurn, groupTurnText, handOff, MAX_HANDOFFS, USER_LABEL } from "./group-chat.ts";
@@ -57,6 +58,8 @@ export interface RunnerDeps {
   machines?: () => Machine[];
   /** Turns in progress by machine, for the machines block (set by the hub). */
   activity?: MachineActivityFeed;
+  /** Where the user is, when their phone shares it. */
+  locations?: UserLocations;
   secrets: SecretIntake;
   /** First-run setup (set by the hub): keeps messages written while no brain works and adds the prompt section. */
   setup?: {
@@ -1363,8 +1366,11 @@ export class SessionRunner {
     if (!conv) return undefined;
     const task = row.taskId ? this.d.store.getTask(row.taskId) : undefined;
     const machineId = parseBrainRef(row.brainRef).machineId;
+    const timezone = this.d.settings.get().timezone;
+    const user = this.d.locations?.line((iso) => clockTime(iso, timezone));
     return situation({
       ...this.teamFacts(),
+      ...(user ? { user } : {}),
       agentId: row.agentId,
       session: {
         kind: task?.kind === "message" ? "thread" : task ? "task" : conv.kind === "group" ? "group" : "dialog",

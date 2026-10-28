@@ -133,6 +133,7 @@ export default {
   "machine.badPublicKey": "Invalid public key",
   "device.badPairingCode": "The invite has expired or was already used. Ask for a new link in the chat.",
   "device.badPublicKey": "The phone sent an invalid key",
+  "device.badLocation": "The phone sent a location the hub cannot read",
   "device.notFound": "No such device",
   "device.badSignature": "The Face ID confirmation did not check out. Try again.",
   "device.networkOff": "Phones cannot reach the hub: its port for phones is closed (OWLBOT_DEVICES=0) and access from anywhere is off.",

@@ -14,6 +14,7 @@ import { imageTypeOf, MAX_IMAGE_BYTES, parseImageUrl } from "../media.ts";
 import { mimeOf } from "../attachments.ts";
 import type { Transcriber } from "../transcribe.ts";
 import type { RoadRoute } from "../routing.ts";
+import type { UserLocation } from "../user-location.ts";
 
 export interface CoreToolDeps {
   registry: ToolRegistry;
@@ -33,6 +34,8 @@ export interface CoreToolDeps {
   transcriber?: Transcriber;
   /** A route along roads or paths for show_map (routing.ts). */
   route?: (mode: Exclude<RouteMode, "transit">, stops: Array<[number, number]>) => Promise<RoadRoute | { error: string }>;
+  /** Where the user is, when their phone shares it (user-location.ts). */
+  userLocation?: () => UserLocation | undefined;
 }
 
 /** Who is writing to a task: the agent, its conversation and, inside a task, that task; tainted when it had read outside content. */
@@ -415,6 +418,32 @@ export function registerCoreTools(d: CoreToolDeps): void {
       return text(
         `The user now sees ${items.length === 1 ? "the image" : `a carousel of ${items.length} images`} in the chat (and in Telegram, if your reply goes there). ` +
           "Do not paste it again as markdown.",
+      );
+    },
+  );
+
+  reg(
+    {
+      name: "user_location",
+      description:
+        "Where the user is now, as their phone reports it (when they share their location in the Owlbot app): the point, how exact it is, " +
+        "the place's name and when it was reported. Use it for \"near me\", directions from where they are (show_map with an icon \"user\" marker as " +
+        "the first stop), local time and weather questions. Your [You now] block already names the place when it is known.",
+      effect: "read",
+      inputSchema: { type: "object", properties: {} },
+    },
+    () => {
+      const l = d.userLocation?.();
+      if (!l) return text("Unknown: the user's phone does not share their location. They can turn it on in the Owlbot app, on the Hub tab.");
+      const ago = Math.max(0, Math.round((Date.now() - Date.parse(l.at)) / 60_000));
+      return text(
+        [
+          `lat ${l.lat}, lon ${l.lon}${l.accuracyM !== undefined ? ` (within ${l.accuracyM} m)` : ""}`,
+          l.place ? `Place: ${l.place}` : "",
+          `Reported ${ago < 1 ? "just now" : ago < 120 ? `${ago} min ago` : `${Math.round(ago / 60)} h ago`} (${l.at}) by the phone “${l.deviceName}”.`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
       );
     },
   );

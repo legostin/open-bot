@@ -26,6 +26,7 @@ import { Notifier } from "./notifier.ts";
 import { SessionRunner } from "./runner.ts";
 import { Team } from "./team.ts";
 import { roadRoute } from "./routing.ts";
+import { UserLocations } from "./user-location.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
 import { McpClientManager } from "./mcp/client.ts";
@@ -89,6 +90,8 @@ export class Hub {
   activity: MachineActivityFeed;
   /** Phones paired with the hub (the Owlbot app) and the device port they talk to. */
   devices: DeviceRegistry;
+  /** Where the user is, when their phone shares it (user-location.ts). */
+  locations: UserLocations;
   deviceApp?: FastifyInstance;
   private deviceError?: string;
   private deviceSync: Promise<unknown> = Promise.resolve();
@@ -160,6 +163,7 @@ export class Hub {
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit, invites: this.invites });
     this.activity = new MachineActivityFeed(this.bus, this.machines);
     this.devices = new DeviceRegistry({ db: this.db, bus: this.bus, audit: this.audit, invites: this.invites });
+    this.locations = new UserLocations(this.settings, (id) => !!this.devices.get(id));
     this.secrets = new SecretIntake({ db: this.db, bus: this.bus, audit: this.audit, vault: this.vault, plugins: () => this.plugins });
     this.agentDrafts = new AgentDrafts({ db: this.db, bus: this.bus });
     this.cliTools = new CliTools(config.dataDir, config.installClis);
@@ -190,6 +194,7 @@ export class Hub {
       machineName: (id) => this.machines.name(id),
       machines: () => this.machines.list(),
       activity: this.activity,
+      locations: this.locations,
       secrets: this.secrets,
       transcriber: this.transcriber,
     });
@@ -281,6 +286,7 @@ export class Hub {
       workspacesRoot: join(config.dataDir, "workspaces"),
       transcriber: this.transcriber,
       route: (mode, stops) => roadRoute(config.routerUrl, mode, stops),
+      userLocation: () => this.locations.get(),
     });
     this.machines.registerTools(this.tools);
     registerHubTools(this);

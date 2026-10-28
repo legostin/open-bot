@@ -139,6 +139,17 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls, opts: { remote?: 
       hub.devices.revoke(req.device!.id, `device:${req.device!.id}`);
       return { ok: true };
     });
+    // Location sharing (the app's switch): the phone reports where the user is when it moves; agents see the last place.
+    api.post("/api/devices/location", async (req) => {
+      if (req.webCsrf) throw new HttpError(403, "auth.required");
+      if (!hub.locations.set(req.device!, req.body)) throw new HttpError(400, "device.badLocation");
+      return { ok: true };
+    });
+    api.delete("/api/devices/location", async (req) => {
+      if (req.webCsrf) throw new HttpError(403, "auth.required");
+      hub.locations.forget(req.device!.id);
+      return { ok: true };
+    });
 
     // ----- approvals: listed with everything the card shows; approving needs the phone's key (Face ID) -----
     api.get("/api/approvals", async (req) => {
