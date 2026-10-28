@@ -12,7 +12,8 @@ import { LOCALES, localeFromEnv } from "@owlbot/shared";
 import { errorText, hubLocale, LocalizedError, requestLocale, tFor } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
-import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, sendFile } from "./http.ts";
+import { clientIp, FailureBudget, hostAllowed, HttpError, originAllowed, originsFor, sendFile } from "./http.ts";
+import { registerJoinPage } from "./join-page.ts";
 import { registerApi } from "./api.ts";
 import { registerSpa } from "./spa.ts";
 
@@ -176,19 +177,16 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
 
   // ---------- public: machine nodes ----------
 
-  const pairFailures = new Map<string, number[]>();
+  // Wrong invite codes, from a machine pairing or the invite page: 10 per address in 15 minutes.
+  const pairBudget = new FailureBudget(10, 15 * 60_000);
   app.post("/api/node/pair", async (req) => {
-    const ip = clientIp(req);
-    const now = Date.now();
-    const recent = (pairFailures.get(ip) ?? []).filter((t) => now - t < 15 * 60_000);
-    if (recent.length >= 10) throw new HttpError(429, "auth.tooManyAttempts");
+    if (pairBudget.exhausted(req)) throw new HttpError(429, "auth.tooManyAttempts");
     try {
       const b = req.body as any;
       const m = hub.machines.pair({ code: String(b?.code ?? ""), publicKey: String(b?.publicKey ?? ""), name: b?.name, info: b?.info });
       return { machineId: m.id, name: m.name };
     } catch (e: any) {
-      recent.push(now);
-      pairFailures.set(ip, recent);
+      pairBudget.fail(req);
       throw e instanceof LocalizedError ? new HttpError(400, e.key, e.params) : new HttpError(400, e.message);
     }
   });
@@ -196,6 +194,9 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   app.get("/node/ws", { websocket: true }, (socket, req) => {
     hub.machines.attach(socket as any, clientIp(req));
   });
+
+  // The invite's page and the desktop installers (join-page.ts).
+  registerJoinPage(app, hub, { remote: !!remote, budget: pairBudget });
 
   // Single-file machine daemon (public code, no secrets): `node owlbot-node.mjs pair <hub> <code>`.
   app.get("/download/owlbot-node.mjs", async (_req, reply) => {

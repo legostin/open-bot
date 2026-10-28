@@ -344,7 +344,10 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   // The hub's computer and the paired machines with the turns running there now; "machines.activity" keeps it current.
   api.get("/api/machines/activity", async () => hub.activity.view());
   // A hub only this computer can reach gives other machines its link, when it has one.
-  api.post("/api/machines/pairing-code", async (req) => ({ ...hub.machines.createPairingCode((req.body as any)?.name), hubUrl: machineHubUrl(cfg.publicUrl, hub.remote.link()) }));
+  api.post("/api/machines/pairing-code", async () => ({ ...hub.machines.createPairingCode(), hubUrl: machineHubUrl(cfg.publicUrl, hub.remote.link()) }));
+  // One link connects a computer or a phone (invites.ts); a phone's chat may invite a computer too.
+  api.post("/api/invites", async () => hub.createInvite());
+  api.delete("/api/invites/:code", async (req) => ({ ok: hub.invites.revoke((req.params as { code: string }).code) }));
   api.patch("/api/machines/:id", async (req) => hub.machines.rename((req.params as any).id, String((req.body as any)?.name ?? "")));
   api.delete("/api/machines/:id", async (req) => {
     hub.machines.revoke((req.params as any).id);

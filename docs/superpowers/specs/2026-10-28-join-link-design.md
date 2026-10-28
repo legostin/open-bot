@@ -17,7 +17,7 @@ address + code the user typed by hand (and got wrong: the phones' `:8443` addres
 
 ## Invites (`packages/core/src/invites.ts`)
 
-- Table `invites(code primary key, expires_at, used_at, used_by)`, migration 13. Code: 8 characters `[A-Z0-9]`, the
+- Table `invites(code primary key, expires_at, used_at, used_by)`, a new migration. Code: 8 characters `[A-Z0-9]`, the
   format the phone already accepts, so `owlbot-ios` needs no change.
 - `create() → { code, expiresAt }` (1 hour, audit `invite.create`), `consume(code, by)` marks it used in one
   `update … where used_at is null and expires_at > now` (one winner), `valid(code)`, `revoke(code)` (audit).

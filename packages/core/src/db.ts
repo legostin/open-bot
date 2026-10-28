@@ -58,6 +58,8 @@ const MIGRATIONS: string[] = [
   `alter table conversations add column members text;`,
   // A task's open question to whoever started it (task_ask).
   `alter table tasks add column question text;`,
+  // One-time invites for any device (invites.ts); pairing_codes and device_pairing_codes are no longer written.
+  `create table invites(code text primary key, expires_at text not null, used_at text, used_by text);`,
 ];
 
 export function openDb(file: string): Db {

@@ -38,7 +38,7 @@ describe("devices", () => {
     expect(() => devices.pair({ code, name: "Again", platform: "ios", publicKey: key.publicKey })).toThrow();
 
     const late = devices.createPairingCode().code;
-    db.prepare("update device_pairing_codes set expires_at = ? where code = ?").run(new Date(Date.now() - 1000).toISOString(), late);
+    db.prepare("update invites set expires_at = ? where code = ?").run(new Date(Date.now() - 1000).toISOString(), late);
     expect(() => devices.pair({ code: late, name: "Late", platform: "ios", publicKey: key.publicKey })).toThrow();
   });
 

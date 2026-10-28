@@ -10,9 +10,9 @@ import type { BrainRegistry } from "./brains.ts";
 import type { AuditLog } from "./audit.ts";
 import type { ToolRegistry } from "./tools/registry.ts";
 import { hubLocale, LocalizedError } from "./i18n.ts";
+import { InviteRegistry } from "./invites.ts";
 
 export const NODE_AUTH_PREFIX = "owlbot-node-auth:";
-const PAIRING_TTL = 10 * 60_000;
 
 const fromRow = (r: any, online: boolean): Machine => ({
   id: r.id,
@@ -29,38 +29,36 @@ export class MachineHub {
   bus: EventBus;
   brains: BrainRegistry;
   audit: AuditLog;
+  invites: InviteRegistry;
   private peers = new Map<string, RpcPeer>();
 
-  constructor(d: { db: Db; bus: EventBus; brains: BrainRegistry; audit: AuditLog }) {
+  constructor(d: { db: Db; bus: EventBus; brains: BrainRegistry; audit: AuditLog; invites?: InviteRegistry }) {
     this.db = d.db;
     this.bus = d.bus;
     this.brains = d.brains;
     this.audit = d.audit;
+    this.invites = d.invites ?? new InviteRegistry(d);
   }
 
-  createPairingCode(name?: string): { code: string; expiresAt: string } {
-    const code = randomBytes(6).toString("base64url").replace(/[-_]/g, "x").slice(0, 8).toUpperCase();
-    const expiresAt = new Date(Date.now() + PAIRING_TTL).toISOString();
-    this.db.prepare("insert into pairing_codes(code, name, expires_at) values (?,?,?)").run(code, name ?? null, expiresAt);
-    this.audit.append("user", "machine.pairing-code", undefined, { name });
-    return { code, expiresAt };
+  /** An invite (invites.ts): it pairs a computer, or a phone just as well. */
+  createPairingCode(): { code: string; expiresAt: string } {
+    return this.invites.create();
   }
 
   /** Called by a node daemon with a one-time code. Registers its public key. */
   pair(p: { code: string; publicKey: string; name?: string; info?: MachineInfo }): Machine {
-    const row = this.db.prepare("select * from pairing_codes where code = ?").get(String(p.code).trim().toUpperCase()) as any;
-    if (!row || row.used || Date.parse(row.expires_at) < Date.now()) throw new LocalizedError("machine.badPairingCode");
-    const pub = Buffer.from(p.publicKey, "base64url");
+    const pub = Buffer.from(String(p.publicKey ?? ""), "base64url");
     if (pub.length !== 32) throw new LocalizedError("machine.badPublicKey");
-    this.db.prepare("update pairing_codes set used = 1 where code = ?").run(row.code);
     const id = newId("mach_");
-    const name = (row.name || p.name || p.info?.hostname || "machine").slice(0, 60);
+    if (!this.invites.consume(p.code, `machine:${id}`)) throw new LocalizedError("machine.badPairingCode");
+    const name = (p.name || p.info?.hostname || "machine").slice(0, 60);
     this.db
       .prepare("insert into machines(id, name, public_key, info, last_seen_at, created_at) values (?,?,?,?,?,?)")
       .run(id, name, p.publicKey, p.info ? JSON.stringify(p.info) : null, nowIso(), nowIso());
     this.audit.append("user", "machine.pair", id, { name });
     const m = this.get(id)!;
     this.bus.emit("machine.updated", m);
+    this.invites.joined(p.code, "machine", m.name);
     return m;
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deviceUrls, machineHubUrl, pairingLink, parsePairingLink, qrSvg, qrText } from "../src/pairing.ts";
+import { desktopPairLink, deviceUrls, inviteUrl, machineHubUrl, pairingLink, parsePairingLink, qrSvg, qrText } from "../src/pairing.ts";
 
 describe("pairing link", () => {
   it("carries the code, name, fingerprint and every address, and parses back", () => {
@@ -39,5 +39,11 @@ describe("machine pairing address", () => {
     expect(machineHubUrl("http://127.0.0.1:8080", link)).toBe(link);
     expect(machineHubUrl("https://bot.example.com", link)).toBe("https://bot.example.com");
     expect(machineHubUrl("http://localhost:8080")).toBe("http://localhost:8080");
+  });
+
+  it("makes an invite link only where other devices can open it, and the desktop app's link", () => {
+    expect(inviteUrl("https://owlbot.tail1234.ts.net", "AB12CD34")).toBe("https://owlbot.tail1234.ts.net/join/AB12CD34");
+    expect(inviteUrl("http://localhost:8080", "AB12CD34")).toBeUndefined();
+    expect(desktopPairLink("https://owlbot.tail1234.ts.net", "AB12CD34")).toBe("owlbot://pair?hub=https%3A%2F%2Fowlbot.tail1234.ts.net&code=AB12CD34");
   });
 });

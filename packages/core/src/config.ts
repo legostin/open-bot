@@ -1,6 +1,6 @@
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { BUILTIN_GOOGLE_CLIENT, GOOGLE_ENDPOINTS, type GoogleClientConfig } from "./connections.ts";
 
 export interface Config {
@@ -48,6 +48,8 @@ export interface Config {
   vaultPassphraseFile?: string;
   timezone: string;
   version: string;
+  /** GitHub repository whose releases carry the desktop installers (`/download/desktop/<os>`). */
+  releasesRepo: string;
   /** For tests: skip starting builtin plugins. */
   plugins: "all" | "none" | string[];
 }
@@ -116,7 +118,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     brainHome: "",
     vaultPassphraseFile: env.OWLBOT_VAULT_PASSPHRASE_FILE && existsSync(env.OWLBOT_VAULT_PASSPHRASE_FILE) ? env.OWLBOT_VAULT_PASSPHRASE_FILE : undefined,
     timezone: env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    version: "0.1.0",
+    version: appVersion(),
+    releasesRepo: env.OWLBOT_RELEASES_REPO || "legostin/open-bot",
     plugins: (env.OWLBOT_PLUGINS ?? "all") === "all" ? "all" : env.OWLBOT_PLUGINS === "none" ? "none" : (env.OWLBOT_PLUGINS ?? "").split(","),
   };
   const merged = { ...cfg, ...overrides };
@@ -124,6 +127,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     merged.brainHome = env.OWLBOT_BRAIN_HOME && env.OWLBOT_ISOLATION !== "users" ? resolve(env.OWLBOT_BRAIN_HOME) : join(merged.dataDir, "home", "agent");
   }
   return merged;
+}
+
+/** The root package.json's version: the desktop installers on GitHub are released under it. */
+function appVersion(): string {
+  try {
+    return String(JSON.parse(readFileSync(join(APP_ROOT, "package.json"), "utf8")).version || "0.1.0");
+  } catch {
+    return "0.1.0";
+  }
 }
 
 export function isLocalHost(host: string): boolean {

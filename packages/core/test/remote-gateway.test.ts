@@ -220,12 +220,19 @@ describe("the link's gateways", () => {
     expect(remote.json.qrSvg).toMatch(/^<svg/);
     const machine = await web.req("POST", "/api/machines/pairing-code", {});
     expect(machine.json.hubUrl).toBe(`https://${LINK}`);
-    // The chat's tool gives the same address, never the phones' one.
+    // One invite for any device: its link is on the web gateway, never the phones' port; the phone's QR uses that.
+    const invite = await web.req("POST", "/api/invites", {});
+    expect(invite.json.url).toBe(`https://${LINK}/join/${invite.json.code}`);
+    expect(parsePairingLink(invite.json.phoneLink)!.urls).toEqual([`https://${LINK}:8443`]);
+    const page = await viaLink(ports.web, "GET", `/join/${invite.json.code}`, { headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } });
+    expect(page.status).toBe(200);
+    expect(page.json).toContain(`owlbot://pair?hub=${encodeURIComponent(`https://${LINK}`)}&amp;code=${invite.json.code}`);
+    // The chat's card tells the model the hub is reachable but never gives it a code.
     const conversationId = hub.store.agentConversation("assistant").id;
-    const r = await hub.tools.get("hub_machine_pairing_code")!.invoke({}, { conversationId, agentId: "assistant", sessionId: "s", machineId: "local", workspace: tmpdir(), tainted: false, background: false } as any);
+    const r = await hub.tools.get("hub_connect_device")!.invoke({}, { conversationId, agentId: "assistant", sessionId: "s", machineId: "local", workspace: tmpdir(), tainted: false, background: false } as any);
     const said = r.content.map((c: any) => c.text).join("");
-    expect(said).toContain(`pair https://${LINK} `);
-    expect(said).not.toContain(":8443");
+    expect(said).toContain("Other devices reach the hub");
+    expect(said).not.toContain(invite.json.code);
   });
 
   it("pauses sign-in through the link after 30 failures from anywhere, while the computer's own works", async () => {

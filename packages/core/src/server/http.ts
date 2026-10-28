@@ -86,6 +86,34 @@ export function clientIp(req: FastifyRequest): string {
   return req.ip ?? req.socket.remoteAddress ?? "unknown";
 }
 
+/** Failed attempts per client address in a sliding window: pairing and the invite page share one. */
+export class FailureBudget {
+  private limit: number;
+  private windowMs: number;
+  private seen = new Map<string, number[]>();
+
+  constructor(limit: number, windowMs: number) {
+    this.limit = limit;
+    this.windowMs = windowMs;
+  }
+
+  private recent(ip: string, now = Date.now()): number[] {
+    const list = (this.seen.get(ip) ?? []).filter((at) => now - at < this.windowMs);
+    if (list.length) this.seen.set(ip, list);
+    else this.seen.delete(ip);
+    return list;
+  }
+
+  exhausted(req: FastifyRequest): boolean {
+    return this.recent(clientIp(req)).length >= this.limit;
+  }
+
+  fail(req: FastifyRequest): void {
+    const ip = clientIp(req);
+    this.seen.set(ip, [...this.recent(ip), Date.now()]);
+  }
+}
+
 export function securityHeaders(reply: FastifyReply, csp: string): void {
   reply.header("content-security-policy", csp);
   reply.header("x-content-type-options", "nosniff");

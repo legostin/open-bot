@@ -595,6 +595,26 @@ export interface DevicePairing {
   fingerprint: string;
 }
 
+/** An invite for any device (a computer or a phone): POST /api/invites. */
+export interface Invite {
+  code: string;
+  expiresAt: ISODate;
+  /** https://<hub>/join/<code>: forwarded to the device or opened there. Absent when only this computer reaches the hub. */
+  url?: string;
+  /** owlbot://pair?hub=…&code=…: opens the desktop app on the computer the web UI is open on. */
+  appLink?: string;
+  /** owlbot://pair?v=1&c=…: the phone's link, while phones can reach the hub; `qrSvg` draws it. */
+  phoneLink?: string;
+  qrSvg?: string;
+}
+
+/** A device joined with an invite. */
+export interface InviteUsed {
+  code: string;
+  kind: "machine" | "device";
+  name: string;
+}
+
 /** The device port: whether phones can reach the hub, and where. */
 export interface DeviceNetwork {
   /** False only when OWLBOT_DEVICES=0 closed the port: phones then use the link alone. */
@@ -695,6 +715,7 @@ export type UiEvent =
   | { type: "machines.activity"; data: MachineActivity[] }
   | { type: "device.updated"; data: { id: string } }
   | { type: "devices.network"; data: DeviceNetwork }
+  | { type: "invite.used"; data: InviteUsed }
   | { type: "remote.updated"; data: RemoteView }
   | { type: "vault.state"; data: { state: VaultState } }
   | { type: "secret.request"; data: SecretRequest }

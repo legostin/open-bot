@@ -256,7 +256,7 @@ export class SetupGuide {
       telegram:
         'telegram: Telegram for messages and approvals on the phone. The user creates a bot with @BotFather (https://t.me/BotFather, /newbot) and gets its token; then call `hub_plugin_setup` with id "telegram": its card takes the token (and creates the vault first if there is none). Afterwards ask them to message the bot.',
       backupBrain: `backupBrain: ${backup ? `${backup.label} (${backup.ref}) ${backup.installed ? "is installed but not signed in" : "can be installed and signed in"}` : "a second brain"}, a backup for when the current brain hits its limits: \`hub_brain_login\`${backup ? ` with ref "${backup.ref}"` : ""}.`,
-      machines: "machines: other computers can join this hub, and their Claude Code and Codex become brains here: `hub_machine_pairing_code` gives a one-time code for that computer.",
+      machines: "machines: other computers can join this hub, and their Claude Code and Codex become brains here: `hub_connect_device` shows a card with a one-time link the user opens on that computer.",
       profile:
         'profile: get to know the user: how to address them, their language, what they want help with. Keep the facts with `memory_write`, change the hub language with `hub_settings_update` if needed and your own name or instructions with `profile_update` if they want; then call `hub_setup_update` with step "profile" and status "done".',
     };

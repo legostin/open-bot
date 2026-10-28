@@ -17,7 +17,7 @@ import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { hubLocale } from "../i18n.ts";
 import { listIntegrations } from "../integrations.ts";
-import { machineHubUrl } from "../pairing.ts";
+import { inviteUrl, machineHubUrl } from "../pairing.ts";
 import { isSetupStep, SETUP_STEPS } from "../setup.ts";
 
 export const HUB_TOOL_PREFIX = "hub_";
@@ -28,7 +28,7 @@ export const AGENT_SETTABLE = ["timezone", "defaultAgent", "language", "quietHou
 const SECRET_KEY = /key|token|secret|password/i;
 
 /** Tools that only put a card in front of the user, who then decides: fine even after outside content was read. */
-const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft", "brain_login", "device_pairing", "integration_connect"]);
+const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft", "brain_login", "connect_device", "integration_connect"]);
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 const json = (v: unknown): ToolResult => text(JSON.stringify(v, null, 2));
@@ -313,23 +313,6 @@ export function registerHubTools(hub: Hub): void {
   // ---------- machines ----------
 
   reg(
-    {
-      name: "machine_pairing_code",
-      effect: "local-write",
-      description: "Create a one-time code to connect one of the user's computers. Returns the command the user runs on that computer.",
-      inputSchema: obj({ name: { type: "string", description: "Optional name for the computer" } }),
-    },
-    (i) => {
-      const c = hub.machines.createPairingCode(i.name ? String(i.name) : undefined);
-      const url = machineHubUrl(hub.config.publicUrl, hub.remote.link());
-      return text(
-        `Pairing code ${c.code} (valid until ${c.expiresAt}). On the computer (Node.js 24+):\n` +
-          `curl -fsSLo owlbot-node.mjs ${url}/download/owlbot-node.mjs && node owlbot-node.mjs pair ${url} ${c.code}`,
-      );
-    },
-  );
-
-  reg(
     { name: "machine_rename", effect: "local-write", description: "Rename a connected computer.", inputSchema: obj({ machine: { type: "string", description: "Machine id or name" }, name: { type: "string" } }, ["machine", "name"]) },
     (i) => {
       const m = hub.machines.find(String(i.machine));
@@ -541,28 +524,27 @@ export function registerHubTools(hub: Hub): void {
 
   reg(
     {
-      name: "device_pairing",
+      name: "connect_device",
       effect: "local-write",
       description:
-        "Show a card in this chat for connecting the user's phone (the Owlbot iOS app): it makes a one-time QR code and link with every " +
-        "address the phone can use. Use it whenever the user wants Owlbot on their phone; never send them to settings pages for it.",
+        "Show a card in this chat for connecting one of the user's devices: a computer (it becomes a machine whose Claude Code, Codex and " +
+        "allowed folders agents can use) or a phone (the Owlbot iPhone app). The card makes one link for any device, valid once for an " +
+        "hour: the user forwards it to the device or opens it there, and the device asks to connect. Use it whenever the user wants to " +
+        "connect a computer or a phone; never send them to settings pages or give them commands for it.",
       inputSchema: obj({}),
     },
     (_i, ctx) => {
       hub.runner.attachPart(ctx.conversationId, { type: "device_pairing" });
-      const urls = hub.phoneUrls();
-      const link = hub.remote.deviceLink();
-      const paired = hub.devices.list().map((d) => d.name);
+      const reachable = !!inviteUrl(machineHubUrl(hub.config.publicUrl, hub.remote.link()), "x");
+      const machines = hub.machines.list().map((m) => m.name);
+      const phones = hub.devices.list().map((d) => d.name);
       return text(
         [
-          "A card for connecting a phone is shown in the chat: the user opens the Owlbot app and scans its QR code (or opens its link on the phone).",
-          urls.length
-            ? `The QR gives the phone these addresses, and it uses whichever answers: ${urls.join(", ")}.`
-            : "Phones cannot reach the hub: the computer has no network address and access from anywhere is off.",
-          link
-            ? "Away from home the phone uses the hub's link (access from anywhere)."
-            : "Away from home the phone needs access from anywhere (the remote-access integration) for a permanent link.",
-          `Paired phones: ${paired.join(", ") || "none"}.`,
+          "A card for connecting a device is shown in the chat. The user presses its button to get a one-time link (you never see it) and opens it on the computer or phone.",
+          reachable
+            ? "Other devices reach the hub through that link's address."
+            : "Other devices cannot reach the hub: its address works only on this computer and access from anywhere is off. The card says so; offer access from anywhere (the remote-access integration). A phone at home can still scan the card's QR code.",
+          `Connected computers: ${machines.join(", ") || "none"}. Paired phones: ${phones.join(", ") || "none"}.`,
         ].join("\n"),
       );
     },

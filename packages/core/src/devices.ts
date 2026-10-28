@@ -10,8 +10,8 @@ import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";
 import { hashToken } from "./store.ts";
 import { LocalizedError } from "./i18n.ts";
+import { InviteRegistry } from "./invites.ts";
 
-const PAIRING_TTL = 10 * 60_000;
 const NONCE_TTL = 2 * 60_000;
 const TICKET_TTL = 60_000;
 const WEB_SESSION_TTL = 30 * 24 * 3600_000;
@@ -52,6 +52,7 @@ export class DeviceRegistry {
   db: Db;
   bus: EventBus;
   audit: AuditLog;
+  invites: InviteRegistry;
   private nonces = new Map<string, { nonce: string; expires: number }>();
   private seen = new Map<string, number>();
   private tickets = new Map<string, { deviceId: string; expires: number }>();
@@ -59,30 +60,23 @@ export class DeviceRegistry {
    * asks the app for a new ticket. */
   private webSessions = new Map<string, { deviceId: string; csrf: string; expires: number }>();
 
-  constructor(d: { db: Db; bus: EventBus; audit: AuditLog }) {
+  constructor(d: { db: Db; bus: EventBus; audit: AuditLog; invites?: InviteRegistry }) {
     this.db = d.db;
     this.bus = d.bus;
     this.audit = d.audit;
+    this.invites = d.invites ?? new InviteRegistry(d);
   }
 
+  /** An invite (invites.ts): it pairs a phone, or a computer just as well. */
   createPairingCode(): { code: string; expiresAt: string } {
-    const now = nowIso();
-    this.db.prepare("delete from device_pairing_codes where expires_at < ? or used = 1").run(now);
-    const code = randomBytes(8).toString("base64url").replace(/[^A-Za-z0-9]/g, "").toUpperCase().padEnd(8, "X").slice(0, 8);
-    const expiresAt = new Date(Date.now() + PAIRING_TTL).toISOString();
-    this.db.prepare("insert into device_pairing_codes(code, expires_at) values (?,?)").run(code, expiresAt);
-    this.audit.append("user", "device.pairing-code");
-    return { code, expiresAt };
+    return this.invites.create();
   }
 
   /** Called by the phone with the code from the QR or link. The token is returned once and never stored. */
   pair(p: { code: string; name?: string; platform?: string; model?: string; publicKey: string }): { device: Device; token: string } {
-    const code = String(p.code ?? "").replace(/[\s-]/g, "").toUpperCase();
-    const row = this.db.prepare("select * from device_pairing_codes where code = ?").get(code) as any;
-    if (!row || row.used || Date.parse(row.expires_at) < Date.now()) throw new LocalizedError("device.badPairingCode", undefined, 400);
     if (!deviceKey(String(p.publicKey ?? ""))) throw new LocalizedError("device.badPublicKey", undefined, 400);
-    this.db.prepare("update device_pairing_codes set used = 1 where code = ?").run(code);
     const id = newId("dev_");
+    if (!this.invites.consume(p.code, `device:${id}`)) throw new LocalizedError("device.badPairingCode", undefined, 400);
     const token = randomBytes(32).toString("base64url");
     const now = nowIso();
     this.db
@@ -91,6 +85,7 @@ export class DeviceRegistry {
     const device = this.get(id)!;
     this.audit.append("user", "device.pair", id, { name: device.name, model: device.model });
     this.bus.emit("device.updated", { id });
+    this.invites.joined(p.code, "device", device.name);
     return { device, token };
   }
 

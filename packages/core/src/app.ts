@@ -2,7 +2,7 @@
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing } from "@owlbot/shared";
+import type { AgentDef, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing, Invite } from "@owlbot/shared";
 import { DEFAULT_LOCALE, catalogLookup, formatBrainRef, localizeValue, normalizeLocale, parseBrainRef } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
@@ -33,8 +33,9 @@ import { DesktopTickets } from "./desktop-login.ts";
 import { MachineHub } from "./machines.ts";
 import { MachineActivityFeed } from "./activity.ts";
 import { DeviceRegistry } from "./devices.ts";
+import { InviteRegistry } from "./invites.ts";
 import { deviceTls, type DeviceTls } from "./devices-tls.ts";
-import { deviceUrls, hubName, pairingLink, qrSvg } from "./pairing.ts";
+import { deviceUrls, hubName, inviteUrl, machineHubUrl, pairingLink, qrSvg } from "./pairing.ts";
 import { createCoreCall } from "./core-call.ts";
 import { configureHubLocale, coreCatalog, hubLocale, localizePluginValue, LocalizedError, t } from "./i18n.ts";
 import { registerHubTools, slug } from "./tools/hub-tools.ts";
@@ -80,6 +81,8 @@ export class Hub {
   auth: AuthService;
   /** One-time sign-in tickets from the desktop app (see desktop-login.ts). */
   desktopTickets = new DesktopTickets();
+  /** One-time invites: one link connects a computer or a phone (invites.ts). */
+  invites: InviteRegistry;
   machines: MachineHub;
   /** What every machine is doing now, for the machines block (activity.ts). */
   activity: MachineActivityFeed;
@@ -152,9 +155,10 @@ export class Hub {
       localize: (owner, text) =>
         owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),
     });
-    this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit });
+    this.invites = new InviteRegistry({ db: this.db, bus: this.bus, audit: this.audit });
+    this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit, invites: this.invites });
     this.activity = new MachineActivityFeed(this.bus, this.machines);
-    this.devices = new DeviceRegistry({ db: this.db, bus: this.bus, audit: this.audit });
+    this.devices = new DeviceRegistry({ db: this.db, bus: this.bus, audit: this.audit, invites: this.invites });
     this.secrets = new SecretIntake({ db: this.db, bus: this.bus, audit: this.audit, vault: this.vault, plugins: () => this.plugins });
     this.agentDrafts = new AgentDrafts({ db: this.db, bus: this.bus });
     this.cliTools = new CliTools(config.dataDir, config.installClis);
@@ -370,6 +374,20 @@ export class Hub {
     const link = this.remote.deviceLink();
     if (this.deviceApp) return deviceUrls(this.config.devicePort, this.config.deviceUrls, undefined, link);
     return link ? [link] : [];
+  }
+
+  /** The phone's link for an invite code, while phones can reach the hub (the device port or the link). */
+  phoneLink(code: string): string | undefined {
+    const urls = this.phoneUrls();
+    return urls.length ? pairingLink({ code, hubName: hubName(), fingerprint: this.deviceTls().fingerprint, urls }) : undefined;
+  }
+
+  /** One invite for any device: the shareable /join link and, while phones can reach the hub, the phone's QR. */
+  createInvite(): Invite {
+    const { code, expiresAt } = this.invites.create();
+    const url = inviteUrl(machineHubUrl(this.config.publicUrl, this.remote.link()), code);
+    const phoneLink = this.phoneLink(code);
+    return { code, expiresAt, ...(url ? { url } : {}), ...(phoneLink ? { phoneLink, qrSvg: qrSvg(phoneLink) } : {}) };
   }
 
   /** A one-time code and the QR for a phone; the device port or the link must be up. */

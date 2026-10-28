@@ -32,6 +32,16 @@ export function machineHubUrl(publicUrl: string, link?: string): string {
   return link && isLocalHost(new URL(publicUrl).hostname) ? link : publicUrl;
 }
 
+/** The invite's shareable link, when other devices can reach `hubUrl` at all (not a loopback address). */
+export function inviteUrl(hubUrl: string, code: string): string | undefined {
+  return isLocalHost(new URL(hubUrl).hostname) ? undefined : `${hubUrl}/join/${code}`;
+}
+
+/** The desktop app's link (packages/desktop deeplink.rs): pair this computer with the hub at `hubUrl`. */
+export function desktopPairLink(hubUrl: string, code: string): string {
+  return `owlbot://pair?${new URLSearchParams({ hub: hubUrl, code })}`;
+}
+
 /** The hub's name on phones: the computer's name without ".local". */
 export function hubName(): string {
   return hostname().replace(/\.local$/i, "").slice(0, 60) || "Owlbot";
