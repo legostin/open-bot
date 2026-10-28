@@ -1,6 +1,6 @@
 {
   "name": "Codex",
-  "description": "Мозг на подписке ChatGPT: запускает Codex CLI (codex exec) с инструментами Owlbot.",
+  "description": "Интеллект на подписке ChatGPT: запускает Codex CLI (codex exec) с инструментами Owlbot.",
   "settings.command.title": "Команда CLI",
   "settings.apiKeyRef.title": "Ключ OpenAI (ссылка vault, необязательно)",
   "settings.apiKeyRef.description": "Если пусто — используется подписка ChatGPT: войдите из чата.",

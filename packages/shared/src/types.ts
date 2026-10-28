@@ -205,7 +205,9 @@ export type MessagePart =
    * A task the agent started (task_delegate): one line with its live status that opens the task. A message to a
    * teammate (team_message) carries what the agent wrote (`text`) and, once it came, the teammate's answer (`reply`).
    */
-  | { type: "task"; taskId: string; text?: string; reply?: string };
+  | { type: "task"; taskId: string; text?: string; reply?: string }
+  /** The user's message this reply answers, when the dialog moved on since (a task's result for the request that started it). */
+  | { type: "reply_to"; messageId: string; text: string };
 
 /** What a sent file is: a voice note and a photo are told apart from an audio file or a document by the channel. */
 export type AttachmentKind = "photo" | "voice" | "audio" | "video" | "file";

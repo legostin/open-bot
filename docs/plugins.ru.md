@@ -2,12 +2,12 @@
 
 [English](plugins.md)
 
-Почти всё в Owlbot — плагины: мозги (Claude Code, Codex, API), каналы (Telegram), браузер, память, веб-поиск, триггеры. Ядро только связывает их и следит за безопасностью. Плагин может добавить:
+Почти всё в Owlbot — плагины: интеллекты (Claude Code, Codex, API), каналы (Telegram), браузер, память, веб-поиск, триггеры. Ядро только связывает их и следит за безопасностью. Плагин может добавить:
 
 | Что | Где |
 |---|---|
 | Инструменты для агентов | `server/` → `ctx.tools.register` |
-| Мозг (харнесс или API) | `server/` → `ctx.brains.register` |
+| Интеллект (харнесс или API) | `server/` → `ctx.brains.register` |
 | Канал (мессенджер) | `server/` → `ctx.channels.register` |
 | Хуки (`tool.before`, `message.in`, …) | `server/` → `ctx.hooks.on` |
 | HTTP-эндпоинты (вебхуки, API для своего UI) | `server/` → `ctx.http.handle` |
@@ -16,7 +16,7 @@
 | Интерфейс: панели, вкладки, рендер результатов, замена композера | `ui/` |
 | Переводы | `.owlbot-plugin/locales/` |
 
-Плагины Claude Code (`.claude-plugin/plugin.json`) и Codex (`.codex-plugin/plugin.json`) ставятся как есть: их скиллы, команды, агенты и MCP-серверы становятся доступны. Плагины Claude Code к тому же передаются мозгу Claude Code на хабе через `--plugin-dir`, поэтому их хуки работают там.
+Плагины Claude Code (`.claude-plugin/plugin.json`) и Codex (`.codex-plugin/plugin.json`) ставятся как есть: их скиллы, команды, агенты и MCP-серверы становятся доступны. Плагины Claude Code к тому же передаются интеллекту Claude Code на хабе через `--plugin-dir`, поэтому их хуки работают там.
 
 ## Структура
 
@@ -115,9 +115,9 @@ export default plugin;
 
 **Каналы.** Канал — это `{ id, label, send(message), status?() }`. В `send` приходят ответы, уведомления, карточки подтверждения (с токенами «разрешить» и «отклонить») и дайджест. Входящие сообщения пользователя плагин передаёт хабу через `ctx.core.call("channels.inbound", { text, channel, files? })`. В `files` то, что пользователь приложил: `{ name?, mimeType?, data (base64), kind?: "photo" | "voice" | "audio" | "video" | "file", durationSec? }`, не больше 10 файлов по 25 МБ. Хаб сохраняет их в рабочей папке переписки (`attachments/`), а агент получает их пути. Если есть файлы, текст может быть пустым. `context` (по-английски, до 2000 символов) модель получает перед словами пользователя, в чате его не видно: откуда переслано сообщение, на что оно отвечает.
 
-## Мозги
+## Интеллект
 
-Мозг — это `BrainProviderImpl`: `probe()` (установлен? есть вход?) и `createSession(opts)`. Сессия получает системный промпт, рабочую папку и MCP-доступ к инструментам хаба (`opts.mcp.url`, `opts.mcp.token`, `opts.mcp.bridgeCommand` для stdio-клиентов). `send(turn)` выдаёт события `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error`, `done`; ещё сессия реализует `interrupt()` и `close()`. При `limit_hit` ядро помечает мозг занятым до `resetAt` и переключается на следующий в списке агента. Готовые адаптеры для CLI — в `@owlbot/brains-cli`. Если у мозга есть варианты (например, провайдеры API), перечислите их в `variants: ["anthropic", "openai"]` — в интерфейсе они появятся отдельными мозгами `<id>:<вариант>@local`, а вариант придёт в `probe(variant)` и `opts.variant`. Id мозгов перечисляются в `contributes.brains`.
+Интеллект — это `BrainProviderImpl`: `probe()` (установлен? есть вход?) и `createSession(opts)`. Сессия получает системный промпт, рабочую папку и MCP-доступ к инструментам хаба (`opts.mcp.url`, `opts.mcp.token`, `opts.mcp.bridgeCommand` для stdio-клиентов). `send(turn)` выдаёт события `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error`, `done`; ещё сессия реализует `interrupt()` и `close()`. При `limit_hit` ядро помечает интеллект занятым до `resetAt` и переключается на следующий в списке агента. Готовые адаптеры для CLI — в `@owlbot/brains-cli`. Если у интеллекта есть варианты (например, провайдеры API), перечислите их в `variants: ["anthropic", "openai"]` — в интерфейсе они появятся отдельными интеллектами `<id>:<вариант>@local`, а вариант придёт в `probe(variant)` и `opts.variant`. Id интеллектов перечисляются в `contributes.brains`.
 
 ## UI
 
@@ -277,7 +277,7 @@ expect(await h.invokeText("forecast", {})).toContain("°");
 await h.stop();
 ```
 
-Тестовая обвязка вызывает инструменты по короткому имени, без префикса. Ещё `startPlugin` принимает `vault` (записи по id), `core` (реализация `ctx.core.call`; все вызовы записываются в `h.coreCalls`), `locale` и `env`. У обвязки есть `http`, `hook`, `emit`, `uiMessage`, `setSettings`, `setLocale` и `channelSend`. Для мозгов — `brainProbe`, `brainCreate`, `brainSend`, `brainInterrupt` и `brainClose`; для API-мозгов — `startMockLlm`, фейковый LLM-сервер с API Anthropic Messages и OpenAI Chat Completions.
+Тестовая обвязка вызывает инструменты по короткому имени, без префикса. Ещё `startPlugin` принимает `vault` (записи по id), `core` (реализация `ctx.core.call`; все вызовы записываются в `h.coreCalls`), `locale` и `env`. У обвязки есть `http`, `hook`, `emit`, `uiMessage`, `setSettings`, `setLocale` и `channelSend`. Для интеллектов — `brainProbe`, `brainCreate`, `brainSend`, `brainInterrupt` и `brainClose`; для API-интеллектов — `startMockLlm`, фейковый LLM-сервер с API Anthropic Messages и OpenAI Chat Completions.
 
 ## Установка
 

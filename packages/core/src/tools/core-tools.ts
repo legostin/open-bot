@@ -37,6 +37,8 @@ export type TaskSender = { agentId: string; conversationId: string; taskId?: str
 export interface TaskLine {
   place(agentId: string, machine: string): { brainRef?: string; machineName: string; note?: string } | { error: string };
   ask(taskId: string, question: string): Promise<{ ok: boolean; text: string }>;
+  /** What each agent is busy with now, one line each. */
+  team(): string[];
   message(taskId: string, text: string, from: TaskSender): Promise<{ ok: boolean; text: string }>;
   cancel(taskId: string, from: TaskSender): { ok: boolean; text: string };
   computers(): Array<{ id: string; name: string; online: boolean }>;
@@ -221,7 +223,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
   reg(
     {
       name: "task_agents",
-      description: "List your teammates (role, where their brains run) for team_message and task_delegate, and the computers tasks can run on.",
+      description: "List your teammates (role, where their brains run, what each is busy with now) for team_message and task_delegate, and the computers tasks can run on.",
       effect: "read",
       inputSchema: { type: "object", properties: {} },
     },
@@ -233,7 +235,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
         return `- ${a.id}: ${a.name} — ${a.description}${where ? ` (brains on: ${where})` : ""}`;
       });
       const pcs = computers.map((c) => `- ${c.id}: ${c.name}${c.id === "local" ? " (the hub's own computer)" : ""}, ${c.online ? "online" : "offline"}`);
-      return text(["Agents:", ...agents, "", "Computers:", ...pcs].join("\n"));
+      return text(["Agents:", ...agents, "", "Busy now:", ...d.tasks.team(), "", "Computers:", ...pcs].join("\n"));
     },
   );
 

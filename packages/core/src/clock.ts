@@ -11,6 +11,16 @@ export function nowLine(timezone: string, at = new Date()): string {
   return `[Now: ${get("weekday")}, ${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")} (${timezone})]`;
 }
 
+/** A moment for the model in the user's timezone: "23:02" today, "27 Oct, 23:02" on another day. */
+export function clockTime(iso: string, timezone: string, now = new Date()): string {
+  const at = new Date(iso);
+  const day = (d: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: timezone, day: "numeric", month: "short", year: "numeric" }).format(d);
+  const hm = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+  if (day(at) === day(now)) return hm;
+  const dm = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, day: "numeric", month: "short" }).format(at);
+  return `${dm}, ${hm}`;
+}
+
 /** Decides per brain session when its next turn needs the time again. */
 export class TurnClock {
   private last = new Map<string, number>();

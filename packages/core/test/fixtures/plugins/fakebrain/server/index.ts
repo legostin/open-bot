@@ -5,12 +5,14 @@
 // Brain `fake` takes input into such a turn (steer): the turn then ends with "fake also heard: <its last line>";
 // `fake2` cannot steer, so the hub sends it as the next turn.
 // "TIME?" answers with the turn's "[Now: …]" line (or "none"); a turn with files answers with their paths and the note.
+// "SELF?" answers with the last "[You now]" block the session got (or "none").
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { PluginContext } from "@owlbot/plugin-sdk";
 import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 
 /** Sessions in a "SLOW" turn: interrupt() ends it, and so does input steered into it. */
+const selves = new Map<string, string>();
 const slow = new Map<string, () => void>();
 const steered = new Map<string, string[]>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -47,7 +49,19 @@ export default {
           async *send(raw): AsyncGenerator<BrainEvent> {
             // The hub's "[Now: …]" line comes first; the scripts below read the rest.
             const clock = /^\[Now: [^\]]*\]\n/.exec(raw.text)?.[0].trim();
-            const turn = { ...raw, text: clock ? raw.text.slice(clock.length + 1) : raw.text };
+            let rest = clock ? raw.text.slice(clock.length + 1) : raw.text;
+            // Then the "[You now]" block, when it changed: kept for "SELF?".
+            const self = /^\[You now\]\n[\s\S]*?\n\n/.exec(rest)?.[0];
+            if (self) {
+              selves.set(o.sessionId, self.trim());
+              rest = rest.slice(self.length);
+            }
+            const turn = { ...raw, text: rest };
+            if (lastLine(turn.text) === "SELF?") {
+              yield { type: "text", delta: `${id} self: ${selves.get(o.sessionId) ?? "none"}` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
             if (turn.text.trim() === "TIME?") {
               yield { type: "text", delta: `${id} time: ${clock ?? "none"}` };
               yield { type: "done", resumeToken: `${id}-resume` };

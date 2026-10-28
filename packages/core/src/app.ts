@@ -273,6 +273,7 @@ export class Hub {
         message: (taskId, text, from) => this.runner.messageTask(taskId, text, from),
         cancel: (taskId, from) => this.runner.cancelTaskFrom(taskId, from),
         computers: () => this.runner.computers(),
+        team: () => this.runner.teamNow(),
         teammate: (to, text, from) => this.runner.messageTeammate(to, text, from),
       },
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),

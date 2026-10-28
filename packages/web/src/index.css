@@ -284,6 +284,21 @@
     animation-delay: 0.3s;
   }
 
+  /* The message a reply quote points to, when the quote is clicked (MessageView). */
+  @keyframes owl-flash {
+    0%,
+    60% {
+      background: var(--accent-soft);
+    }
+    100% {
+      background: transparent;
+    }
+  }
+  .reply-flash {
+    border-radius: 1rem;
+    animation: owl-flash 1.6s ease-out;
+  }
+
   @keyframes owl-caret {
     50% {
       opacity: 0;
