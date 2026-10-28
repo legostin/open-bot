@@ -159,7 +159,17 @@ describe("memory changes after outside content", () => {
     sent = await send('CALL memory_forget {"path":"people/olga.md"}');
     ({ approval } = await held("memory_forget"));
     hub.approvals.resolve(approval.id, "approve", { via: "console" });
-    expect(await reply(sent, /^tool said:/)).toBe("tool said: Forgot people/olga.md.");
+    expect(await reply(sent, /^tool said:/)).toBe("tool said: Forgot [people/olga.md]: Ольга.");
     expect(await recall("people/olga.md")).toMatch(/^Error: no fact/);
+  });
+
+  it("each turn gets the memories that matter before the user's words (turn.context)", async () => {
+    const ctx = { conversationId: conv, agentId: "lyapa", sessionId: "s", callId: "c", machineId: "local", workspace: tmpdir(), tainted: false, background: false } satisfies ToolCallContext;
+    const saved = await hub.tools.get("memory_remember")!.invoke({ fact: "The user's dog Bublik loves the park by the river.", kind: "person", about: ["Bublik"] }, ctx);
+    expect(saved.content[0]).toMatchObject({ type: "text", text: expect.stringMatching(/^Remembered \[people\//) });
+    const said = await say("ECHO? How is Bublik doing today?", /saw:/);
+    expect(said).toContain("[Memory] What you remember that may matter here");
+    // Nothing relevant: nothing added.
+    expect(await say("ECHO? What time is it?", /saw:/)).not.toContain("[Memory]");
   });
 });

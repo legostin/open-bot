@@ -224,11 +224,12 @@ function Parts({ message }: { message: Message }) {
   return (
     <>
       {items.map((it, idx) => {
-        if (!details && it.kind !== "part") return null;
+        // A plugin's inline line ("Remembered: …") is for the person: shown without the details mode.
+        const plugin = it.kind === "tool" ? pickToolRenderer(contributions, it.call.name) : undefined;
+        if (!details && it.kind !== "part" && !plugin?.inline) return null;
         if (it.kind === "part" && !partShown(it.part, message.role, details)) return null;
         if (it.kind === "tool") {
           const running = streaming && !it.result;
-          const plugin = pickToolRenderer(contributions, it.call.name);
           const core = <ToolCard call={it.call} result={it.result} running={running} />;
           if (!plugin) return <div key={it.key}>{core}</div>;
           const C = plugin.component;
@@ -303,9 +304,11 @@ function channelLabel(channel: string | undefined): string {
 /** Core rendering of a message (also passed to chat.message overrides as `Default`). */
 export const DefaultMessage = memo(function DefaultMessage({ message, agentName, agent }: { message: Message; agentName?: string; agent?: AgentDef }) {
   const details = useStore(showDetails);
+  const { contributions } = usePluginRegistry();
   const name = agentName ?? agent?.name ?? message.agentId ?? t("message.assistant");
   // A finished message with nothing for the person (only tool calls, or a note for the model) is not shown at all.
-  if (message.status !== "streaming" && !message.parts.some((p) => p.type !== "reply_to" && partShown(p, message.role, details))) return null;
+  const forPerson = (p: MessagePart) => (p.type === "tool_call" && !details ? !!pickToolRenderer(contributions, p.name)?.inline : p.type !== "reply_to" && partShown(p, message.role, details));
+  if (message.status !== "streaming" && !message.parts.some(forPerson)) return null;
   // A teammate writing in a thread is a user-role message with its agent: it reads as that agent's message.
   if (message.role === "user" && !message.agentId) {
     return (

@@ -58,6 +58,11 @@ export interface SlotContribution<P = any> {
   match?: { tool?: string[]; role?: Message["role"]; agentId?: string };
   /** Higher wins for overrides; default 0. */
   priority?: number;
+  /**
+   * chat.toolResult: the renderer is a line meant for the person ("Remembered: …"), shown in the chat without the
+   * details mode; a message holding only such calls is shown too. Default: a service detail, like core tool cards.
+   */
+  inline?: boolean;
 }
 
 // ---------- live view ----------

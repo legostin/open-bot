@@ -258,7 +258,7 @@ export class SetupGuide {
       backupBrain: `backupBrain: ${backup ? `${backup.label} (${backup.ref}) ${backup.installed ? "is installed but not signed in" : "can be installed and signed in"}` : "a second brain"}, a backup for when the current brain hits its limits: \`hub_brain_login\`${backup ? ` with ref "${backup.ref}"` : ""}.`,
       machines: "machines: other computers can join this hub, and their Claude Code and Codex become brains here: `hub_connect_device` shows a card with a one-time link the user opens on that computer.",
       profile:
-        'profile: get to know the user: how to address them, their language, what they want help with. Keep the facts with `memory_write`, change the hub language with `hub_settings_update` if needed and your own name or instructions with `profile_update` if they want; then call `hub_setup_update` with step "profile" and status "done".',
+        'profile: get to know the user: how to address them, their language, what they want help with. Keep each fact with `memory_remember`, change the hub language with `hub_settings_update` if needed and your own name or instructions with `profile_update` if they want; then call `hub_setup_update` with step "profile" and status "done".',
     };
     const lines = [
       "## Hub setup",

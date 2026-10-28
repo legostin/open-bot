@@ -67,10 +67,15 @@ export interface ChannelImpl {
   status?(): Promise<{ connected: boolean; detail?: string }>;
 }
 
-export type HookName = "session.start" | "tool.before" | "tool.after" | "message.in" | "notify.before" | "digest.compose";
+export type HookName = "session.start" | "turn.context" | "tool.before" | "tool.after" | "message.in" | "notify.before" | "digest.compose";
 
 export interface HookPayloads {
   "session.start": { sessionId: string; agentId: string; conversationId: string; taskId?: string; background: boolean };
+  /**
+   * A turn is about to reach the brain. `text` is the turn's input (the user's words when `fromUser`, otherwise a
+   * system note); the returned `context` goes before it, for this turn only (e.g. the memories that matter now).
+   */
+  "turn.context": { sessionId: string; agentId: string; conversationId: string; taskId?: string; background: boolean; text: string; fromUser: boolean };
   "tool.before": { tool: string; input: unknown; context: ToolCallContext };
   "tool.after": { tool: string; input: unknown; result: ToolResult; context: ToolCallContext };
   "message.in": { conversationId: string; text: string; channel?: string };
@@ -81,6 +86,7 @@ export interface HookPayloads {
 
 export interface HookResults {
   "session.start": { appendSystemPrompt?: string } | void;
+  "turn.context": { context?: string } | void;
   "tool.before": { block?: string; input?: unknown } | void;
   "tool.after": { result?: ToolResult } | void;
   "message.in": { block?: string; text?: string } | void;

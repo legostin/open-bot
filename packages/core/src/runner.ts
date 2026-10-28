@@ -91,6 +91,8 @@ interface TurnOpts {
   taint?: boolean;
   /** The user's message the reply answers (shown above it): a task's report when the dialog moved on since the request. */
   replyTo?: { messageId: string; text: string };
+  /** The input is the user's own words (not a system note): plugins may learn from it (turn.context). */
+  fromUser?: boolean;
 }
 
 /** User messages waiting for the conversation's next turn. */
@@ -276,14 +278,14 @@ export class SessionRunner {
       void (async () => {
         const files: Pick<TurnOpts, "attachments" | "speech"> = attachments.length ? await this.transcribeParts(msg.id, attachments) : {};
         if (await this.steerInto(conversationId, prompt, { ...reply, ...files })) return;
-        if (task) await this.wakeTask(task, prompt, { ...reply, ...files });
+        if (task) await this.wakeTask(task, prompt, { ...reply, ...files, fromUser: true });
         else this.queueUserTurn(conv, { messageId: msg.id, prompt, attachments: files.attachments ?? [], ...reply });
       })();
       return msg;
     }
     // Written on a task's page: the task carries on with it (its status, result and report follow).
     if (task) {
-      void (async () => this.wakeTask(task, prompt, { ...reply, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}) }))();
+      void (async () => this.wakeTask(task, prompt, { ...reply, fromUser: true, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}) }))();
       return msg;
     }
     this.queueUserTurn(conv, { messageId: msg.id, prompt, attachments, ...reply });
@@ -315,6 +317,7 @@ export class SessionRunner {
       }
       const quote = batch.flatMap((b) => (b.quote ? [b.quote] : [])).join("\n");
       return this.runTurn(conv, batch.map((b) => b.prompt).join("\n\n"), {
+        fromUser: true,
         replyChannel: batch[0].replyChannel,
         ...(quote ? { quote } : {}),
         ...(attachments.length ? { attachments, speech } : {}),
@@ -429,6 +432,7 @@ export class SessionRunner {
         const r = await this.runTurn(conv, prompt, {
           ...opts,
           agentId,
+          fromUser: !fromName,
           group: { triggerId, floorNote: fromName ? `[System] ${fromName} handed the floor to you. It is your turn to reply in the group.` : undefined },
         });
         prev = agentId;
@@ -737,7 +741,7 @@ export class SessionRunner {
    * Something for a task (its starter's answer or clarification, the user's words on its page): it joins the running
    * turn, waits for the first turn of a task that has not started, or gives the task another turn.
    */
-  async wakeTask(task: Task, text: string, opts: Pick<TurnOpts, "replyChannel" | "quote" | "attachments" | "speech" | "taint"> = {}): Promise<"steered" | "queued" | "started" | "cancelled"> {
+  async wakeTask(task: Task, text: string, opts: Pick<TurnOpts, "replyChannel" | "quote" | "attachments" | "speech" | "taint" | "fromUser"> = {}): Promise<"steered" | "queued" | "started" | "cancelled"> {
     const cur = this.d.store.getTask(task.id) ?? task;
     if (cur.status === "cancelled") return "cancelled";
     // Outside content stays marked in every session of the task from now on.
@@ -1363,6 +1367,21 @@ export class SessionRunner {
     return !toChannel;
   }
 
+  /** Blocks plugins add before a turn's input (turn.context hook), or undefined. Never fails the turn. */
+  private async turnContext(row: SessionRow, conv: Conversation, agent: AgentDef, task: Task | undefined, prompt: string, opts: TurnOpts): Promise<string | undefined> {
+    try {
+      const r = await this.d.hooks.run(
+        "turn.context",
+        { sessionId: row.id, agentId: agent.id, conversationId: conv.id, taskId: task?.id, background: !!task?.background, text: prompt, fromUser: !!opts.fromUser },
+        (p) => p,
+      );
+      const blocks = r.results.map((x) => (typeof x?.context === "string" ? x.context.trim() : "")).filter(Boolean);
+      return blocks.length ? this.d.redactor.text(blocks.join("\n\n")) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** What the brain gets for a turn (or as input joining one): the text with its files' note and the current time. */
   private turnInput(row: SessionRow, text: string, opts: Pick<TurnOpts, "attachments" | "speech">): BrainTurn {
     let paths: string[] = [];
@@ -1551,6 +1570,10 @@ export class SessionRunner {
         const open = this.openTasks(conv.id);
         if (open) text = `${open}\n\n${text}`;
       }
+
+      // What plugins add for this turn only (the memories that matter now), before the input.
+      const extra = await this.turnContext(row!, conv, agent, task, prompt, opts);
+      if (extra) text = `${extra}\n\n${text}`;
 
       this.brainLoad.set(key, (this.brainLoad.get(key) ?? 0) + 1);
       try {
