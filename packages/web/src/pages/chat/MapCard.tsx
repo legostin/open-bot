@@ -46,6 +46,7 @@ import { formatCoords, OSM_COPYRIGHT, TILE_URL } from "../../lib/media";
 import { appLink, BUILTIN_MAP_APPS, formatDistance, formatTravelTime, mapTarget } from "../../lib/maps";
 import { usePluginRegistry } from "../../plugins/slots";
 import { cx } from "../../components/ui";
+import { native } from "../../lib/native";
 import { t, type MessageKey } from "../../i18n";
 
 type MapPart = Extract<MessagePart, { type: "map" }>;
@@ -281,12 +282,17 @@ export function MapCard({ part }: { part: MapPart }) {
     });
     if (!full) return () => cancelAnimationFrame(frame);
     activate.current(true);
+    // Nothing over the map: the chat's composer hides (index.css), and the phone app hides its header.
+    document.documentElement.classList.add("owl-map-full");
+    native?.call("fullscreen", { on: true }).catch(() => {});
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setFull(false);
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", esc);
     return () => {
       cancelAnimationFrame(frame);
+      document.documentElement.classList.remove("owl-map-full");
+      native?.call("fullscreen", { on: false }).catch(() => {});
       document.removeEventListener("keydown", esc);
       document.body.style.overflow = overflow;
       activate.current(false);

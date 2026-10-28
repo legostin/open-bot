@@ -471,6 +471,10 @@
     opacity: 0;
   }
 }
+/* A map full screen (MapCard): the chat's composer steps aside. */
+html.owl-map-full .chat-dock {
+  display: none;
+}
 /* Routes: a light casing under a blue line, dashed for transit (drawn straight between the stops). */
 .owl-map path.owl-route {
   stroke: #2563eb;

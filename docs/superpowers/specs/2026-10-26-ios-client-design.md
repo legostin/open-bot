@@ -129,6 +129,7 @@ a Promise of the reply object (rejected with a message string on failure).
 | `dictation.stop` | `{}` | `{ text }`: the final words |
 | `openURL` | `{ url }` | `{ ok: true }`: opens in Safari (sign-in pages) |
 | `open` | `{ path }`: the web UI's path of another chat (`/`, `/agent/:id`, `/chat/:id`, `/tasks/:id`) | `{ ok: true }`: the app opens that chat as its own screen (a new agent's card, a task line, a link in a message); rejects when the hub has no such chat |
+| `fullscreen` | `{ on }`: the page shows something full screen (a map) or stopped | `{ ok: true }`: the app hides its header while `on` (the page hides its own composer) |
 | `haptic` | `{ kind: "light" \| "success" \| "warning" }` | `{ ok: true }` |
 | `reauth` | `{}` | none: the app gets a new ticket and reloads the page |
 
