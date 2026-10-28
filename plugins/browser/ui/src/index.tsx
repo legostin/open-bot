@@ -5,7 +5,7 @@
 // Texts come from .owlbot-plugin/locales (ui.* keys) through ui.i18n.t.
 
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Badge, Button, EmptyState, Spinner, definePluginUI } from "@owlbot/ui";
 import type { LiveViewActivity, LiveViewProps, OwlbotUI, ToolResultProps } from "@owlbot/ui";
 
@@ -71,6 +71,29 @@ const mods = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey
 
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
+/** A phone or tablet: taps and drags instead of a mouse, and a system keyboard that needs a text field. */
+const touchScreen = () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+
+/** Keys the phone's keyboard sends as keys, not text (also a hardware keyboard on a tablet). */
+const KEY_CODES: Record<string, number> = {
+  Backspace: 8,
+  Tab: 9,
+  Enter: 13,
+  Escape: 27,
+  PageUp: 33,
+  PageDown: 34,
+  End: 35,
+  Home: 36,
+  ArrowLeft: 37,
+  ArrowUp: 38,
+  ArrowRight: 39,
+  ArrowDown: 40,
+  Delete: 46,
+};
+
+/** What the keyboard field holds between keystrokes: Backspace on a truly empty field fires no input event on Android. */
+const KB_IDLE = "\u200b";
+
 function hostOf(u: string): string {
   try {
     const x = new URL(u);
@@ -101,7 +124,9 @@ const S: Record<string, CSSProperties> = {
   select: { maxWidth: 220, padding: "4px 6px", borderRadius: 8, border: "1px solid rgba(127,127,127,.35)", background: "transparent", color: "inherit", font: "inherit" },
   area: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   screen: { position: "relative", borderRadius: 6, overflow: "hidden", background: "rgba(127,127,127,.08)", outline: "none" },
-  img: { display: "block", width: "100%", height: "100%", userSelect: "none" },
+  img: { display: "block", width: "100%", height: "100%", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" },
+  // Focused to bring up the phone's keyboard; invisible and out of the way of taps. 16 px: iOS does not zoom.
+  kb: { position: "absolute", left: 0, bottom: 0, width: 1, height: 1, opacity: 0, border: 0, padding: 0, fontSize: 16, pointerEvents: "none" },
   center: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, height: "100%", textAlign: "center", padding: 8 },
   hint: { opacity: 0.7, fontSize: 12 },
   error: { color: "#dc2626", fontSize: 12 },
@@ -136,9 +161,16 @@ function BrowserView({ mode }: LiveViewProps) {
   const screenRef = useRef<HTMLDivElement | null>(null);
   const controlRef = useRef(false);
   const lastMove = useRef(0);
+  const kbRef = useRef<HTMLInputElement | null>(null);
+  const [kbOpen, setKbOpen] = useState(false);
+  // The finger on the screen: a tap clicks, a drag scrolls the page (wheel deltas, sent at most every 32 ms).
+  const finger = useRef<{ id: number; x0: number; y0: number; x: number; y: number; moved: boolean; dx: number; dy: number; sentAt: number } | null>(null);
+  // Phones follow a tap with emulated mouse events: those are dropped, the tap was already sent.
+  const lastTouch = useRef(0);
   const control = expanded && state?.control === "user";
   controlRef.current = control;
   const box = useBoxSize(area);
+  const touch = touchScreen();
 
   useEffect(() => {
     send({ type: "watch", on: true, id: viewerId, refresh: true });
@@ -201,7 +233,7 @@ function BrowserView({ mode }: LiveViewProps) {
   };
 
   const mouse = (action: "down" | "up" | "move") => (e: ReactMouseEvent) => {
-    if (!control) return;
+    if (!control || Date.now() - lastTouch.current < 800) return;
     if (action === "move") {
       const now = Date.now();
       if (now - lastMove.current < 40) return;
@@ -223,13 +255,110 @@ function BrowserView({ mode }: LiveViewProps) {
   };
 
   const key = (action: "down" | "up") => (e: ReactKeyboardEvent) => {
-    if (!control) return;
+    // The keyboard field (inside the screen) sends its own keys.
+    if (!control || e.target === kbRef.current) return;
     // Let the browser fire "paste" so the user's clipboard text is sent with insertText.
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") return;
     // Prevented keys (Escape included) go to the agent's browser and do not close the live view.
     e.preventDefault();
     send({ type: "input", event: "key", action, key: e.key, code: e.code, keyCode: e.keyCode, repeat: e.repeat, ...mods(e) });
   };
+
+  const press = (key: string) => {
+    for (const action of ["down", "up"]) send({ type: "input", event: "key", action, key, code: key, keyCode: KEY_CODES[key] ?? 0 });
+  };
+
+  /** Send the drag so far as one wheel step: the page moves with the finger (remote pixels per screen pixel). */
+  const flushScroll = () => {
+    const f = finger.current;
+    const r = imgRef.current?.getBoundingClientRect();
+    if (!f || !r?.width || (!f.dx && !f.dy)) return;
+    const k = frameSize.w / r.width;
+    send({ type: "input", event: "wheel", ...pos({ clientX: f.x0, clientY: f.y0 }), deltaX: -f.dx * k, deltaY: -f.dy * k });
+    f.dx = f.dy = 0;
+    f.sentAt = Date.now();
+  };
+
+  const onPointer = (kind: "down" | "move" | "up" | "cancel") => (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!control || e.pointerType !== "touch") return;
+    lastTouch.current = Date.now();
+    const f = finger.current;
+    if (kind === "down") {
+      // No emulated mouse events and no focus change (the keyboard field keeps the phone's keyboard up).
+      e.preventDefault();
+      if (f) return;
+      finger.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, moved: false, dx: 0, dy: 0, sentAt: 0 };
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* the pointer is already gone */
+      }
+      return;
+    }
+    if (!f || f.id !== e.pointerId) return;
+    if (kind === "move") {
+      if (!f.moved && Math.hypot(e.clientX - f.x0, e.clientY - f.y0) < 8) return;
+      f.moved = true;
+      f.dx += e.clientX - f.x;
+      f.dy += e.clientY - f.y;
+      f.x = e.clientX;
+      f.y = e.clientY;
+      if (Date.now() - f.sentAt >= 32) flushScroll();
+      return;
+    }
+    if (kind === "up" && !f.moved) {
+      const at = pos(e);
+      send({ type: "input", event: "mouse", action: "down", ...at, button: "left", buttons: 1, clickCount: 1 });
+      send({ type: "input", event: "mouse", action: "up", ...at, button: "left", buttons: 0, clickCount: 1 });
+    } else if (kind === "up") flushScroll();
+    finger.current = null;
+  };
+
+  // The phone's keyboard types into the page: text with insertText, Backspace / Enter / arrows as keys. The field stays
+  // (almost) empty; words an input method composes go when they are committed.
+  useEffect(() => {
+    const el = kbRef.current;
+    if (!el) return;
+    const idle = () => {
+      el.value = KB_IDLE;
+      el.setSelectionRange(KB_IDLE.length, KB_IDLE.length);
+    };
+    const onBeforeInput = (e: InputEvent) => {
+      if (!controlRef.current || e.isComposing || e.inputType === "insertCompositionText") return;
+      e.preventDefault();
+      const text = e.data ?? e.dataTransfer?.getData("text/plain");
+      if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") press("Enter");
+      else if (e.inputType.startsWith("insert") && text) send({ type: "input", event: "text", text });
+      else if (e.inputType.startsWith("deleteContentBackward") || e.inputType.startsWith("deleteWordBackward")) press("Backspace");
+      else if (e.inputType.startsWith("deleteContentForward")) press("Delete");
+    };
+    const onCompositionEnd = (e: CompositionEvent) => {
+      if (controlRef.current && e.data) send({ type: "input", event: "text", text: e.data });
+      setTimeout(idle, 0);
+    };
+    const onInput = (e: Event) => !(e as InputEvent).isComposing && idle();
+    const onKey = (e: KeyboardEvent) => {
+      if (!controlRef.current || e.isComposing || !(e.key in KEY_CODES)) return;
+      // Handled here, so no beforeinput follows; prevented, so Escape does not close the live view.
+      e.preventDefault();
+      send({ type: "input", event: "key", action: e.type === "keydown" ? "down" : "up", key: e.key, code: e.code || e.key, keyCode: KEY_CODES[e.key], repeat: e.repeat, ...mods(e) });
+    };
+    idle();
+    el.addEventListener("focus", idle);
+    el.addEventListener("beforeinput", onBeforeInput);
+    el.addEventListener("compositionend", onCompositionEnd);
+    el.addEventListener("input", onInput);
+    el.addEventListener("keydown", onKey);
+    el.addEventListener("keyup", onKey);
+    return () => {
+      el.removeEventListener("focus", idle);
+      el.removeEventListener("beforeinput", onBeforeInput);
+      el.removeEventListener("compositionend", onCompositionEnd);
+      el.removeEventListener("input", onInput);
+      el.removeEventListener("keydown", onKey);
+      el.removeEventListener("keyup", onKey);
+    };
+  }, [control]);
 
   const navigate = () => {
     const url = (draftUrl ?? "").trim();
@@ -248,14 +377,25 @@ function BrowserView({ mode }: LiveViewProps) {
       <div
         ref={screenRef}
         tabIndex={expanded ? 0 : -1}
-        style={{ ...S.screen, ...(scale > 0 ? fit : { width: "100%", height: "100%" }), boxShadow: control ? "0 0 0 2px #f59e0b" : undefined, cursor: control ? "default" : expanded ? "not-allowed" : undefined }}
+        style={{
+          ...S.screen,
+          ...(scale > 0 ? fit : { width: "100%", height: "100%" }),
+          boxShadow: control ? "0 0 0 2px #f59e0b" : undefined,
+          cursor: control ? "default" : expanded ? "not-allowed" : undefined,
+          // Drags are the page's scrolling, not the live view's (and no pinch zoom of the picture).
+          touchAction: control ? "none" : undefined,
+        }}
+        onPointerDown={onPointer("down")}
+        onPointerMove={onPointer("move")}
+        onPointerUp={onPointer("up")}
+        onPointerCancel={onPointer("cancel")}
         onMouseDown={mouse("down")}
         onMouseUp={mouse("up")}
         onMouseMove={mouse("move")}
         onKeyDown={key("down")}
         onKeyUp={key("up")}
         onPaste={(e) => {
-          if (!control) return;
+          if (!control || e.target === kbRef.current) return;
           e.preventDefault();
           const text = e.clipboardData.getData("text");
           if (text) send({ type: "input", event: "text", text });
@@ -276,6 +416,21 @@ function BrowserView({ mode }: LiveViewProps) {
           <div style={S.center}>
             <Spinner />
           </div>
+        )}
+        {control && (
+          <input
+            ref={kbRef}
+            style={S.kb}
+            tabIndex={-1}
+            aria-label={t("ui.keyboard.label")}
+            autoCapitalize="off"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="enter"
+            onFocus={() => setKbOpen(true)}
+            onBlur={() => setKbOpen(false)}
+          />
         )}
       </div>
     </div>
@@ -399,7 +554,17 @@ function BrowserView({ mode }: LiveViewProps) {
           {picture}
           <div style={{ ...S.row, ...S.hint }}>
             {state?.running && status}
-            <span>{control ? t("ui.hint.user") : t("ui.hint.agent")}</span>
+            {control && touch && (
+              <Button
+                size="sm"
+                variant={kbOpen ? "primary" : "secondary"}
+                // A tap focuses the field (inside the gesture, or iOS shows no keyboard); a second tap hides it.
+                onClick={() => (kbOpen ? kbRef.current?.blur() : kbRef.current?.focus())}
+              >
+                ⌨ {kbOpen ? t("ui.keyboard.hide") : t("ui.keyboard.show")}
+              </Button>
+            )}
+            <span>{control ? t(touch ? "ui.hint.touch" : "ui.hint.user") : t("ui.hint.agent")}</span>
           </div>
         </>
       )}

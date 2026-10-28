@@ -52,6 +52,9 @@ and stops on unmount. `slots.register("live.view", …)` registers a view withou
   finds none, or the browser closes. A `{ type: "activity" }` UI message asks for the current value.
 - UI: one component; compact mode shows only the picture, expanded mode adds the address bar, tabs and
   take/return control. Leaving the expanded view while in control hands control back to the agent.
+- Takeover on a phone (coarse pointer): a tap clicks, a one-finger drag scrolls the page (wheel steps that follow the
+  finger), and a "Keyboard" button focuses an invisible field that brings up the system keyboard. The field stays empty:
+  text goes to the page with `insertText` (composed words when committed), Backspace / Enter / arrows as keys.
 - The `pane.right` contribution is removed (the slot stays for other plugins). Model-facing hints say "live view".
 
 ## Testing
