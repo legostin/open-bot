@@ -169,7 +169,7 @@ export function activate(ui: OpenBotUI) {
 }
 ```
 
-Именованные слоты ядра: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. Каждый слот обёрнут в error boundary: упавший плагин заменяется компонентом ядра.
+Именованные слоты ядра: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `live.view` (плавающее окно живого просмотра, см. `2026-10-26-live-view-design.md`), `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. Каждый слот обёрнут в error boundary: упавший плагин заменяется компонентом ядра.
 
 **Модель доверия:** UI-плагин — доверенный код с полным доступом к основной странице. Предупреждение при установке: «UI-плагин получает полный доступ к интерфейсу». Защита:
 1. Подтверждения, vault, правила и аудит — на отдельном origin (порт 8081, отдельная cookie, `frame-ancestors 'none'`, открывается отдельной вкладкой). Код основной страницы не может их прочитать, нажать или вызвать их API.

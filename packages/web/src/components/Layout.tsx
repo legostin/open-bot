@@ -16,6 +16,7 @@ import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlo
 import { cx, IconButton } from "./ui";
 import { ApprovalsBadge, ConnectionBadge, VaultBadge } from "./StatusBadges";
 import { CommandPalette } from "./CommandPalette";
+import { LiveViewWindow } from "./LiveViewWindow";
 import { SettingsPanel } from "./SettingsPanel";
 import { MachinesBlock } from "./MachinesBlock";
 import { OwlMark, type OwlMood } from "./OwlMark";
@@ -188,6 +189,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-bg md:my-2 md:mr-2 md:rounded-[22px] md:shadow-sheet">{children}</main>
         <SettingsPanel />
         <RightPane open={pane && panes.length > 0} onClose={() => setPane(false)} />
+        <LiveViewWindow />
         <CommandPalette />
       </div>
     </ShellContext.Provider>

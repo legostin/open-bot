@@ -35,11 +35,13 @@ describe("policy engine", () => {
     expect(decide(base({ tool: tool("fs_write", "local-write"), profile: "strict" }), [], unknownTargets).decision).toBe("ask");
   });
 
-  it("after outside content an agent changes its own profile only with approval; reading it stays free", () => {
-    const self = tool("profile_update", "local-write");
-    expect(decide(base({ tool: self, input: { prompt: "x" } }), [], unknownTargets).decision).toBe("allow");
-    expect(decide(base({ tool: self, input: { prompt: "x" }, tainted: true }), [], unknownTargets).decision).toBe("ask");
-    expect(decide(base({ tool: self, input: {}, tainted: true }), [], unknownTargets).decision).toBe("allow");
+  it("after outside content, lasting changes (askWhenTainted) need approval; reading stays free", () => {
+    for (const name of ["profile_update", "memory_write", "memory_forget"]) {
+      const lasting = { ...tool(name, "local-write"), askWhenTainted: true };
+      expect(decide(base({ tool: lasting, input: { path: "x" } }), [], unknownTargets).decision, name).toBe("allow");
+      expect(decide(base({ tool: lasting, input: { path: "x" }, tainted: true }), [], unknownTargets).decision, name).toBe("ask");
+      expect(decide(base({ tool: lasting, input: {}, tainted: true }), [], unknownTargets).decision, name).toBe("allow");
+    }
     expect(decide(base({ tool: tool("fs_write", "local-write"), tainted: true }), [], unknownTargets).decision).toBe("allow");
   });
 

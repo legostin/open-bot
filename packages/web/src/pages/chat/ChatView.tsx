@@ -15,6 +15,7 @@ import { addFiles } from "../../state/attachments";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
 import { AgentAvatar } from "../../components/AgentAvatar";
 import { TopBar } from "../../components/Layout";
+import { useComposerInsetRef } from "../../components/LiveViewWindow";
 import { AgentHeader } from "./AgentHeader";
 import { GroupFloor, GroupHeader } from "./GroupHeader";
 import { ChatMenu } from "./DetailsToggle";
@@ -113,6 +114,7 @@ export function ChatView({
   const lastId = useRef<string | undefined>(undefined);
   const lastTop = useRef(0);
   const [showDown, setShowDown] = useState(false);
+  const composerArea = useComposerInsetRef();
   const [dropping, setDropping] = useState(false);
   // dragenter/dragleave fire for every child the pointer crosses: count them.
   const dragDepth = useRef(0);
@@ -309,7 +311,7 @@ export function ChatView({
         )}
       </div>
 
-      <div className="chat-dock relative shrink-0 px-3 pb-3 sm:px-6">
+      <div ref={composerArea} className="chat-dock relative shrink-0 px-3 pb-3 sm:px-6">
         <div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-b from-transparent to-bg" aria-hidden />
         <div className="mx-auto w-full max-w-3xl">
           <Composer key={conversationId} conversationId={conversationId} />

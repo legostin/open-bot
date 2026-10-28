@@ -2,7 +2,7 @@
 
 import { useEffect, type ComponentType } from "react";
 import type { Catalog } from "@owlbot/shared";
-import type { OwlbotUI, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
+import type { LiveViewContribution, OwlbotUI, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
 import { translator } from "@owlbot/shared/i18n";
 import { navigate } from "wouter/use-browser-location";
 import { api, request, type Method } from "../lib/api";
@@ -10,7 +10,7 @@ import { createStore, useStore } from "../lib/store";
 import { hubEvents, sendToHub, session, type UiPluginEntry } from "../state/app";
 import { toast } from "../state/toast";
 import { formatDate, formatNumber, locale, t } from "../i18n";
-import { addCommand, addContribution, addMapApp, addRoute, addSettings, addStatus, addWidget, normalizePath, removePlugin } from "./registry";
+import { addCommand, addContribution, addLiveView, addMapApp, addRoute, addSettings, addStatus, addWidget, normalizePath, removePlugin } from "./registry";
 import { resolveActivate } from "./activate";
 
 export interface PluginLoadState {
@@ -41,6 +41,8 @@ export function createOwlbotUI(pluginId: string, messages: Catalog = {}): Owlbot
         return addSettings(pluginId, { id: c.id, title: c.title ?? c.id, component: c.component as ComponentType<SlotProps> });
       case "layout.statusbar":
         return addStatus(pluginId, { id: c.id, render: c.component as ComponentType<SlotProps> });
+      case "live.view":
+        return addLiveView(pluginId, c as unknown as LiveViewContribution).dispose;
       default:
         return addContribution(pluginId, slot, c as SlotContribution);
     }
@@ -58,6 +60,7 @@ export function createOwlbotUI(pluginId: string, messages: Catalog = {}): Owlbot
     statusbar: { add: (item) => addStatus(pluginId, item) },
     commands: { register: (c) => addCommand(pluginId, c) },
     settings: { section: (s) => addSettings(pluginId, s) },
+    liveView: { register: (c) => addLiveView(pluginId, c) },
     maps: { addApp: (a) => addMapApp(pluginId, a) },
     widgets: { add: (kind, component) => addWidget(pluginId, kind, component as ComponentType<any>) },
     toast: (text, kind) => toast(text, kind ?? "info"),

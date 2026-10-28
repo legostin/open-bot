@@ -90,8 +90,8 @@ export class Memory {
 
   // ---------- writes ----------
 
-  /** Create or update a fact. From a tainted session it is queued for review instead. */
-  write(input: WriteInput, meta: { source: string; tainted: boolean }): Promise<{ path: string; status: "created" | "updated" | "review" }> {
+  /** Create or update a fact. */
+  write(input: WriteInput, meta: { source: string }): Promise<{ path: string; status: "created" | "updated" }> {
     return this.lock(async () => {
       const title = String(input.title ?? "")
         .replace(/\s+/g, " ")
@@ -111,14 +111,9 @@ export class Memory {
         created: existing?.created || now,
         updated: now,
         source: meta.source,
-        status: meta.tainted ? "review" : "active",
+        status: "active",
         body: content,
       };
-      if (meta.tainted) {
-        this.store.putReview(fact);
-        await this.commit("review", path);
-        return { path, status: "review" as const };
-      }
       this.store.put(fact);
       this.index.upsert(fact);
       await this.commit(existing ? "update" : "create", path);

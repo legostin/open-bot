@@ -16,7 +16,8 @@ export type SlotName =
   | "layout.sidebar" // extra items at the bottom of the left navigation
   | "layout.statusbar" // small items in the status bar
   | "sidebar.panel" // collapsible panels in the left sidebar
-  | "pane.right" // right-side pane tabs (e.g. browser live view)
+  | "pane.right" // right-side pane tabs
+  | "live.view" // the floating live view of an agent's screen (prefer ui.liveView.register: it reports activity)
   | "chat.message" // replace rendering of a whole message (match by role / agent)
   | "chat.toolResult" // custom renderer for a tool call + result (match by tool name glob)
   | "chat.composer" // wrap/replace the message composer
@@ -72,6 +73,55 @@ export interface WidgetProps<D = any> extends SlotProps {
   data: D;
   /** The agent's message the card is in. */
   message: Message;
+}
+
+// ---------- live view ----------
+//
+// A floating picture-in-picture window, owned by the host, onto something an agent works in (a browser, a desktop
+// app, another machine's screen). A plugin contributes the content and reports activity; the host decides when the
+// window shows (it opens on its own while a view is busy, turns into a pill a little after the work stops), where it
+// sits, and draws its frame, title bar and the expanded overlay.
+
+/** What a live view is doing now. Report the truth; the host smooths short gaps between bursts of work. */
+export interface LiveViewActivity {
+  /** An agent is working there right now: the window opens on its own. */
+  active: boolean;
+  /** The work needs the user (a captcha, a sign-in): the window reopens even if minimized or closed, highlighted. */
+  attention?: boolean;
+  /** The user drives it right now (takeover): the view counts as busy. */
+  userControl?: boolean;
+  /** The agent working there: the host shows its name and avatar. */
+  agentId?: string;
+  /** One line about what is going on, in the interface language ("Opened a page · example.com"). */
+  status?: string;
+}
+
+export interface LiveViewProps extends SlotProps {
+  /**
+   * "mini": the compact corner window (view only; the host turns a click into expand).
+   * "expanded": the large overlay where the user can interact (e.g. take over).
+   * The component stays mounted when the mode changes, and is unmounted while the view is a pill or hidden:
+   * start streaming on mount, stop on unmount.
+   */
+  mode: "mini" | "expanded";
+  expand(): void;
+  /** Back to the compact window. */
+  collapse(): void;
+}
+
+export interface LiveViewContribution {
+  id: string;
+  title: string;
+  /** Lucide icon name or an emoji. */
+  icon?: string;
+  component: ComponentType<LiveViewProps>;
+}
+
+export interface LiveViewHandle {
+  /** Merge an activity update (call on every change). */
+  update(activity: Partial<LiveViewActivity>): void;
+  /** Remove the view. */
+  dispose(): void;
 }
 
 // ---------- maps ----------
@@ -130,6 +180,8 @@ export interface OwlbotUI {
   statusbar: { add(item: { id: string; render: ComponentType<SlotProps> }): () => void };
   commands: { register(c: { id: string; title: string; run: () => void | Promise<void> }): () => void };
   settings: { section(s: { id: string; title: string; component: ComponentType<SlotProps> }): () => void };
+  /** Live views: a plugin can register several (one per screen) and dispose them at any time. */
+  liveView: { register(c: LiveViewContribution): LiveViewHandle };
   /** Maps apps for the "Open in…" menu of map cards (after Apple Maps, Google Maps and OpenStreetMap). */
   maps: { addApp(app: MapAppContribution): () => void };
   /** Draw this plugin's chat cards: `kind` as in contributes.widgets and ctx.widgets.show. */

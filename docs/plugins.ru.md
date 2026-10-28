@@ -105,7 +105,7 @@ export default plugin;
 
 Что есть в `ctx`: `pluginId`, `pluginDir`, `dataDir` (личная папка с правом записи), `hubUrl`, `appRoot`, `settings`, `onSettingsChange`, `i18n` (см. [Локализация](#локализация)), `log`, `tools`, `brains`, `channels`, `events.on`, `hooks.on`, `http.handle`, `ui.emit` / `ui.onMessage`, `vault.get`, `storage` (хранилище ключ-значение плагина: `get`, `set`, `delete`, `list`) и `core.call`. Модуль может также экспортировать `deactivate()`.
 
-**Инструменты.** Обработчик получает вход и контекст (сессия, агент, рабочая папка, машина) и возвращает строку или `ToolResult` (`{ content: [{ type: "text", text }], isError? }`); брошенная ошибка превращается в результат с ошибкой. Кроме `effect`, инструмент может указать `source: true`, если его результаты приходят извне (веб, почта): после их чтения сессия считается недоверенной. `availability` ограничивает инструмент сессиями `interactive` или `background`. Для `effect: "external"` можно задать `approvalSummary: "Send {text} to {chat}"` — так действие будет показано в карточке подтверждения; `{поле}` подставляется из входа инструмента.
+**Инструменты.** Обработчик получает вход и контекст (сессия, агент, рабочая папка, машина) и возвращает строку или `ToolResult` (`{ content: [{ type: "text", text }], isError? }`); брошенная ошибка превращается в результат с ошибкой. Кроме `effect`, инструмент может указать `source: true`, если его результаты приходят извне (веб, почта): после их чтения сессия считается недоверенной. `availability` ограничивает инструмент сессиями `interactive` или `background`. Для `effect: "external"` можно задать `approvalSummary: "Send {text} to {chat}"` — так действие будет показано в карточке подтверждения; `{поле}` подставляется из входа инструмента. Инструмент `local-write`, чьи изменения переживают сессию (память, профили), может указать `askWhenTainted: true`: тогда в недоверенной сессии каждый вызов, который что-то меняет, ждёт подтверждения пользователя в карточке в чате, а после подтверждения обработчик получает `ctx.approved`.
 
 **Хуки.** `session.start` может дописать системный промпт (`appendSystemPrompt`), `tool.before` — заблокировать вызов (`block`) или заменить его `input`, `tool.after` — заменить `result`, `message.in` — заблокировать сообщение или переписать его `text`, `notify.before` — заблокировать уведомление или поменять его `level`, `digest.compose` (`{ date, time, timezone }`) — добавить в уходящую сводку раздел `{ title, body }` (Google Календарь добавляет события дня). Хуки выполняются до политики, поэтому хук не может разрешить то, что политика запретила или отправила на подтверждение: он может только заблокировать вызов или изменить вход.
 
@@ -151,7 +151,18 @@ export default definePluginUI((host) => {
 
 `definePluginUI` принимает саму функцию активации: она получает `ui` и может вернуть функцию очистки. Каждый вызов `register` и `add` возвращает функцию, которая убирает добавленное.
 
-Слоты: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` заменяет стандартный компонент целиком. Каждый слот обёрнут в error boundary.
+Слоты: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `live.view`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` заменяет стандартный компонент целиком. Каждый слот обёрнут в error boundary.
+
+**Живой просмотр.** Если агент работает в чём-то, за чем пользователю стоит следить (встроенный браузер; приложение на рабочем столе или экран другой машины), добавьте живой просмотр. Хост показывает его в плавающем окне в углу: оно открывается само, пока идёт работа, вскоре после её конца сворачивается в «таблетку» и разворачивается в большое окно поверх приложения, где пользователь может действовать сам (например, взять управление). Плагин даёт только содержимое и сообщает об активности; окно рисует хост и сам решает, когда его показать:
+
+```tsx
+const view = ui.liveView.register({ id: "screen", title: ui.i18n.t("screen.title"), icon: "monitor", component: Screen });
+ui.plugin.on("activity", (a) => view.update({ active: a.busy, agentId: a.agentId, status: a.what, attention: a.needsUser }));
+// Screen получает { mode: "mini" | "expanded", expand, collapse }. Он смонтирован, только пока видно окно или
+// большое окно (начинайте трансляцию при монтировании, останавливайте при размонтировании), и не перемонтируется при смене режима.
+```
+
+`attention` снова открывает окно (даже если пользователь его свернул или закрыл) и подсвечивает его; `userControl` держит его открытым, пока управляет пользователь. Плагин может зарегистрировать несколько живых просмотров и убрать любой через `dispose()`.
 
 Кроме слотов, в `ui` есть `routes.add` (отдельная страница, по желанию — в навигации), `settings.section`, `commands.register` (палитра команд), `toast`, `navigate`, `api` (REST API хаба), `plugin` (`http`, `send` и `on` — связь со своим бэкендом через `ctx.http`, `ctx.ui.onMessage` и `ctx.ui.emit`), `events.on` (события хаба в реальном времени) и `i18n`. Ещё `@owlbot/ui` экспортирует компоненты `Button`, `Card`, `Badge`, `EmptyState`, `Spinner`, `Markdown`, хуки `useTasks` и `useHubEvent`, а также `api` и `locale`.
 

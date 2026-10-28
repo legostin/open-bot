@@ -32,6 +32,11 @@ export interface ToolSpec {
   source?: boolean;
   /** Template for approval cards, e.g. "Send an email to {to}: {subject}" or a "%key%" from the plugin's locales. */
   approvalSummary?: string;
+  /**
+   * A local-write whose change outlives the session (memory, an agent's profile): after outside content the user
+   * approves each call that changes something (a call with no input only reads).
+   */
+  askWhenTainted?: boolean;
   /** Only available to background tasks / interactive sessions. Default: both. */
   availability?: "all" | "interactive" | "background";
 }
@@ -71,6 +76,8 @@ export interface ToolCallContext {
   agentId: string;
   callId: string;
   tainted: boolean;
+  /** The user approved this exact call on its approval card. */
+  approved?: boolean;
   background: boolean;
   workspace: string;
   machineId: string;

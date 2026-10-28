@@ -1,11 +1,12 @@
-// Registry of UI plugin contributions (slots, routes, status bar items, commands, settings sections).
+// Registry of UI plugin contributions (slots, routes, status bar items, commands, settings sections, live views).
 // State is an immutable snapshot so React can subscribe with useSyncExternalStore.
 
 import type { ComponentType } from "react";
 import type { Message } from "@owlbot/shared";
-import type { MapAppContribution, SlotContribution, SlotName, SlotProps, WidgetProps } from "@owlbot/ui";
+import type { LiveViewContribution, LiveViewHandle, LiveViewProps, MapAppContribution, SlotContribution, SlotName, SlotProps, WidgetProps } from "@owlbot/ui";
 import { createStore } from "../lib/store";
 import { globSpecificity, matchesGlob } from "../lib/glob";
+import { applyActivity, IDLE_VIEW, type LiveViewState } from "./liveview";
 
 export interface Contribution extends SlotContribution {
   pluginId: string;
@@ -49,6 +50,15 @@ export interface SettingsEntry {
   component: ComponentType<SlotProps>;
 }
 
+export interface LiveViewEntry extends LiveViewState {
+  pluginId: string;
+  key: string;
+  id: string;
+  title: string;
+  icon?: string;
+  component: ComponentType<LiveViewProps>;
+}
+
 export interface MapAppEntry extends MapAppContribution {
   pluginId: string;
   key: string;
@@ -68,11 +78,12 @@ export interface RegistryState {
   statusbar: StatusEntry[];
   commands: CommandEntry[];
   settings: SettingsEntry[];
+  liveViews: LiveViewEntry[];
   mapApps: MapAppEntry[];
   widgets: WidgetEntry[];
 }
 
-export const registry = createStore<RegistryState>({ contributions: [], routes: [], statusbar: [], commands: [], settings: [], mapApps: [], widgets: [] });
+export const registry = createStore<RegistryState>({ contributions: [], routes: [], statusbar: [], commands: [], settings: [], liveViews: [], mapApps: [], widgets: [] });
 
 let seq = 0;
 function nextKey(pluginId: string): { key: string; seq: number } {
@@ -111,6 +122,23 @@ export function addSettings(pluginId: string, s: { id: string; title: string; co
   return addTo("settings", { pluginId, key: nextKey(pluginId).key, id: s.id, title: s.title, component: s.component });
 }
 
+export function addLiveView(pluginId: string, c: LiveViewContribution): LiveViewHandle {
+  if (!c || (typeof c.component !== "function" && (typeof c.component !== "object" || c.component === null))) throw new Error("live view: component is required");
+  const { key } = nextKey(pluginId);
+  const dispose = addTo("liveViews", { ...IDLE_VIEW, pluginId, key, id: c.id ?? key, title: c.title ?? c.id ?? key, icon: c.icon, component: c.component });
+  return {
+    update: (patch) =>
+      registry.set((s) => {
+        const i = s.liveViews.findIndex((v) => v.key === key);
+        if (i < 0) return s;
+        const liveViews = s.liveViews.slice();
+        liveViews[i] = { ...liveViews[i], ...applyActivity(liveViews[i], patch ?? {}, Date.now()) };
+        return { ...s, liveViews };
+      }),
+    dispose,
+  };
+}
+
 export function addMapApp(pluginId: string, a: MapAppContribution): () => void {
   if (!a || typeof a.place !== "function") throw new Error("maps.addApp: place() is required");
   return addTo("mapApps", { ...a, pluginId, key: nextKey(pluginId).key });
@@ -134,6 +162,7 @@ export function removePlugin(pluginId: string): void {
     statusbar: s.statusbar.filter((x) => x.pluginId !== pluginId),
     commands: s.commands.filter((x) => x.pluginId !== pluginId),
     settings: s.settings.filter((x) => x.pluginId !== pluginId),
+    liveViews: s.liveViews.filter((x) => x.pluginId !== pluginId),
     mapApps: s.mapApps.filter((x) => x.pluginId !== pluginId),
     widgets: s.widgets.filter((x) => x.pluginId !== pluginId),
   }));

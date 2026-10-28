@@ -105,7 +105,7 @@ Plugins only `import type` from `@owlbot/plugin-sdk`: the runner provides the im
 
 What `ctx` offers: `pluginId`, `pluginDir`, `dataDir` (a private writable folder), `hubUrl`, `appRoot`, `settings`, `onSettingsChange`, `i18n` (see [Localization](#localization)), `log`, `tools`, `brains`, `channels`, `events.on`, `hooks.on`, `http.handle`, `ui.emit` / `ui.onMessage`, `vault.get`, `storage` (the plugin's key-value store: `get`, `set`, `delete`, `list`) and `core.call`. A module may also export `deactivate()`.
 
-**Tools.** A handler receives the input and a context (session, agent, workspace, machine) and returns a string or a `ToolResult` (`{ content: [{ type: "text", text }], isError? }`); a thrown error becomes an error result. Besides `effect`, a tool can set `source: true` when its results come from outside (web, mail): reading them marks the session as untrusted. `availability` limits a tool to `interactive` or `background` sessions. For `effect: "external"` you can set `approvalSummary: "Send {text} to {chat}"`, which is how the action appears on the approval card; `{field}` is filled from the tool input.
+**Tools.** A handler receives the input and a context (session, agent, workspace, machine) and returns a string or a `ToolResult` (`{ content: [{ type: "text", text }], isError? }`); a thrown error becomes an error result. Besides `effect`, a tool can set `source: true` when its results come from outside (web, mail): reading them marks the session as untrusted. `availability` limits a tool to `interactive` or `background` sessions. For `effect: "external"` you can set `approvalSummary: "Send {text} to {chat}"`, which is how the action appears on the approval card; `{field}` is filled from the tool input. A `local-write` tool whose changes outlive the session (memory, profiles) can set `askWhenTainted: true`: in an untrusted session every call that changes something then waits for the user to approve it on a card in the chat, and the handler gets `ctx.approved` once they do.
 
 **Hooks.** `session.start` can append to the system prompt (`appendSystemPrompt`), `tool.before` can block a call (`block`) or replace its `input`, `tool.after` can replace the `result`, `message.in` can block a message or rewrite its `text`, `notify.before` can block a notification or change its `level`, `digest.compose` (`{ date, time, timezone }`) can add a section `{ title, body }` to the digest going out (Google Calendar adds the day's events). Hooks run before the policy, so a hook cannot allow what the policy denied or sent for approval; it can only block the call or change its input.
 
@@ -151,7 +151,18 @@ export default definePluginUI((host) => {
 
 `definePluginUI` takes the activate function itself: it receives `ui` and may return a cleanup function. Every `register` and `add` call returns a function that removes the contribution.
 
-Slots: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` replaces a standard component entirely. Every slot is wrapped in an error boundary.
+Slots: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `live.view`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` replaces a standard component entirely. Every slot is wrapped in an error boundary.
+
+**Live view.** When an agent works in something the user may want to watch (the builtin browser; a desktop app or another machine's screen), contribute a live view. The host shows it in a floating corner window that opens on its own while the view is busy, turns into a pill shortly after the work stops, and expands into a large overlay where the user can interact (for example, take over). The plugin only provides the content and reports activity; the host draws the window and decides when it shows:
+
+```tsx
+const view = ui.liveView.register({ id: "screen", title: ui.i18n.t("screen.title"), icon: "monitor", component: Screen });
+ui.plugin.on("activity", (a) => view.update({ active: a.busy, agentId: a.agentId, status: a.what, attention: a.needsUser }));
+// Screen gets { mode: "mini" | "expanded", expand, collapse }. It is mounted only while the window or the overlay
+// is visible (start streaming on mount, stop on unmount), and stays mounted when the mode changes.
+```
+
+`attention` reopens the window (even if the user minimized or closed it) and highlights it; `userControl` keeps it open while the user drives. A plugin may register several live views and `dispose()` them at any time.
 
 Besides slots, `ui` offers `routes.add` (a full page, optionally in the navigation), `settings.section`, `commands.register` (the command palette), `toast`, `navigate`, `api` (the hub's REST API), `plugin` (`http`, `send` and `on` to talk to the plugin's own backend through `ctx.http`, `ctx.ui.onMessage` and `ctx.ui.emit`), `events.on` (realtime hub events) and `i18n`. `@owlbot/ui` also exports the components `Button`, `Card`, `Badge`, `EmptyState`, `Spinner` and `Markdown`, the hooks `useTasks` and `useHubEvent`, plus `api` and `locale`.
 
