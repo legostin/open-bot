@@ -1,6 +1,6 @@
 {
   "name": "Веб",
-  "description": "Чтение веб-страниц (web_fetch) и поиск в интернете (web_search): Brave, Tavily, SearXNG или DuckDuckGo",
+  "description": "Чтение веб-страниц (web_fetch), лент RSS и Atom (web_rss) и поиск в интернете (web_search): Brave, Tavily, SearXNG или DuckDuckGo",
   "settings.provider.title": "Поисковик",
   "settings.provider.description": "auto — первый настроенный: Brave → Tavily → SearXNG → DuckDuckGo. Ключи Brave и Tavily хранятся в vault (brave_api_key, tavily_api_key, поле value).",
   "settings.searxngUrl.title": "Адрес SearXNG",
@@ -19,5 +19,5 @@
   "setup.brave.hint": "Необязательно: поиск станет лучше. Бесплатный ключ — в кабинете Brave Search API.",
   "setup.tavily.title": "API-ключ Tavily",
   "setup.tavily.hint": "Необязательно: поиск, заточенный под агентов. Ключ — на app.tavily.com.",
-  "integration.summary": "Поиск в интернете и чтение страниц; ключи Brave или Tavily по желанию, DuckDuckGo работает без ключа"
+  "integration.summary": "Поиск в интернете, чтение страниц и RSS-лент; ключи Brave или Tavily по желанию, DuckDuckGo работает без ключа"
 }
