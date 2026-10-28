@@ -7,6 +7,7 @@ import { startPlugin, type PluginHarness } from "@owlbot/testkit";
 import { isPrivateAddress } from "../server/ssrf.ts";
 import { guardedFetch } from "../server/fetch.ts";
 import { parseDuckDuckGo } from "../server/search.ts";
+import { findFeeds, parseFeed } from "../server/rss.ts";
 
 const DIR = join(import.meta.dirname, "..");
 const DDG_HTML = readFileSync(join(import.meta.dirname, "fixtures", "duckduckgo.html"), "utf8");
@@ -33,6 +34,21 @@ const ARTICLE = `<!doctype html>
   </div>
   <footer>© 2026 Garden Blog. All rights reserved.</footer>
 </body></html>`;
+
+const RSS = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel><title>Tech &amp; Steppe</title><link>https://steppe.example/</link>
+  <item><title><![CDATA[Older: Kaspi & AI]]></title><link>https://steppe.example/older</link><pubDate>Mon, 26 Oct 2026 08:00:00 +0500</pubDate>
+    <description>&lt;p&gt;An &lt;b&gt;AI&lt;/b&gt; lab&lt;/p&gt;&lt;img src="/img/older.jpg"&gt;</description></item>
+  <item><title>Newest: local models</title><guid>https://steppe.example/newest</guid><dc:date>2026-10-28T09:30:00Z</dc:date>
+    <media:thumbnail url="https://cdn.steppe.example/n.jpg"/><description>Runs &#x2014; on a laptop.</description></item>
+</channel></rss>`;
+
+const ATOM = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title type="text">Agents weekly</title>
+  <entry><title>Release 2.0</title><link rel="replies" href="https://a.example/r2/comments"/><link href="/r2" rel="alternate"/>
+    <updated>2026-10-27T10:00:00Z</updated><summary type="html">&lt;i&gt;Big&lt;/i&gt; one</summary>
+    <link rel="enclosure" type="image/png" href="https://a.example/x.png"/></entry>
+</feed>`;
 
 let server: http.Server;
 let base = "";
@@ -90,6 +106,10 @@ function startServer(): Promise<void> {
           );
         case "/html/":
           return html(DDG_HTML);
+        case "/feed.xml":
+          return res.writeHead(200, { "content-type": "application/rss+xml" }).end(RSS);
+        case "/site":
+          return html(`<html><head><title>Steppe</title><link rel="alternate" type="application/rss+xml" title="All news" href="/feed.xml"><link rel="alternate" type="application/atom+xml" href="https://steppe.example/atom"></head><body>Hi</body></html>`);
         default:
           return html("<p>not found</p>", 404);
       }
@@ -194,6 +214,49 @@ describe("web_fetch", () => {
     }
     h.setSettings({ allowPrivate: true });
     expect(await h.invokeText("fetch", { url: `${base}/article` })).toContain("# Growing tomatoes");
+  });
+});
+
+describe("web_rss", () => {
+  let h: PluginHarness;
+  beforeAll(async () => {
+    h = await startPlugin({ dir: DIR, settings: { allowPrivate: true } });
+  });
+  afterAll(() => h?.stop());
+
+  it("parses RSS and Atom: titles, links, dates, summaries and pictures", () => {
+    const rss = parseFeed(RSS, "https://steppe.example/feed.xml")!;
+    expect(rss.title).toBe("Tech & Steppe");
+    expect(rss.items).toEqual([
+      { title: "Older: Kaspi & AI", url: "https://steppe.example/older", date: "2026-10-26T03:00:00.000Z", summary: "An AI lab", image: "https://steppe.example/img/older.jpg" },
+      { title: "Newest: local models", url: "https://steppe.example/newest", date: "2026-10-28T09:30:00.000Z", summary: "Runs — on a laptop.", image: "https://cdn.steppe.example/n.jpg" },
+    ]);
+    const atom = parseFeed(ATOM, "https://a.example/feed")!;
+    expect(atom).toEqual({ title: "Agents weekly", items: [{ title: "Release 2.0", url: "https://a.example/r2", date: "2026-10-27T10:00:00.000Z", summary: "Big one" }] });
+    expect(parseFeed("<html><body>no</body></html>", "https://x.example/")).toBeUndefined();
+    expect(findFeeds('<link rel="alternate" type="application/rss+xml" title="All" href="/f.xml"><link rel="stylesheet" href="/s.css">', "https://x.example/a/")).toEqual([
+      { url: "https://x.example/f.xml", title: "All" },
+    ]);
+  });
+
+  it("reads a feed newest first, finds a site's feeds, and keeps to newer items", async () => {
+    expect(h.tools.get("rss")).toMatchObject({ effect: "read", source: true });
+    const direct = await h.invokeText("rss", { url: `${base}/feed.xml` });
+    expect(direct.split("\n").slice(0, 5)).toEqual([
+      `Feed: Tech & Steppe — ${base}/feed.xml`,
+      "",
+      "1. 2026-10-28 09:30 UTC — Newest: local models",
+      "   https://steppe.example/newest",
+      "   Runs — on a laptop.",
+    ]);
+    const viaSite = await h.invokeText("rss", { url: `${base}/site`, limit: 1 });
+    expect(viaSite).toContain(`Feed: Tech & Steppe — ${base}/feed.xml\nOther feeds on the site: https://steppe.example/atom`);
+    expect(viaSite).not.toContain("Older");
+    const newer = await h.invokeText("rss", { url: `${base}/feed.xml`, since: "2026-10-27T00:00:00Z" });
+    expect(newer).toContain("Newest");
+    expect(newer).not.toContain("Older");
+    const none = await h.invoke("rss", { url: `${base}/article` });
+    expect(none.isError).toBe(true);
   });
 });
 

@@ -12,6 +12,7 @@ import { mobileMode } from "../lib/mobile";
 import { native } from "../lib/native";
 import { adoptHubLocale, t } from "../i18n";
 import { toast } from "./toast";
+import { clearFeeds, feeds, onFeedEvent, refreshFeeds } from "./feeds";
 
 export interface UiPluginEntry {
   id: string;
@@ -215,6 +216,7 @@ export async function logout(): Promise<void> {
   agents.set(null);
   team.set(null);
   groups.set(null);
+  clearFeeds();
   machineActivity.set(null);
   conversations.set([]);
   await showLogin();
@@ -232,6 +234,7 @@ function startSocket(): void {
       void refreshConversations();
       void refreshTeam();
       void refreshGroups();
+      if (feeds.get()) void refreshFeeds();
       if (tasks.get()) void refreshTasks();
       if (machineActivity.get()) void refreshMachineActivity();
       for (const id of Object.keys(messages.get())) if (messages.get()[id].loaded) void loadMessages(id, true);
@@ -321,6 +324,11 @@ function handleEvent(e: UiEvent): void {
       break;
     case "group.updated":
       groups.set((list) => (list ? upsertGroup(list, e.data) : list));
+      break;
+    case "feed.updated":
+    case "feed.deleted":
+    case "feed.post":
+      onFeedEvent(e);
       break;
     case "task.updated":
       tasks.set((list) => (list ? upsertById(list, e.data) : list));

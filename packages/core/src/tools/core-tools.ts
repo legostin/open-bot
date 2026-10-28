@@ -350,6 +350,28 @@ export function registerCoreTools(d: CoreToolDeps): void {
 
   reg(
     {
+      name: "show_choices",
+      description:
+        "Put quick-reply buttons under your reply when the person picks among a few clear options (how often, which one, yes or no): a tap sends the option's text as their message. " +
+        "Ask the question in your reply; keep options short (1–4 words), 2–6 of them, in their language. They can still type anything else.",
+      effect: "read",
+      availability: "interactive",
+      inputSchema: {
+        type: "object",
+        properties: { options: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 6 } },
+        required: ["options"],
+      },
+    },
+    (i, ctx) => {
+      const options = (Array.isArray(i.options) ? i.options : []).map((o: unknown) => clip(o, 60)).filter((o: string | undefined): o is string => !!o);
+      if (options.length < 2 || options.length > 6) return text("Give 2 to 6 short options.", true);
+      d.attachPart(ctx.conversationId, { type: "choices", options });
+      return text(`The person sees ${options.length} buttons under your reply; their tap comes back as their message. Do not list the options again as text.`);
+    },
+  );
+
+  reg(
+    {
       name: "show_images",
       description:
         "Show the user pictures right in the chat: one image appears as a card, 2–10 as a swipeable carousel, and they open full screen on click. " +

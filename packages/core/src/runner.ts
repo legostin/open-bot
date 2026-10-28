@@ -475,6 +475,21 @@ export class SessionRunner {
     else this.d.store.addMessage({ conversationId, role: "system", parts: [part], status: "complete" });
   }
 
+  /**
+   * The person tapped a quick reply: the buttons rest on that option, and its text is their next message (the same
+   * way as typed). A second tap does nothing.
+   */
+  async choose(messageId: string, index: number, channel: string): Promise<Message | undefined> {
+    const m = this.d.store.getMessage(messageId);
+    const at = m?.parts.findIndex((p) => p.type === "choices") ?? -1;
+    const part = at >= 0 ? (m!.parts[at] as Extract<MessagePart, { type: "choices" }>) : undefined;
+    if (!m || !part || part.chosen !== undefined || !Number.isInteger(index) || !part.options[index]) return undefined;
+    const parts = m.parts.slice();
+    parts[at] = { ...part, chosen: index };
+    this.d.store.updateMessage(m.id, { parts });
+    return this.userMessage(m.conversationId, part.options[index], { channel });
+  }
+
   /** The user saved (or dismissed) a secret card after its tool call stopped waiting: tell the agent and let it go on. */
   private onSecretResolved(r: SecretRequest, how: { waited: boolean; viaMessage: boolean }): void {
     this.updateSecretPart(r);
@@ -561,6 +576,8 @@ export class SessionRunner {
     tainted?: boolean;
     /** A thread's sender: its opening message is theirs. */
     from?: string;
+    /** A channel's gathering run (feeds.ts). */
+    feedId?: string;
   }): Task {
     const task = this.d.store.createTask({ ...t, ...(t.tainted ? { tainted: true } : {}) });
     this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete", ...(t.from ? { agentId: t.from } : {}) });
@@ -1096,7 +1113,13 @@ export class SessionRunner {
   // ---------- turns ----------
 
   workspacePath(s: { agentId: string; taskId?: string; conversationId: string }): string {
-    return join(this.d.config.dataDir, "workspaces", s.agentId, s.taskId ?? s.conversationId);
+    return join(this.d.config.dataDir, "workspaces", s.agentId, this.workspaceKey(s));
+  }
+
+  /** A session's folder under its agent's: the task's or the conversation's, a channel's own for every run of it. */
+  private workspaceKey(s: { taskId?: string; conversationId: string }): string {
+    const feedId = s.taskId ? this.d.store.getTask(s.taskId)?.feedId : undefined;
+    return feedId ? `feed-${feedId}` : (s.taskId ?? s.conversationId);
   }
 
   private limitedUntil(ref: string): string | undefined {
@@ -1207,7 +1230,7 @@ export class SessionRunner {
     }
 
     const local = ref.machineId === "local";
-    const workspace = local ? this.workspacePath(row) : `${agent.id}/${task?.id ?? conv.id}`;
+    const workspace = local ? this.workspacePath(row) : `${agent.id}/${this.workspaceKey(row)}`;
     if (local) mkdirSync(workspace, { recursive: true });
     const skills = this.d.skills.forAgent(agent.skills);
     let skillsDir: string | undefined;
@@ -1718,6 +1741,9 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "brain_login") return `login:${p.ref}`;
   if (p.type === "device_pairing") return "device_pairing";
   if (p.type === "reply_to") return `reply_to:${p.messageId}`;
+  if (p.type === "news") return `news:${JSON.stringify(p.items.map((x) => x.url ?? x.title))}`;
+  if (p.type === "choices") return `choices:${JSON.stringify(p.options)}`;
+  if (p.type === "feed") return `feed:${p.feedId}`;
   if (p.type === "integration") return `integration:${p.id}`;
   // Each message to a teammate has its own line, even in the same thread.
   if (p.type === "task") return p.text === undefined ? `task:${p.taskId}` : `task:${p.taskId}|${p.text}`;

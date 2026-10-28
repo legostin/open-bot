@@ -8,6 +8,7 @@ import { ListChecks, Menu, PanelRight, Settings, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import { ACTIVE_STATUSES } from "../lib/format";
 import { agentForPath, chatForPath } from "../lib/team";
+import { feedForPath } from "../lib/feeds";
 import { ensureTasks, session, tasks } from "../state/app";
 import { openPanel, panel, togglePanel } from "../state/panel";
 import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlot } from "../plugins/slots";
@@ -50,7 +51,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       <div className="min-h-0 flex-1">
-        <TeamList activeAgentId={agentForPath(loc, s?.defaultAgent)} activeConversationId={chatForPath(loc)} onNavigate={onNavigate} />
+        <TeamList activeAgentId={agentForPath(loc, s?.defaultAgent)} activeConversationId={chatForPath(loc)} activeFeedId={feedForPath(loc)} onNavigate={onNavigate} />
       </div>
       <MachinesBlock onNavigate={onNavigate} />
       <div className="flex flex-col gap-2 px-3 empty:hidden">

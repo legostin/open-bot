@@ -1,6 +1,6 @@
-// The sidebar is the user's team: every agent with its one long-lived dialog, then the group chats. A row shows who
-// said what last, whether someone is working right now and how much is unread; "Add agent" opens the new-agent form,
-// "New group" the form for a chat with several agents.
+// The sidebar's tabs: the team (every agent with its one long-lived dialog), the group chats and the channels. A row
+// shows who said what last, whether someone is working right now and how much is unread; "Add agent" opens the
+// new-agent form, "New group" the form for a chat with several agents, "New channel" the form for a channel.
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -10,11 +10,15 @@ import { useStore } from "../../lib/store";
 import { shortTime } from "../../lib/format";
 import { agentPath, groupOrder, groupPath, teamOrder } from "../../lib/team";
 import { agents, ensureAgents, ensureGroups, ensureTeam, groups, session, team } from "../../state/app";
+import { ensureFeeds, feeds, unreadPosts } from "../../state/feeds";
 import { addAgent } from "../../state/panel";
+import { setSidebarTab, sidebarTab, type SidebarTab } from "../../state/prefs";
 import { AgentAvatar, AvatarPair } from "../../components/AgentAvatar";
-import { cx, IconButton, Spinner } from "../../components/ui";
+import { UnreadBadge } from "../../components/UnreadBadge";
+import { cx, Spinner } from "../../components/ui";
 import { t } from "../../i18n";
 import { GroupDialog } from "./GroupDialog";
+import { ChannelList } from "../channels/ChannelList";
 
 function MemberRow({ agent, member, href, active, onNavigate }: { agent: AgentDef; member?: TeamMember; href: string; active: boolean; onNavigate?: () => void }) {
   const unread = member?.unread ?? 0;
@@ -51,19 +55,6 @@ function MemberRow({ agent, member, href, active, onNavigate }: { agent: AgentDe
         </span>
       </span>
     </Link>
-  );
-}
-
-/** The small count of unread messages on a row. */
-function UnreadBadge({ n }: { n: number }) {
-  return (
-    <span
-      className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-accent-fg"
-      title={t("team.unread", { n })}
-      aria-label={t("team.unread", { n })}
-    >
-      {n > 99 ? "99+" : n}
-    </span>
   );
 }
 
@@ -112,21 +103,70 @@ function GroupRow({ group, byId, active, onNavigate }: { group: GroupChat; byId:
   );
 }
 
-export function TeamList({ activeAgentId, activeConversationId, onNavigate }: { activeAgentId?: string; activeConversationId?: string; onNavigate?: () => void }) {
+/** Agents, groups and channels as tabs; the tab follows what is open (a group's chat, a channel), then the user's pick. */
+function Tabs({ value, unread }: { value: SidebarTab; unread: Record<SidebarTab, number> }) {
+  const tabs: Array<{ id: SidebarTab; label: string }> = [
+    { id: "agents", label: t("team.tab.agents") },
+    { id: "groups", label: t("team.tab.groups") },
+    { id: "channels", label: t("team.tab.channels") },
+  ];
+  return (
+    <div className="mx-3 mb-1 flex rounded-xl bg-surface-2 p-0.5" role="tablist">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={value === tab.id}
+          onClick={() => setSidebarTab(tab.id)}
+          className={cx(
+            "relative flex min-w-0 flex-1 items-center justify-center rounded-[10px] px-1 py-1.5 text-[13px] font-medium transition",
+            value === tab.id ? "bg-surface text-fg shadow-sm" : "text-muted hover:text-fg",
+          )}
+        >
+          <span className="truncate">{tab.label}</span>
+          {value !== tab.id && unread[tab.id] > 0 && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-accent" aria-label={t("team.unread", { n: unread[tab.id] })} />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function TeamList({
+  activeAgentId,
+  activeConversationId,
+  activeFeedId,
+  onNavigate,
+}: {
+  activeAgentId?: string;
+  activeConversationId?: string;
+  activeFeedId?: string;
+  onNavigate?: () => void;
+}) {
   const agentList = useStore(agents);
   const members = useStore(team);
   const groupList = useStore(groups);
+  const feedList = useStore(feeds);
+  const picked = useStore(sidebarTab);
   const s = useStore(session);
   const [creating, setCreating] = useState(false);
   useEffect(() => {
     ensureAgents();
     ensureTeam();
     ensureGroups();
+    ensureFeeds();
   }, []);
   const byId = useMemo(() => new Map((agentList ?? []).map((a) => [a.id, a])), [agentList]);
   const groupRows = useMemo(() => groupOrder(groupList ?? []), [groupList]);
   // A group needs two agents: with one there is nobody to invite yet.
   const canGroup = (agentList?.length ?? 0) >= 2;
+  const openGroup = !!activeConversationId && groupRows.some((g) => g.conversationId === activeConversationId);
+  // Opening a channel or a group (a link, the address bar) shows its tab once; the user's own pick wins after that.
+  useEffect(() => {
+    if (activeFeedId) setSidebarTab("channels");
+    else if (openGroup) setSidebarTab("groups");
+  }, [activeFeedId, openGroup]);
+  const tab = picked;
 
   const entries = useMemo(() => {
     const byAgent = new Map((members ?? []).map((m) => [m.agentId, m]));
@@ -135,65 +175,50 @@ export function TeamList({ activeAgentId, activeConversationId, onNavigate }: { 
       s?.defaultAgent,
     );
   }, [agentList, members, s?.defaultAgent]);
+  const unread: Record<SidebarTab, number> = {
+    agents: (members ?? []).reduce((n, m) => n + (m.unread ?? 0), 0),
+    groups: groupRows.reduce((n, g) => n + g.unread, 0),
+    channels: unreadPosts(feedList),
+  };
 
   const add = () => {
     addAgent();
     onNavigate?.();
   };
 
+  const addRow = (label: string, icon: React.ReactNode, onClick: () => void) => (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-accent-text transition hover:bg-surface-2">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-accent/60">{icon}</span>
+      {label}
+    </button>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between py-1 pr-2 pl-5">
-        <span className="text-[11px] font-semibold tracking-wide text-muted uppercase">{t("team.title")}</span>
-        <IconButton label={t("team.add")} onClick={add} className="size-8">
-          <Plus className="size-4" />
-        </IconButton>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        {!agentList && (
-          <div className="flex justify-center py-6">
-            <Spinner />
-          </div>
+      <Tabs value={tab} unread={unread} />
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" role="tabpanel">
+        {tab === "agents" && (
+          <>
+            {!agentList && (
+              <div className="flex justify-center py-6">
+                <Spinner />
+              </div>
+            )}
+            {entries.map(({ agent, member }) => (
+              <MemberRow key={agent.id} agent={agent} member={member} href={agentPath(agent.id, s?.defaultAgent)} active={agent.id === activeAgentId} onNavigate={onNavigate} />
+            ))}
+            {agentList && addRow(t("team.add"), <Plus className="size-4" />, add)}
+          </>
         )}
-        {entries.map(({ agent, member }) => (
-          <MemberRow key={agent.id} agent={agent} member={member} href={agentPath(agent.id, s?.defaultAgent)} active={agent.id === activeAgentId} onNavigate={onNavigate} />
-        ))}
-        {agentList && (
-          <button type="button" onClick={add} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-accent-text transition hover:bg-surface-2">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-accent/60">
-              <Plus className="size-4" />
-            </span>
-            {t("team.add")}
-          </button>
-        )}
-
-        {agentList && (canGroup || groupRows.length > 0) && (
-          <section className="mt-3" aria-label={t("team.groups")}>
-            <div className="flex items-center justify-between py-1 pr-0 pl-3">
-              <span className="text-[11px] font-semibold tracking-wide text-muted uppercase">{t("team.groups")}</span>
-              {canGroup && (
-                <IconButton label={t("team.newGroup")} onClick={() => setCreating(true)} className="size-8">
-                  <Plus className="size-4" />
-                </IconButton>
-              )}
-            </div>
+        {tab === "groups" && (
+          <>
             {groupRows.map((g) => (
               <GroupRow key={g.conversationId} group={g} byId={byId} active={g.conversationId === activeConversationId} onNavigate={onNavigate} />
             ))}
-            {canGroup && (
-              <button
-                type="button"
-                onClick={() => setCreating(true)}
-                className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-accent-text transition hover:bg-surface-2"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-accent/60">
-                  <UsersRound className="size-4" />
-                </span>
-                {t("team.newGroup")}
-              </button>
-            )}
-          </section>
+            {canGroup ? addRow(t("team.newGroup"), <UsersRound className="size-4" />, () => setCreating(true)) : agentList && <p className="px-3 pt-2 text-xs leading-relaxed text-muted">{t("team.groupsNeedTwo")}</p>}
+          </>
         )}
+        {tab === "channels" && <ChannelList activeId={activeFeedId} onNavigate={onNavigate} />}
       </div>
       {/* Creating one opens it; the drawer on phones closes with the navigation. */}
       <GroupDialog open={creating} onClose={() => setCreating(false)} />

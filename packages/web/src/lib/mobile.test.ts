@@ -28,6 +28,7 @@ describe("mobile mode", () => {
     expect(chatLinkPath("/", base)).toBe("/");
     expect(chatLinkPath("/chat/c_2", base)).toBe("/chat/c_2");
     expect(chatLinkPath("/tasks/t_1", base)).toBe("/tasks/t_1");
+    expect(chatLinkPath("/channels/f_1", base)).toBe("/channels/f_1");
     expect(chatLinkPath("https://192.168.1.5:41782/agent/a?x=1#y", base)).toBe("/agent/a");
     expect(chatLinkPath("https://example.com/agent/a", base)).toBeUndefined();
     expect(chatLinkPath("/settings", base)).toBeUndefined();

@@ -126,6 +126,13 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     if (!text && !attachments.length) throw new HttpError(400, "message.empty");
     return hub.runner.userMessage(id, text, { channel: opts.kind === "device" ? "app" : "web", ...(attachments.length ? { attachments } : {}) });
   });
+  // A quick reply tapped (a `choices` part): it becomes the person's message.
+  api.post("/api/messages/:id/choose", async (req) => {
+    const b = (req.body ?? {}) as { index?: unknown };
+    const sent = await hub.runner.choose((req.params as { id: string }).id, Number(b.index), opts.kind === "device" ? "app" : "web");
+    if (!sent) throw new HttpError(409, "choice.unavailable");
+    return sent;
+  });
   // A file for the next message: raw bytes, saved in the conversation's workspace (attachments/).
   await api.register(async (up) => {
     // Signed in before a 25 MB body is read, not after.
@@ -148,6 +155,39 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   // ----- team: every agent with its long-lived dialog (created on first listing), and the group chats -----
   api.get("/api/team", async () => hub.team.list());
   api.get("/api/groups", async () => hub.team.listGroups());
+
+  // ----- channels (feeds.ts): news an agent of the team gathers on a schedule -----
+  api.get("/api/feeds", async () => hub.feeds.list());
+  api.post("/api/feeds", async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    return hub.feeds.create({ title: b.title, brief: b.brief, agentId: b.agentId, times: b.times, weekdays: b.weekdays, enabled: b.enabled });
+  });
+  const feed = (req: FastifyRequest) => {
+    const f = hub.feeds.get((req.params as { id: string }).id);
+    if (!f) throw new HttpError(404, "feed.notFound");
+    return f;
+  };
+  api.get("/api/feeds/:id", async (req) => feed(req));
+  api.patch("/api/feeds/:id", async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    return hub.feeds.update(feed(req).id, { title: b.title, brief: b.brief, agentId: b.agentId, times: b.times, weekdays: b.weekdays, enabled: b.enabled });
+  });
+  api.delete("/api/feeds/:id", async (req) => {
+    hub.feeds.delete(feed(req).id);
+    return { ok: true };
+  });
+  api.get("/api/feeds/:id/posts", async (req) => {
+    const q = req.query as { before?: string; limit?: string };
+    return hub.feeds.posts(feed(req).id, { before: q.before, limit: q.limit ? Number(q.limit) : undefined });
+  });
+  api.post("/api/feeds/:id/read", async (req) => {
+    hub.feeds.markRead(feed(req).id);
+    return { ok: true };
+  });
+  api.post("/api/feeds/:id/run", async (req) => {
+    const task = hub.feeds.run(feed(req).id);
+    return { taskId: task.id };
+  });
 
   // ----- tasks -----
   api.get("/api/tasks", async (req) => {

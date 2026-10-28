@@ -66,6 +66,16 @@ const MIGRATIONS: string[] = [
   `,
   // One-time invites for any device (invites.ts); pairing_codes and device_pairing_codes are no longer written.
   `create table invites(code text primary key, expires_at text not null, used_at text, used_by text);`,
+  // Channels (feeds.ts) and the tasks that gather them.
+  `
+  create table feeds(id text primary key, title text not null, brief text not null, agent_id text not null, times text not null,
+    weekdays text not null default '[]', sources text not null default '[]', enabled integer not null default 1, read_at text,
+    last_run_at text, next_run_at text, created_at text not null, updated_at text not null);
+  create table feed_posts(id text primary key, feed_id text not null, title text not null, text text not null, url text, source text,
+    image text, created_at text not null);
+  create index feed_posts_feed on feed_posts(feed_id, created_at);
+  alter table tasks add column feed_id text;
+  `,
 ];
 
 export function openDb(file: string): Db {
