@@ -123,9 +123,9 @@ const CSS = `
 .owm-chip.on span{color:inherit;opacity:.7}
 .owm-review{border:1px solid color-mix(in srgb,var(--warning) 35%,transparent);background:var(--warning-soft);border-radius:16px;padding:14px 16px;margin-bottom:26px}
 .owm-review h3{margin:0 0 8px;font-size:14px;font-weight:600;color:var(--warning)}
-.owm-ritem{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--warning) 20%,transparent)}
+.owm-ritem{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-start;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--warning) 20%,transparent)}
 .owm-ritem:first-of-type{border-top:0}
-.owm-ritem .txt{flex:1;min-width:0}
+.owm-ritem .txt{flex:1 1 260px;min-width:0}
 .owm-btn{border:1px solid var(--border);background:var(--surface);color:var(--fg);font:inherit;font-size:13px;font-weight:550;padding:5px 12px;border-radius:999px;cursor:pointer;white-space:nowrap}
 .owm-btn:hover{background:var(--surface-2)}
 .owm-btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
@@ -395,7 +395,7 @@ function Review({ items, reload }: { items: ReviewItem[]; reload(): void }) {
           <div className="txt">
             <div className="owm-text">{factText(it)}</div>
             <div className="owm-meta">
-              {it.source && <span>{t("ui.from.agent", { name: agentName(it.source.agentId), date: when(it.source.at) })}</span>}
+              {it.source && <span>{t("ui.review.from", { name: agentName(it.source.agentId), date: when(it.source.at) })}</span>}
               {it.current && <span>· {t("ui.review.replaces", { text: factText(it.current) })}</span>}
             </div>
           </div>
@@ -668,6 +668,17 @@ function MemoryLine({ call, result }: ToolResultProps) {
   const [done, setDone] = useState<"" | "undone" | "approved" | "rejected" | "restored">("");
   const [busy, setBusy] = useState(false);
   useEffect(ensureStyles, []);
+  // The line is drawn again later (a reload, another device): it says what is true now, not what was clicked here.
+  useEffect(() => {
+    if (!o.path || (o.state !== "remembered" && o.state !== "review")) return;
+    let alive = true;
+    http<Detail>("GET", `/fact?path=${enc(o.path)}`)
+      .then((d) => alive && o.state === "review" && d.fact.status !== "review" && setDone("approved"))
+      .catch(() => alive && setDone(o.state === "review" ? "rejected" : "undone"));
+    return () => {
+      alive = false;
+    };
+  }, [o.path, o.state]);
   const input = (call.input ?? {}) as Record<string, unknown>;
   const title = o.title || String(input.title ?? input.fact ?? "");
   const go = async (path: string, body: unknown, next: typeof done) => {

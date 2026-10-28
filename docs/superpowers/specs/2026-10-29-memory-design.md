@@ -122,7 +122,11 @@ Fact JSON (`FactView`):
   "source": { "agentId": "assistant", "conversationId": "c_1", "at": "…", "quote": "…" }
 }
 ```
-`source` is the latest provenance or null; `scope` is "team" or "agent:<id>".
+`source` is the latest provenance or null (`sources` in the detail: oldest first; agent "user" = the person's own
+edit); `scope` is "team" or "agent:<id>"; `validFrom` / `validUntil` are dates (`YYYY-MM-DD`) or empty. History
+entries are `{rev, at, action, message}`: `action` is one of remember, confirm, edit, forget, restore, undo, approve,
+reject, tidy, revert, create, update, sync; `message` is that action in the reader's language. Errors are
+`{error, code, params}` with `error` already in the reader's language.
 
 | Route | Result |
 |---|---|
@@ -152,8 +156,26 @@ Events: `ctx.ui.emit("changed", {path, action})` after every change.
 - **Phone**: a Memory screen from the Hub tab with the same groups, search, review (approve / reject), swipe to forget
   with undo, and the fact's detail.
 
-## Later
+## Built on 2026-10-29
 
-Local embeddings behind the `Embedder` seam; entity pages with summaries; per-person importance learned from what is
-recalled and used; memory of the team about itself (each agent's own notes); conflicts shown side by side in review;
-"why did you say that" — the memories a reply used, under the message.
+Everything above except what is listed below. Checked on a throwaway hub with a scripted model: the agent remembers a
+move (the old city is superseded and shown as "Before"), a sensitive fact waits for "Remember / Don't" in the chat,
+the next message about Anna arrives with her facts in a `[Memory]` block, Undo and "Remember again" in the chat change
+memory for real.
+
+## Roadmap
+
+1. **Recall while steering**: input that joins a running turn (`steer`) gets no `[Memory]` block yet.
+2. **Local embeddings** behind the `Embedder` seam (a small multilingual model run by the hub), joined into
+   `relevance`; keep lexical + entities as the fallback.
+3. **Entity pages**: a person or place with all its facts and a short summary the nightly pass writes; links between
+   entities (who is whose sister) as a light graph.
+4. **Conflicts in review**: when a new fact contradicts one without a shared slot, show both side by side with "keep
+   the new one / keep both".
+5. **"Why did you say that"**: the memories a reply was given, behind a small toggle under the message.
+6. **Learning importance** from use: facts recalled and then used in replies rise, ones never used fade sooner.
+7. **The phone**: live updates from a socket event and a waiting-count badge on the Hub row; the "Before" and
+   history sections can restore a version as on the web.
+8. **Agents' own memory**: each agent's notes about how it works with the person (private scope exists already; a
+   page per agent to see them).
+9. **Import**: bring memories from ChatGPT / Claude exports as review items.
