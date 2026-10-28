@@ -1,0 +1,44 @@
+# A version tag (v0.2.0, the root package.json's version) builds and checks the desktop installers (desktop.yml) and
+# publishes them as that version's release. Hubs of the version hand them out at /download/desktop/<os>
+# (packages/core/src/server/join-page.ts), so the asset names must stay what packaging/desktop/build.mjs makes.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag is package.json's version
+        run: |
+          v=$(node -p "require('./package.json').version")
+          if [ "v$v" != "$GITHUB_REF_NAME" ]; then echo "tag $GITHUB_REF_NAME, package.json $v"; exit 1; fi
+
+  installers:
+    needs: version
+    uses: ./.github/workflows/desktop.yml
+
+  publish:
+    needs: installers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: The assets the hubs link to are there
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          test -f "dist/owlbot-setup-$v-x64.exe"
+          test -f "dist/owlbot-$v.dmg"
+          ls -l dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Owlbot ${GITHUB_REF_NAME#v}" --generate-notes

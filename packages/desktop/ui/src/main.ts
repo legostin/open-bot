@@ -90,17 +90,15 @@ function welcome(state: UiState): void {
   );
 }
 
-/** Hub address, code and machine name; prefilled from an owlbot://pair link. */
+/** The invite link (the node CLI reads it) and the machine name; an owlbot://pair link brings the hub and code. */
 function pairForm(state: UiState, link?: { hub: string; code: string }): void {
-  const hub = input(link?.hub ?? "", { type: "url", placeholder: "https://bot.example.com", required: "" });
-  const code = input(link?.code ?? "", { autocomplete: "one-time-code", required: "" });
+  const invite = input("", { type: "url", placeholder: "https://owlbot.example.ts.net/join/AB12CD34", required: "" });
   const name = input(state.hostname, { maxlength: "60" });
   const note = h("p", { class: "error" });
   const form = h(
     "form",
     {},
-    link ? null : field(t("app.pair.hub"), hub, t("app.pair.hubHint")),
-    link ? null : field(t("app.pair.code"), code, t("app.pair.codeHint")),
+    link ? null : field(t("app.pair.link"), invite, t("app.pair.linkHint")),
     field(t("app.pair.name"), name),
     note,
     h(
@@ -112,14 +110,14 @@ function pairForm(state: UiState, link?: { hub: string; code: string }): void {
   );
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    void run(note, "pair", { hub: hub.value, code: code.value, name: name.value });
+    void run(note, "pair", link ? { hub: link.hub, code: link.code, name: name.value } : { hub: invite.value, code: "", name: name.value });
   });
   if (link) {
     show(h("h1", {}, t("app.link.title", { hub: link.hub })), h("p", { class: "muted" }, t("app.link.body", { hub: link.hub })), state.mode === "hub" && h("p", {}, t("app.link.hubMode")), form);
   } else {
     show(h("h1", {}, t("app.pair.title")), form);
   }
-  (link ? name : hub).focus();
+  (link ? name : invite).focus();
 }
 
 function errorScreen(state: UiState, error: NonNullable<UiState["error"]>): void {

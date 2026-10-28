@@ -7,8 +7,9 @@ import { DEFAULT_LOCALE, localeFromEnv, translator, type Catalog, type Locale, t
 const en = {
   // cli
   "cli.help":
-    "owlbot-node — connects this computer to an Owlbot hub\n\nCommands:\n  owlbot-node pair <hub-url> <code> [--name <name>]   pair this machine (the code is in the web UI: Machines)\n  owlbot-node run                                     connect to the hub and serve requests (in the terminal)\n  owlbot-node status                                  pairing, policy, installed CLIs, hub reachability\n  owlbot-node policy                                  path and contents of the policy file\n\nState folder: {home} (override with OWLBOT_NODE_HOME)",
-  "cli.pairUsage": "Usage: owlbot-node pair <hub-url> <code> [--name <name>]\nExample: owlbot-node pair http://100.64.0.1:8080 AB12CD34",
+    "owlbot-node — connects this computer to an Owlbot hub\n\nCommands:\n  owlbot-node pair <invite-link> [--name <name>]      pair this machine (ask Owlbot in the chat to connect a computer)\n  owlbot-node run                                     connect to the hub and serve requests (in the terminal)\n  owlbot-node status                                  pairing, policy, installed CLIs, hub reachability\n  owlbot-node policy                                  path and contents of the policy file\n\nState folder: {home} (override with OWLBOT_NODE_HOME)",
+  "cli.pairUsage": "Usage: owlbot-node pair <invite-link> [--name <name>]\nExample: owlbot-node pair https://owlbot.example.ts.net/join/AB12CD34\nThe link comes from the chat: ask Owlbot to connect a computer.",
+  "cli.badLink": "{link} is not an Owlbot invite link. It looks like https://<hub>/join/<code>: ask Owlbot in the chat to connect a computer.",
   "cli.checkingClis": "Checking installed CLIs…",
   "cli.paired": "\nThis machine is paired with the hub {hub}: “{name}” ({id})",
   "cli.replaced": "The previous pairing ({id}) was replaced — you can revoke it in the web UI.",
@@ -111,8 +112,9 @@ const en = {
 
 const ru: Record<keyof typeof en, string> = {
   "cli.help":
-    "owlbot-node — подключает этот компьютер к хабу Owlbot\n\nКоманды:\n  owlbot-node pair <адрес-хаба> <код> [--name <имя>]   привязать машину (код — в веб-интерфейсе: «Машины»)\n  owlbot-node run                                     подключиться к хабу и обслуживать запросы (в консоли)\n  owlbot-node status                                  привязка, политика, установленные CLI, доступность хаба\n  owlbot-node policy                                  путь и содержимое файла политики\n\nПапка состояния: {home} (переопределяется OWLBOT_NODE_HOME)",
-  "cli.pairUsage": "Использование: owlbot-node pair <адрес-хаба> <код> [--name <имя>]\nПример: owlbot-node pair http://100.64.0.1:8080 AB12CD34",
+    "owlbot-node — подключает этот компьютер к хабу Owlbot\n\nКоманды:\n  owlbot-node pair <ссылка> [--name <имя>]             привязать машину (попросите Owlbot в чате подключить компьютер)\n  owlbot-node run                                     подключиться к хабу и обслуживать запросы (в консоли)\n  owlbot-node status                                  привязка, политика, установленные CLI, доступность хаба\n  owlbot-node policy                                  путь и содержимое файла политики\n\nПапка состояния: {home} (переопределяется OWLBOT_NODE_HOME)",
+  "cli.pairUsage": "Использование: owlbot-node pair <ссылка> [--name <имя>]\nПример: owlbot-node pair https://owlbot.example.ts.net/join/AB12CD34\nСсылку даёт чат: попросите Owlbot подключить компьютер.",
+  "cli.badLink": "{link} — не ссылка-приглашение Owlbot. Она выглядит как https://<хаб>/join/<код>: попросите Owlbot в чате подключить компьютер.",
   "cli.checkingClis": "Проверяю установленные CLI…",
   "cli.paired": "\nМашина привязана к хабу {hub}: «{name}» ({id})",
   "cli.replaced": "Предыдущая привязка ({id}) заменена — её можно отозвать в веб-интерфейсе.",

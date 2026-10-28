@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig } from "../src/home.ts";
+import { loadConfig, parseInviteLink } from "../src/home.ts";
 import { linkForPhoneAddress, pair } from "../src/pair.ts";
 
 const LINK = "https://owlbot.tail1234.ts.net";
@@ -47,5 +47,15 @@ describe("pairing", () => {
     });
     const home = mkdtempSync(join(tmpdir(), "owl-pair-"));
     await expect(pair({ home, hubUrl: "https://192.168.1.2:8082", code: "AB12CD34" })).rejects.toThrow(/own certificate.*phones/s);
+  });
+
+  it("reads an invite link: the hub's page or the desktop app's link", () => {
+    expect(parseInviteLink(`${LINK}/join/AB12CD34`)).toEqual({ hubUrl: LINK, code: "AB12CD34" });
+    expect(parseInviteLink(" http://192.168.1.2:8080/join/ab12cd34/ ")).toEqual({ hubUrl: "http://192.168.1.2:8080", code: "ab12cd34" });
+    expect(parseInviteLink("https://example.com/owlbot/join/AB12CD34")).toEqual({ hubUrl: "https://example.com/owlbot", code: "AB12CD34" });
+    expect(parseInviteLink(`owlbot://pair?hub=${encodeURIComponent(LINK)}&code=AB12CD34`)).toEqual({ hubUrl: LINK, code: "AB12CD34" });
+    expect(parseInviteLink(LINK)).toBeUndefined();
+    expect(parseInviteLink("owlbot://pair?v=1&c=AB12CD34")).toBeUndefined();
+    expect(parseInviteLink("not a link")).toBeUndefined();
   });
 });

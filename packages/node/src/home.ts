@@ -93,6 +93,27 @@ export function normalizeHubUrl(input: string): string {
   return u.toString().replace(/\/+$/, "");
 }
 
+/**
+ * An invite link → the hub and the code: the hub's page `https://<hub>/join/<code>`, or the desktop app's
+ * `owlbot://pair?hub=…&code=…` that page opens. Undefined when it is neither.
+ */
+export function parseInviteLink(input: string): { hubUrl: string; code: string } | undefined {
+  let u: URL;
+  try {
+    u = new URL(String(input ?? "").trim());
+  } catch {
+    return undefined;
+  }
+  if (/^owlbot(-test)?:$/.test(u.protocol)) {
+    const hub = u.searchParams.get("hub");
+    const code = u.searchParams.get("code");
+    return hub && code ? { hubUrl: normalizeHubUrl(hub), code } : undefined;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+  const m = /^(.*)\/join\/([A-Za-z0-9-]+)\/?$/.exec(u.pathname);
+  return m ? { hubUrl: normalizeHubUrl(u.origin + m[1]), code: m[2] } : undefined;
+}
+
 /** Hub URL → WebSocket endpoint for nodes. */
 export function nodeWsUrl(hubUrl: string): string {
   const u = new URL(hubUrl);

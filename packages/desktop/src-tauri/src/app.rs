@@ -353,7 +353,11 @@ pub fn pair(app: &AppHandle, hub: &str, code: &str, name: &str) -> Result<(), St
   let st = app.state::<AppState>();
   let p = &st.paths;
   let mut cmd = supervisor::command(&p.node);
-  cmd.arg(p.node_cli()).args(["pair", hub.trim(), code.trim()]).env("OWLBOT_LANG", texts().lang()).env("OWLBOT_NODE_HOME", &p.node_home);
+  // An owlbot://pair link brings the hub and the code; the setup form gives the invite link alone, which the CLI reads.
+  cmd.arg(p.node_cli()).args(["pair", hub.trim()]).env("OWLBOT_LANG", texts().lang()).env("OWLBOT_NODE_HOME", &p.node_home);
+  if !code.trim().is_empty() {
+    cmd.arg(code.trim());
+  }
   if !name.trim().is_empty() {
     cmd.args(["--name", name.trim()]);
   }

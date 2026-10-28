@@ -2,7 +2,7 @@
 // owlbot-node CLI: pair | run | status | policy
 
 import { existsSync, readFileSync } from "node:fs";
-import { configFile, keyFile, loadConfig, nodeHome, normalizeHubUrl, NotPairedError, UserError } from "./home.ts";
+import { configFile, keyFile, loadConfig, nodeHome, normalizeHubUrl, NotPairedError, parseInviteLink, UserError } from "./home.ts";
 import { PolicyStore, policySummary } from "./policy.ts";
 import { BrainHost } from "./brains.ts";
 import { pair, PairError, networkErrorText } from "./pair.ts";
@@ -32,7 +32,10 @@ function parseArgs(argv: string[]): { positional: string[]; flags: Record<string
 const out = (s = "") => process.stdout.write(s + "\n");
 
 async function cmdPair(args: string[], flags: Record<string, string | true>): Promise<void> {
-  const [hubUrl, code] = args;
+  // `pair <invite link>`, or the older `pair <hub-url> <code>`.
+  const link = args.length === 1 ? parseInviteLink(args[0]) : undefined;
+  if (args.length === 1 && !link) throw new PairError(t("cli.badLink", { link: args[0] }));
+  const [hubUrl, code] = link ? [link.hubUrl, link.code] : args;
   if (!hubUrl || !code) throw new PairError(t("cli.pairUsage"));
   normalizeHubUrl(hubUrl);
   const home = nodeHome();

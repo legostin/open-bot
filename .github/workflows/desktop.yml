@@ -1,9 +1,11 @@
 # Builds the desktop app and its installers and checks them on clean runners: install, the hub answers, quit,
-# uninstall, the data stays.
+# uninstall, the data stays. release.yml calls it on a version tag and publishes what it built.
 name: desktop app
 
 on:
   workflow_dispatch:
+  # release.yml builds the installers it publishes with this workflow.
+  workflow_call:
   push:
     branches: [main]
     paths: ["packaging/**", "packages/desktop/**", "packages/tailnet/**", "package.json", "package-lock.json", ".github/workflows/desktop.yml"]
