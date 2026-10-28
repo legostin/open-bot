@@ -33,14 +33,25 @@ function Spark({ values, up }: { values: number[]; up: boolean }) {
   );
 }
 
+/** The coin's logo over its ticker: the ticker shows while the picture loads, and stays if it never does. */
 function Logo({ coin }: { coin: CoinRow }) {
+  const [shown, setShown] = useState(false);
   const [broken, setBroken] = useState(false);
   const src = coin.image && !broken ? mediaSrc(coin.image) : undefined;
   const box: CSSProperties = { width: 28, height: 28, borderRadius: 999, flexShrink: 0 };
-  if (src) return <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} style={{ ...box, objectFit: "cover" }} />;
   return (
-    <span aria-hidden style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-2)", fontSize: 11, fontWeight: 700 }}>
-      {coin.symbol.slice(0, 3)}
+    <span aria-hidden style={{ ...box, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-2)", fontSize: 9.5, fontWeight: 700, overflow: "hidden" }}>
+      {!shown && coin.symbol.slice(0, 3)}
+      {src && (
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          onLoad={() => setShown(true)}
+          onError={() => setBroken(true)}
+          style={{ ...box, position: "absolute", inset: 0, objectFit: "cover", opacity: shown ? 1 : 0 }}
+        />
+      )}
     </span>
   );
 }
