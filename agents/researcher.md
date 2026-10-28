@@ -8,7 +8,7 @@ i18n:
 avatar: { color: violet, shape: hexagon }
 brains: [claude-code@local, codex@local, "api:anthropic", "api:openai"]
 initiative: 1
-tools: ["web_*", "browser_*", "memory_*", "notify", "task_*", "team_*", "skill_load", "trigger_*"]
+tools: ["web_*", "browser_*", "memory_*", "notify", "task_*", "team_*", "skill_load", "trigger_*", "feed_*"]
 skills: ["*"]
 policyProfile: default
 budget:

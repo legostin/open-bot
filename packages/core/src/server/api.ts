@@ -156,6 +156,13 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   api.get("/api/team", async () => hub.team.list());
   api.get("/api/groups", async () => hub.team.listGroups());
 
+  // ----- setup chats: "New channel", "Add agent" (setup-chats.ts) -----
+  api.post("/api/setup-chats", async (req) => {
+    const purpose = (req.body as { purpose?: unknown } | undefined)?.purpose;
+    if (purpose !== "feed" && purpose !== "agent") throw new HttpError(400, "setup.badPurpose");
+    return hub.setupChats.start(purpose, requestLocale(req));
+  });
+
   // ----- channels (feeds.ts): news an agent of the team gathers on a schedule -----
   api.get("/api/feeds", async () => hub.feeds.list());
   api.post("/api/feeds", async (req) => {

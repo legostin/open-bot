@@ -27,6 +27,8 @@ const convFrom = (r: any): Conversation => ({
   title: r.title,
   agentId: r.agent_id,
   ...(r.kind === "group" ? { members: json<string[]>(r.members, [r.agent_id]) } : {}),
+  ...(r.purpose ? { purpose: r.purpose } : {}),
+  ...(r.entity ? { entity: r.entity } : {}),
   taskId: r.task_id ?? undefined,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -99,17 +101,35 @@ export class Store {
   // ---------- conversations ----------
 
   /** A group's lead is its first member: `agentId` is taken from `members` then. */
-  createConversation(c: { kind: Conversation["kind"]; title: string; agentId: string; members?: string[]; taskId?: string; id?: string }): Conversation {
+  createConversation(c: { kind: Conversation["kind"]; title: string; agentId: string; members?: string[]; taskId?: string; id?: string; purpose?: Conversation["purpose"] }): Conversation {
     const now = nowIso();
     const members = c.kind === "group" ? (c.members?.length ? c.members : [c.agentId]) : undefined;
     const agentId = members ? members[0] : c.agentId;
-    const conv: Conversation = { id: c.id ?? newId("c_"), kind: c.kind, title: c.title, agentId, ...(members ? { members } : {}), taskId: c.taskId, createdAt: now, updatedAt: now };
+    const conv: Conversation = {
+      id: c.id ?? newId("c_"),
+      kind: c.kind,
+      title: c.title,
+      agentId,
+      ...(members ? { members } : {}),
+      ...(c.purpose ? { purpose: c.purpose } : {}),
+      taskId: c.taskId,
+      createdAt: now,
+      updatedAt: now,
+    };
     // read_at stays empty: everything that arrives in a new conversation is unread until the user looks.
     this.db
-      .prepare("insert into conversations(id, kind, title, agent_id, members, task_id, created_at, updated_at) values (?,?,?,?,?,?,?,?)")
-      .run(conv.id, conv.kind, conv.title, conv.agentId, members ? JSON.stringify(members) : null, conv.taskId ?? null, now, now);
+      .prepare("insert into conversations(id, kind, title, agent_id, members, task_id, purpose, created_at, updated_at) values (?,?,?,?,?,?,?,?,?)")
+      .run(conv.id, conv.kind, conv.title, conv.agentId, members ? JSON.stringify(members) : null, conv.taskId ?? null, c.purpose ?? null, now, now);
     this.bus.emit("conversation.updated", conv);
     return conv;
+  }
+
+  /** A setup chat became what it made (a channel, an agent). */
+  setEntity(id: string, entity: string): Conversation | undefined {
+    this.db.prepare("update conversations set entity = ? where id = ?").run(entity, id);
+    const c = this.getConversation(id);
+    if (c) this.bus.emit("conversation.updated", c);
+    return c;
   }
 
   getConversation(id: string): Conversation | undefined {
