@@ -218,7 +218,7 @@ function Parts({ message }: { message: Message }) {
         switch (p.type) {
           case "text": {
             const caret = streaming && idx === items.length - 1 && lastPart?.type === "text";
-            return message.role === "user" ? (
+            return message.role === "user" && !message.agentId ? (
               <Markdown key={it.key} text={p.text} className="md-bubble" user />
             ) : (
               <Markdown key={it.key} text={p.text} className={cx(caret && "stream-caret")} />
@@ -251,7 +251,7 @@ function Parts({ message }: { message: Message }) {
           case "device_pairing":
             return <DevicePairingCard key={it.key} />;
           case "task":
-            return <TaskLine key={it.key} taskId={p.taskId} />;
+            return <TaskLine key={it.key} taskId={p.taskId} text={p.text} reply={p.reply} from={message.agentId} />;
           default:
             return null;
         }
@@ -273,7 +273,8 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName,
   const name = agentName ?? agent?.name ?? message.agentId ?? t("message.assistant");
   // A finished message with nothing for the person (only tool calls, or a note for the model) is not shown at all.
   if (message.status !== "streaming" && !message.parts.some((p) => partShown(p, message.role, details))) return null;
-  if (message.role === "user") {
+  // A teammate writing in a thread is a user-role message with its agent: it reads as that agent's message.
+  if (message.role === "user" && !message.agentId) {
     return (
       <div className="animate-in flex justify-end">
         <div className="max-w-[88%] rounded-2xl rounded-br-md bg-user-bubble px-3.5 py-2 text-user-bubble-fg text-[15px] leading-relaxed sm:max-w-[75%]">

@@ -1,17 +1,19 @@
-// Task detail: summary, cancel/retry, and the task's conversation.
+// Task detail: summary, cancel/retry, and the task's conversation. A teammate's thread (team_message) reads as the
+// two agents' conversation: both of them on top, no job summary.
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Ban, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Ban, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 import type { Task } from "@owlbot/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
-import { ACTIVE_STATUSES, formatDateTime, relativeTime, taskStatus } from "../lib/format";
+import { ACTIVE_STATUSES, formatDateTime, relativeTime, taskStatus, threadStatus } from "../lib/format";
 import { agents, ensureAgents, hubEvents, reconnected, tasks } from "../state/app";
 import { toast } from "../state/toast";
 import { t, tRich } from "../i18n";
 import { Markdown } from "../components/markdown";
 import { Badge, Button, EmptyState, ErrorNote, Loading } from "../components/ui";
+import { AgentAvatar } from "../components/AgentAvatar";
 import { ChatView } from "./chat/ChatView";
 import { TopBar } from "../components/Layout";
 
@@ -61,9 +63,13 @@ export function TaskDetailPage({ id }: { id: string }) {
     );
   if (!current) return <Loading />;
 
-  const st = taskStatus(current.status);
+  const thread = current.kind === "message";
+  const st = thread ? threadStatus(current.status) : taskStatus(current.status);
   const active = ACTIVE_STATUSES.includes(current.status);
-  const canRetry = ["failed", "cancelled", "interrupted", "paused", "done"].includes(current.status);
+  // A thread goes on when its sender writes again; only one that broke off can be retried.
+  const canRetry = (thread ? ["failed", "interrupted"] : ["failed", "cancelled", "interrupted", "paused", "done"]).includes(current.status);
+  const from = thread && current.from ? (agentList?.find((a) => a.id === current.from) ?? { id: current.from, name: current.from, avatar: undefined }) : undefined;
+  const to = agentList?.find((a) => a.id === current.agentId);
 
   const act = async (kind: "cancel" | "retry") => {
     setBusy(kind);
@@ -131,13 +137,37 @@ export function TaskDetailPage({ id }: { id: string }) {
     </div>
   );
 
+  const hint = (
+    <div className="flex flex-col gap-2">
+      <div className="text-center text-xs text-muted">{t("thread.hint")}</div>
+      {current.error && <ErrorNote>{current.error}</ErrorNote>}
+    </div>
+  );
+
   return (
     <div className="flex h-full flex-col">
       <TopBar>
         <Link href="/tasks" aria-label={t("task.toTasks")} className="inline-flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-fg">
           <ArrowLeft className="size-[18px]" />
         </Link>
-        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{current.title || t("task.untitled")}</span>
+        {thread ? (
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[15px] font-semibold" title={current.title}>
+            {from && (
+              <>
+                <AgentAvatar avatar={from.avatar} id={from.id} name={from.name} size={22} />
+                <span className="min-w-0 truncate">{from.name}</span>
+                <ArrowLeftRight className="size-3.5 shrink-0 text-muted" aria-hidden />
+              </>
+            )}
+            <AgentAvatar avatar={to?.avatar} id={current.agentId} name={agentName} size={22} />
+            <span className="min-w-0 truncate">{agentName}</span>
+            <Badge tone={st.tone} dot={current.status === "running"} className="ml-1 shrink-0">
+              {st.label}
+            </Badge>
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{current.title || t("task.untitled")}</span>
+        )}
         {active && (
           <Button size="sm" variant="danger" icon={<Ban className="size-3.5" />} onClick={() => void act("cancel")} loading={busy === "cancel"}>
             {t("task.cancel")}
@@ -150,7 +180,7 @@ export function TaskDetailPage({ id }: { id: string }) {
         )}
       </TopBar>
       <div className="min-h-0 flex-1">
-        <ChatView conversationId={current.conversationId} header={false} top={summary} emptyHint={t("task.notStarted")} />
+        <ChatView conversationId={current.conversationId} header={false} top={thread ? hint : summary} emptyHint={t("task.notStarted")} />
       </div>
     </div>
   );

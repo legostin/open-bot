@@ -58,6 +58,12 @@ const MIGRATIONS: string[] = [
   `alter table conversations add column members text;`,
   // A task's open question to whoever started it (task_ask).
   `alter table tasks add column question text;`,
+  // Threads between teammates (team_message: kind "message"), and tasks started from a session that read outside content.
+  `
+  alter table tasks add column kind text;
+  alter table tasks add column tainted integer not null default 0;
+  alter table tasks add column from_agent text;
+  `,
 ];
 
 export function openDb(file: string): Db {

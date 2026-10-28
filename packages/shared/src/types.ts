@@ -201,8 +201,11 @@ export type MessagePart =
   | { type: "images"; items: ImageItem[] }
   /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers. */
   | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[] }
-  /** A task the agent started (task_delegate): one line with its live status that opens the task. */
-  | { type: "task"; taskId: string };
+  /**
+   * A task the agent started (task_delegate): one line with its live status that opens the task. A message to a
+   * teammate (team_message) carries what the agent wrote (`text`) and, once it came, the teammate's answer (`reply`).
+   */
+  | { type: "task"; taskId: string; text?: string; reply?: string };
 
 /** What a sent file is: a voice note and a photo are told apart from an audio file or a document by the channel. */
 export type AttachmentKind = "photo" | "voice" | "audio" | "video" | "file";
@@ -226,6 +229,7 @@ export interface Message {
   role: MessageRole;
   parts: MessagePart[];
   status: "streaming" | "complete" | "error";
+  /** The agent that wrote it. On a user-role message: a teammate writing in a thread (team_message), not the user. */
   agentId?: string;
   taskId?: string;
   brainRef?: string;
@@ -312,6 +316,12 @@ export interface Task {
   resumeAt?: ISODate;
   /** A question the task asked whoever started it (task_ask), until it gets an answer. */
   question?: string;
+  /** "message": a thread between two agents of the team (team_message); it reads like a conversation, not a job. */
+  kind?: "message";
+  /** A thread's other side (kind "message"): the teammate who wrote. `agentId` is the one answering. */
+  from?: string;
+  /** Started or messaged from a session that had read outside content: its sessions are marked the same way. */
+  tainted?: boolean;
   createdAt: ISODate;
   updatedAt: ISODate;
 }

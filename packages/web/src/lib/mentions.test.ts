@@ -37,6 +37,7 @@ describe("@mention autocomplete", () => {
     // In Russian its own word comes first; "@a…" still offers "@all".
     expect(filterMentions(members, "", 8, "\u0432\u0441\u0435").at(-1)).toEqual({ id: "\u0432\u0441\u0435", name: "\u0432\u0441\u0435", all: true });
     expect(filterMentions(members, "al", 8, "\u0432\u0441\u0435").at(-1)).toEqual({ id: "all", name: "all", all: true });
+    expect(filterMentions(members, "a", 8, null)).toEqual([{ id: "assistant", name: "Owl" }, { id: "research-lead", name: "Research Lead" }]);
   });
 
   it("inserts @id and a space, replacing the word under the caret", () => {

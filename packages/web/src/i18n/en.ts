@@ -146,6 +146,13 @@ export default {
   "taskStatus.done": "done",
   "taskStatus.failed": "failed",
   "taskStatus.cancelled": "cancelled",
+  "threadStatus.sent": "sent",
+  "threadStatus.answering": "answering…",
+  "threadStatus.asksBack": "asks back",
+  "threadStatus.answered": "answered",
+  "threadStatus.failed": "couldn't answer",
+  "threadStatus.interrupted": "interrupted",
+  "threadStatus.cancelled": "cancelled",
 
   // notification levels
   "notifyLevel.silent": "silent",
@@ -394,6 +401,8 @@ export default {
   "task.subtaskOf": "Subtask of a {parent}",
   "task.parent": "parent task",
   "task.notStarted": "The agent hasn't started on this task yet.",
+  "thread.open": "Open the conversation",
+  "thread.hint": "Two agents talking — the reply goes back to the one who wrote on its own. To step in, just write here.",
 
   // notifications
   "notifications.subtitle": "What agents thought deserved your attention. Your ratings help them learn what matters.",

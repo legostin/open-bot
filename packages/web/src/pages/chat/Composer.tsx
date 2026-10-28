@@ -1,11 +1,12 @@
 // Message composer: Enter = send, Shift+Enter = newline (on the phone Return is a newline, the button sends), /command
-// autocomplete, @member autocomplete in group chats, files from the paperclip, the clipboard or a drop on the chat
+// autocomplete, @member autocomplete (group members; teammates in an agent's dialog), files from the paperclip, the clipboard or a drop on the chat
 // (uploaded at once, sent with the message), Stop while streaming (in a group: while members answer).
 // Inside the iOS app an empty field shows a hold-to-talk mic (the app's on-device dictation).
 // Plugins may wrap/replace it (chat.composer) and add buttons (chat.composerActions).
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { ArrowUp, Mic, Paperclip, Square, UsersRound } from "lucide-react";
+import type { AgentDef } from "@owlbot/shared";
 import { api, errorText } from "../../lib/api";
 import { mobileMode } from "../../lib/mobile";
 import { native, nativeErrorText, type NativeBridge } from "../../lib/native";
@@ -14,7 +15,7 @@ import { applyMention, filterMentions, mentionQuery, type MentionOption } from "
 import { canSend, readyPaths } from "../../lib/attachments";
 import { isStreaming } from "../../lib/messages";
 import { useStore } from "../../lib/store";
-import { agents, conversations, groups, interrupt, sendMessage, useConversationMessages, useSelector } from "../../state/app";
+import { agents, conversations, ensureAgents, groups, interrupt, sendMessage, useConversationMessages, useSelector } from "../../state/app";
 import { toast } from "../../state/toast";
 import { addFiles, removeFiles, usePendingFiles } from "../../state/attachments";
 import { AttachmentChips } from "./AttachmentChips";
@@ -66,12 +67,24 @@ export function useSend(conversationId: string) {
   );
 }
 
-/** A group chat's members for @mentions (none in other conversations). */
-function useMentionable(conversationId: string) {
+/**
+ * Who @mentions offer: a group chat's members; in an agent's dialog its teammates (the agent writes to the one the user
+ * names); nobody elsewhere.
+ */
+function useMentionable(conversationId: string): { members: Array<{ id: string; name: string; avatar?: AgentDef["avatar"] }>; group: boolean } {
   const meta = useSelector(conversations, (list) => list.find((c) => c.id === conversationId));
   const agentList = useStore(agents);
-  const members = meta?.kind === "group" ? meta.members : undefined;
-  return useMemo(() => (members ?? []).map((id) => agentList?.find((a) => a.id === id) ?? { id, name: id, avatar: undefined }), [members, agentList]);
+  const kind = meta?.kind;
+  const members = kind === "group" ? meta?.members : undefined;
+  const own = kind === "main" ? meta?.agentId : undefined;
+  useEffect(() => {
+    if (kind === "main") ensureAgents();
+  }, [kind]);
+  return useMemo(() => {
+    if (kind === "group") return { members: (members ?? []).map((id) => agentList?.find((a) => a.id === id) ?? { id, name: id, avatar: undefined }), group: true };
+    if (kind === "main") return { members: (agentList ?? []).filter((a) => a.id !== own), group: false };
+    return { members: [], group: false };
+  }, [kind, members, own, agentList]);
 }
 
 /** A press shorter than this with no words is a tap: say how the mic works. */
@@ -177,8 +190,7 @@ function MicButton({
 
 export function DefaultComposer({ conversationId }: { conversationId: string }) {
   const conv = useConversationMessages(conversationId);
-  const mentionable = useMentionable(conversationId);
-  const isGroup = mentionable.length > 0;
+  const { members: mentionable, group: isGroup } = useMentionable(conversationId);
   // Between two members' answers no message streams, but the round goes on.
   const groupRunning = useSelector(groups, (list) => !!list?.find((g) => g.conversationId === conversationId)?.running);
   const streaming = isStreaming(conv.messages) || groupRunning;
@@ -222,8 +234,9 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
     if (query !== null) void loadCommands().then(setCommands);
   }, [query !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   const suggestions = query !== null && !dismissed ? filterCommands(commands, query) : [];
-  const mention = isGroup ? mentionQuery(text, caret) : null;
-  const mentions = mention && !dismissed ? filterMentions(mentionable, mention.query, 8, t("composer.everyoneMention")) : [];
+  const mention = mentionable.length ? mentionQuery(text, caret) : null;
+  // "@all" is for groups; in a dialog a mention names the teammate to ask.
+  const mentions = mention && !dismissed ? filterMentions(mentionable, mention.query, 8, isGroup ? t("composer.everyoneMention") : null) : [];
   // One list at a time: "/command" only at the very start, "@member" anywhere.
   const options = suggestions.length || mentions.length;
   const active = Math.min(sel, Math.max(0, options - 1));
