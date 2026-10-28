@@ -5,17 +5,11 @@ import { Check, Laptop, Link2, Pencil, Trash2, X } from "lucide-react";
 import type { Machine } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";
-import { pairLink } from "../lib/desktop";
 import { hubEvents } from "../state/app";
 import { toast } from "../state/toast";
 import { t, tRich } from "../i18n";
-import { Badge, Button, CodeLine, EmptyState, ErrorNote, Field, IconButton, Input, Loading, Modal, Page } from "../components/ui";
-
-interface Pairing {
-  code: string;
-  expiresAt: string;
-  hubUrl: string;
-}
+import { Badge, Button, EmptyState, ErrorNote, IconButton, Input, Loading, Modal, Page } from "../components/ui";
+import { InviteBlock } from "../components/Invite";
 
 export function MachinesPage() {
   const [list, setList] = useState<Machine[] | null>(null);
@@ -181,107 +175,11 @@ function MachineCard({ m, onChanged, onRevoke }: { m: Machine; onChanged: () => 
   );
 }
 
+/** Connecting a computer: one link, forwarded to it or opened there (components/Invite.tsx). */
 function PairModal({ onClose }: { onClose: () => void }) {
-  const [name, setName] = useState("");
-  const [pairing, setPairing] = useState<Pairing | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    if (!pairing) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [pairing]);
-
-  useEffect(
-    () =>
-      hubEvents.on((e) => {
-        if (e.type === "machine.updated" && pairing && e.data?.name) {
-          toast(t("machines.paired", { name: e.data.name }), "success");
-          onClose();
-        }
-      }),
-    [pairing, onClose],
-  );
-
-  const create = async () => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      setPairing(await api.post<Pairing>("/api/machines/pairing-code", name.trim() ? { name: name.trim() } : {}));
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const left = pairing ? Math.max(0, Math.floor((Date.parse(pairing.expiresAt) - now) / 1000)) : 0;
-  const expired = !!pairing && left === 0;
-
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={t("machines.pair")}
-      footer={
-        pairing ? (
-          <>
-            {expired && (
-              <Button onClick={() => void create()} loading={busy}>
-                {t("machines.newCode")}
-              </Button>
-            )}
-            <Button variant="primary" onClick={onClose}>
-              {t("common.done")}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button onClick={onClose}>{t("common.cancel")}</Button>
-            <Button variant="primary" onClick={() => void create()} loading={busy}>
-              {t("machines.getCode")}
-            </Button>
-          </>
-        )
-      }
-    >
-      {!pairing ? (
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-muted">{t("machines.intro")}</p>
-          <Field label={t("machines.name")} hint={t("machines.nameHint")}>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("machines.namePlaceholder")} maxLength={60} autoFocus />
-          </Field>
-          {error && <ErrorNote>{error}</ErrorNote>}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div>
-            <div className="mb-1.5 text-sm font-medium">{t("machines.step1")}</div>
-            <CodeLine>{`npx owlbot-node pair ${pairing.hubUrl} ${pairing.code}`}</CodeLine>
-          </div>
-          <div>
-            <div className="mb-1.5 text-sm font-medium">{t("machines.step2")}</div>
-            <CodeLine>npx owlbot-node run</CodeLine>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-            <span className="text-muted">{t("machines.orApp")}</span>
-            <a className="font-medium text-accent-text underline decoration-border underline-offset-2 hover:decoration-current" href={pairLink(pairing.hubUrl, pairing.code)}>
-              {t("machines.openInApp")}
-            </a>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            {t("machines.code")} <span className="font-mono text-base font-semibold tracking-widest">{pairing.code}</span>
-            {expired ? (
-              <Badge tone="danger">{t("machines.expired")}</Badge>
-            ) : (
-              <Badge tone="info">{t("machines.validFor", { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` })}</Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted">{t("machines.otherNetwork")}</p>
-        </div>
-      )}
+    <Modal open onClose={onClose} title={t("machines.pair")}>
+      <InviteBlock onJoined={onClose} onClose={onClose} />
     </Modal>
   );
 }

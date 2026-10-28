@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { desktopApp, desktopTicketFrom, pairLink } from "./desktop";
+import { desktopApp, desktopTicketFrom, onAnotherComputer, pairLink } from "./desktop";
 
 describe("desktop app links", () => {
   it("reads a sign-in ticket from the address fragment", () => {
@@ -20,5 +20,15 @@ describe("desktop app links", () => {
     expect(desktopApp({ owlbotDesktop: { scheme: "owlbot", test: false } })).toEqual({ scheme: "owlbot", test: false });
     expect(desktopApp({ owlbotDesktop: { scheme: "owlbot-test", test: true } })).toEqual({ scheme: "owlbot-test", test: true });
     expect(desktopApp({ owlbotDesktop: { scheme: "javascript" } })).toBeUndefined();
+  });
+
+  it("offers to connect the computer the web UI is open on, unless it is the hub's own or a phone", () => {
+    const mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15";
+    expect(onAnotherComputer("owlbot.tail1234.ts.net", mac, {})).toBe(true);
+    expect(onAnotherComputer("192.168.1.2", mac, {})).toBe(true);
+    expect(onAnotherComputer("localhost", mac, {})).toBe(false);
+    expect(onAnotherComputer("127.0.0.1", mac, {})).toBe(false);
+    expect(onAnotherComputer("owlbot.tail1234.ts.net", "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)", {})).toBe(false);
+    expect(onAnotherComputer("owlbot.tail1234.ts.net", mac, { owlbotDesktop: { scheme: "owlbot" } })).toBe(false);
   });
 });

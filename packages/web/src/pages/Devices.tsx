@@ -10,7 +10,8 @@ import { toast } from "../state/toast";
 import { useRemote } from "../state/remote";
 import { openPanel } from "../state/panel";
 import { t } from "../i18n";
-import { PairingBlock, PhoneAccess, useDevices } from "../components/DevicePairing";
+import { PhoneAccess, useDevices } from "../components/DevicePairing";
+import { InviteBlock } from "../components/Invite";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Loading, Modal, Page } from "../components/ui";
 
 export function DevicesPage() {
@@ -66,7 +67,7 @@ export function DevicesPage() {
         {pairOpen && canPair && (
           <section className="animate-in rounded-2xl border border-accent/25 bg-surface p-4 shadow-card">
             <div className="mb-3 font-semibold">{t("devices.connect")}</div>
-            <PairingBlock devices={devices} onPaired={closePairing} onClose={closePairing} />
+            <InviteBlock onJoined={closePairing} onClose={closePairing} />
           </section>
         )}
         {devices && (
