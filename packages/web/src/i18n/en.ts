@@ -41,6 +41,7 @@ export default {
   // the iOS app's chat page (/m/*)
   "mobile.noChat": "No chat to show",
   "mobile.noChatHint": "Open a chat from the app.",
+  "mobile.computerOnly": "This page is in the web UI on the computer.",
   "link.openFailed": "Could not open the link: {error}",
 
   // navigation and header

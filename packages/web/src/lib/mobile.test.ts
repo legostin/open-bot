@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMobilePath, mobileConversationId, trackVisualViewport } from "./mobile";
+import { chatLinkPath, isMobilePath, mobileConversationId, trackVisualViewport } from "./mobile";
 
 describe("mobile mode", () => {
   it("is the /m/ pages only", () => {
@@ -20,6 +20,21 @@ describe("mobile mode", () => {
     expect(mobileConversationId("/m/chat/c1/extra")).toBeUndefined();
     expect(mobileConversationId("/m/chat/%E0%A4%A")).toBeUndefined();
     expect(mobileConversationId("/chat/c1")).toBeUndefined();
+  });
+
+  it("knows the links to other chats, which the app opens itself", () => {
+    const base = "https://192.168.1.5:41782/m/chat/c1";
+    expect(chatLinkPath("/agent/researcher", base)).toBe("/agent/researcher");
+    expect(chatLinkPath("/", base)).toBe("/");
+    expect(chatLinkPath("/chat/c_2", base)).toBe("/chat/c_2");
+    expect(chatLinkPath("/tasks/t_1", base)).toBe("/tasks/t_1");
+    expect(chatLinkPath("https://192.168.1.5:41782/agent/a?x=1#y", base)).toBe("/agent/a");
+    expect(chatLinkPath("https://example.com/agent/a", base)).toBeUndefined();
+    expect(chatLinkPath("/settings", base)).toBeUndefined();
+    expect(chatLinkPath("/api/files?path=a.png", base)).toBeUndefined();
+    expect(chatLinkPath("/m/chat/c2", base)).toBeUndefined();
+    expect(chatLinkPath("#top", base)).toBeUndefined();
+    expect(chatLinkPath("/agent/a/b", base)).toBeUndefined();
   });
 });
 

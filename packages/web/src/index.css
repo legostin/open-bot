@@ -424,7 +424,7 @@
  * The iOS app's chat page (/m/chat/:id in a WKWebView, html.owl-mobile). Unlayered, so these win over utilities;
  * nothing here applies to the desktop UI.
  */
-/* iOS system colors, monochrome like the app around the page: no seam under the native header. */
+/* iOS system backgrounds under the app's native header (no seam); the rest, the user's ink bubble included, is the web UI's. */
 html.owl-mobile {
   --bg: #ffffff;
   --surface: #ffffff;
@@ -437,7 +437,6 @@ html.owl-mobile {
   --accent-fg: #ffffff;
   --accent-soft: #f2f2f7;
   --accent-text: #1c1c1e;
-  --user-bubble: #f2f2f7;
   --code-bg: #f6f6f8;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 6px 20px rgb(0 0 0 / 0.06);
 }
@@ -455,7 +454,6 @@ html.owl-mobile {
     --accent-fg: #000000;
     --accent-soft: #2c2c2e;
     --accent-text: #f5f5f7;
-    --user-bubble: #262628;
     --code-bg: #141416;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
   }

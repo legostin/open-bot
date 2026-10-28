@@ -18,6 +18,25 @@ export function mobileConversationId(pathname: string): string | undefined {
   }
 }
 
+/** The web UI's pages that are a chat in the app too: the default agent's dialog, an agent's, a group chat, a task. */
+const CHAT_PAGES = [/^\/$/, /^\/agent\/[^/]+\/?$/, /^\/chat\/[^/]+\/?$/, /^\/tasks\/[^/]+\/?$/];
+
+/**
+ * The hub path of a link to another chat (`/`, `/agent/:id`, `/chat/:id` or `/tasks/:id` in the web UI), which the
+ * app opens as its own chat screen; undefined for any other link.
+ */
+export function chatLinkPath(href: string, base: string): string | undefined {
+  let url: URL;
+  try {
+    const from = new URL(base);
+    url = new URL(href, from);
+    if (url.origin !== from.origin) return undefined;
+  } catch {
+    return undefined;
+  }
+  return CHAT_PAGES.some((page) => page.test(url.pathname)) ? url.pathname : undefined;
+}
+
 /** Decided once per page load: the app opens /m/* pages directly. */
 export const mobileMode = typeof window !== "undefined" && isMobilePath(window.location.pathname);
 
