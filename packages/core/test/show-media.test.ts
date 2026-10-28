@@ -1,12 +1,15 @@
 // End-to-end: an agent shows images and a map (core tools show_images / show_map), the web UI gets them as message
-// parts, the channels get them as media, and the hub serves them through its own authenticated routes.
+// parts, the channels get them as media, and the hub serves them through its own authenticated routes. Routes go to a
+// stand-in OSRM server (OWLBOT_ROUTER_URL).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { createServer as createHttpServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hub, loadConfig } from "../src/index.ts";
+import { simplify } from "../src/routing.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489", "hex");
@@ -71,10 +74,34 @@ describe("agents show images and maps", () => {
     }, `reply to ${tool}`);
   };
 
+  /** The stand-in router: what it was asked, and whether it is down. */
+  const asked: string[] = [];
+  let routerDown = false;
+  let router: Server;
+
   beforeAll(async () => {
-    const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
+    const [port, consolePort, egressPort, routerPort] = [await freePort(), await freePort(), await freePort(), await freePort()];
+    router = createHttpServer((req, res) => {
+      asked.push(req.url ?? "");
+      if (routerDown) {
+        res.writeHead(503).end();
+        return;
+      }
+      // Each stop, and a bend half way between each pair: the line the hub stores.
+      const pts = /\/driving\/([^?]+)/.exec(req.url ?? "")![1].split(";").map((p) => p.split(",").map(Number));
+      const line = pts.flatMap((p, n) => (n ? [[(pts[n - 1][0] + p[0]) / 2 + 0.001, (pts[n - 1][1] + p[1]) / 2], p] : [p]));
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ code: "Ok", routes: [{ distance: 2412.4, duration: 1830.2, geometry: { type: "LineString", coordinates: line } }] }));
+    });
+    await new Promise<void>((r) => router.listen(routerPort, "127.0.0.1", r));
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      {
+        OWLBOT_PORT: String(port),
+        OWLBOT_DEVICES: "0",
+        OWLBOT_CONSOLE_PORT: String(consolePort),
+        OWLBOT_EGRESS_PORT: String(egressPort),
+        OWLBOT_ROUTER_URL: `http://127.0.0.1:${routerPort}`,
+        TZ: "UTC",
+      },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-media-hub-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
@@ -96,6 +123,7 @@ describe("agents show images and maps", () => {
 
   afterAll(async () => {
     await hub?.stop();
+    router?.close();
   });
 
   it("show_images adds a carousel to the reply and sends it to the channels", async () => {
@@ -177,6 +205,67 @@ describe("agents show images and maps", () => {
     expect(bad.output).toMatch(/lat must be a number from -90 to 90/);
     const zoom = (await call("show_map", { lat: 1, lon: 2, zoom: 25 })).parts.find((p: any) => p.type === "tool_result");
     expect(zoom.output).toMatch(/zoom must be a number from 1 to 19/);
+  });
+
+  it("show_map draws places with symbols and a route along roads, with its length and time", async () => {
+    asked.length = 0;
+    const reply = await call("show_map", {
+      title: "Evening walk",
+      markers: [
+        { lat: 43.2567, lon: 76.9286, label: "Hotel Kazakhstan", icon: "hotel", note: "Dostyk Ave 52" },
+        { lat: 43.2389, lon: 76.9455, label: "Kok-Tobe", icon: "sight" },
+        { lat: 43.25, lon: 76.95, label: "Coffee", icon: "cafe" },
+      ],
+      route: { mode: "walk", stops: [0, 2, 1] },
+    });
+    const map = reply.parts.find((p: any) => p.type === "map");
+    expect(map).toMatchObject({ title: "Evening walk", lat: 43.2478, lon: 76.9393, route: { mode: "walk", stops: [0, 2, 1], distanceM: 2412, durationS: 1830 } });
+    expect(map.markers[0]).toEqual({ lat: 43.2567, lon: 76.9286, label: "Hotel Kazakhstan", note: "Dostyk Ave 52", icon: "hotel" });
+    // Asked for the foot profile, lon,lat in stop order; the line has the bends between the stops, as [lat, lon].
+    expect(asked).toEqual(["/routed-foot/route/v1/driving/76.9286,43.2567;76.95,43.25;76.9455,43.2389?overview=full&geometries=geojson"]);
+    expect(map.route.path).toHaveLength(5);
+    expect(map.route.path[0]).toEqual([43.2567, 76.9286]);
+    expect(reply.parts.find((p: any) => p.type === "tool_result").output).toMatch(/Route: 2\.4 km, about 31 min\.$/);
+  });
+
+  it("show_map draws transit, and a route the router could not find, straight between the stops", async () => {
+    asked.length = 0;
+    const markers = [
+      { lat: 1, lon: 2 },
+      { lat: 3, lon: 4 },
+    ];
+    const transit = (await call("show_map", { markers, route: { mode: "transit" } })).parts.find((p: any) => p.type === "map");
+    expect(transit.route).toEqual({ mode: "transit", stops: [0, 1], path: [[1, 2], [3, 4]] });
+    expect(asked).toEqual([]);
+
+    routerDown = true;
+    try {
+      const r = await call("show_map", { markers, route: { mode: "drive" } });
+      expect(r.parts.find((p: any) => p.type === "map").route).toEqual({ mode: "drive", stops: [0, 1], path: [[1, 2], [3, 4]] });
+      expect(r.parts.find((p: any) => p.type === "tool_result").output).toMatch(/No road route \(the router answered 503\): the line is straight between the stops\.$/);
+    } finally {
+      routerDown = false;
+    }
+    for (const [args, why] of [
+      [{ markers, route: { mode: "fly" } }, /route\.mode must be walk, drive, bike or transit/],
+      [{ markers, route: { mode: "walk", stops: [0, 5] } }, /route\.stops are marker indexes from 0 to 1/],
+      [{ markers: [markers[0]], route: { mode: "walk" } }, /at least two markers/],
+      [{ markers: [{ lat: 1, lon: 2, icon: "dragon" }] }, /markers\[0\]\.icon must be one of: pin, food/],
+      [{ title: "nowhere" }, /Give lat and lon, or markers/],
+    ] as const) {
+      const out = (await call("show_map", args)).parts.find((p: any) => p.type === "tool_result");
+      expect(out.isError, JSON.stringify(args)).toBe(true);
+      expect(out.output).toMatch(why);
+    }
+  });
+
+  it("keeps a long route line short enough for a message, ends included", () => {
+    const wiggly = Array.from({ length: 5000 }, (_, n) => [43 + n * 0.0001, 76 + Math.sin(n / 3) * 0.0005] as [number, number]);
+    const short = simplify(wiggly, 400);
+    expect(short.length).toBeLessThanOrEqual(400);
+    expect(short.length).toBeGreaterThan(50);
+    expect(short[0]).toEqual(wiggly[0]);
+    expect(short.at(-1)).toEqual(wiggly.at(-1));
   });
 
   it("serves proxied images and map tiles to the signed-in UI, with checks", async () => {

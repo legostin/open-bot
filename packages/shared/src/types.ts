@@ -206,13 +206,36 @@ export type MessagePart =
   | { type: "integration"; id: string }
   /** Pictures the agent shows (show_images): one item is a single image, two or more a carousel. */
   | { type: "images"; items: ImageItem[] }
-  /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers. */
-  | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[] }
+  /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers and the route. */
+  | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[]; route?: MapRoute }
   /**
    * A task the agent started (task_delegate): one line with its live status that opens the task. A message to a
    * teammate (team_message) carries what the agent wrote (`text`) and, once it came, the teammate's answer (`reply`).
    */
-  | { type: "task"; taskId: string; text?: string; reply?: string };
+  | { type: "task"; taskId: string; text?: string; reply?: string }
+  /** The user's message this reply answers, when the dialog moved on since (a task's result for the request that started it). */
+  | { type: "reply_to"; messageId: string; text: string }
+  /** News the agent shows (show_news): cards from a channel's posts or found by the agent; `feedId` links the channel. */
+  | { type: "news"; title?: string; feedId?: string; items: NewsItem[] }
+  /**
+   * Quick replies under the agent's message (show_choices): a tap sends the option's text as the person's message;
+   * `chosen` is the one they tapped, after which the buttons rest.
+   */
+  | { type: "choices"; options: string[]; chosen?: number }
+  /** A channel's live card in the chat: its state and buttons (open, gather now, how often, pause, delete). */
+  | { type: "feed"; feedId: string };
+
+/** One card of a `news` part. */
+export interface NewsItem {
+  title: string;
+  text?: string;
+  url?: string;
+  source?: string;
+  /** An http(s) picture, shown through the hub's image proxy. */
+  image?: string;
+  /** When it came out (or was posted in the channel). */
+  at?: ISODate;
+}
 
 /** What a sent file is: a voice note and a photo are told apart from an audio file or a document by the channel. */
 export type AttachmentKind = "photo" | "voice" | "audio" | "video" | "file";
@@ -228,6 +251,47 @@ export interface MapMarker {
   lat: number;
   lon: number;
   label?: string;
+  /** A line under the label: an address, opening hours, why it is there. */
+  note?: string;
+  /** What the place is: the marker's symbol (default "pin"; a route's stops without one are numbered). */
+  icon?: MapIcon;
+}
+
+/** Marker symbols (show_map; MAP_ICONS lists them). "user" is where the user is; "start" and "finish" end a route. */
+export type MapIcon =
+  | "pin"
+  | "food"
+  | "cafe"
+  | "bar"
+  | "hotel"
+  | "sight"
+  | "museum"
+  | "park"
+  | "shop"
+  | "transport"
+  | "parking"
+  | "fuel"
+  | "hospital"
+  | "home"
+  | "work"
+  | "photo"
+  | "star"
+  | "start"
+  | "finish"
+  | "user";
+
+export type RouteMode = "walk" | "drive" | "bike" | "transit";
+
+/** A route over a map's markers. */
+export interface MapRoute {
+  mode: RouteMode;
+  /** The markers it goes through, in order, by index (at least two). */
+  stops: number[];
+  /** The line, [lat, lon] pairs: along roads and paths when the hub found it, otherwise straight between the stops. */
+  path: Array<[number, number]>;
+  /** Length in metres and time in seconds, for a route along roads. */
+  distanceM?: number;
+  durationS?: number;
 }
 
 export interface Message {
@@ -329,8 +393,57 @@ export interface Task {
   from?: string;
   /** Started or messaged from a session that had read outside content: its sessions are marked the same way. */
   tainted?: boolean;
+  /** A channel's gathering run (Feed): it works in the channel's own folder, and its output is the channel's posts. */
+  feedId?: string;
   createdAt: ISODate;
   updatedAt: ISODate;
+}
+
+// ---------- Channels (feeds) ----------
+
+/**
+ * A channel: news on a topic the user described, which an agent of the team (its editor) gathers at set times from
+ * whatever fits (RSS, the web, a browser, its own scripts, plugins) and posts like a channel in a messenger. The code
+ * calls it a feed: "channels" there are where messages travel (Telegram).
+ */
+export interface Feed {
+  id: string;
+  title: string;
+  /** What the user wants from it, in their words. */
+  brief: string;
+  /** The agent who edits it. */
+  agentId: string;
+  /** When it is gathered: local "HH:MM" times in the user's time zone. */
+  times: string[];
+  /** The days it is gathered, 0 = Sunday … 6 = Saturday; empty: every day. */
+  weekdays: number[];
+  /** What the editor reads, one line each as it noted them ("rss https://…", "search …", "script digest.py"). */
+  sources: string[];
+  enabled: boolean;
+  /** The editor is gathering now: its run's task. */
+  runningTaskId?: string;
+  lastRunAt?: ISODate;
+  nextRunAt?: ISODate;
+  /** Posts the user has not seen yet, and the newest post. */
+  unread: number;
+  lastPost?: { title: string; createdAt: ISODate };
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
+/** One news item in a channel. */
+export interface FeedPost {
+  id: string;
+  feedId: string;
+  title: string;
+  /** A few lines on what matters (markdown). */
+  text: string;
+  url?: string;
+  /** Where it comes from: a site's or a feed's name. */
+  source?: string;
+  /** A picture for it: an http(s) address, shown through the hub's image proxy. */
+  image?: string;
+  createdAt: ISODate;
 }
 
 // ---------- Agents ----------
@@ -720,6 +833,9 @@ export type UiEvent =
   | { type: "conversation.updated"; data: Conversation }
   | { type: "team.updated"; data: TeamMember }
   | { type: "group.updated"; data: GroupChat }
+  | { type: "feed.updated"; data: Feed }
+  | { type: "feed.deleted"; data: { id: string } }
+  | { type: "feed.post"; data: FeedPost }
   | { type: "task.updated"; data: Task }
   | { type: "notification.created"; data: Notification }
   | { type: "approval.pending"; data: { count: number } }

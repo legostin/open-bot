@@ -6,6 +6,8 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
     testTimeout: 20000,
     pool: "forks",
+    // Every temp file of the run, spawned processes' included, lands in one folder that is deleted at the end.
+    globalSetup: ["packages/testkit/src/temp-dir.ts"],
     // Messages are asserted in English; a developer's own LANG must not change them.
     env: { OWLBOT_LANG: "en" },
   },

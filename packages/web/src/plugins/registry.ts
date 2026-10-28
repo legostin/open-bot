@@ -3,7 +3,7 @@
 
 import type { ComponentType } from "react";
 import type { Message } from "@owlbot/shared";
-import type { LiveViewContribution, LiveViewHandle, LiveViewProps, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
+import type { LiveViewContribution, LiveViewHandle, LiveViewProps, MapAppContribution, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
 import { createStore } from "../lib/store";
 import { globSpecificity, matchesGlob } from "../lib/glob";
 import { applyActivity, IDLE_VIEW, type LiveViewState } from "./liveview";
@@ -59,6 +59,11 @@ export interface LiveViewEntry extends LiveViewState {
   component: ComponentType<LiveViewProps>;
 }
 
+export interface MapAppEntry extends MapAppContribution {
+  pluginId: string;
+  key: string;
+}
+
 export interface RegistryState {
   contributions: Contribution[];
   routes: RouteEntry[];
@@ -66,9 +71,10 @@ export interface RegistryState {
   commands: CommandEntry[];
   settings: SettingsEntry[];
   liveViews: LiveViewEntry[];
+  mapApps: MapAppEntry[];
 }
 
-export const registry = createStore<RegistryState>({ contributions: [], routes: [], statusbar: [], commands: [], settings: [], liveViews: [] });
+export const registry = createStore<RegistryState>({ contributions: [], routes: [], statusbar: [], commands: [], settings: [], liveViews: [], mapApps: [] });
 
 let seq = 0;
 function nextKey(pluginId: string): { key: string; seq: number } {
@@ -124,6 +130,11 @@ export function addLiveView(pluginId: string, c: LiveViewContribution): LiveView
   };
 }
 
+export function addMapApp(pluginId: string, a: MapAppContribution): () => void {
+  if (!a || typeof a.place !== "function") throw new Error("maps.addApp: place() is required");
+  return addTo("mapApps", { ...a, pluginId, key: nextKey(pluginId).key });
+}
+
 /** Drop everything a plugin registered (on unload / disable). */
 export function removePlugin(pluginId: string): void {
   registry.set((s) => ({
@@ -133,6 +144,7 @@ export function removePlugin(pluginId: string): void {
     commands: s.commands.filter((x) => x.pluginId !== pluginId),
     settings: s.settings.filter((x) => x.pluginId !== pluginId),
     liveViews: s.liveViews.filter((x) => x.pluginId !== pluginId),
+    mapApps: s.mapApps.filter((x) => x.pluginId !== pluginId),
   }));
 }
 

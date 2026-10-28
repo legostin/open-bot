@@ -2,7 +2,7 @@
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
 import { memo, useState } from "react";
-import { Bell, Check, CircleAlert, ExternalLink, FileText, Mic, ShieldAlert, X } from "lucide-react";
+import { Bell, Check, CircleAlert, CornerUpLeft, ExternalLink, FileText, Mic, ShieldAlert, X } from "lucide-react";
 import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
 import { fileSize, formatDuration, formatTime, notifyLevel } from "../../lib/format";
@@ -24,6 +24,8 @@ import { BrainSetupCard } from "../../components/BrainSetupCard";
 import { IntegrationChatCard } from "../../components/IntegrationCard";
 import { ImagesCard } from "./ImagesCard";
 import { MapCard } from "./MapCard";
+import { NewsCard } from "./NewsCard";
+import { Choices, FeedCard } from "./ChatButtons";
 import { TaskLine } from "./TaskLine";
 import { ConnectDeviceCard } from "./ConnectDeviceCard";
 import { t, type MessageKey } from "../../i18n";
@@ -170,6 +172,29 @@ function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" 
   );
 }
 
+/** The person's message this reply answers (a task's report after the talk moved on): a click scrolls to it. */
+function ReplyQuote({ part }: { part: Extract<MessagePart, { type: "reply_to" }> }) {
+  const jump = () => {
+    const el = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(part.messageId)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.remove("reply-flash");
+    void el.offsetWidth;
+    el.classList.add("reply-flash");
+  };
+  return (
+    <button
+      type="button"
+      onClick={jump}
+      title={t("message.replyTo")}
+      className="mb-1 flex max-w-full items-center gap-1.5 rounded-lg border-l-2 border-accent bg-surface-2 py-1 pr-2.5 pl-2 text-left text-[13px] text-muted transition hover:text-fg"
+    >
+      <CornerUpLeft className="size-3.5 shrink-0" />
+      <span className="min-w-0 truncate">{part.text}</span>
+    </button>
+  );
+}
+
 function TypingDots() {
   return (
     <span className="inline-flex items-center gap-1 py-2" aria-label={t("message.typing")}>
@@ -252,6 +277,14 @@ function Parts({ message }: { message: Message }) {
             return <ConnectDeviceCard key={it.key} />;
           case "task":
             return <TaskLine key={it.key} taskId={p.taskId} text={p.text} reply={p.reply} from={message.agentId} />;
+          case "reply_to":
+            return <ReplyQuote key={it.key} part={p} />;
+          case "news":
+            return <NewsCard key={it.key} part={p} />;
+          case "choices":
+            return <Choices key={it.key} part={p} messageId={message.id} />;
+          case "feed":
+            return <FeedCard key={it.key} feedId={p.feedId} />;
           default:
             return null;
         }
@@ -272,11 +305,11 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName,
   const details = useStore(showDetails);
   const name = agentName ?? agent?.name ?? message.agentId ?? t("message.assistant");
   // A finished message with nothing for the person (only tool calls, or a note for the model) is not shown at all.
-  if (message.status !== "streaming" && !message.parts.some((p) => partShown(p, message.role, details))) return null;
+  if (message.status !== "streaming" && !message.parts.some((p) => p.type !== "reply_to" && partShown(p, message.role, details))) return null;
   // A teammate writing in a thread is a user-role message with its agent: it reads as that agent's message.
   if (message.role === "user" && !message.agentId) {
     return (
-      <div className="animate-in flex justify-end">
+      <div className="animate-in flex justify-end" data-message-id={message.id}>
         <div className="max-w-[88%] rounded-2xl rounded-br-md bg-user-bubble px-3.5 py-2 text-user-bubble-fg text-[15px] leading-relaxed sm:max-w-[75%]">
           <Parts message={message} />
           <div className="mt-0.5 text-right text-[11px] text-muted">
@@ -289,13 +322,13 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName,
   }
   if (message.role === "system") {
     return (
-      <div className="animate-in mx-auto w-full max-w-[640px] text-sm">
+      <div className="animate-in mx-auto w-full max-w-[640px] text-sm" data-message-id={message.id}>
         <Parts message={message} />
       </div>
     );
   }
   return (
-    <div className="animate-in flex gap-2.5">
+    <div className="animate-in flex gap-2.5" data-message-id={message.id}>
       <AgentAvatar avatar={agent?.avatar} id={message.agentId} name={name} size={28} className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-muted">

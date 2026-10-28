@@ -27,7 +27,9 @@ import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
 import { MAX_IMAGE_BYTES, readWorkspaceImage } from "./media.ts";
-import { TurnClock } from "./clock.ts";
+import { clockTime, TurnClock } from "./clock.ts";
+import { busy, situation, TASK_STATE } from "./situation.ts";
+import type { UserLocations } from "./user-location.ts";
 import { attachmentNote, forSession, isSpeech, SPEECH_NOT_SET_UP, type AttachmentPart, type SessionFile } from "./attachments.ts";
 import { MAX_AUTO_TRANSCRIBE_SEC, type Transcriber } from "./transcribe.ts";
 import { firstSpeakers, groupTurn, groupTurnText, handOff, MAX_HANDOFFS, USER_LABEL } from "./group-chat.ts";
@@ -56,6 +58,8 @@ export interface RunnerDeps {
   machines?: () => Machine[];
   /** Turns in progress by machine, for the machines block (set by the hub). */
   activity?: MachineActivityFeed;
+  /** Where the user is, when their phone shares it. */
+  locations?: UserLocations;
   secrets: SecretIntake;
   /** First-run setup (set by the hub): keeps messages written while no brain works and adds the prompt section. */
   setup?: {
@@ -85,6 +89,17 @@ interface TurnOpts {
   group?: { triggerId?: string; floorNote?: string };
   /** The input carries outside content (a tainted task's result, a tainted teammate's message): mark the session first. */
   taint?: boolean;
+  /** The user's message the reply answers (shown above it): a task's report when the dialog moved on since the request. */
+  replyTo?: { messageId: string; text: string };
+}
+
+/** User messages waiting for the conversation's next turn. */
+interface Pending {
+  messageId: string;
+  prompt: string;
+  attachments: AttachmentPart[];
+  replyChannel?: string;
+  quote?: string;
 }
 
 /** Who writes to a teammate (team_message): the agent, where it writes from, and whether it may start a nested thread. */
@@ -150,8 +165,14 @@ export class SessionRunner {
   private activeTurns = new Map<string, ActiveTurn>();
   private runningTasks = new Set<string>();
   private brainLoad = new Map<string, number>();
+  /** Turns waiting for a busy brain: woken when any brain's turn ends. */
+  private freed = new Set<() => void>();
+  /** By conversation: user messages written while a turn runs, which reach the agent together as its next turn. */
+  private pending = new Map<string, Pending[]>();
   /** When each live session last got the current time (clock.ts). */
   private clock = new TurnClock();
+  /** The `[You now]` block each live session saw last (situation.ts). */
+  private seen = new Map<string, string>();
   private timer?: NodeJS.Timeout;
   private kickoff?: NodeJS.Timeout;
   private streamingMessage = new Map<string, string>(); // conversationId -> messageId
@@ -204,6 +225,7 @@ export class SessionRunner {
     this.live.delete(id);
     this.d.egress.revokeOwner(`brain:${id}`);
     this.clock.forget(id);
+    this.seen.delete(id);
     await l?.handle.close().catch(() => {});
   }
 
@@ -252,10 +274,10 @@ export class SessionRunner {
     // first). A brain that cannot take it, or a turn that ended meanwhile, gets it as the next turn.
     if (this.activeTurns.has(conversationId)) {
       void (async () => {
-        const files = attachments.length ? await this.transcribeParts(msg.id, attachments) : {};
+        const files: Pick<TurnOpts, "attachments" | "speech"> = attachments.length ? await this.transcribeParts(msg.id, attachments) : {};
         if (await this.steerInto(conversationId, prompt, { ...reply, ...files })) return;
         if (task) await this.wakeTask(task, prompt, { ...reply, ...files });
-        else void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { ...reply, ...files }));
+        else this.queueUserTurn(conv, { messageId: msg.id, prompt, attachments: files.attachments ?? [], ...reply });
       })();
       return msg;
     }
@@ -264,9 +286,40 @@ export class SessionRunner {
       void (async () => this.wakeTask(task, prompt, { ...reply, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}) }))();
       return msg;
     }
-    // Voice notes become words first, in the queue: the turn waits for them, later messages wait for the turn.
-    void this.enqueue(conversationId, async () => this.runTurn(conv, prompt, { ...reply, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}) }));
+    this.queueUserTurn(conv, { messageId: msg.id, prompt, attachments, ...reply });
     return msg;
+  }
+
+  /**
+   * A user message for the conversation's next turn. Messages written in a row while a turn runs (or before the next
+   * one starts) reach the agent together, as one turn: people clarify in several short messages. Voice notes become
+   * words first, in the queue: the turn waits for them, later messages wait for the turn.
+   */
+  private queueUserTurn(conv: Conversation, item: Pending): void {
+    const waiting = this.pending.get(conv.id);
+    if (waiting) {
+      waiting.push(item);
+      return;
+    }
+    const batch = [item];
+    this.pending.set(conv.id, batch);
+    void this.enqueue(conv.id, async () => {
+      if (this.pending.get(conv.id) === batch) this.pending.delete(conv.id);
+      const attachments: AttachmentPart[] = [];
+      const speech: Record<string, string> = {};
+      for (const b of batch) {
+        if (!b.attachments.length) continue;
+        const files = await this.transcribeParts(b.messageId, b.attachments);
+        attachments.push(...files.attachments);
+        Object.assign(speech, files.speech);
+      }
+      const quote = batch.flatMap((b) => (b.quote ? [b.quote] : [])).join("\n");
+      return this.runTurn(conv, batch.map((b) => b.prompt).join("\n\n"), {
+        replyChannel: batch[0].replyChannel,
+        ...(quote ? { quote } : {}),
+        ...(attachments.length ? { attachments, speech } : {}),
+      });
+    });
   }
 
   /** More input for the turn running in the conversation: true when its brain took it (the reply goes on there). */
@@ -422,6 +475,21 @@ export class SessionRunner {
     else this.d.store.addMessage({ conversationId, role: "system", parts: [part], status: "complete" });
   }
 
+  /**
+   * The person tapped a quick reply: the buttons rest on that option, and its text is their next message (the same
+   * way as typed). A second tap does nothing.
+   */
+  async choose(messageId: string, index: number, channel: string): Promise<Message | undefined> {
+    const m = this.d.store.getMessage(messageId);
+    const at = m?.parts.findIndex((p) => p.type === "choices") ?? -1;
+    const part = at >= 0 ? (m!.parts[at] as Extract<MessagePart, { type: "choices" }>) : undefined;
+    if (!m || !part || part.chosen !== undefined || !Number.isInteger(index) || !part.options[index]) return undefined;
+    const parts = m.parts.slice();
+    parts[at] = { ...part, chosen: index };
+    this.d.store.updateMessage(m.id, { parts });
+    return this.userMessage(m.conversationId, part.options[index], { channel });
+  }
+
   /** The user saved (or dismissed) a secret card after its tool call stopped waiting: tell the agent and let it go on. */
   private onSecretResolved(r: SecretRequest, how: { waited: boolean; viaMessage: boolean }): void {
     this.updateSecretPart(r);
@@ -508,6 +576,8 @@ export class SessionRunner {
     tainted?: boolean;
     /** A thread's sender: its opening message is theirs. */
     from?: string;
+    /** A channel's gathering run (feeds.ts). */
+    feedId?: string;
   }): Task {
     const task = this.d.store.createTask({ ...t, ...(t.tainted ? { tainted: true } : {}) });
     this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete", ...(t.from ? { agentId: t.from } : {}) });
@@ -708,7 +778,34 @@ export class SessionRunner {
     if (parent.kind !== "group" && (await this.steerInto(parent.id, note, taint))) return;
     // In a group chat, the member who wrote to the teammate hears the reply.
     const sender = parent.kind === "group" && task.kind === "message" ? { agentId: this.threadSender(task).id } : {};
-    void this.enqueue(parent.id, () => this.runTurn(parent, note, { ...taint, ...sender }));
+    void this.enqueue(parent.id, () => {
+      const asked = parent.kind === "group" ? undefined : this.askedFor(parent.id, task);
+      return this.runTurn(parent, note, { ...taint, ...sender, ...(asked ? { replyTo: asked } : {}) });
+    });
+  }
+
+  /** The user's message a task (or a message to a teammate) came from, if the user wrote more since: the report replies to it. */
+  private askedFor(conversationId: string, task: Task): { messageId: string; text: string } | undefined {
+    const msgs = this.d.store.listMessages(conversationId, { limit: 200 });
+    const at = msgs.findLastIndex((m) => m.parts.some((p) => p.type === "task" && p.taskId === task.id));
+    const fromUser = (m: Message) => m.role === "user" && !m.agentId;
+    const asked = at < 0 ? undefined : msgs.slice(0, at).findLast(fromUser);
+    if (!asked || !msgs.slice(at).some(fromUser)) return undefined;
+    const said = asked.parts.flatMap((p) => (p.type === "text" ? [p.text] : p.type === "attachment" ? [`📎 ${p.name}`] : [])).join(" ");
+    return { messageId: asked.id, text: truncate(said.replace(/\s+/g, " ").trim(), 200) };
+  }
+
+  /** For whoever started a task that waits in line for its agent's busy brain: who is busy with what. */
+  private queuedNote(task: Task): string {
+    const doing = this.d.store
+      .listTasks({ status: ["running"], limit: 200 })
+      .filter((t) => t.agentId === task.agentId && t.id !== task.id)
+      .map((t) => `“${t.title}”`);
+    const what = doing.length ? `working on ${doing.slice(0, 3).join(", ")}` : "in another conversation";
+    const who = this.agentLabel(task.agentId);
+    return task.kind === "message"
+      ? `[System] ${who} is busy right now (${what}): your message (thread ${task.id}) waits in line, and they will answer as soon as they are free.`
+      : `[System] Task ${task.id} “${task.title}” waits in line: ${who} is busy right now (${what}) and will start it as soon as they are free.`;
   }
 
   /** The task (or thread) was started or messaged with outside content, or read some itself. */
@@ -935,14 +1032,7 @@ export class SessionRunner {
   private openTasks(conversationId: string): string {
     const open = this.d.store.listTasks({ status: OPEN_TASK, limit: 200 }).filter((t) => t.parentConversationId === conversationId);
     if (!open.length) return "";
-    const state: Partial<Record<TaskStatus, string>> = {
-      queued: "waiting to start",
-      running: "working",
-      waiting_approval: "waiting for the user's approval",
-      waiting_input: "waiting for your answer",
-      paused: "paused until its brain's limit resets",
-      interrupted: "interrupted",
-    };
+    const state: Partial<Record<TaskStatus, string>> = { ...TASK_STATE, waiting_input: "waiting for your answer" };
     const lines = open.slice(0, 12).map((t) => {
       const a = this.d.agents.get(t.agentId);
       const asked = t.question ? `; asked you: ${truncate(t.question, 300)}` : "";
@@ -1023,7 +1113,13 @@ export class SessionRunner {
   // ---------- turns ----------
 
   workspacePath(s: { agentId: string; taskId?: string; conversationId: string }): string {
-    return join(this.d.config.dataDir, "workspaces", s.agentId, s.taskId ?? s.conversationId);
+    return join(this.d.config.dataDir, "workspaces", s.agentId, this.workspaceKey(s));
+  }
+
+  /** A session's folder under its agent's: the task's or the conversation's, a channel's own for every run of it. */
+  private workspaceKey(s: { taskId?: string; conversationId: string }): string {
+    const feedId = s.taskId ? this.d.store.getTask(s.taskId)?.feedId : undefined;
+    return feedId ? `feed-${feedId}` : (s.taskId ?? s.conversationId);
   }
 
   private limitedUntil(ref: string): string | undefined {
@@ -1046,11 +1142,13 @@ export class SessionRunner {
     this.d.settings.setKey(BRAINS_CHANGED_KEY, { ...at, [agentId]: nowIso() });
   }
 
-  private async candidates(agent: AgentDef, preferred?: string, only?: string[]): Promise<{ usable: string[]; earliestReset?: string; reasons: string[]; hard: number; setupOnly: boolean }> {
+  /** `queue`: a task's or thread's turn waits for a busy brain; the user's own conversations are never held up by tasks. */
+  private async candidates(agent: AgentDef, preferred?: string, only?: string[], queue = false): Promise<{ usable: string[]; earliestReset?: string; reasons: string[]; hard: number; busy: number; setupOnly: boolean }> {
     const ordered = only ?? (preferred ? [preferred, ...agent.brains.filter((b) => formatBrainRef(parseBrainRef(b)) !== formatBrainRef(parseBrainRef(preferred)))] : agent.brains);
     const usable: string[] = [];
     const reasons: string[] = [];
     let hard = 0;
+    let busy = 0;
     // Skips that setting up fixes (not connected, not installed, not signed in), as opposed to limits and load.
     let setup = 0;
     let earliestReset: string | undefined;
@@ -1067,7 +1165,8 @@ export class SessionRunner {
         if (!earliestReset || lim < earliestReset) earliestReset = lim;
         continue;
       }
-      if ((this.brainLoad.get(formatBrainRef(parseBrainRef(ref))) ?? 0) >= conc) {
+      if (queue && (this.brainLoad.get(formatBrainRef(parseBrainRef(ref))) ?? 0) >= conc) {
+        busy++;
         reasons.push(t("brain.reason.busy", { ref }));
         continue;
       }
@@ -1080,7 +1179,20 @@ export class SessionRunner {
       }
       usable.push(ref);
     }
-    return { usable, earliestReset, reasons, hard, setupOnly: ordered.length > 0 && setup === ordered.length };
+    return { usable, earliestReset, reasons, hard, busy, setupOnly: ordered.length > 0 && setup === ordered.length };
+  }
+
+  /** Resolves when a brain's turn ends, or after `ms`. */
+  private brainFreed(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.freed.delete(done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      this.freed.add(done);
+    });
   }
 
   /** One setup card per wait: none while the last one still has no answer after it. */
@@ -1118,7 +1230,7 @@ export class SessionRunner {
     }
 
     const local = ref.machineId === "local";
-    const workspace = local ? this.workspacePath(row) : `${agent.id}/${task?.id ?? conv.id}`;
+    const workspace = local ? this.workspacePath(row) : `${agent.id}/${this.workspaceKey(row)}`;
     if (local) mkdirSync(workspace, { recursive: true });
     const skills = this.d.skills.forAgent(agent.skills);
     let skillsDir: string | undefined;
@@ -1140,7 +1252,7 @@ export class SessionRunner {
       skills,
       nativeSkills: !!skillsDir,
       appended,
-      machineName: local ? undefined : this.d.machineName(ref.machineId),
+      machine: { name: this.computerName(ref.machineId), local },
       setup: background || task ? undefined : await this.d.setup?.promptBlock(agent.id),
       group: conv.kind === "group" ? { title: conv.title, members: this.groupMembers(conv) } : undefined,
       dispatch: conv.kind === "main" && !task && !background ? this.dispatchContext() : undefined,
@@ -1260,9 +1372,75 @@ export class SessionRunner {
       text = [text, attachmentNote(files, { remote: !local })].filter(Boolean).join("\n\n");
       paths = files.flatMap((f) => (f.path ? [f.path] : []));
     }
+    // Where the agent is and what it and its team are doing, when that changed since this session last heard it.
+    const self = this.situationOf(row);
+    if (self && self !== this.seen.get(row.id)) {
+      this.seen.set(row.id, self);
+      text = `${self}\n\n${text}`;
+    }
     const now = this.clock.line(row.id, this.d.settings.get().timezone);
     if (now) text = `${now}\n${text}`;
     return { text, ...(paths.length ? { attachments: paths } : {}) };
+  }
+
+  /** The `[You now]` block for a session's next turn (situation.ts). */
+  private situationOf(row: SessionRow): string | undefined {
+    const conv = this.d.store.getConversation(row.conversationId);
+    if (!conv) return undefined;
+    const task = row.taskId ? this.d.store.getTask(row.taskId) : undefined;
+    const machineId = parseBrainRef(row.brainRef).machineId;
+    const timezone = this.d.settings.get().timezone;
+    const user = this.d.locations?.line((iso) => clockTime(iso, timezone));
+    return situation({
+      ...this.teamFacts(),
+      ...(user ? { user } : {}),
+      agentId: row.agentId,
+      session: {
+        kind: task?.kind === "message" ? "thread" : task ? "task" : conv.kind === "group" ? "group" : "dialog",
+        conversationId: conv.id,
+        machine: this.computerName(machineId),
+        local: machineId === "local",
+        ...(task ? { task } : {}),
+        ...(conv.kind === "group" ? { groupTitle: conv.title } : {}),
+      },
+    });
+  }
+
+  /** What every agent is busy with now, for situation.ts and task_agents. */
+  private teamFacts() {
+    const timezone = this.d.settings.get().timezone;
+    return {
+      team: this.d.agents.list().map((a) => ({ id: a.id, name: agentName(a, hubLocale()) })),
+      tasks: this.d.store.listTasks({ status: OPEN_TASK, limit: 200 }),
+      activity: this.d.activity?.view() ?? [{ id: "local", name: hubName(), online: true, work: [] }],
+      starter: (t: Task) => this.startedBy(t),
+      machineOf: (t: Task) => this.computerName(this.taskMachine(t)),
+      time: (iso: string) => clockTime(iso, timezone),
+    };
+  }
+
+  /** "Owl: free" / "Coder: t_1 “Fix the build”: …" for each agent, as task_agents lists them. */
+  teamNow(): string[] {
+    const f = this.teamFacts();
+    const name = (id: string) => f.team.find((a) => a.id === id)?.name ?? id;
+    return f.team.map((a) => `- ${a.id} (${a.name}): ${busy(f, a.id, name)}`);
+  }
+
+  /** The agent who started a task: a thread's sender, the agent of the task or the conversation it came from. */
+  private startedBy(t: Task): string | undefined {
+    if (t.kind === "message") return t.from;
+    if (t.parentTaskId) return this.d.store.getTask(t.parentTaskId)?.agentId;
+    return t.parentConversationId ? this.d.store.getConversation(t.parentConversationId)?.agentId : undefined;
+  }
+
+  /** The computer a task runs on: where it was placed, its session's brain, or its agent's first brain. */
+  private taskMachine(t: Task): string {
+    const ref = t.brainRef ?? this.d.store.activeSession(t.conversationId, t.agentId)?.brainRef ?? this.d.agents.get(t.agentId)?.brains[0];
+    return ref ? parseBrainRef(ref).machineId : "local";
+  }
+
+  private computerName(machineId: string): string {
+    return machineId === "local" ? hubName() : (this.d.machineName(machineId) ?? machineId);
   }
 
   /** The reply's images and maps for the channels: web images by address, workspace files inline (10 MB each, 40 MB in all). */
@@ -1303,10 +1481,20 @@ export class SessionRunner {
 
     // A task placed on a computer runs on the brain there or not at all.
     const pinned = task?.brainRef ? [task.brainRef] : undefined;
+    let waits = 0;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons, hard, setupOnly } = await this.candidates(agent, stay, pinned);
+      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates(agent, stay, pinned, !!task);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
+      // The agent's brains are busy with other turns (a teammate wrote while it works): the turn waits in line.
+      if (!ref && busy) {
+        // Still waiting after a few seconds: whoever started it hears that the agent is busy and will get to it.
+        if (waits === 1 && task?.createdBy === "agent") void this.tellStarter(task, this.queuedNote(task));
+        await this.brainFreed(waits++ ? 30_000 : 3_000);
+        if (task && this.d.store.getTask(task.id)?.status === "cancelled") return { text: "", error: t("chat.cannotStart", { agent: agentName(agent, hubLocale()), reason: reasons.join("; ") }), awaitingApproval: false };
+        attempt--;
+        continue;
+      }
       // No brain of the agent is set up yet: the setup card instead of an error, and the message waits for a brain.
       // (A group chat's round goes on with the next member instead.)
       if (!ref && setupOnly && !tried.size && !task && this.d.setup && conv.kind !== "group") {
@@ -1365,7 +1553,7 @@ export class SessionRunner {
 
       this.brainLoad.set(key, (this.brainLoad.get(key) ?? 0) + 1);
       try {
-        const r = await this.streamTurn(conv, row!, live!, agent, this.turnInput(row!, text, opts), task, opts.replyChannel);
+        const r = await this.streamTurn(conv, row!, live!, agent, this.turnInput(row!, text, opts), task, opts.replyChannel, opts.replyTo);
         if (r.retry) {
           lastError = r.error ?? lastError;
           if (r.limited) earliestReset = r.limited.resetAt ?? earliestReset;
@@ -1383,6 +1571,7 @@ export class SessionRunner {
         return r;
       } finally {
         this.brainLoad.set(key, Math.max(0, (this.brainLoad.get(key) ?? 1) - 1));
+        for (const wake of [...this.freed]) wake();
       }
     }
     return { text: "", error: lastError || t("chat.turnFailed"), awaitingApproval: false };
@@ -1396,9 +1585,13 @@ export class SessionRunner {
     turn: BrainTurn,
     task: Task | undefined,
     replyChannel?: string,
+    replyTo?: TurnOpts["replyTo"],
   ): Promise<TurnResult & { retry?: boolean }> {
-    const newMessage = () => this.d.store.addMessage({ conversationId: conv.id, role: "assistant", parts: [], status: "streaming", agentId: agent.id, taskId: task?.id, brainRef: live.brainRef, channel: replyChannel });
-    let msg = newMessage();
+    const newMessage = (parts: MessagePart[] = []) =>
+      this.d.store.addMessage({ conversationId: conv.id, role: "assistant", parts, status: "streaming", agentId: agent.id, taskId: task?.id, brainRef: live.brainRef, channel: replyChannel });
+    // The reply's first message shows which of the user's messages it answers.
+    const answers: MessagePart[] = replyTo ? [{ type: "reply_to", ...replyTo }] : [];
+    let msg = newMessage(answers);
     const turnKey = msg.id;
     this.streamingMessage.set(conv.id, msg.id);
     const activity = this.d.activity;
@@ -1410,7 +1603,7 @@ export class SessionRunner {
       title: task ? task.title : conv.kind === "group" ? conv.title : undefined,
     });
 
-    let parts: MessagePart[] = [];
+    let parts: MessagePart[] = [...answers];
     let fullText = "";
     let lastFlush = 0;
     let produced = false;
@@ -1547,12 +1740,16 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "agent_draft") return `draft:${p.draftId}`;
   if (p.type === "brain_login") return `login:${p.ref}`;
   if (p.type === "device_pairing") return "device_pairing";
+  if (p.type === "reply_to") return `reply_to:${p.messageId}`;
+  if (p.type === "news") return `news:${JSON.stringify(p.items.map((x) => x.url ?? x.title))}`;
+  if (p.type === "choices") return `choices:${JSON.stringify(p.options)}`;
+  if (p.type === "feed") return `feed:${p.feedId}`;
   if (p.type === "integration") return `integration:${p.id}`;
   // Each message to a teammate has its own line, even in the same thread.
   if (p.type === "task") return p.text === undefined ? `task:${p.taskId}` : `task:${p.taskId}|${p.text}`;
   // Pictures and maps carry no id: the same content shown twice in one reply is one card.
   if (p.type === "images") return `images:${JSON.stringify(p.items)}`;
-  if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers])}`;
+  if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers, p.route?.mode, p.route?.stops])}`;
   return undefined;
 }
 

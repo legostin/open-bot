@@ -1,0 +1,12 @@
+{
+  "id": "yandex-2gis",
+  "name": "%name%",
+  "version": "0.1.0",
+  "description": "%description%",
+  "author": "Owlbot",
+  "builtin": true,
+  "ui": "./ui/dist/index.js",
+  "permissions": {
+    "ui": ["map.apps"]
+  }
+}

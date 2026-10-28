@@ -8,7 +8,7 @@
 // (the host's implementation of everything exported below as values).
 
 import type { ComponentType, ReactNode } from "react";
-import type { Locale, Message, MessagePart, Params, Task, UiEvent } from "@owlbot/shared";
+import type { Locale, Message, MessagePart, Params, RouteMode, Task, UiEvent } from "@owlbot/shared";
 
 // ---------- slots ----------
 
@@ -109,6 +109,32 @@ export interface LiveViewHandle {
   dispose(): void;
 }
 
+// ---------- maps ----------
+
+/** A place a map card opens in a maps app. */
+export interface MapAppPlace {
+  lat: number;
+  lon: number;
+  label?: string;
+  zoom: number;
+}
+
+/** A route a map card opens in a maps app: two or more stops in order, and the way of travel. */
+export interface MapAppRoute {
+  stops: Array<{ lat: number; lon: number; label?: string }>;
+  mode: RouteMode;
+}
+
+/** A maps app in the "Open in…" menu of map cards (ui.maps.addApp): links for a place and, if it can, a route. */
+export interface MapAppContribution {
+  id: string;
+  /** The app's name in the menu. */
+  title: string;
+  place(p: MapAppPlace): string;
+  /** A link that opens the route planned; without it the menu opens the route's destination. */
+  route?(r: MapAppRoute): string | undefined;
+}
+
 // ---------- host services ----------
 
 export interface HubApi {
@@ -141,6 +167,8 @@ export interface OwlbotUI {
   settings: { section(s: { id: string; title: string; component: ComponentType<SlotProps> }): () => void };
   /** Live views: a plugin can register several (one per screen) and dispose them at any time. */
   liveView: { register(c: LiveViewContribution): LiveViewHandle };
+  /** Maps apps for the "Open in…" menu of map cards (after Apple Maps, Google Maps and OpenStreetMap). */
+  maps: { addApp(app: MapAppContribution): () => void };
   toast(text: string, kind?: "info" | "success" | "error"): void;
   /** Navigate inside the SPA. */
   navigate(path: string): void;

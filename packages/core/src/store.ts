@@ -65,6 +65,7 @@ const taskFrom = (r: any): Task => ({
   ...(r.kind === "message" ? { kind: "message" as const } : {}),
   ...(r.from_agent ? { from: r.from_agent } : {}),
   ...(r.tainted ? { tainted: true } : {}),
+  ...(r.feed_id ? { feedId: r.feed_id } : {}),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -226,7 +227,7 @@ export class Store {
     const task: Task = { ...t, id, conversationId: conv.id, status: t.status ?? "queued", createdAt: now, updatedAt: now };
     this.db
       .prepare(
-        "insert into tasks(id, conversation_id, parent_conversation_id, parent_task_id, agent_id, title, goal, status, brain_ref, created_by, trigger_id, background, result, error, resume_at, kind, tainted, from_agent, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "insert into tasks(id, conversation_id, parent_conversation_id, parent_task_id, agent_id, title, goal, status, brain_ref, created_by, trigger_id, background, result, error, resume_at, kind, tainted, from_agent, feed_id, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       )
       .run(
         task.id,
@@ -247,6 +248,7 @@ export class Store {
         task.kind ?? null,
         task.tainted ? 1 : 0,
         task.from ?? null,
+        task.feedId ?? null,
         now,
         now,
       );

@@ -23,3 +23,28 @@ export function setShowDetails(on: boolean): void {
     /* private mode: the choice lasts until reload */
   }
 }
+
+const TAB = "ob.sidebar.tab";
+
+export type SidebarTab = "agents" | "groups" | "channels";
+
+function readTab(): SidebarTab {
+  try {
+    const v = localStorage.getItem(TAB);
+    return v === "groups" || v === "channels" ? v : "agents";
+  } catch {
+    return "agents";
+  }
+}
+
+/** The sidebar's tab: agents, group chats or channels. */
+export const sidebarTab = createStore<SidebarTab>(readTab());
+
+export function setSidebarTab(tab: SidebarTab): void {
+  sidebarTab.set(tab);
+  try {
+    localStorage.setItem(TAB, tab);
+  } catch {
+    /* private mode: the choice lasts until reload */
+  }
+}
