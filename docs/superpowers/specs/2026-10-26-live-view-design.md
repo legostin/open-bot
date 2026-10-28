@@ -24,6 +24,9 @@ happens. The window belongs to the core; plugins contribute content and activity
 - **Expanded**: an overlay over the app (full screen on phones) with the plugin's full controls. Esc or the
   collapse button returns to the corner; it never closes by itself. The plugin content stays mounted across
   compact ↔ expanded (same React position), so a stream does not restart.
+- **iOS app** (the chat screen, `/m/chat/:id` in a WKWebView): the same window, placed in the chat shell that follows
+  the visual viewport, so it rides above the keyboard; top corners keep below the app's header (safe area), and the
+  expanded view fills the screen inside the safe areas.
 - Several live views at once: a switcher in the title bar; pills for each.
 - Command palette: "Show live view: <title>" opens the expanded view even with no activity (e.g. to sign in to a site
   in the agent's browser ahead of time).

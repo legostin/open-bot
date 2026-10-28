@@ -46,7 +46,7 @@ function setCorner(c: Corner): void {
   }
 }
 
-/** Distance from the bottom of the viewport to the top of the chat composer (0: no composer on screen). */
+/** Distance from the bottom of the window's box (the viewport or its frame) to the top of the chat composer (0: none). */
 const composerInset = createStore(0);
 
 /** A ref for the chat composer's area: the window keeps its bottom corners above it, clear of the send button. */
@@ -54,10 +54,15 @@ export function useComposerInsetRef(): (el: HTMLElement | null) => void {
   const [el, setEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
     if (!el) return;
-    const measure = () => composerInset.set(Math.max(0, Math.round(window.innerHeight - el.getBoundingClientRect().top)));
+    const measure = () => {
+      const frame = el.closest("[data-live-view-frame]");
+      const bottom = frame ? frame.getBoundingClientRect().bottom : window.innerHeight;
+      composerInset.set(Math.max(0, Math.round(bottom - el.getBoundingClientRect().top)));
+    };
     measure();
+    // Border box: the iOS dock changes only its padding when the keyboard comes up.
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(el, { box: "border-box" });
     window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
@@ -68,10 +73,12 @@ export function useComposerInsetRef(): (el: HTMLElement | null) => void {
   return setEl;
 }
 
-function placement(c: Corner, inset: number): CSSProperties {
+/** In a frame (the iOS app) there is no top bar, but the app's header and the notch: keep below the safe area. */
+function placement(c: Corner, inset: number, framed: boolean): CSSProperties {
+  const side = `calc(env(safe-area-inset-${c[1] === "l" ? "left" : "right"}, 0px) + ${EDGE}px)`;
   return {
-    ...(c[0] === "t" ? { top: TOP } : { bottom: Math.max(EDGE, inset + 8) }),
-    ...(c[1] === "l" ? { left: EDGE } : { right: EDGE }),
+    ...(c[0] === "t" ? { top: framed ? "calc(env(safe-area-inset-top, 0px) + 8px)" : TOP } : { bottom: Math.max(EDGE, inset + 8) }),
+    ...(c[1] === "l" ? { left: side } : { right: side }),
   };
 }
 
@@ -228,7 +235,12 @@ function Pill({ view, now }: { view: LiveViewEntry; now: number }) {
 
 // ---------- the window ----------
 
-export function LiveViewWindow() {
+/**
+ * `frame`: the box to place the window in instead of the page, marked `data-live-view-frame`: the iOS app's chat shell,
+ * which follows the visual viewport (so the window rides above the keyboard) and runs under the app's own header.
+ * Its transform makes it the containing block of the window's fixed layers.
+ */
+export function LiveViewWindow({ frame }: { frame?: HTMLElement }) {
   const { liveViews } = usePluginRegistry();
   const choices = useStore(liveWindow);
   const now = useLiveClock(liveViews);
@@ -249,7 +261,9 @@ export function LiveViewWindow() {
   }, [expanded]);
 
   if (mode === "hidden") return null;
-  const place = placement(where, inset);
+  const framed = !!frame;
+  const place = placement(where, inset, framed);
+  const root = frame ?? document.body;
 
   if (mode === "pill" || !current) {
     return createPortal(
@@ -261,7 +275,7 @@ export function LiveViewWindow() {
           <Pill key={v.key} view={v} now={now} />
         ))}
       </div>,
-      document.body,
+      root,
     );
   }
 
@@ -281,7 +295,9 @@ export function LiveViewWindow() {
         className={cx(
           "flex flex-col overflow-hidden bg-surface outline-none",
           expanded
-            ? "animate-in fixed inset-0 z-50 sm:inset-[3vh_3vw] sm:rounded-2xl sm:border sm:border-border sm:shadow-card"
+            ? framed
+              ? "animate-in fixed inset-0 z-50 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
+              : "animate-in fixed inset-0 z-50 sm:inset-[3vh_3vw] sm:rounded-2xl sm:border sm:border-border sm:shadow-card"
             : "animate-in fixed z-30 w-[min(52vw,240px)] rounded-2xl border shadow-card sm:w-80",
           !expanded && (attention ? "border-warning ring-2 ring-warning/30" : "border-border"),
         )}
@@ -315,6 +331,6 @@ export function LiveViewWindow() {
         </div>
       </section>
     </>,
-    document.body,
+    root,
   );
 }
