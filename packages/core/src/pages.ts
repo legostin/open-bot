@@ -4,7 +4,7 @@
 // the link sees it, and the page itself reaches nothing of the user's (no cookies, no API). It keeps a little state of
 // its own (useStored) and reports what broke in a browser, which page_read shows its agent.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { transform } from "sucrase";
 import type { Locale, PageView } from "@owlbot/shared";
@@ -300,6 +300,7 @@ export function loadKit(dir: string): { hash: string; theme: string; files: Map<
   if (!existsSync(join(dir, "kit.js")) || !existsSync(join(dir, "theme.css"))) return undefined;
   const files = new Map<string, { data: Buffer; type: string }>();
   for (const [name, type] of Object.entries(types)) files.set(name, { data: readFileSync(join(dir, name)), type });
+  for (const name of readdirSync(dir)) if (name.endsWith(".woff2")) files.set(name, { data: readFileSync(join(dir, name)), type: "font/woff2" });
   const hash = createHash("sha256").update(files.get("kit.js")!.data).update(files.get("kit.css")!.data).digest("hex").slice(0, 12);
   return { hash, theme: readFileSync(join(dir, "theme.css"), "utf8"), files };
 }

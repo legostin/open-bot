@@ -26,7 +26,13 @@ export async function registerPages(app: FastifyInstance, hub: Hub): Promise<voi
     const k = getKit();
     const f = k?.files.get(file);
     if (!k || !f || hash !== k.hash) throw new HttpError(404, "not found");
-    reply.header("content-type", f.type).header("cache-control", "public, max-age=31536000, immutable").header("x-content-type-options", "nosniff").header("vary", "accept-encoding");
+    // A page's fonts load in CORS mode from its opaque origin.
+    reply
+      .header("content-type", f.type)
+      .header("cache-control", "public, max-age=31536000, immutable")
+      .header("x-content-type-options", "nosniff")
+      .header("access-control-allow-origin", "*")
+      .header("vary", "accept-encoding");
     if (!/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) return reply.send(f.data);
     let z = zipped.get(file);
     if (!z) zipped.set(file, (z = gzipSync(f.data)));

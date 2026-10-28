@@ -2,7 +2,7 @@
 // Owlbot's blocks and the page runtime as one classic script), kit.css (Leaflet's and the blocks' styles),
 // tailwind.js (Tailwind's browser runtime, which styles a page from its classes) and theme.css (shadcn's tokens).
 import { build } from "esbuild";
-import { copyFileSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,9 +22,14 @@ await build({
   target: "es2022",
   jsx: "automatic",
   loader: { ".png": "dataurl", ".svg": "dataurl" },
+  // The fonts are files next to kit.css (copied below), not bundled.
+  external: ["*.woff2"],
   define: { "process.env.NODE_ENV": '"production"' },
   legalComments: "none",
   logLevel: "warning",
 });
 copyFileSync(require.resolve("@tailwindcss/browser"), join(out, "tailwind.js"));
 copyFileSync(join(here, "src", "theme.css"), join(out, "theme.css"));
+// Onest, the app's face (kit.css refers to these next to it).
+const fonts = join(here, "..", "web", "src", "assets", "fonts");
+for (const f of readdirSync(fonts)) if (f.startsWith("onest-") && f.endsWith(".woff2")) copyFileSync(join(fonts, f), join(out, f));
