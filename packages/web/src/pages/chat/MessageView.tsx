@@ -28,6 +28,7 @@ import { NewsCard } from "./NewsCard";
 import { Choices, FeedCard } from "./ChatButtons";
 import { TaskLine } from "./TaskLine";
 import { ConnectDeviceCard } from "./ConnectDeviceCard";
+import { WidgetCard } from "./WidgetCard";
 import { t, type MessageKey } from "../../i18n";
 import { mobileMode } from "../../lib/mobile";
 
@@ -285,6 +286,8 @@ function Parts({ message }: { message: Message }) {
             return <Choices key={it.key} part={p} messageId={message.id} />;
           case "feed":
             return <FeedCard key={it.key} feedId={p.feedId} />;
+          case "widget":
+            return <WidgetCard key={it.key} part={p} message={message} />;
           default:
             return null;
         }

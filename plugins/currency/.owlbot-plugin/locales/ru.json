@@ -1,0 +1,11 @@
+{
+  "name": "Курсы валют",
+  "description": "Курсы и пересчёт валют без ключа: курсы Европейского центрального банка через Frankfurter, остальные валюты через ExchangeRate-API.",
+  "integration.summary": "Пересчёт любой суммы и как менялся курс за месяц",
+  "integration.example": "Сколько будет 100 долларов в евро и рублях?",
+  "card.label": "{amount} {code} в других валютах",
+  "card.rate": "1 {from} = {rate} {to}",
+  "card.days": "{n, plural, one {# день} few {# дня} many {# дней} other {# дня}}",
+  "card.ecb": "Европейский центральный банк, {date}",
+  "card.erApi": "Курсы Exchange Rate API, {date}"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "cardy",
+  "name": "Cardy",
+  "builtin": true,
+  "defaultEnabled": false,
+  "server": "./server/index.ts",
+  "contributes": { "tools": true, "widgets": ["card"] },
+  "integration": { "category": "everyday", "icon": "sparkles", "connect": "none", "summary": "Shows cards", "example": "%example%" }
+}

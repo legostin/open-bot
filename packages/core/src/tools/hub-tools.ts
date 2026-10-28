@@ -389,8 +389,9 @@ export function registerHubTools(hub: Hub): void {
       name: "integrations_list",
       effect: "read",
       description:
-        "The integrations library: services the user can connect (access from anywhere, Google Calendar, Telegram, web search, the browser…) with their status " +
-        "(connected and as whom, needs-setup, off, broken, unavailable). Check it before saying something cannot be done.",
+        "The catalog: services the user can connect and abilities they can turn on (access from anywhere, Google Calendar, Telegram, web search, the browser, " +
+        "weather, currency rates, Wikipedia, holidays, crypto prices, world clock…) with their status (connected and as whom, needs-setup, off, broken, unavailable). " +
+        "Check it before saying something cannot be done: an ability that is off can be turned on with hub_integration_connect.",
       inputSchema: obj({}),
     },
     async () => {

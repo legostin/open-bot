@@ -56,6 +56,11 @@ export interface ToolResult {
     artifacts?: string[];
     status?: "awaiting_approval" | "denied";
     approvalId?: string;
+    /**
+     * A plugin tool's cards for the reply (PluginContext.widgets.show): the hub turns each into a `widget` part of the
+     * agent's message and drops them from the result the model reads. Kinds must be listed in contributes.widgets.
+     */
+    widgets?: Array<{ kind: string; data: unknown }>;
   };
 }
 
@@ -216,7 +221,12 @@ export type MessagePart =
    */
   | { type: "choices"; options: string[]; chosen?: number }
   /** A channel's live card in the chat: its state and buttons (open, gather now, how often, pause, delete). */
-  | { type: "feed"; feedId: string };
+  | { type: "feed"; feedId: string }
+  /**
+   * A plugin's own card (its tool called PluginContext.widgets.show): the plugin's UI module draws `data` with the
+   * component it registered for `kind` (ui.widgets.add). Without that module the part shows nothing.
+   */
+  | { type: "widget"; plugin: string; kind: string; data: unknown };
 
 /** One card of a `news` part. */
 export interface NewsItem {
@@ -863,7 +873,7 @@ export type UiEvent =
 
 export type IntegrationStatus = "connected" | "needs-setup" | "off" | "unavailable" | "broken";
 
-/** A card of the integrations library (GET /api/integrations). */
+/** A card of the integrations library (GET /api/integrations) and an entry of the catalog (GET /api/catalog). */
 export interface IntegrationView {
   /** The plugin's id, or a core entry's ("remote-access"). */
   id: string;
@@ -878,6 +888,21 @@ export interface IntegrationView {
   account?: string;
   /** Why it is broken or unavailable (in the reader's language). */
   detail?: string;
+  /** Something to ask once it is on, in the person's words (the catalog's "Try"). */
+  example?: string;
+}
+
+/** A group of the catalog: a situation in life (everyday, travel, money…) and what helps in it. */
+export interface CatalogSection {
+  id: string;
+  /** In the reader's language. */
+  title: string;
+  items: IntegrationView[];
+}
+
+/** Everything the person can turn on (GET /api/catalog): integrations, widgets and abilities, by situation. */
+export interface CatalogView {
+  sections: CatalogSection[];
 }
 
 /** A connected account of a provider (Google), as the hub keeps it. */

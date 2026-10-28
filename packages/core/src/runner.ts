@@ -1755,6 +1755,7 @@ function attachedKey(p: MessagePart): string | undefined {
   // Pictures and maps carry no id: the same content shown twice in one reply is one card.
   if (p.type === "images") return `images:${JSON.stringify(p.items)}`;
   if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers, p.route?.mode, p.route?.stops])}`;
+  if (p.type === "widget") return `widget:${p.plugin}:${p.kind}:${JSON.stringify(p.data)}`;
   return undefined;
 }
 

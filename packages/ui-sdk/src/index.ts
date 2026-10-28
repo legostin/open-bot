@@ -59,6 +59,21 @@ export interface SlotContribution<P = any> {
   priority?: number;
 }
 
+// ---------- widgets ----------
+
+/**
+ * A plugin's card in the chat (a `widget` part: the plugin's tool called ctx.widgets.show(call, kind, data)).
+ * The host draws the card's frame; the component fills it. Use the theme's CSS variables (var(--fg), var(--muted),
+ * var(--surface-2), var(--border), var(--accent)…) so it fits light and dark, the web and the phone.
+ */
+export interface WidgetProps<D = any> extends SlotProps {
+  kind: string;
+  /** What the tool passed, as it was when shown. */
+  data: D;
+  /** The agent's message the card is in. */
+  message: Message;
+}
+
 // ---------- maps ----------
 
 /** A place a map card opens in a maps app. */
@@ -117,6 +132,8 @@ export interface OwlbotUI {
   settings: { section(s: { id: string; title: string; component: ComponentType<SlotProps> }): () => void };
   /** Maps apps for the "Open in…" menu of map cards (after Apple Maps, Google Maps and OpenStreetMap). */
   maps: { addApp(app: MapAppContribution): () => void };
+  /** Draw this plugin's chat cards: `kind` as in contributes.widgets and ctx.widgets.show. */
+  widgets: { add<D = any>(kind: string, component: ComponentType<WidgetProps<D>>): () => void };
   toast(text: string, kind?: "info" | "success" | "error"): void;
   /** Navigate inside the SPA. */
   navigate(path: string): void;
@@ -226,6 +243,11 @@ export interface OwlbotUIRuntime {
   /** Subscribe to hub events inside a component. */
   useHubEvent(cb: (e: UiEvent) => void, deps?: unknown[]): void;
   api: HubApi;
+  /**
+   * Where the page loads a picture from: the page may only load images from the hub, so an http(s) address goes
+   * through the hub's image proxy. Undefined for what cannot be shown.
+   */
+  mediaSrc(src: string): string | undefined;
   /** Interface language (same as ui.i18n.locale). */
   locale: Locale;
   /**
@@ -247,6 +269,7 @@ export declare const Markdown: OwlbotUIRuntime["Markdown"];
 export declare const useTasks: OwlbotUIRuntime["useTasks"];
 export declare const useHubEvent: OwlbotUIRuntime["useHubEvent"];
 export declare const api: OwlbotUIRuntime["api"];
+export declare const mediaSrc: OwlbotUIRuntime["mediaSrc"];
 export declare const locale: OwlbotUIRuntime["locale"];
 /** The iOS app's bridge; `undefined` in a browser. */
 export declare const native: OwlbotUIRuntime["native"];

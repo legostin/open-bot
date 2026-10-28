@@ -252,6 +252,7 @@ export class Hub {
       onLayoutsChanged: () => this.reindex(),
       // The user's own CLIs first, then the ones the hub installed: a CLI the user installed wins.
       cliBinDirs: () => [...this.userPath.dirs(), ...this.cliTools.binDirs()],
+      attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
     });
     this.mcp = new McpEndpoint(this.gateway, this.store, config.version);
     this.media = new MediaService({ dataDir: config.dataDir, version: config.version, resolve: (host) => this.egress.resolveTarget(host) });

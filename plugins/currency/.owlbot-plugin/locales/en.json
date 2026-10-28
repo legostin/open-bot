@@ -1,0 +1,11 @@
+{
+  "name": "Currency rates",
+  "description": "Exchange rates and conversion without a key: the European Central Bank's rates through Frankfurter, other currencies through ExchangeRate-API.",
+  "integration.summary": "Convert any sum and see how the rate moved this month",
+  "integration.example": "How much is 100 dollars in euros and rubles?",
+  "card.label": "{amount} {code} in other currencies",
+  "card.rate": "1 {from} = {rate} {to}",
+  "card.days": "{n, plural, one {# day} other {# days}}",
+  "card.ecb": "European Central Bank, {date}",
+  "card.erApi": "Rates by Exchange Rate API, {date}"
+}

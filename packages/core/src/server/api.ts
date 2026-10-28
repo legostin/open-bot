@@ -13,7 +13,7 @@ import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
-import { googleScopes, listIntegrations } from "../integrations.ts";
+import { googleScopes, listCatalog, listIntegrations } from "../integrations.ts";
 import { machineHubUrl, qrSvg } from "../pairing.ts";
 import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
 
@@ -478,14 +478,25 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     return hub.mcpClients.list();
   });
 
-  // ----- integrations: the library's cards, and the hub's Google sign-in -----
+  // ----- integrations: the library's cards, the catalog (the same cards by situation), and the hub's Google sign-in -----
   api.get("/api/integrations", async (req) => listIntegrations(hub, requestLocale(req)));
+  api.get("/api/catalog", async (req) => listCatalog(hub, requestLocale(req)));
   api.post("/api/integrations/:id/enabled", async (req) => {
     const id = (req.params as any).id as string;
     if (!hub.plugins.get(id)?.layout?.manifest.integration) throw new HttpError(404, "connections.notFound", { id });
-    await hub.plugins.setEnabled(id, !!(req.body as any)?.enabled);
+    const b = (req.body ?? {}) as { enabled?: unknown; conversationId?: unknown };
+    await hub.plugins.setEnabled(id, !!b.enabled);
     hub.bus.emit("connections.updated", { provider: id });
-    return (await listIntegrations(hub, requestLocale(req))).find((i) => i.id === id);
+    const view = (await listIntegrations(hub, requestLocale(req))).find((i) => i.id === id);
+    // Turned on from its card in a chat (the agent offered it): the agent hears and carries on with what was asked.
+    if (b.enabled && view?.status === "connected" && typeof b.conversationId === "string" && hub.store.getConversation(b.conversationId)) {
+      const tools = hub.tools.list().filter((d) => d.owner === id).map((d) => d.name);
+      hub.runner.tellAgent(
+        b.conversationId,
+        `[System] The user turned on ${view.name} (${id}) from its card${tools.length ? `; its tools are available now: ${tools.join(", ")}` : ""}. Carry on with what the user asked.`,
+      );
+    }
+    return view;
   });
   api.get("/api/connections", async () => ({ google: { available: hub.connections.available("google"), account: hub.connections.get("google") ?? null } }));
   api.post("/api/connections/google/start", async (req) => {

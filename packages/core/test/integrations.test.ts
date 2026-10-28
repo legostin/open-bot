@@ -122,8 +122,8 @@ describe("integrations and the Google sign-in", () => {
   });
 
   it("shows the cards: Google ones wait for the sign-in, setup ones for their secrets", async () => {
-    expect(await integration("fakecal")).toMatchObject({ name: "Fake calendar", category: "calendar", icon: "calendar", connect: "google", status: "needs-setup" });
-    expect(await integration("fakeset")).toMatchObject({ connect: "setup", status: "needs-setup", category: "messaging" });
+    expect(await integration("fakecal")).toMatchObject({ name: "Fake calendar", category: "work", icon: "calendar", connect: "google", status: "needs-setup" });
+    expect(await integration("fakeset")).toMatchObject({ connect: "setup", status: "needs-setup", category: "communication" });
     expect(textOf(await tool("fakecal_token"))).toBe("no token: Google is not connected");
   });
 
@@ -181,7 +181,7 @@ describe("integrations and the Google sign-in", () => {
     hub.connectionDone(done.account, done.origin);
     expect(await integration("fakecal")).toMatchObject({ status: "connected" });
     await until(() => hub.store.listMessages(conv.id).some((m) => m.parts.some((p) => p.type === "text" && p.text.includes("[System] The user connected Google as anna@example.com (fakecal)"))), "the note to the agent");
-    expect(textOf(await tool("hub_integrations_list"))).toContain("fakecal — Fake calendar [calendar]: connected (anna@example.com)");
+    expect(textOf(await tool("hub_integrations_list"))).toContain("fakecal — Fake calendar [work]: connected (anna@example.com)");
   });
 
   it("puts the plugins' sections into the digest, even with nothing else waiting", async () => {

@@ -15,7 +15,7 @@ import { GROUPS, SECTIONS, sectionDef, type PanelSection } from "./nav";
 import { AgentsPage } from "../pages/Agents";
 import { BrainsPage } from "../pages/Brains";
 import { PluginsPage } from "../pages/Plugins";
-import { IntegrationsPage } from "../pages/Integrations";
+import { CatalogPage } from "../pages/Catalog";
 import { MachinesPage } from "../pages/Machines";
 import { DevicesPage } from "../pages/Devices";
 import { McpPage } from "../pages/Mcp";
@@ -34,7 +34,7 @@ function SectionBody({ section }: { section: PanelSection }) {
     case "plugins":
       return <PluginsPage />;
     case "integrations":
-      return <IntegrationsPage />;
+      return <CatalogPage />;
     case "machines":
       return <MachinesPage />;
     case "devices":

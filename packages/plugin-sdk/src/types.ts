@@ -157,6 +157,15 @@ export interface PluginContext {
   events: { on(name: EventName, cb: (payload: any) => void): void };
   hooks: { on<H extends HookName>(hook: H, handler: (payload: HookPayloads[H]) => Promise<HookResults[H]> | HookResults[H]): void };
   http: { handle(handler: (req: PluginHttpRequest) => Promise<PluginHttpResponse> | PluginHttpResponse): void };
+  widgets: {
+    /**
+     * Show a card in the reply the agent is writing, from inside a tool handler (`call` is the handler's context).
+     * The plugin's UI module draws it: ui.widgets.add(kind, Component) gets `data`. The kind must be listed in
+     * contributes.widgets; `data` is plain JSON (at most 64 KB) and stays in the conversation as it was shown.
+     * The model only reads the tool's text, so say there that a card is shown.
+     */
+    show(call: ToolCallContext, kind: string, data: unknown): void;
+  };
   ui: {
     /** Push an event to all web clients: they receive {type:"plugin.event", data:{pluginId, channel, payload}}. */
     emit(channel: string, payload: unknown): void;

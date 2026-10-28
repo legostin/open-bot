@@ -1,0 +1,7 @@
+{
+  "name": "@owlbot/plugin-time-units",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "World clock & units: time in other cities, time zone and unit conversion, offline"
+}

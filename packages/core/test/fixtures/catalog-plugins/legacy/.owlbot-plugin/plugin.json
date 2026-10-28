@@ -1,0 +1,6 @@
+{
+  "id": "legacy",
+  "name": "Legacy calendar",
+  "builtin": true,
+  "integration": { "category": "calendar", "icon": "calendar", "connect": "none", "summary": "A calendar from before the catalog" }
+}

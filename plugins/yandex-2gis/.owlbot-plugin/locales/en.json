@@ -1,6 +1,8 @@
 {
   "name": "Yandex Maps and 2GIS",
   "description": "Adds Yandex Maps and 2GIS to “Open in…” on the maps agents show in the chat: places and planned routes open in those apps.",
+  "integration.summary": "Places and routes from the chat open in Yandex Maps or 2GIS",
+  "integration.example": "Show me the walk from Red Square to the Bolshoi Theatre on a map",
   "app.yandex": "Yandex Maps",
   "app.2gis": "2GIS"
 }

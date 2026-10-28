@@ -50,7 +50,7 @@
       }
     }
   },
-  "integration": {"category": "browser", "icon": "globe", "connect": "none", "summary": "%integration.summary%"},
+  "integration": {"category": "work", "icon": "app-window", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%"},
   "permissions": {
     "network": [
       "*"
