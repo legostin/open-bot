@@ -217,9 +217,12 @@ function Meta({ f }: { f: FactView }) {
   const bits: ReactNode[] = [];
   for (const a of f.about.slice(0, 4)) bits.push(<span key={`a-${a}`} className="owm-tag">{a}</span>);
   if (f.scope.startsWith("agent:")) bits.push(<span key="own" className="owm-own">{t("ui.onlyAgent", { name: agentName(f.scope.slice(6)) })}</span>);
+  // An event shows its own date; other facts when they were last learned.
   if (f.kind === "event" && f.validFrom) bits.push(<span key="date">{when(f.validFrom)}</span>);
-  else if (f.validUntil && f.status === "active") bits.push(<span key="until">{t("ui.until", { date: when(f.validUntil) })}</span>);
-  bits.push(<span key="upd">{when(f.updated || f.created)}</span>);
+  else {
+    if (f.validUntil && f.status === "active") bits.push(<span key="until">{t("ui.until", { date: when(f.validUntil) })}</span>);
+    bits.push(<span key="upd">{when(f.updated || f.created)}</span>);
+  }
   return <div className="owm-meta">{bits}</div>;
 }
 

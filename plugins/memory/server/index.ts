@@ -371,9 +371,11 @@ const plugin: PluginModule = {
       if (!p?.sessionId) return;
       const words = String(p.text ?? "");
       if (p.fromUser && !p.background && p.conversationId) {
+        // In a group chat every member answering the same message hears it: journaled once.
+        const again = lastWords.get(p.conversationId) === words.slice(0, 600);
         lastWords.set(p.conversationId, words.slice(0, 600));
         if (lastWords.size > 300) lastWords.delete(lastWords.keys().next().value!);
-        if (words.trim().length >= 12) mem.state.journal({ at: new Date().toISOString(), agent: p.agentId, conversation: p.conversationId, text: words.slice(0, 2000) });
+        if (!again && words.trim().length >= 12) mem.state.journal({ at: new Date().toISOString(), agent: p.agentId, conversation: p.conversationId, text: words.slice(0, 2000) });
       }
       const context = mem.turnContext(p.sessionId, p.agentId, words);
       return context ? { context } : undefined;

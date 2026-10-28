@@ -151,8 +151,8 @@ export function secretReason(text: string): string | undefined {
 
 const SENSITIVE = [
   // health
-  /\b(diagnos\w*|illness|disease|cancer|hiv|diabetes|depress\w*|anxiety|therap\w*|psychiatr\w*|medication|prescri\w*|pregnan\w*|disorder|surgery)\b/i,
-  /(диагноз|болезн|болеет|(?<!\p{L})рак(?:а|ом|у)?(?!\p{L})|(?<!\p{L})вич(?!\p{L})|диабет|депресс|терапевт|психиатр|психотерап|лекарств|беремен|расстройств|операци(?:я|и|ю|ей)(?!\p{L}))/iu,
+  /\b(diagnos\w*|illness|disease|allerg\w*|cancer|hiv|diabetes|depress\w*|anxiety|therap\w*|psychiatr\w*|medication|prescri\w*|pregnan\w*|disorder|surgery)\b/i,
+  /(диагноз|болезн|болеет|аллерги|(?<!\p{L})рак(?:а|ом|у)?(?!\p{L})|(?<!\p{L})вич(?!\p{L})|диабет|депресс|терапевт|психиатр|психотерап|лекарств|беремен|расстройств|операци(?:я|и|ю|ей)(?!\p{L}))/iu,
   // money
   /\b(salary|income|debt|loan|mortgage|bank account|credit score|bankrupt\w*)\b/i,
   /(зарплат|(?<!\p{L})доход|(?<!\p{L})долг(?:и|а|ов|ом|ам)?(?!\p{L})|кредит|ипотек|банковск\S* сч|банкрот)/iu,
