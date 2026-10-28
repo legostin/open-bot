@@ -1,23 +1,43 @@
 // A conversation: top bar (agent and title, or a group's members), scrolling message list with history loading, composer.
 // Files dropped anywhere on it go to the composer.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { ArrowDown, Check, Paperclip, Pencil, X } from "lucide-react";
+import type { Message } from "@owlbot/shared";
+import { AVATAR_PALETTE, defaultAvatar } from "@owlbot/shared/avatar";
 import { useStore } from "../../lib/store";
 import { stickAfterScroll } from "../../lib/stick";
 import { errorText } from "../../lib/api";
 import { agents, conversations, ensureAgents, loadMessages, loadOlder, updateConversation, useConversationMessages } from "../../state/app";
+import { showDetails } from "../../state/prefs";
 import { toast } from "../../state/toast";
 import { addFiles } from "../../state/attachments";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
+import { AgentAvatar } from "../../components/AgentAvatar";
 import { TopBar } from "../../components/Layout";
 import { AgentHeader } from "./AgentHeader";
 import { GroupFloor, GroupHeader } from "./GroupHeader";
-import { DetailsToggle } from "./DetailsToggle";
-import { t } from "../../i18n";
-import { MessageView } from "./MessageView";
+import { ChatMenu } from "./DetailsToggle";
+import { formatDate, formatRelative, t } from "../../i18n";
+import { authorOf, messageShown, MessageView } from "./MessageView";
 import { LatestDraftCards } from "./AgentDraftCard";
 import { Composer } from "./Composer";
+
+/** Messages closer than this by one author read as one run. */
+const GROUP_MS = 5 * 60_000;
+
+function dayOf(iso: string): string {
+  return new Date(iso).toDateString();
+}
+
+/** "Today", "Yesterday", or the weekday and date, in the interface language. */
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86_400_000);
+  const s = days === 0 || days === 1 ? formatRelative(-days, "day") : formatDate(d, { weekday: "long", day: "numeric", month: "long" });
+  return s.charAt(0).toLocaleUpperCase() + s.slice(1);
+}
 
 function TitleEditor({ id, title }: { id: string; title: string }) {
   const [editing, setEditing] = useState(false);
@@ -155,6 +175,25 @@ export function ChatView({
   const editable = meta?.kind === "chat";
   const isGroup = meta?.kind === "group";
   const groupHint = isGroup ? t("group.emptyHint", { lead: agentById.get(meta.agentId)?.name ?? meta.agentId }) : undefined;
+  const host = meta && !isGroup ? agentById.get(meta.agentId) : undefined;
+
+  // Runs of messages by one author share a face and a name; a new day gets a chip. What was there when the chat opened
+  // stands still; what arrives afterwards comes in with motion.
+  const details = useStore(showDetails);
+  const opened = useRef<Set<string> | null>(null);
+  if (opened.current === null && conv.loaded) opened.current = new Set(conv.messages.map((m) => m.id));
+  const rows = useMemo(() => {
+    let prev: Message | undefined;
+    return conv.messages.map((m) => {
+      if (!messageShown(m, details)) return { m, grouped: false, day: undefined };
+      const day = dayOf(m.createdAt);
+      const newDay = !prev || dayOf(prev.createdAt) !== day;
+      const author = authorOf(m);
+      const grouped = !newDay && !!prev && !!author && author === authorOf(prev) && Date.parse(m.createdAt) - Date.parse(prev.createdAt) < GROUP_MS;
+      prev = m;
+      return { m, grouped, day: newDay ? dayLabel(m.createdAt) : undefined };
+    });
+  }, [conv.messages, details]);
 
   return (
     <div
@@ -193,16 +232,17 @@ export function ChatView({
           ) : (
             <>
               {meta && <AgentHeader agentId={meta.agentId} settings={meta.kind !== "task"} />}
-              <span className="hidden text-border sm:inline">/</span>
-              <div className="hidden min-w-0 flex-1 text-sm text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
+              {(editable || meta?.kind === "task") && (
+                <div className="hidden min-w-0 flex-1 text-[13px] text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
+              )}
             </>
           )}
-          <DetailsToggle />
+          <ChatMenu />
         </TopBar>
       )}
 
       <div ref={scroller} onScroll={onScroll} className="chat-scroll relative min-h-0 flex-1 overflow-y-auto">
-        <div ref={content} className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-3 py-5 sm:px-6">
+        <div ref={content} className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-3 pt-6 pb-4 sm:px-6">
           {top}
           {conv.hasMore && (
             <div className="flex justify-center">
@@ -218,11 +258,37 @@ export function ChatView({
             </div>
           )}
           {conv.loaded && !conv.messages.length && !conv.error && (
-            <EmptyState icon={isGroup ? "users" : "sparkles"} title={isGroup ? t("group.emptyTitle") : t("chat.empty")} hint={emptyHint ?? groupHint ?? t("chat.emptyHint")} />
+            <div className="flex min-h-[46vh] flex-col justify-center">
+              {host ? (
+                <EmptyState
+                  title={host.name}
+                  art={
+                    <span className="block" style={{ "--halo": `${AVATAR_PALETTE[(host.avatar ?? defaultAvatar(host.id)).color].bottom}66` } as CSSProperties}>
+                      <AgentAvatar avatar={host.avatar} id={host.id} name={host.name} size={76} />
+                    </span>
+                  }
+                  hint={
+                    <>
+                      {host.description && <span className="block">{host.description}</span>}
+                      <span className="mt-2 block text-[13px] text-muted/80">{emptyHint ?? t("chat.emptyHint")}</span>
+                    </>
+                  }
+                />
+              ) : (
+                <EmptyState icon={isGroup ? "users" : "sparkles"} title={isGroup ? t("group.emptyTitle") : t("chat.empty")} hint={emptyHint ?? groupHint ?? t("chat.emptyHint")} />
+              )}
+            </div>
           )}
           <LatestDraftCards.Provider value={latestDrafts}>
-            {conv.messages.map((m) => (
-              <MessageView key={m.id} message={m} agent={m.agentId ? agentById.get(m.agentId) : undefined} />
+            {rows.map(({ m, grouped, day }) => (
+              <Fragment key={m.id}>
+                {day && (
+                  <div className="flex justify-center">
+                    <span className="day-chip">{day}</span>
+                  </div>
+                )}
+                <MessageView message={m} agent={m.agentId ? agentById.get(m.agentId) : undefined} grouped={grouped} fresh={!!opened.current && !opened.current.has(m.id)} />
+              </Fragment>
             ))}
           </LatestDraftCards.Provider>
           {isGroup && <GroupFloor conversationId={conversationId} />}
@@ -236,14 +302,15 @@ export function ChatView({
               scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
             }}
             aria-label={t("chat.scrollDown")}
-            className="sticky bottom-3 left-full mr-4 ml-auto flex size-9 items-center justify-center rounded-full border border-border bg-surface shadow-card"
+            className="glass press animate-pop sticky bottom-3 left-full mr-4 ml-auto flex size-9 items-center justify-center rounded-full border border-hairline text-muted shadow-pop hover:text-fg"
           >
             <ArrowDown className="size-4" />
           </button>
         )}
       </div>
 
-      <div className="chat-dock shrink-0 px-3 pt-1 pb-3 sm:px-6">
+      <div className="chat-dock relative shrink-0 px-3 pb-3 sm:px-6">
+        <div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-b from-transparent to-bg" aria-hidden />
         <div className="mx-auto w-full max-w-3xl">
           <Composer key={conversationId} conversationId={conversationId} />
         </div>

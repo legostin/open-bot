@@ -75,7 +75,7 @@ const SYMBOLS: Record<MarkerIcon, { Icon: IconType; color: string }> = {
   finish: { Icon: Flag, color: "#dc2626" },
   user: { Icon: Navigation2, color: "#2563eb" },
 };
-const ROUTE_COLOR = "#2563eb";
+const ROUTE_COLOR = "#e07b00";
 
 const MODES: Record<RouteMode, { Icon: IconType; label: MessageKey }> = {
   walk: { Icon: Footprints, label: "message.map.mode.walk" },
@@ -329,14 +329,14 @@ export function MapCard({ part }: { part: MapPart }) {
   });
   const target = selected !== undefined ? (spots[selected].label ?? t("message.map.point", { n: selected + 1 })) : route ? t("message.map.route") : place;
 
-  const button = "flex size-8 items-center justify-center rounded-lg border border-border bg-surface/95 text-fg shadow-card backdrop-blur transition hover:bg-surface-2";
+  const button = "glass press flex size-8 items-center justify-center rounded-full border border-hairline text-fg shadow-card hover:bg-surface";
 
   return (
     <figure
       ref={card}
       className={cx(
         "flex flex-col overflow-hidden bg-surface",
-        full ? "fixed inset-0 z-[70] m-0 pb-[env(safe-area-inset-bottom)]" : "my-2 max-w-full rounded-2xl border border-border shadow-card sm:max-w-xl",
+        full ? "animate-zoom fixed inset-0 z-[70] m-0 pb-[env(safe-area-inset-bottom)]" : "w-full max-w-xl rounded-[22px] border border-hairline shadow-card",
       )}
       aria-label={t("message.map.label", { place })}
     >
@@ -391,7 +391,7 @@ export function MapCard({ part }: { part: MapPart }) {
               nudge ? "opacity-100" : "opacity-0 group-hover/map:opacity-100",
             )}
           >
-            <span className="rounded-full border border-border bg-surface/90 px-3 py-1 text-xs text-fg shadow-card backdrop-blur">{t("message.map.hint")}</span>
+            <span className="glass rounded-full border border-hairline px-3 py-1 text-xs font-medium text-fg shadow-card">{t("message.map.hint")}</span>
           </div>
         )}
       </div>
@@ -418,8 +418,10 @@ export function MapCard({ part }: { part: MapPart }) {
         </ol>
       )}
 
-      <figcaption className="flex items-center gap-2 border-t border-border px-3 py-2 text-sm">
-        {Mode ? <Mode.Icon className="size-4 shrink-0 text-muted" /> : <MapPin className="size-4 shrink-0 text-muted" />}
+      <figcaption className="flex items-center gap-2.5 px-3.5 py-2.5 text-sm">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text">
+          {Mode ? <Mode.Icon className="size-4" /> : <MapPin className="size-4" />}
+        </span>
         <span className="min-w-0 flex-1 truncate" title={place}>
           <span className="font-medium">{place}</span>
           {route && (
@@ -439,13 +441,13 @@ export function MapCard({ part }: { part: MapPart }) {
               setMenu((v) => !v);
             }}
             aria-expanded={menu}
-            className="inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[13px] text-muted transition hover:bg-surface-2 hover:text-fg"
+            className="press inline-flex h-7 items-center gap-1 rounded-full bg-surface-2 px-2.5 text-[12.5px] font-medium text-fg hover:bg-surface-3"
           >
-            <ExternalLink className="size-3.5" /> {t("message.map.openIn")} <ChevronDown className="size-3.5" />
+            {t("message.map.openIn")} <ChevronDown className={cx("size-3.5 transition-transform", menu && "rotate-180")} />
           </button>
           {menu && (
-            <div className="absolute right-0 bottom-full z-[1100] mb-1 w-56 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-card" onClick={(e) => e.stopPropagation()}>
-              <div className="truncate px-3 py-1.5 text-xs text-muted">{target}</div>
+            <div className="animate-zoom absolute right-0 bottom-full z-[1100] mb-1.5 w-56 origin-bottom-right overflow-hidden rounded-2xl border border-hairline bg-surface p-1 shadow-pop" onClick={(e) => e.stopPropagation()}>
+              <div className="truncate px-2.5 py-1.5 text-xs text-muted">{target}</div>
               {links.map((l) => (
                 <a
                   key={l.key}
@@ -453,7 +455,7 @@ export function MapCard({ part }: { part: MapPart }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setMenu(false)}
-                  className="flex items-center justify-between px-3 py-1.5 text-sm text-fg transition hover:bg-surface-2"
+                  className="flex items-center justify-between rounded-xl px-2.5 py-1.5 text-sm text-fg transition-colors hover:bg-surface-2"
                 >
                   {l.title}
                   <ExternalLink className="size-3.5 text-muted" />

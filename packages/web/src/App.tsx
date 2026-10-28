@@ -11,7 +11,8 @@ import { PluginBoundary } from "./plugins/boundary";
 import { AuthScreen } from "./pages/Auth";
 import { Layout, TopBar } from "./components/Layout";
 import { Toasts } from "./components/Toasts";
-import { Button, EmptyState, Loading } from "./components/ui";
+import { Button, EmptyState } from "./components/ui";
+import { OwlMark } from "./components/OwlMark";
 import { sectionForPath, type PanelSection } from "./components/nav";
 import { ChatPage } from "./pages/chat/ChatPage";
 import { AgentPage } from "./pages/chat/AgentPage";
@@ -31,19 +32,15 @@ export function App() {
 
   return (
     <>
-      {p.kind === "loading" && (
-        <div className="flex h-dvh items-center justify-center">
-          <Loading text={t("app.connecting")} />
-        </div>
-      )}
-      {p.kind === "reauth" && (
-        <div className="flex h-dvh items-center justify-center">
-          <Loading text={t("app.reauth")} />
+      {(p.kind === "loading" || p.kind === "reauth") && (
+        <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-bg" role="status">
+          <OwlMark size={52} mood="sleepy" className="animate-zoom" />
+          <span className="animate-fade text-sm text-muted">{t(p.kind === "loading" ? "app.connecting" : "app.reauth")}</span>
         </div>
       )}
       {p.kind === "error" && (
-        <div className="flex h-dvh flex-col items-center justify-center gap-4 p-6">
-          <EmptyState icon="wifi" title={t("app.hubUnavailable")} hint={p.message} />
+        <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-bg p-6">
+          <EmptyState art={<OwlMark size={64} mood="asleep" />} title={t("app.hubUnavailable")} hint={p.message} />
           <Button variant="primary" onClick={() => void init()}>
             {t("common.retry")}
           </Button>
