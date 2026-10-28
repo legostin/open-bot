@@ -5,7 +5,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import type { AgentDef, Task } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
 import { taskStatus, threadStatus, type Tone } from "../../lib/format";
@@ -40,13 +40,23 @@ export function TaskLine({ taskId, text, reply, from }: { taskId: string; text?:
     <Link
       href={`/tasks/${encodeURIComponent(task.id)}`}
       title={`${name}: ${task.title}`}
-      className="animate-in -mx-1.5 my-0.5 flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs transition hover:bg-surface-2"
+      className="press flex w-full max-w-md items-center gap-2.5 rounded-full border border-hairline bg-surface/70 py-1.5 pr-3.5 pl-1.5 text-[13px] hover:bg-surface"
     >
-      <AgentAvatar avatar={agent?.avatar} id={task.agentId} name={name} size={16} initial={false} />
-      <span className="min-w-0 flex-1 truncate text-fg">{task.title}</span>
-      {where && <span className="shrink-0 text-muted">{where}</span>}
-      <span className={cx("shrink-0", toneText(st.tone), working && "animate-pulse")}>{st.label}</span>
+      <AgentAvatar avatar={agent?.avatar} id={task.agentId} name={name} size={22} running={task.status === "running"} />
+      <span className="min-w-0 flex-1 truncate font-medium text-fg">{task.title}</span>
+      {where && <span className="shrink-0 text-xs text-muted">{where}</span>}
+      <Status label={st.label} tone={st.tone} working={working} />
     </Link>
+  );
+}
+
+/** A task's state: a word in its tone, with a breathing amber dot while it works. */
+function Status({ label, tone, working }: { label: string; tone: Tone; working: boolean }) {
+  return (
+    <span className={cx("inline-flex shrink-0 items-center gap-1.5 text-xs font-medium", working ? "text-accent-text" : toneText(tone))}>
+      {working && <span className="live-dot size-1.5 rounded-full" />}
+      {label}
+    </span>
   );
 }
 
@@ -62,38 +72,49 @@ function MessageLine({ task, text, reply, from, agentList }: { task: Task; text:
   const answer = reply ?? (task.status === "done" ? task.result : undefined);
   const st = threadStatus(task.status);
   const working = task.status === "running" || task.status === "queued";
+  // Cut text opens with a click on it, or on the chevron in the header line: no row of its own for that.
+  const foldable = open || cutText || (!!answer && cutAnswer);
   return (
-    <div className="animate-in my-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm">
-      <Link
-        href={`/tasks/${encodeURIComponent(task.id)}`}
-        title={t("thread.open")}
-        className="-mx-1.5 -my-0.5 flex items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-xs transition hover:bg-surface-2"
-      >
-        {from && <AgentAvatar avatar={sender?.avatar} id={from} name={sender?.name ?? from} size={16} initial={false} />}
-        <ArrowRight className="size-3 shrink-0 text-muted" aria-hidden />
-        <AgentAvatar avatar={to?.avatar} id={task.agentId} name={toName} size={16} initial={false} />
-        <span className="min-w-0 flex-1 truncate font-medium text-fg">{toName}</span>
-        <span className={cx("shrink-0", toneText(st.tone), working && "animate-pulse")}>{st.label}</span>
-      </Link>
-      <Clamp open={open} lines={answer ? 2 : 4} onCut={setCutText}>
-        <div className="mt-1 whitespace-pre-wrap break-words text-fg">{text}</div>
-      </Clamp>
-      {answer && (
-        <div className="mt-2 flex gap-2 border-t border-border pt-2">
-          <AgentAvatar avatar={to?.avatar} id={task.agentId} name={toName} size={16} initial={false} className="mt-0.5" />
-          <div className="min-w-0 flex-1">
-            <Clamp open={open} lines={3} onCut={setCutAnswer}>
-              <Markdown text={answer} className="text-sm" />
-            </Clamp>
+    <div className="w-full max-w-md rounded-[20px] border border-hairline bg-surface px-3.5 py-2.5 text-sm shadow-card">
+      <div className="flex items-center gap-1.5">
+        <Link
+          href={`/tasks/${encodeURIComponent(task.id)}`}
+          title={t("thread.open")}
+          className="press -mx-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-full px-1 py-0.5 text-xs hover:bg-surface-2"
+        >
+          {from && <AgentAvatar avatar={sender?.avatar} id={from} name={sender?.name ?? from} size={20} />}
+          <ArrowRight className="size-3 shrink-0 text-muted" aria-hidden />
+          <AgentAvatar avatar={to?.avatar} id={task.agentId} name={toName} size={20} running={task.status === "running"} />
+          <span className="min-w-0 flex-1 truncate font-semibold text-fg">{toName}</span>
+          <Status label={st.label} tone={st.tone} working={working} />
+        </Link>
+        {foldable && (
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-label={open ? t("task.collapse") : t("task.expand")}
+            title={open ? t("task.collapse") : t("task.expand")}
+            className="press -mr-1 flex size-6 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-fg"
+          >
+            <ChevronDown className={cx("size-3.5 transition-transform duration-300", open && "rotate-180")} />
+          </button>
+        )}
+      </div>
+      <div className={cx(foldable && !open && "cursor-pointer")} onClick={foldable && !open ? () => setOpen(true) : undefined}>
+        <Clamp open={open} lines={answer ? 2 : 4} onCut={setCutText}>
+          <div className="mt-1.5 whitespace-pre-wrap break-words text-fg">{text}</div>
+        </Clamp>
+        {answer && (
+          <div className="mt-2 flex gap-2 rounded-2xl bg-surface-2/70 px-2.5 py-2">
+            <AgentAvatar avatar={to?.avatar} id={task.agentId} name={toName} size={18} className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <Clamp open={open} lines={3} onCut={setCutAnswer}>
+                <Markdown text={answer} className="text-sm" />
+              </Clamp>
+            </div>
           </div>
-        </div>
-      )}
-      {(open || cutText || (answer && cutAnswer)) && (
-        <button type="button" onClick={() => setOpen(!open)} className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted hover:text-fg">
-          {open ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-          {open ? t("task.collapse") : t("task.expand")}
-        </button>
-      )}
+        )}
+      </div>
     </div>
   );
 }

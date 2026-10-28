@@ -1,0 +1,13 @@
+{
+  "name": "World clock & units",
+  "description": "Time in other cities as live clocks, time zone conversion, and units (miles, pounds, Fahrenheit…). Works offline.",
+  "integration.summary": "Time in other cities, calls across time zones, miles and pounds",
+  "integration.example": "What time is it in New York and Tokyo?",
+  "card.label": "Clocks",
+  "card.same": "Same time as here",
+  "card.ahead": "{h} h ahead",
+  "card.behind": "{h} h behind",
+  "card.yesterday": "Yesterday",
+  "card.today": "Today",
+  "card.tomorrow": "Tomorrow"
+}

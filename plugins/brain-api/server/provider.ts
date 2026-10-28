@@ -13,6 +13,8 @@ export interface ModelCall {
   signal: AbortSignal;
   /** Number of messages sent by the previous request in this session (an extra cache read point). */
   prevMessageCount?: number;
+  /** Reasoning effort for this request (the session's); unset: the adapter's default. */
+  effort?: string;
 }
 
 export type StopKind = "end" | "tool_use" | "max_tokens" | "refusal" | "pause" | "aborted";

@@ -179,8 +179,8 @@ function MicButton({
       aria-pressed={held}
       title={t("composer.mic")}
       className={cx(
-        "mic-button inline-flex size-9 items-center justify-center rounded-xl transition",
-        held ? "scale-110 bg-danger text-white shadow-card" : "bg-accent text-accent-fg",
+        "mic-button inline-flex size-9 items-center justify-center rounded-full transition-transform duration-200",
+        held ? "scale-125 bg-danger text-white shadow-[0_0_0_6px_color-mix(in_srgb,var(--danger)_22%,transparent)]" : "candy",
       )}
     >
       <Mic className={cx("size-[18px]", held && "animate-pulse")} />
@@ -339,7 +339,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
   return (
     <div className="relative">
       {suggestions.length > 0 && (
-        <div className="absolute inset-x-0 bottom-full mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-card" role="listbox" aria-label={t("composer.commands")}>
+        <div className="animate-zoom absolute inset-x-0 bottom-full mb-2 overflow-hidden rounded-2xl border border-hairline bg-surface p-1 shadow-pop" role="listbox" aria-label={t("composer.commands")}>
           {suggestions.map((c, i) => (
             <button
               key={c.name}
@@ -351,7 +351,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
                 choose(c);
               }}
               onMouseMove={() => setSel(i)}
-              className={cx("flex w-full items-baseline gap-3 px-3 py-2 text-left text-sm", i === active ? "bg-accent-soft" : "")}
+              className={cx("flex w-full items-baseline gap-3 rounded-xl px-3 py-2 text-left text-sm", i === active ? "bg-accent-soft" : "")}
             >
               <span className="shrink-0 font-mono font-medium text-accent-text">/{c.name.replace(/^\//, "")}</span>
               <span className="min-w-0 flex-1 truncate text-muted">{c.description}</span>
@@ -361,7 +361,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
         </div>
       )}
       {mentions.length > 0 && (
-        <div className="animate-in absolute inset-x-0 bottom-full mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-card" role="listbox" aria-label={t("composer.mentions")}>
+        <div className="animate-zoom absolute inset-x-0 bottom-full mb-2 overflow-hidden rounded-2xl border border-hairline bg-surface p-1 shadow-pop" role="listbox" aria-label={t("composer.mentions")}>
           {mentions.map((o, i) => {
             const a = mentionable.find((m) => m.id === o.id);
             return (
@@ -375,7 +375,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
                   chooseMention(o);
                 }}
                 onMouseMove={() => setSel(i)}
-                className={cx("flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm", i === active ? "bg-accent-soft" : "")}
+                className={cx("flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm", i === active ? "bg-accent-soft" : "")}
               >
                 {o.all ? (
                   <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-muted">
@@ -394,7 +394,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
           })}
         </div>
       )}
-      <div className="composer-box rounded-2xl border border-border bg-surface p-1.5 shadow-card transition focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20">
+      <div className="composer-box rounded-[26px] border border-hairline bg-surface p-1.5 shadow-pop transition-[border-color,box-shadow] duration-200 focus-within:border-accent/50 focus-within:shadow-[var(--shadow-pop),0_0_0_4px_color-mix(in_srgb,var(--accent)_16%,transparent)]">
         {files.length > 0 && <AttachmentChips files={files} onRemove={(id) => removeFiles(conversationId, [id])} />}
         <div className="flex items-end gap-1">
           <button
@@ -402,7 +402,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
             onClick={() => picker.current?.click()}
             title={t("composer.attach")}
             aria-label={t("composer.attach")}
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-fg"
+            className="press inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-fg"
           >
             <Paperclip className="size-[18px]" />
           </button>
@@ -454,9 +454,9 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
                 disabled={stopping}
                 title={t("composer.stop")}
                 aria-label={t("composer.stop")}
-                className="inline-flex size-9 items-center justify-center rounded-xl bg-fg text-bg transition hover:opacity-90 disabled:opacity-50"
+                className="press animate-pop inline-flex size-9 items-center justify-center rounded-full bg-fg text-bg hover:opacity-90 disabled:opacity-50"
               >
-                <Square className="size-3.5 fill-current" />
+                <Square className="size-3 fill-current" />
               </button>
             ) : showMic ? null : (
               <button
@@ -465,9 +465,12 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
                 disabled={!sendable || busy}
                 title={t("composer.sendTitle")}
                 aria-label={t("composer.send")}
-                className="inline-flex size-9 items-center justify-center rounded-xl bg-accent text-accent-fg transition hover:brightness-110 disabled:opacity-40"
+                className={cx(
+                  "press inline-flex size-9 items-center justify-center rounded-full transition-[transform,background,color,box-shadow] duration-300",
+                  sendable && !busy ? "candy scale-100" : "scale-90 bg-surface-2 text-muted/70",
+                )}
               >
-                <ArrowUp className="size-[18px]" />
+                <ArrowUp className="size-[18px]" strokeWidth={2.4} />
               </button>
             )}
           </div>
@@ -478,7 +481,6 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
           {micNote.text}
         </div>
       )}
-      <div className="mt-1.5 hidden px-1 text-[11px] text-muted sm:block mobile:hidden">{t("composer.hint")}</div>
     </div>
   );
 }

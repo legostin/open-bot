@@ -72,5 +72,6 @@
   "ui.error.urlScheme": "Unsupported address scheme: {scheme}",
   "ui.error.urlInvalid": "Invalid address: {url}",
   "ui.error.urlProtocol": "Only http(s) addresses can be opened, not {protocol}",
-  "integration.summary": "A real browser for the agent: websites, forms, screenshots, a live view you can take over"
+  "integration.summary": "A real browser for the agent: websites, forms, screenshots, a live view you can take over",
+  "integration.example": "Open wikipedia.org and tell me what the article of the day is about"
 }

@@ -81,19 +81,24 @@ export function SidebarPanels() {
         const id = `${p.pluginId}:${p.id}`;
         const open = !closed[id];
         return (
-          <div key={p.key} className="rounded-xl border border-border bg-surface">
+          <div key={p.key}>
+            {/* A quiet label like "Machines"; it folds the panel on a click, its chevron shows only on hover. */}
             <button
               type="button"
               onClick={() => setClosed((c) => ({ ...c, [id]: open }))}
-              className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[13px] font-medium"
+              className="group flex w-full items-center gap-1.5 px-1 py-1 text-left text-[12px] font-medium text-muted hover:text-fg"
               aria-expanded={open}
             >
-              <Icon name={p.icon} className="size-4 text-muted" />
+              <Icon name={p.icon} className="size-3.5" />
               <span className="min-w-0 flex-1 truncate">{p.title ?? p.id}</span>
-              {open ? <ChevronDown className="size-4 text-muted" /> : <ChevronRight className="size-4 text-muted" />}
+              {open ? (
+                <ChevronDown className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+              ) : (
+                <ChevronRight className="size-3.5 opacity-60" />
+              )}
             </button>
             {open && (
-              <div className="border-t border-border p-2.5 text-sm">
+              <div className="animate-fade rounded-2xl bg-surface/60 p-2.5 text-sm">
                 <PluginBoundary pluginId={p.pluginId}>
                   <C pluginId={p.pluginId} />
                 </PluginBoundary>
@@ -114,8 +119,8 @@ export function RightPane({ open, onClose }: { open: boolean; onClose: () => voi
   if (!open || !current) return null;
   const C = current.component;
   return (
-    <aside className="fixed inset-0 z-40 flex flex-col bg-surface lg:static lg:z-auto lg:w-[420px] lg:shrink-0 lg:border-l lg:border-border xl:w-[480px]">
-      <div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
+    <aside className="animate-slide fixed inset-0 z-40 flex flex-col overflow-hidden bg-bg lg:static lg:z-auto lg:my-2 lg:mr-2 lg:w-[420px] lg:shrink-0 lg:rounded-[22px] lg:shadow-sheet xl:w-[480px]">
+      <div className="glass flex h-12 items-center gap-1 px-2">
         <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
           {tabs.map((tab) => (
             <button
@@ -123,7 +128,7 @@ export function RightPane({ open, onClose }: { open: boolean; onClose: () => voi
               type="button"
               onClick={() => setActive(tab.key)}
               className={cx(
-                "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition",
+                "press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium whitespace-nowrap",
                 tab.key === current.key ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",
               )}
             >

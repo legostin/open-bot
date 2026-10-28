@@ -61,6 +61,11 @@ export interface ToolResult {
     artifacts?: string[];
     status?: "awaiting_approval" | "denied";
     approvalId?: string;
+    /**
+     * A plugin tool's cards for the reply (PluginContext.widgets.show): the hub turns each into a `widget` part of the
+     * agent's message and drops them from the result the model reads. Kinds must be listed in contributes.widgets.
+     */
+    widgets?: Array<{ kind: string; data: unknown }>;
   };
 }
 
@@ -223,7 +228,37 @@ export type MessagePart =
    */
   | { type: "choices"; options: string[]; chosen?: number }
   /** A channel's live card in the chat: its state and buttons (open, gather now, how often, pause, delete). */
-  | { type: "feed"; feedId: string };
+  | { type: "feed"; feedId: string }
+  /** How an agent thinks for each kind of work (AgentDef.thinking): a live card with a preset per kind. */
+  | { type: "thinking"; agentId: string }
+  /** A page the agent made (page_create, page_show): its card, which opens the page full screen. */
+  | { type: "page"; pageId: string }
+  /**
+   * A plugin's own card (its tool called PluginContext.widgets.show): the plugin's UI module draws `data` with the
+   * component it registered for `kind` (ui.widgets.add). Without that module the part shows nothing.
+   */
+  | { type: "widget"; plugin: string; kind: string; data: unknown };
+
+/** A page an agent made: TSX on the pages kit plus its data, served sandboxed at `url` (core/src/pages.ts). */
+export interface PageView {
+  id: string;
+  title: string;
+  /** One or two lines for the card in the chat. */
+  summary?: string;
+  /** The card's picture: an http(s) URL (through the image proxy) or `file:<path>`. */
+  cover?: string;
+  agentId: string;
+  /** The chat it was made in. */
+  conversationId?: string;
+  /** The page's own address with its secret token: `/p/<id>/<token>/`. */
+  url: string;
+  /** Goes up with every change, so open pages reload. */
+  version: number;
+  /** The last error the page hit in a browser, until the next change. */
+  lastError?: string;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
 
 /** One card of a `news` part. */
 export interface NewsItem {
@@ -464,7 +499,10 @@ export interface AgentDef {
   description: string;
   /** Ordered brain refs, e.g. ["claude-code@local", "api:anthropic"]. */
   brains: string[];
+  /** An exact model for every brain (from before `thinking`): used when no choice names one. */
   model?: string;
+  /** How the agent thinks for each kind of work: kinds without a choice of their own follow `chat`. */
+  thinking?: AgentThinking;
   /** 0 = only reacts, 1 = suggests (read-only background), 2 = acts within rules. */
   initiative: 0 | 1 | 2;
   /** Tool name globs. ["*"] = all. */
@@ -479,6 +517,29 @@ export interface AgentDef {
   /** Translated name / description shown in the UI ("i18n: { ru: { name: … } }" in the frontmatter). */
   i18n?: Partial<Record<Locale, { name?: string; description?: string }>>;
 }
+
+/** How deeply an agent thinks, in plain words: each brain maps it to one of its models and an effort (ProbeResult.presets). */
+export type ThinkingPreset = "fast" | "balanced" | "deep";
+
+/**
+ * How an agent thinks for a kind of work: a preset, or an exact model and effort (they win over the preset's). `brain`
+ * is the brain the choice was made for: it is tried first, and the exact model and effort apply only on it.
+ */
+export interface ThinkingChoice {
+  preset?: ThinkingPreset;
+  model?: string;
+  effort?: string;
+  brain?: string;
+}
+
+/**
+ * The kinds of work an agent does: "chat" its dialogs and group chats (and messages from teammates), "task" what it
+ * does on the side (delegated, background and user tasks), "feed" a channel's runs, "schedule" runs a trigger started.
+ */
+export type WorkKind = "chat" | "task" | "feed" | "schedule";
+
+/** An agent's choice per kind of work; `chat` is the general one the other kinds follow when they have none. */
+export type AgentThinking = Partial<Record<WorkKind, ThinkingChoice>>;
 
 // ---------- Brains ----------
 
@@ -495,6 +556,12 @@ export interface ProbeResult {
   models?: string[];
   /** The model the brain answers with when the agent names none, for people to see. */
   model?: string;
+  /** Names people read for `models`, by id (e.g. "opus" → "Opus"). */
+  modelNames?: Record<string, string>;
+  /** Reasoning efforts the brain takes, least first (e.g. ["low", "medium", "high"]); absent: it takes none. */
+  efforts?: string[];
+  /** What each preset means on this brain: one of its models and efforts (unset: the brain's default). */
+  presets?: Partial<Record<ThinkingPreset, { model?: string; effort?: string }>>;
   detail?: string;
 }
 
@@ -578,6 +645,8 @@ export interface BrainSessionOptions {
   agent: AgentDef;
   variant?: string;
   model?: string;
+  /** Reasoning effort, one of the brain's ProbeResult.efforts; unset: the brain's default. */
+  effort?: string;
   workspace: string;
   mcp: {
     url: string;
@@ -607,6 +676,11 @@ export type BrainEvent =
 export interface BrainTurn {
   text: string;
   attachments?: string[];
+  /**
+   * What came before in this conversation (a summary and the recent turns), for a session that was to resume but cannot
+   * (its history is gone, or too full to go on): the brain starts afresh with it before `text`. Ignored otherwise.
+   */
+  recap?: string;
 }
 
 // ---------- Notifications ----------
@@ -846,6 +920,8 @@ export type UiEvent =
   | { type: "feed.updated"; data: Feed }
   | { type: "feed.deleted"; data: { id: string } }
   | { type: "feed.post"; data: FeedPost }
+  | { type: "page.updated"; data: PageView }
+  | { type: "page.deleted"; data: { id: string } }
   | { type: "task.updated"; data: Task }
   | { type: "notification.created"; data: Notification }
   | { type: "approval.pending"; data: { count: number } }
@@ -870,7 +946,7 @@ export type UiEvent =
 
 export type IntegrationStatus = "connected" | "needs-setup" | "off" | "unavailable" | "broken";
 
-/** A card of the integrations library (GET /api/integrations). */
+/** A card of the integrations library (GET /api/integrations) and an entry of the catalog (GET /api/catalog). */
 export interface IntegrationView {
   /** The plugin's id, or a core entry's ("remote-access"). */
   id: string;
@@ -885,6 +961,21 @@ export interface IntegrationView {
   account?: string;
   /** Why it is broken or unavailable (in the reader's language). */
   detail?: string;
+  /** Something to ask once it is on, in the person's words (the catalog's "Try"). */
+  example?: string;
+}
+
+/** A group of the catalog: a situation in life (everyday, travel, money…) and what helps in it. */
+export interface CatalogSection {
+  id: string;
+  /** In the reader's language. */
+  title: string;
+  items: IntegrationView[];
+}
+
+/** Everything the person can turn on (GET /api/catalog): integrations, widgets and abilities, by situation. */
+export interface CatalogView {
+  sections: CatalogSection[];
 }
 
 /** A connected account of a provider (Google), as the hub keeps it. */

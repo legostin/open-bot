@@ -182,6 +182,7 @@ export class BrainHost {
     const local: BrainSessionOptions = {
       ...opts,
       model: safeArg(opts.model, "model"),
+      effort: safeArg(opts.effort, "effort"),
       variant: safeArg(opts.variant, "variant"),
       resume: safeArg(opts.resume, "resume"),
       workspace,

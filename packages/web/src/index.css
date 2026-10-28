@@ -3,65 +3,160 @@
 /* The iOS app's chat page (/m/*): <html class="owl-mobile">, set by lib/mobile.ts. `mobile:` utilities apply only there. */
 @custom-variant mobile (&:where(.owl-mobile, .owl-mobile *));
 
-/* Semantic color tokens, Owlbot's ink-on-paper style after the 0_0 mark: neutral greys, black (light) or white
-   (dark) as the accent, muted semantic colours. Light by default, dark via prefers-color-scheme. */
+/*
+ * Owlbot's look, "Amber": warm ink and paper, and one light in it, the owl's amber eyes. Amber is what is yours and
+ * what is alive: your messages, the button that sends, an agent at work, what is unread. Everything else stays quiet.
+ * Three layers of paper: the canvas (the sidebar sits on it), the sheet (the conversation), and cards and bubbles on
+ * the sheet. Light by default, dark via prefers-color-scheme.
+ *
+ * Type: Onest for the interface (Latin and Cyrillic drawn as one family), Unbounded for the few display moments
+ * (the wordmark, page titles, empty states). Both SIL OFL, bundled (assets/fonts): the hub works offline.
+ */
+@font-face {
+  font-family: "Onest Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./assets/fonts/onest-cyrillic-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Onest Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./assets/fonts/onest-cyrillic-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Onest Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./assets/fonts/onest-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Onest Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./assets/fonts/onest-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Unbounded Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url("./assets/fonts/unbounded-cyrillic-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Unbounded Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url("./assets/fonts/unbounded-cyrillic-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Unbounded Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url("./assets/fonts/unbounded-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Unbounded Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url("./assets/fonts/unbounded-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
-  --bg: #f5f5f4;
+  /* Paper: the canvas under the sidebar, the sheet of the conversation, cards and bubbles on it. */
+  --canvas: #ece7e0;
+  --bg: #f7f4ef;
   --surface: #ffffff;
-  --surface-2: #efefee;
-  --surface-3: #e6e6e4;
-  --fg: #111113;
-  --muted: #6b6b71;
-  --border: #e2e2df;
-  --accent: #111113;
-  --accent-fg: #ffffff;
-  --accent-soft: #ebebe9;
-  --accent-text: #111113;
-  --success: #1f7a45;
-  --success-soft: #e1f2e7;
-  --warning: #9a6300;
-  --warning-soft: #f8eed6;
-  --danger: #b93815;
-  --danger-soft: #f9e3da;
-  --info: #2f5bd3;
-  --info-soft: #e3e9fb;
-  --user-bubble: #111113;
-  --user-bubble-fg: #ffffff;
-  --code-bg: #f1f1ef;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 6px 20px rgb(0 0 0 / 0.06);
+  --surface-2: #f1ece5;
+  --surface-3: #e5ded4;
+  --fg: #1c1814;
+  --muted: #7b7369;
+  --border: #e4ddd3;
+  --hairline: rgb(70 50 20 / 0.09);
+  /* Amber, the one light. --accent-text is the amber that reads as text on paper. */
+  --accent: #f4a11a;
+  --accent-fg: #2b1a03;
+  --accent-soft: #fff0d0;
+  --accent-text: #a35c00;
+  --candy-top: #ffd56b;
+  --candy-bottom: #ffad29;
+  --candy-glow: rgb(245 158 11 / 0.42);
+  --success: #1c8a4b;
+  --success-soft: #e2f4e8;
+  --warning: #cf5d0c;
+  --warning-soft: #fdebdc;
+  --danger: #d33a2c;
+  --danger-soft: #fce5e1;
+  --info: #2d6ae3;
+  --info-soft: #e4ecfd;
+  --user-bubble: #ffc43d;
+  --user-bubble-fg: #2b1a03;
+  --code-bg: #f4efe8;
+  /* Elevation: e1 for what sits on the sheet, pop for what floats over it, sheet for the sheet on the canvas. */
+  --shadow: 0 1px 1px rgb(70 45 10 / 0.04), 0 2px 6px -2px rgb(70 45 10 / 0.07), 0 10px 24px -14px rgb(70 45 10 / 0.12);
+  --shadow-pop: 0 1px 2px rgb(70 45 10 / 0.06), 0 12px 32px -8px rgb(70 45 10 / 0.18), 0 32px 64px -24px rgb(70 45 10 / 0.18);
+  --shadow-sheet: 0 0 0 1px rgb(70 50 20 / 0.06), 0 1px 3px rgb(70 45 10 / 0.05), 0 16px 40px -24px rgb(70 45 10 / 0.18);
+  --glass: rgb(247 244 239 / 0.78);
+  /* Motion: things arrive with a little spring and leave quickly. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0b0b0c;
-    --surface: #141416;
-    --surface-2: #1b1b1e;
-    --surface-3: #242428;
-    --fg: #f3f3f4;
-    --muted: #9b9ba2;
-    --border: #28282c;
-    --accent: #f3f3f4;
-    --accent-fg: #0b0b0c;
-    --accent-soft: #232327;
-    --accent-text: #ffffff;
-    --success: #5ccf8a;
-    --success-soft: #15291d;
-    --warning: #e7b450;
-    --warning-soft: #2e2512;
-    --danger: #f07a55;
-    --danger-soft: #331d16;
-    --info: #86a6ff;
-    --info-soft: #1a2240;
-    --user-bubble: #f3f3f4;
-    --user-bubble-fg: #0b0b0c;
-    --code-bg: #101012;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+    --canvas: #090807;
+    --bg: #12100e;
+    --surface: #1d1a17;
+    --surface-2: #26221e;
+    --surface-3: #332d27;
+    --fg: #f4eee6;
+    --muted: #a0968a;
+    --border: #2c2722;
+    --hairline: rgb(255 235 205 / 0.075);
+    --accent: #ffb52e;
+    --accent-fg: #241602;
+    --accent-soft: #382910;
+    --accent-text: #ffc857;
+    --candy-top: #ffd061;
+    --candy-bottom: #f7a01c;
+    --candy-glow: rgb(255 176 32 / 0.34);
+    --success: #4cd787;
+    --success-soft: #142a1d;
+    --warning: #ff9447;
+    --warning-soft: #3a2213;
+    --danger: #ff6a58;
+    --danger-soft: #3b1814;
+    --info: #7ea8ff;
+    --info-soft: #182440;
+    --user-bubble: #ffbe3a;
+    --user-bubble-fg: #241602;
+    --code-bg: #0e0c0a;
+    --shadow: 0 1px 0 rgb(255 240 220 / 0.03) inset, 0 1px 2px rgb(0 0 0 / 0.45), 0 10px 28px -14px rgb(0 0 0 / 0.7);
+    --shadow-pop: 0 0 0 1px rgb(255 240 220 / 0.06), 0 16px 40px -8px rgb(0 0 0 / 0.7), 0 40px 80px -24px rgb(0 0 0 / 0.6);
+    --shadow-sheet: 0 0 0 1px rgb(255 240 220 / 0.06), 0 20px 50px -24px rgb(0 0 0 / 0.9);
+    --glass: rgb(18 16 14 / 0.74);
     color-scheme: dark;
   }
 }
 
 @theme inline {
+  --color-canvas: var(--canvas);
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -69,6 +164,7 @@
   --color-fg: var(--fg);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-hairline: var(--hairline);
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
@@ -85,8 +181,17 @@
   --color-user-bubble-fg: var(--user-bubble-fg);
   --color-code-bg: var(--code-bg);
   --shadow-card: var(--shadow);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --shadow-pop: var(--shadow-pop);
+  --shadow-sheet: var(--shadow-sheet);
+  --font-sans: "Onest Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-display: "Unbounded Variable", "Onest Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* Softer corners everywhere: nothing in Owlbot is sharp. */
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+  --ease-out: var(--ease-out);
 }
 
 @layer base {
@@ -97,15 +202,18 @@
   }
 
   body {
-    background: var(--bg);
+    background: var(--canvas);
     color: var(--fg);
     font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     -webkit-tap-highlight-color: transparent;
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    background: color-mix(in srgb, var(--accent) 38%, transparent);
   }
 
   * {
@@ -117,6 +225,12 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+
+  button:not(:disabled),
+  [role="button"],
+  summary {
+    cursor: pointer;
+  }
 }
 
 @layer components {
@@ -124,10 +238,100 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
+  /* Display type: the wordmark, page titles, empty states. */
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    font-feature-settings: normal;
+  }
+
+  /* Amber candy: the one strong thing on a screen (send, the main button, your bubble). A soft top light and a glow. */
+  .candy {
+    background: linear-gradient(180deg, var(--candy-top), var(--candy-bottom));
+    color: var(--accent-fg);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.55),
+      inset 0 -1px 0 rgb(150 80 0 / 0.14),
+      0 1px 2px rgb(150 80 0 / 0.16),
+      0 6px 16px -6px var(--candy-glow);
+  }
+  .candy:where(:hover:not(:disabled)) {
+    filter: brightness(1.04) saturate(1.05);
+  }
+
+  /* Pressing things: they give a little under the finger. */
+  .press {
+    transition:
+      transform 0.16s var(--ease-out),
+      background-color 0.16s,
+      color 0.16s,
+      box-shadow 0.2s,
+      opacity 0.16s,
+      filter 0.16s;
+  }
+  .press:where(:active:not(:disabled)) {
+    transform: scale(0.96);
+  }
+
+  /* Glass for chrome that floats over content (top bars, the composer's dock, menus). */
+  .glass {
+    background: var(--glass);
+    -webkit-backdrop-filter: saturate(1.6) blur(18px);
+    backdrop-filter: saturate(1.6) blur(18px);
+  }
+
+  /* ---------- messages ---------- */
+
+  /* Your message: amber, with its tail at the bottom right. */
+  .bubble-user {
+    background: linear-gradient(170deg, var(--candy-top), var(--candy-bottom) 140%);
+    color: var(--user-bubble-fg);
+    border-radius: 1.25rem 1.25rem 0.375rem 1.25rem;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.5),
+      0 1px 2px rgb(150 80 0 / 0.12),
+      0 8px 20px -12px var(--candy-glow);
+  }
+  .bubble-user.is-grouped {
+    border-radius: 1.25rem 0.375rem 0.375rem 1.25rem;
+  }
+
+  /* An agent's words: paper on the sheet, tail at the top left on the first of a run. Cards sit under them bare. */
+  .msg-parts {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.375rem;
+  }
+  .msg-parts > * {
+    max-width: 100%;
+  }
+  /* Cards take the column's width (each caps its own); words take only what they need. */
+  .msg-parts > :not(.md, .msg-bubble) {
+    align-self: stretch;
+  }
+  .msg-parts > .md,
+  .msg-bubble {
+    width: fit-content;
+    max-width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 0.375rem 1.25rem 1.25rem 1.25rem;
+    padding: 0.5rem 0.875rem;
+    box-shadow: 0 1px 2px rgb(70 45 10 / 0.05);
+  }
+  .is-grouped .msg-parts > .md:first-child {
+    border-top-left-radius: 1.25rem;
+  }
+  .msg-parts > .md + .md,
+  .msg-parts > .md ~ .md {
+    border-top-left-radius: 1.25rem;
+  }
+
   /* Markdown content inside messages. */
   .md {
     overflow-wrap: anywhere;
-    line-height: 1.6;
+    line-height: 1.55;
   }
   .md > :first-child {
     margin-top: 0;
@@ -141,21 +345,28 @@
   .md pre,
   .md blockquote,
   .md table {
-    margin: 0.6em 0;
+    margin: 0.55em 0;
   }
   .md ul {
     list-style: disc;
-    padding-left: 1.4em;
+    padding-left: 1.3em;
   }
   .md ol {
     list-style: decimal;
-    padding-left: 1.4em;
+    padding-left: 1.3em;
+  }
+  .md li::marker {
+    color: var(--muted);
   }
   .md li + li {
     margin-top: 0.2em;
   }
   .md li > input[type="checkbox"] {
     margin-right: 0.4em;
+    accent-color: var(--accent);
+  }
+  .md strong {
+    font-weight: 620;
   }
   .md h1,
   .md h2,
@@ -163,36 +374,44 @@
   .md h4 {
     font-weight: 650;
     line-height: 1.3;
+    letter-spacing: -0.01em;
     margin: 1em 0 0.4em;
   }
   .md h1 {
-    font-size: 1.35em;
+    font-size: 1.3em;
   }
   .md h2 {
-    font-size: 1.2em;
+    font-size: 1.16em;
   }
   .md h3 {
-    font-size: 1.08em;
+    font-size: 1.06em;
   }
   .md a {
     color: var(--accent-text);
     text-decoration: underline;
-    text-underline-offset: 2px;
+    text-decoration-color: color-mix(in srgb, var(--accent-text) 40%, transparent);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.15s;
+  }
+  .md a:hover {
+    text-decoration-color: currentColor;
   }
   .md code {
     font-family: var(--font-mono);
-    font-size: 0.88em;
+    font-size: 0.86em;
     background: var(--code-bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--hairline);
     border-radius: 6px;
-    padding: 0.1em 0.35em;
+    padding: 0.08em 0.35em;
   }
   .md pre {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: 0.84em;
+    line-height: 1.55;
     background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 10px;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
     padding: 0.8em 1em;
     overflow-x: auto;
   }
@@ -203,54 +422,71 @@
     font-size: 1em;
   }
   .md blockquote {
-    border-left: 3px solid var(--border);
+    border-left: 3px solid var(--accent);
     padding-left: 0.9em;
     color: var(--muted);
   }
   .md table {
     display: block;
     overflow-x: auto;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 0.92em;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: fit-content;
+    max-width: 100%;
   }
   .md th,
   .md td {
-    border: 1px solid var(--border);
-    padding: 0.35em 0.7em;
+    border-bottom: 1px solid var(--border);
+    padding: 0.45em 0.8em;
     text-align: left;
     /* Cells keep whole words and the table scrolls sideways; "anywhere" would squeeze them letter by letter. */
     overflow-wrap: break-word;
     min-width: 4.5em;
   }
+  .md tr:last-child td {
+    border-bottom: 0;
+  }
   .md th {
     background: var(--surface-2);
     font-weight: 600;
+    font-size: 0.92em;
+    color: var(--muted);
   }
   .md hr {
     border: 0;
     border-top: 1px solid var(--border);
     margin: 1em 0;
   }
-  /* The user's own message on its ink bubble: everything takes the bubble's text colour. */
+  /* The user's own message on its amber bubble: everything takes the bubble's text colour. */
   .md-bubble a,
   .md-bubble blockquote {
     color: inherit;
   }
-  .md-bubble code,
-  .md-bubble pre,
-  .md-bubble th {
-    background: color-mix(in srgb, currentColor 12%, transparent);
+  .md-bubble a {
+    text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   }
   .md-bubble code,
   .md-bubble pre,
+  .md-bubble th {
+    background: color-mix(in srgb, currentColor 9%, transparent);
+  }
+  .md-bubble code,
+  .md-bubble pre,
+  .md-bubble table,
   .md-bubble th,
   .md-bubble td,
   .md-bubble hr {
-    border-color: color-mix(in srgb, currentColor 22%, transparent);
+    border-color: color-mix(in srgb, currentColor 18%, transparent);
   }
   .md-bubble blockquote {
     border-left-color: color-mix(in srgb, currentColor 40%, transparent);
     opacity: 0.85;
+  }
+  .md-bubble li::marker {
+    color: inherit;
   }
   .vault-ref {
     display: inline-flex;
@@ -264,24 +500,38 @@
     font-size: 13px;
   }
 
-  @keyframes owl-blink {
+  /* The day between messages: a quiet chip in the middle. */
+  .day-chip {
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+    border-radius: 999px;
+    padding: 0.2rem 0.7rem;
+  }
+
+  /* Typing: three amber dots that roll like a wave. */
+  @keyframes owl-wave {
     0%,
-    80%,
+    60%,
     100% {
-      opacity: 0.25;
+      transform: translateY(0);
+      opacity: 0.45;
     }
-    40% {
+    30% {
+      transform: translateY(-3px);
       opacity: 1;
     }
   }
   .typing-dot {
-    animation: owl-blink 1.2s infinite ease-in-out;
+    background: linear-gradient(180deg, var(--candy-top), var(--candy-bottom));
+    animation: owl-wave 1.2s infinite var(--ease-out);
   }
   .typing-dot:nth-child(2) {
-    animation-delay: 0.15s;
+    animation-delay: 0.14s;
   }
   .typing-dot:nth-child(3) {
-    animation-delay: 0.3s;
+    animation-delay: 0.28s;
   }
 
   /* The message a reply quote points to, when the quote is clicked (MessageView). */
@@ -295,7 +545,7 @@
     }
   }
   .reply-flash {
-    border-radius: 1rem;
+    border-radius: 1.25rem;
     animation: owl-flash 1.6s ease-out;
   }
 
@@ -304,17 +554,26 @@
       opacity: 0;
     }
   }
-  .stream-caret::after {
-    content: "▍";
-    margin-left: 1px;
-    color: var(--accent);
+  .stream-caret > :last-child::after,
+  .stream-caret:empty::after {
+    content: "";
+    display: inline-block;
+    width: 0.5em;
+    height: 0.5em;
+    margin-left: 0.3em;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--candy-top), var(--candy-bottom));
+    box-shadow: 0 0 10px var(--candy-glow);
+    vertical-align: 0.05em;
     animation: owl-caret 1s steps(1) infinite;
   }
+
+  /* ---------- motion ---------- */
 
   @keyframes owl-in {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(8px);
     }
     to {
       opacity: 1;
@@ -322,7 +581,23 @@
     }
   }
   .animate-in {
-    animation: owl-in 0.18s ease-out;
+    animation: owl-in 0.32s var(--ease-out);
+  }
+
+  /* Your message pops out of the composer: from below, a touch small, with a little spring. */
+  @keyframes owl-send {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.92);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .animate-send {
+    transform-origin: bottom right;
+    animation: owl-send 0.42s var(--ease-spring);
   }
 
   @keyframes owl-fade {
@@ -331,17 +606,58 @@
     }
   }
   .animate-fade {
-    animation: owl-fade 0.18s ease-out;
+    animation: owl-fade 0.2s ease-out;
   }
 
   @keyframes owl-zoom {
     from {
       opacity: 0;
-      transform: scale(0.96);
+      transform: scale(0.95) translateY(4px);
     }
   }
   .animate-zoom {
-    animation: owl-zoom 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: owl-zoom 0.28s var(--ease-spring);
+  }
+
+  @keyframes owl-slide {
+    from {
+      opacity: 0;
+      transform: translateX(24px);
+    }
+  }
+  .animate-slide {
+    animation: owl-slide 0.34s var(--ease-out);
+  }
+
+  @keyframes owl-pop {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  .animate-pop {
+    animation: owl-pop 0.32s var(--ease-spring);
+  }
+
+  /* Something going on: a soft amber pulse (a running task, a channel gathering). */
+  @keyframes owl-breathe {
+    0%,
+    100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 var(--candy-glow);
+    }
+    50% {
+      opacity: 0.75;
+      box-shadow: 0 0 0 4px transparent;
+    }
+  }
+  .live-dot {
+    background: linear-gradient(180deg, var(--candy-top), var(--candy-bottom));
+    animation: owl-breathe 1.8s ease-in-out infinite;
   }
 
   /* Horizontal strips (the image carousel) scroll by touch, trackpad and buttons, without a scrollbar. */
@@ -352,33 +668,170 @@
     display: none;
   }
 
+  /* ---------- agents' faces (AgentAvatar) and the owl (OwlMark) ---------- */
+
+  .owl-face .owl-eye {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .owl-face .owl-pupil {
+    transition: transform 0.3s var(--ease-out);
+  }
+  /* A face blinks when you point at it. */
+  @keyframes owl-blink-once {
+    0%,
+    100% {
+      transform: scaleY(1);
+    }
+    45%,
+    55% {
+      transform: scaleY(0.12);
+    }
+  }
+  .owl-avatar:hover .owl-eye {
+    animation: owl-blink-once 0.36s ease-in-out;
+  }
+  /* At work: it looks around and blinks, and glows in its own colour. */
+  @keyframes owl-look {
+    0%,
+    18% {
+      transform: translate(0, 0);
+    }
+    26%,
+    44% {
+      transform: translate(1.3px, -0.4px);
+    }
+    52%,
+    72% {
+      transform: translate(-1.3px, 0.2px);
+    }
+    80%,
+    100% {
+      transform: translate(0, 0);
+    }
+  }
+  @keyframes owl-blink {
+    0%,
+    46%,
+    54%,
+    100% {
+      transform: scaleY(1);
+    }
+    50% {
+      transform: scaleY(0.12);
+    }
+  }
+  @keyframes owl-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-0.9px);
+    }
+  }
+  @keyframes owl-glow {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 0 transparent);
+    }
+    50% {
+      filter: drop-shadow(0 0 5px var(--glow, var(--candy-glow)));
+    }
+  }
+  .owl-alive {
+    animation: owl-glow 2.4s ease-in-out infinite;
+  }
+  .owl-alive .owl-pupil {
+    animation: owl-look 3.6s var(--ease-out) infinite;
+  }
+  .owl-alive .owl-eye {
+    animation: owl-blink 3.6s ease-in-out infinite;
+  }
+  .owl-alive .owl-smile {
+    animation: owl-bob 0.9s ease-in-out infinite;
+  }
+  /* The owl in the corner blinks now and then; it narrows its eyes while connecting and sleeps offline. */
+  @keyframes owl-idle-blink {
+    0%,
+    94%,
+    100% {
+      transform: scaleY(1);
+    }
+    97% {
+      transform: scaleY(0.1);
+    }
+  }
+  .owl-mark .owl-eye {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 0.4s var(--ease-out);
+  }
+  .owl-mark.is-awake .owl-eye {
+    animation: owl-idle-blink 7s ease-in-out infinite;
+  }
+  .owl-mark.is-sleepy .owl-eye {
+    transform: scaleY(0.45);
+  }
+  .owl-mark.is-asleep .owl-eye {
+    transform: scaleY(0.12);
+  }
+
+  /* The empty chat: the agent, big, with a soft halo of its colour. */
+  .hero-halo {
+    position: relative;
+    isolation: isolate;
+  }
+  .hero-halo::before {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    z-index: -1;
+    border-radius: 999px;
+    background: radial-gradient(closest-side, var(--halo, var(--candy-glow)), transparent);
+    opacity: 0.55;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-in,
+    .animate-send,
     .animate-fade,
-    .animate-zoom {
+    .animate-zoom,
+    .animate-slide,
+    .animate-pop,
+    .owl-alive,
+    .owl-alive .owl-pupil,
+    .owl-alive .owl-eye,
+    .owl-alive .owl-smile,
+    .owl-mark .owl-eye,
+    .typing-dot,
+    .live-dot {
       animation: none;
+    }
+    .press:active {
+      transform: none;
     }
   }
 }
 
 /* Maps in messages (pages/chat/MapCard.tsx). Unlayered, like leaflet.css, which loads with the first map: these rules
-   win by specificity. Tiles are toned down to the ink palette; in dark mode they are inverted. */
+   win by specificity. Tiles are warmed to the paper palette; in dark mode they are inverted. */
 .owl-map.leaflet-container {
   background: var(--surface-2);
   font-family: var(--font-sans);
   outline: none;
 }
 .owl-map .leaflet-tile-pane {
-  filter: saturate(0.65) contrast(1.02);
+  filter: sepia(0.18) saturate(0.7) contrast(1.02) brightness(1.02);
 }
 @media (prefers-color-scheme: dark) {
   .owl-map .leaflet-tile-pane {
-    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.55);
+    filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.88) saturate(0.45) sepia(0.12);
   }
 }
 .owl-map .leaflet-bar {
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
   box-shadow: var(--shadow);
   overflow: hidden;
 }
@@ -397,16 +850,16 @@
   color: var(--muted);
 }
 .owl-map .leaflet-control-attribution {
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
   color: var(--muted);
   font-size: 10px;
-  border-top-left-radius: 6px;
+  border-top-right-radius: 8px;
 }
 .owl-map .leaflet-control-attribution a {
   color: var(--muted);
 }
-/* Places: a round badge in the symbol's colour (--marker) with a white glyph or the stop's number; the list under the
-   map uses the small one. "user" is a blue dot with a soft pulse. */
+/* Places: a round candy badge in the symbol's colour (--marker) with a white glyph or the stop's number; the list
+   under the map uses the small one. "user" is a blue dot with a soft pulse. */
 .owl-map .owl-marker-wrap {
   background: none;
   border: 0;
@@ -418,15 +871,19 @@
   width: 30px;
   height: 30px;
   border-radius: 9999px;
-  background: var(--marker, #1f2937);
+  background:
+    radial-gradient(120% 90% at 30% 15%, rgb(255 255 255 / 0.35), transparent 55%),
+    var(--marker, #1f2937);
   color: #fff;
   border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
-  transition: transform 0.15s ease-out;
+  box-shadow:
+    0 2px 6px rgb(0 0 0 / 0.28),
+    0 0 0 1px rgb(0 0 0 / 0.05);
+  transition: transform 0.25s var(--ease-spring);
 }
 .owl-marker-sm {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-width: 1.5px;
 }
 .owl-marker-sm svg {
@@ -441,7 +898,7 @@
 }
 .owl-map .owl-marker-wrap:hover .owl-marker,
 .owl-map .owl-marker.is-selected {
-  transform: scale(1.18);
+  transform: scale(1.2);
 }
 .owl-marker-user {
   position: relative;
@@ -471,14 +928,14 @@
     opacity: 0;
   }
 }
-/* A map full screen (MapCard): the chat's composer steps aside. */
+/* A map or a page full screen (MapCard, PageCard): the chat's composer steps aside. */
 html.owl-map-full .chat-dock {
   display: none;
 }
-/* Routes: a light casing under a blue line, dashed for transit (drawn straight between the stops). */
+/* Routes: a light casing under an amber-to-ink line, dashed for transit (drawn straight between the stops). */
 .owl-map path.owl-route {
-  stroke: #2563eb;
-  stroke-opacity: 0.9;
+  stroke: #e8890c;
+  stroke-opacity: 0.95;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -487,67 +944,46 @@ html.owl-map-full .chat-dock {
 }
 .owl-map path.owl-route-casing {
   stroke: #fff;
-  stroke-opacity: 0.85;
+  stroke-opacity: 0.9;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 @media (prefers-color-scheme: dark) {
   .owl-map path.owl-route {
-    stroke: #60a5fa;
+    stroke: #ffb52e;
   }
   .owl-map path.owl-route-casing {
-    stroke: #0b0b0c;
+    stroke: #12100e;
   }
 }
 .owl-map .owl-map-label {
   background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
   box-shadow: var(--shadow);
-  font: 500 12px/1.3 var(--font-sans);
-  padding: 3px 8px;
+  font: 600 12px/1.3 var(--font-sans);
+  padding: 3px 9px;
 }
 .owl-map .leaflet-tooltip-top.owl-map-label::before {
-  border-top-color: var(--border);
+  border-top-color: var(--surface);
 }
 
 /*
  * The iOS app's chat page (/m/chat/:id in a WKWebView, html.owl-mobile). Unlayered, so these win over utilities;
- * nothing here applies to the desktop UI.
+ * nothing here applies to the desktop UI. The same paper as the app's own screens (Theme.swift), under its glass
+ * header; the system font, as in the rest of the app.
  */
-/* iOS system backgrounds under the app's native header (no seam); the rest, the user's ink bubble included, is the web UI's. */
 html.owl-mobile {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f2f2f7;
-  --surface-3: #e5e5ea;
-  --fg: #111113;
-  --muted: #8a8a8e;
-  --border: #e5e5ea;
-  --accent: #1c1c1e;
-  --accent-fg: #ffffff;
-  --accent-soft: #f2f2f7;
-  --accent-text: #1c1c1e;
-  --code-bg: #f6f6f8;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 6px 20px rgb(0 0 0 / 0.06);
+  --canvas: #f7f4ef;
+  --muted: #857c71;
 }
 
 @media (prefers-color-scheme: dark) {
   html.owl-mobile {
-    --bg: #000000;
-    --surface: #1c1c1e;
-    --surface-2: #2c2c2e;
-    --surface-3: #3a3a3c;
-    --fg: #f5f5f7;
-    --muted: #98989f;
-    --border: #2c2c2e;
-    --accent: #f2f2f7;
-    --accent-fg: #000000;
-    --accent-soft: #2c2c2e;
-    --accent-text: #f5f5f7;
-    --code-bg: #141416;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
+    --canvas: #0d0b0a;
+    --bg: #0d0b0a;
+    --surface: #1b1815;
   }
 }
 
@@ -561,6 +997,8 @@ html.owl-mobile body {
 
 html.owl-mobile body {
   font-family: -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif, "Apple Color Emoji";
+  font-feature-settings: normal;
+  background: var(--bg);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -592,7 +1030,7 @@ html.owl-mobile[data-keyboard="open"] .chat-dock {
 
 /* The caret says where typing goes; no glowing ring around the composer, as in Messages. */
 .owl-mobile .composer-box:focus-within {
-  border-color: var(--surface-3);
+  border-color: var(--hairline);
   box-shadow: var(--shadow);
 }
 

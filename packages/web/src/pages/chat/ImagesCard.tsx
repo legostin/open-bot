@@ -53,11 +53,11 @@ function Picture({ src, alt, fit, className }: { src: string; alt: string; fit: 
 
 function SingleImage({ item, onOpen }: { item: Shown; onOpen: () => void }) {
   return (
-    <figure className="inline-flex max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-card sm:max-w-md">
+    <figure className="inline-flex max-w-full flex-col overflow-hidden rounded-[22px] border border-hairline bg-surface shadow-card sm:max-w-md">
       <button type="button" onClick={onOpen} aria-label={item.alt || item.caption || t("message.images.open")} className="group block cursor-zoom-in overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-accent">
         <Picture src={item.url} alt={item.alt ?? item.caption ?? ""} fit="contain" className="transition-transform duration-300 ease-out group-hover:scale-[1.01]" />
       </button>
-      {item.caption && <figcaption className="border-t border-border px-3 py-2 text-[13px] leading-snug text-muted">{item.caption}</figcaption>}
+      {item.caption && <figcaption className="px-3.5 py-2.5 text-[13px] leading-snug text-muted">{item.caption}</figcaption>}
     </figure>
   );
 }
@@ -107,7 +107,7 @@ function Carousel({ items, onOpen }: { items: Shown[]; onOpen: (i: number) => vo
     }
   };
 
-  const arrow = "absolute top-1/2 z-10 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface/90 text-fg shadow-card backdrop-blur transition duration-200 hover:bg-surface focus-visible:opacity-100";
+  const arrow = "glass absolute top-1/2 z-10 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-hairline text-fg shadow-card transition duration-200 hover:bg-surface focus-visible:opacity-100";
   return (
     <div className="group/carousel relative max-w-full sm:max-w-xl" role="region" aria-roledescription="carousel" aria-label={t("message.images.carousel", { n: items.length })}>
       <div className="relative">
@@ -124,7 +124,7 @@ function Carousel({ items, onOpen }: { items: Shown[]; onOpen: (i: number) => vo
                 type="button"
                 onClick={() => onOpen(i)}
                 aria-label={it.alt || it.caption || t("message.images.open")}
-                className="group block w-full cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-surface shadow-card outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="group block w-full cursor-zoom-in overflow-hidden rounded-[20px] border border-hairline bg-surface shadow-card outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <Picture src={it.url} alt={it.alt ?? it.caption ?? ""} fit="cover" className="aspect-[4/3] w-full transition-transform duration-300 ease-out group-hover:scale-[1.015]" />
               </button>
@@ -151,7 +151,7 @@ function Carousel({ items, onOpen }: { items: Shown[]; onOpen: (i: number) => vo
             aria-label={t("message.images.goto", { n: i + 1 })}
             aria-current={i === active}
             onClick={() => go(i)}
-            className={cx("h-1.5 rounded-full transition-all duration-300 ease-out", i === active ? "w-5 bg-fg" : "w-1.5 bg-border hover:bg-muted")}
+            className={cx("h-1.5 rounded-full transition-all duration-300 ease-out", i === active ? "w-5 bg-accent" : "w-1.5 bg-surface-3 hover:bg-muted")}
           />
         ))}
       </div>

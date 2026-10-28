@@ -1,4 +1,4 @@
-import type { AgentDef, Locale, Task } from "@owlbot/shared";
+import type { AgentDef, Locale, Task, ThinkingPreset, WorkKind } from "@owlbot/shared";
 
 /** Language names for the system prompt (English, since prompts are English). */
 const LANGUAGE_NAMES: Record<Locale, string> = { en: "English", ru: "Russian" };
@@ -29,6 +29,16 @@ export interface PromptContext {
   thread?: { id: string; name: string };
   /** A short setup chat ("New channel", "Add agent"): what it makes, and what it already became. */
   making?: { purpose: "feed" | "agent"; entity?: string };
+  /** How this session thinks: its brain's name, the kind of work, and the model and effort the user's choice came to. */
+  thinking?: { brain: string; kind: WorkKind; model?: string; effort?: string; preset?: ThinkingPreset };
+}
+
+const KIND_NAMES: Record<WorkKind, string> = { chat: "your dialogs", task: "tasks", feed: "channel runs", schedule: "scheduled runs" };
+
+/** "You think with Claude Code: model opus, effort high (the user's "deep" choice for tasks)." */
+function thinkingLine(t: NonNullable<PromptContext["thinking"]>): string {
+  const how = [t.model ? `model ${t.model}` : "its default model", t.effort ? `effort ${t.effort}` : ""].filter(Boolean).join(", ");
+  return `You think with ${t.brain}: ${how}${t.preset ? ` (the user's "${t.preset}" choice for ${KIND_NAMES[t.kind]})` : ""}.`;
 }
 
 /** Where the agent is in a setup chat, and how it ends. */
@@ -119,6 +129,7 @@ export function buildSystemPrompt(c: PromptContext): string {
     `Local time when this session started: ${now} (${c.timezone}); the latest \`[Now: …]\` line before a message is the current time. Reply in the user's language (default: ${LANGUAGE_NAMES[c.language as Locale] ?? c.language}).`,
     where,
     c.machine ? `You are running on the computer "${c.machine.name}"${c.machine.local ? " (the hub's own computer)" : ""}.` : "",
+    c.thinking ? thinkingLine(c.thinking) : "",
     "Your dialog with the user, your tasks and your threads with teammates are all you, in separate sessions. The `[You now]` block before a message says where this session runs, what else you are doing, what each teammate is busy with and where the user is; it is current, so answer from it when asked what you or a teammate are doing.",
     "",
     "Tools from the `owlbot` MCP server are your hands: browser, memory, tasks, triggers, notifications, machines, vault references, and anything plugins add.",
@@ -134,6 +145,9 @@ export function buildSystemPrompt(c: PromptContext): string {
   );
   if (!c.background) {
     lines.push("- When the user asks you to change your own name, description, look or instructions, do it yourself with `profile_update`; never send them to a settings page.");
+    lines.push(
+      "- How quickly or deeply you think (brain, model, effort) can differ by kind of work: your dialogs, tasks, channel runs, scheduled runs. When the user wants it changed (\"answer faster\", \"a deeper model for research tasks\"), do it with `thinking_set`; to show them how it is now, `thinking_show`. Either puts a card with buttons under your reply.",
+    );
   }
   if (c.task) lines.push(...(c.thread ? inAThread(c.thread) : IN_A_TASK));
   if (!c.machine || c.machine.local) {

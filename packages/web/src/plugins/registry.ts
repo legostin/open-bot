@@ -3,7 +3,7 @@
 
 import type { ComponentType } from "react";
 import type { Message } from "@owlbot/shared";
-import type { LiveViewContribution, LiveViewHandle, LiveViewProps, MapAppContribution, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
+import type { LiveViewContribution, LiveViewHandle, LiveViewProps, MapAppContribution, SlotContribution, SlotName, SlotProps, WidgetProps } from "@owlbot/ui";
 import { createStore } from "../lib/store";
 import { globSpecificity, matchesGlob } from "../lib/glob";
 import { applyActivity, IDLE_VIEW, type LiveViewState } from "./liveview";
@@ -64,6 +64,14 @@ export interface MapAppEntry extends MapAppContribution {
   key: string;
 }
 
+/** A plugin's chat card renderer (ui.widgets.add). */
+export interface WidgetEntry {
+  pluginId: string;
+  key: string;
+  kind: string;
+  component: ComponentType<WidgetProps>;
+}
+
 export interface RegistryState {
   contributions: Contribution[];
   routes: RouteEntry[];
@@ -72,9 +80,10 @@ export interface RegistryState {
   settings: SettingsEntry[];
   liveViews: LiveViewEntry[];
   mapApps: MapAppEntry[];
+  widgets: WidgetEntry[];
 }
 
-export const registry = createStore<RegistryState>({ contributions: [], routes: [], statusbar: [], commands: [], settings: [], liveViews: [], mapApps: [] });
+export const registry = createStore<RegistryState>({ contributions: [], routes: [], statusbar: [], commands: [], settings: [], liveViews: [], mapApps: [], widgets: [] });
 
 let seq = 0;
 function nextKey(pluginId: string): { key: string; seq: number } {
@@ -135,6 +144,16 @@ export function addMapApp(pluginId: string, a: MapAppContribution): () => void {
   return addTo("mapApps", { ...a, pluginId, key: nextKey(pluginId).key });
 }
 
+export function addWidget(pluginId: string, kind: string, component: ComponentType<WidgetProps>): () => void {
+  if (typeof component !== "function" && (typeof component !== "object" || component === null)) throw new Error(`widgets.add ${kind}: component is required`);
+  return addTo("widgets", { pluginId, key: nextKey(pluginId).key, kind: String(kind), component });
+}
+
+/** The renderer of a plugin's card: the one it registered last for the kind. */
+export function pickWidget(widgets: WidgetEntry[], pluginId: string, kind: string): WidgetEntry | undefined {
+  return widgets.findLast((w) => w.pluginId === pluginId && w.kind === kind);
+}
+
 /** Drop everything a plugin registered (on unload / disable). */
 export function removePlugin(pluginId: string): void {
   registry.set((s) => ({
@@ -145,6 +164,7 @@ export function removePlugin(pluginId: string): void {
     settings: s.settings.filter((x) => x.pluginId !== pluginId),
     liveViews: s.liveViews.filter((x) => x.pluginId !== pluginId),
     mapApps: s.mapApps.filter((x) => x.pluginId !== pluginId),
+    widgets: s.widgets.filter((x) => x.pluginId !== pluginId),
   }));
 }
 

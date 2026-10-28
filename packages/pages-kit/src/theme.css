@@ -1,0 +1,107 @@
+/* shadcn/ui's tokens in Owlbot's own look ("Amber": warm paper and ink, amber the one light, Onest), for Tailwind's
+   browser runtime; the hub puts this into every page. */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.875rem;
+  --background: #f7f4ef;
+  --foreground: #1c1814;
+  --card: #ffffff;
+  --card-foreground: #1c1814;
+  --popover: #ffffff;
+  --popover-foreground: #1c1814;
+  --primary: #f4a11a;
+  --primary-foreground: #2b1a03;
+  --secondary: #f1ece5;
+  --secondary-foreground: #1c1814;
+  --muted: #f1ece5;
+  --muted-foreground: #7b7369;
+  --accent: #f1ece5;
+  --accent-foreground: #1c1814;
+  --destructive: #d33a2c;
+  --border: #e4ddd3;
+  --input: #e4ddd3;
+  --ring: #f4a11a;
+  --chart-1: #f4a11a;
+  --chart-2: #2d6ae3;
+  --chart-3: #1c8a4b;
+  --chart-4: #d33a2c;
+  --chart-5: #7b7369;
+}
+
+.dark {
+  --background: #12100e;
+  --foreground: #f4eee6;
+  --card: #1d1a17;
+  --card-foreground: #f4eee6;
+  --popover: #1d1a17;
+  --popover-foreground: #f4eee6;
+  --primary: #ffb52e;
+  --primary-foreground: #241602;
+  --secondary: #26221e;
+  --secondary-foreground: #f4eee6;
+  --muted: #26221e;
+  --muted-foreground: #a0968a;
+  --accent: #26221e;
+  --accent-foreground: #f4eee6;
+  --destructive: #ff6a58;
+  --border: #2c2722;
+  --input: #332d27;
+  --ring: #ffb52e;
+  --chart-1: #ffb52e;
+  --chart-2: #7ea8ff;
+  --chart-3: #4cd787;
+  --chart-4: #ff6a58;
+  --chart-5: #a0968a;
+}
+
+@theme inline {
+  --font-sans: "Onest Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+}

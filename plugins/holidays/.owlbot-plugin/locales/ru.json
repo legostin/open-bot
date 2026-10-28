@@ -1,0 +1,12 @@
+{
+  "name": "Праздники и выходные",
+  "description": "Государственные праздники и длинные выходные примерно 120 стран от Nager.Date — карточкой в чате.",
+  "integration.summary": "Ближайшие выходные и праздники — чтобы планировать поездки",
+  "integration.example": "Когда ближайшие длинные выходные?",
+  "card.upcoming": "Ближайшие праздники",
+  "card.year": "Праздники {year} года",
+  "card.weekends": "Длинные выходные {year} года",
+  "card.days": "{n, plural, one {# день} few {# дня} many {# дней} other {# дня}}",
+  "card.bridge": "Взять отгул: {dates}",
+  "card.label": "{title}: {country}"
+}

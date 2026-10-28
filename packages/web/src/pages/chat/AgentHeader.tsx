@@ -1,50 +1,48 @@
-// The header of a dialog: the agent you are talking to (avatar, name, description), the brain it thinks with
-// and the way to its settings.
+// The header of a dialog: who you are talking to, small. Its face (alive while it works) and name open its settings;
+// "working…" shows under the name only while it is so. Beside the name, quietly, how it thinks (a preset such as
+// "Fast"), which opens the choice of preset, exact model and effort, and brain; it turns into a warning when no brain
+// of the agent answers.
 
 import { useEffect } from "react";
-import { SlidersHorizontal } from "lucide-react";
 import { useStore } from "../../lib/store";
-import { agents, ensureAgents } from "../../state/app";
+import { agents, ensureAgents, team } from "../../state/app";
+import { brains, ensureBrains } from "../../state/brains";
 import { editAgent } from "../../state/panel";
 import { AgentAvatar } from "../../components/AgentAvatar";
-import { IconButton } from "../../components/ui";
+import { cx } from "../../components/ui";
 import { BrainPicker } from "./BrainPicker";
 import { t } from "../../i18n";
 
 export function AgentHeader({ agentId, settings = true }: { agentId?: string; settings?: boolean }) {
   const list = useStore(agents);
-  useEffect(() => ensureAgents(), []);
+  const members = useStore(team);
+  const brainList = useStore(brains);
+  useEffect(() => {
+    ensureAgents();
+    ensureBrains();
+  }, []);
   const agent = list?.find((a) => a.id === agentId);
+  const running = !!members?.find((m) => m.agentId === agentId)?.running;
   const name = agent?.name ?? agentId ?? t("message.assistant");
   const canEdit = !!agent && settings;
   return (
-    <div className="flex min-w-0 items-center gap-0.5">
+    <div className="flex min-w-0 items-center gap-1.5">
       <button
         type="button"
         disabled={!canEdit}
         onClick={() => agent && editAgent(agent.id)}
-        title={canEdit ? t("agent.settings") : undefined}
-        className="flex min-w-10 items-center gap-2.5 rounded-xl py-1 pr-2 pl-1 text-left transition enabled:hover:bg-surface-2"
+        title={canEdit ? `${t("agent.settings")}${agent?.description ? ` · ${agent.description}` : ""}` : agent?.description}
+        className="press flex min-w-0 items-center gap-2 rounded-full py-1 pr-3 pl-1 text-left enabled:hover:bg-surface-2"
       >
-        <AgentAvatar avatar={agent?.avatar} id={agentId} name={name} size={32} />
+        <AgentAvatar avatar={agent?.avatar} id={agentId} name={name} size={28} running={running} />
         <span className="min-w-0">
-          <span className="block truncate text-[15px] leading-tight font-semibold">{name}</span>
-          {agent?.description && <span className="block truncate text-xs leading-tight text-muted">{agent.description}</span>}
+          <span className="block truncate text-[14.5px] leading-tight font-semibold">{name}</span>
+          <span className={cx("block overflow-hidden text-[11.5px] leading-tight text-accent-text transition-all duration-300", running ? "max-h-4 opacity-100" : "max-h-0 opacity-0")}>
+            {t("team.working")}
+          </span>
         </span>
       </button>
-      {/* The avatar opens the same settings (brains included): a phone's bar leaves the room to the agent's name. */}
-      {agent && settings && (
-        <span className="hidden shrink-0 @md/top:flex">
-          <BrainPicker agent={agent} />
-        </span>
-      )}
-      {agent && settings && (
-        <span className="hidden shrink-0 @xl/top:flex">
-          <IconButton label={t("agent.settings")} onClick={() => editAgent(agent.id)} className="size-8 shrink-0">
-            <SlidersHorizontal className="size-4" />
-          </IconButton>
-        </span>
-      )}
+      {agent && settings && brainList && <BrainPicker agent={agent} />}
     </div>
   );
 }

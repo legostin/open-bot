@@ -1,0 +1,7 @@
+{
+  "name": "@owlbot/plugin-holidays",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Holidays and days off: public holidays and long weekends of about 120 countries"
+}

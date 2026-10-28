@@ -16,6 +16,7 @@ import { clientIp, FailureBudget, hostAllowed, HttpError, originAllowed, origins
 import { registerJoinPage } from "./join-page.ts";
 import { registerApi } from "./api.ts";
 import { registerSpa } from "./spa.ts";
+import { registerPages } from "./pages.ts";
 
 const COOKIE = "owlbot_session";
 
@@ -263,6 +264,10 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
       authenticate: guard,
     });
   });
+
+  // ---------- pages agents make: their links are their capability, no session ----------
+
+  await registerPages(app, hub);
 
   // ---------- SPA ----------
 

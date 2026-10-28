@@ -26,8 +26,11 @@ import { ImagesCard } from "./ImagesCard";
 import { MapCard } from "./MapCard";
 import { NewsCard } from "./NewsCard";
 import { Choices, FeedCard } from "./ChatButtons";
+import { ThinkingCard } from "./ThinkingCard";
+import { PageCard } from "./PageCard";
 import { TaskLine } from "./TaskLine";
 import { ConnectDeviceCard } from "./ConnectDeviceCard";
+import { WidgetCard } from "./WidgetCard";
 import { t, type MessageKey } from "../../i18n";
 import { mobileMode } from "../../lib/mobile";
 
@@ -95,14 +98,16 @@ function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" 
   const st = known ? { label: t(known.label), tone: known.tone } : { label: part.status, tone: "neutral" as const };
   const pending = part.status === "pending";
   return (
-    <div className={cx("my-2 rounded-xl border px-3 py-2.5", pending ? "border-warning/40 bg-warning-soft/60" : "border-border bg-surface-2/60")}>
-      <div className="flex flex-wrap items-center gap-2">
-        <ShieldAlert className={cx("size-4", pending ? "text-warning" : "text-muted")} />
+    <div className={cx("w-full max-w-md rounded-2xl border bg-surface p-3.5 shadow-card", pending ? "border-warning/35 ring-4 ring-warning/8" : "border-hairline")}>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className={cx("flex size-7 items-center justify-center rounded-full", pending ? "bg-warning-soft text-warning" : "bg-surface-2 text-muted")}>
+          <ShieldAlert className="size-4" />
+        </span>
         <span className="text-sm font-semibold">{pending ? t("message.approval.titlePending") : t("message.approval.title")}</span>
         {/* "Awaiting approval" is already the title. */}
         {!pending && <Badge tone={st.tone}>{st.label}</Badge>}
       </div>
-      <div className="mt-1.5 text-sm break-words">{part.summary}</div>
+      <div className="mt-2 text-sm leading-relaxed break-words">{part.summary}</div>
       {/* On the phone the answer is given here (Face ID); the security console stays on the computer. */}
       {native && pending && <NativeApprovalActions approvalId={part.approvalId} bridge={native} />}
       {s && !native && (
@@ -110,7 +115,10 @@ function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" 
           href={`${s.consoleUrl}/#/approvals/${encodeURIComponent(part.approvalId)}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1.5 text-[13px] font-medium text-accent-text shadow-sm transition hover:bg-surface-2"
+          className={cx(
+            "press mt-3 inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold",
+            pending ? "candy" : "border border-hairline bg-surface text-fg hover:bg-surface-2",
+          )}
         >
           {pending ? t("message.approval.open") : t("message.approval.details")} <ExternalLink className="size-3.5" />
         </a>
@@ -122,10 +130,12 @@ function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" 
 function NotificationCard({ part }: { part: Extract<MessagePart, { type: "notification" }> }) {
   const lvl = notifyLevel(part.level);
   return (
-    <div className="my-2 rounded-xl border border-accent/25 bg-accent-soft/50 px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Bell className="size-4 text-accent-text" />
-        <span className="text-sm font-semibold">{part.title}</span>
+    <div className="w-full max-w-md rounded-2xl border border-hairline bg-surface p-3.5 shadow-card">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="flex size-7 items-center justify-center rounded-full bg-accent-soft text-accent-text">
+          <Bell className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1 text-sm font-semibold">{part.title}</span>
         <Badge tone={lvl.tone}>{lvl.label}</Badge>
       </div>
       {/* The hub's own lines (a digest's items, a calendar section) keep their breaks. */}
@@ -136,7 +146,7 @@ function NotificationCard({ part }: { part: Extract<MessagePart, { type: "notifi
 
 function ErrorPart({ message }: { message: string }) {
   return (
-    <div className="my-1.5 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
+    <div className="flex max-w-md items-start gap-2 rounded-2xl bg-danger-soft px-3.5 py-2.5 text-sm text-danger">
       <CircleAlert className="mt-0.5 size-4 shrink-0" />
       <span className="min-w-0 break-words whitespace-pre-wrap">{message}</span>
     </div>
@@ -153,7 +163,7 @@ function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" 
     <div className="my-1.5">
       {isImage && (
         <a href={href} target="_blank" rel="noopener noreferrer" className="mb-1 block">
-          <img src={href} alt={part.name} className="max-h-72 max-w-full rounded-xl border border-border" loading="lazy" />
+          <img src={href} alt={part.name} className="max-h-72 max-w-full rounded-2xl border border-hairline" loading="lazy" />
         </a>
       )}
       {isAudio && <audio controls preload="none" src={href} className="mb-1 h-10 w-72 max-w-full" />}
@@ -161,9 +171,11 @@ function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" 
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg transition hover:bg-surface-2"
+        className="press inline-flex max-w-full items-center gap-2 rounded-full border border-hairline bg-surface py-1.5 pr-3.5 pl-2 text-sm text-fg shadow-[0_1px_2px_rgb(70_45_10/0.06)] hover:bg-surface-2"
       >
-        {voice ? <Mic className="size-4 shrink-0 text-muted" /> : <FileText className="size-4 shrink-0 text-muted" />}
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text">
+          {voice ? <Mic className="size-3.5" /> : <FileText className="size-3.5" />}
+        </span>
         <span className="min-w-0 truncate font-medium">{voice ? t("message.voice") : part.name || part.path}</span>
         {meta && <span className="shrink-0 text-xs text-muted">{meta}</span>}
       </a>
@@ -187,7 +199,7 @@ function ReplyQuote({ part }: { part: Extract<MessagePart, { type: "reply_to" }>
       type="button"
       onClick={jump}
       title={t("message.replyTo")}
-      className="mb-1 flex max-w-full items-center gap-1.5 rounded-lg border-l-2 border-accent bg-surface-2 py-1 pr-2.5 pl-2 text-left text-[13px] text-muted transition hover:text-fg"
+      className="press flex max-w-full items-center gap-1.5 self-start rounded-xl border-l-[3px] border-accent bg-surface-2/80 py-1 pr-3 pl-2 text-left text-[13px] text-muted hover:text-fg"
     >
       <CornerUpLeft className="size-3.5 shrink-0" />
       <span className="min-w-0 truncate">{part.text}</span>
@@ -197,10 +209,10 @@ function ReplyQuote({ part }: { part: Extract<MessagePart, { type: "reply_to" }>
 
 function TypingDots() {
   return (
-    <span className="inline-flex items-center gap-1 py-2" aria-label={t("message.typing")}>
-      <span className="typing-dot size-1.5 rounded-full bg-muted" />
-      <span className="typing-dot size-1.5 rounded-full bg-muted" />
-      <span className="typing-dot size-1.5 rounded-full bg-muted" />
+    <span className="msg-bubble inline-flex items-center gap-1.5 px-4 py-3" aria-label={t("message.typing")}>
+      <span className="typing-dot size-[7px] rounded-full" />
+      <span className="typing-dot size-[7px] rounded-full" />
+      <span className="typing-dot size-[7px] rounded-full" />
     </span>
   );
 }
@@ -213,6 +225,22 @@ function partShown(p: MessagePart, role: Message["role"], details: boolean): boo
   if (details) return true;
   if (p.type === "tool_call" || p.type === "tool_result") return false;
   return !(role === "system" && p.type === "text");
+}
+
+/** Whether the chat shows the message at all: a finished one with nothing for the person (only tool calls, a note for the model) is left out. */
+/** `inline`: tools whose plugin line ("Remembered: …") is for the person, shown without the details mode. */
+export function messageShown(message: Message, details: boolean, inline?: (tool: string) => boolean): boolean {
+  return (
+    message.status === "streaming" ||
+    message.parts.some((p) => (p.type === "tool_call" && !details && !!inline?.(p.name)) || (p.type !== "reply_to" && partShown(p, message.role, details)))
+  );
+}
+
+/** Who wrote it, for runs of messages: the person, an agent (or a teammate writing in a thread), or nobody (system). */
+export function authorOf(message: Message): string | undefined {
+  if (message.role === "system") return undefined;
+  if (message.role === "user" && !message.agentId) return "user";
+  return `agent:${message.agentId ?? ""}`;
 }
 
 function Parts({ message }: { message: Message }) {
@@ -289,6 +317,12 @@ function Parts({ message }: { message: Message }) {
             return <Choices key={it.key} part={p} messageId={message.id} />;
           case "feed":
             return <FeedCard key={it.key} feedId={p.feedId} />;
+          case "thinking":
+            return <ThinkingCard key={it.key} agentId={p.agentId} />;
+          case "page":
+            return <PageCard key={it.key} pageId={p.pageId} conversationId={message.conversationId} />;
+          case "widget":
+            return <WidgetCard key={it.key} part={p} message={message} />;
           default:
             return null;
         }
@@ -304,21 +338,45 @@ function channelLabel(channel: string | undefined): string {
   return `${channel === "app" ? t("message.fromPhone") : channel} · `;
 }
 
-/** Core rendering of a message (also passed to chat.message overrides as `Default`). */
-export const DefaultMessage = memo(function DefaultMessage({ message, agentName, agent }: { message: Message; agentName?: string; agent?: AgentDef }) {
+/**
+ * Core rendering of a message (also passed to chat.message overrides as `Default`). Yours is an amber bubble on the
+ * right; an agent's words are paper bubbles beside its face, its cards bare under them. `grouped`: the same author
+ * wrote just before, so no face or name again. `fresh`: it arrived while the chat was open, so it comes in with motion.
+ */
+export const DefaultMessage = memo(function DefaultMessage({
+  message,
+  agentName,
+  agent,
+  grouped,
+  fresh,
+}: {
+  message: Message;
+  agentName?: string;
+  agent?: AgentDef;
+  grouped?: boolean;
+  fresh?: boolean;
+}) {
   const details = useStore(showDetails);
   const { contributions } = usePluginRegistry();
   const name = agentName ?? agent?.name ?? message.agentId ?? t("message.assistant");
   // A finished message with nothing for the person (only tool calls, or a note for the model) is not shown at all.
-  const forPerson = (p: MessagePart) => (p.type === "tool_call" && !details ? !!pickToolRenderer(contributions, p.name)?.inline : p.type !== "reply_to" && partShown(p, message.role, details));
-  if (message.status !== "streaming" && !message.parts.some(forPerson)) return null;
+  if (!messageShown(message, details, (tool) => !!pickToolRenderer(contributions, tool)?.inline)) return null;
   // A teammate writing in a thread is a user-role message with its agent: it reads as that agent's message.
   if (message.role === "user" && !message.agentId) {
     return (
-      <div className="animate-in flex justify-end" data-message-id={message.id}>
-        <div className="max-w-[88%] rounded-2xl rounded-br-md bg-user-bubble px-3.5 py-2 text-user-bubble-fg text-[15px] leading-relaxed sm:max-w-[75%]">
-          <Parts message={message} />
-          <div className="mt-0.5 text-right text-[11px] text-muted">
+      <div className={cx("flex justify-end", grouped && "-mt-3.5")} data-message-id={message.id}>
+        <div
+          className={cx(
+            "bubble-user flex max-w-[86%] flex-wrap items-end gap-x-2.5 px-3.5 py-2 text-[15px] leading-relaxed sm:max-w-[72%]",
+            grouped && "is-grouped",
+            fresh && "animate-send",
+          )}
+        >
+          {/* The time sits on the last line when it fits there, as in a messenger. */}
+          <div className="min-w-0">
+            <Parts message={message} />
+          </div>
+          <div className="ml-auto translate-y-[2px] text-[10.5px] leading-5 font-medium whitespace-nowrap tabular-nums opacity-55">
             {channelLabel(message.channel)}
             {formatTime(message.createdAt)}
           </div>
@@ -328,21 +386,24 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName,
   }
   if (message.role === "system") {
     return (
-      <div className="animate-in mx-auto w-full max-w-[640px] text-sm" data-message-id={message.id}>
+      <div className={cx("mx-auto w-full max-w-[640px] text-sm", fresh && "animate-in")} data-message-id={message.id}>
         <Parts message={message} />
       </div>
     );
   }
+  const streaming = message.status === "streaming";
   return (
-    <div className="animate-in flex gap-2.5" data-message-id={message.id}>
-      <AgentAvatar avatar={agent?.avatar} id={message.agentId} name={name} size={28} className="mt-0.5" />
-      <div className="min-w-0 flex-1">
-        <div className="mb-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-muted">
-          <span className="font-medium text-fg">{name}</span>
-          {details && message.brainRef && <span className="font-mono">{message.brainRef}</span>}
-          <span>{formatTime(message.createdAt)}</span>
-        </div>
-        <div className="text-[15px] leading-relaxed">
+    <div className={cx("flex gap-2.5", grouped && "-mt-3.5", fresh && "animate-in")} data-message-id={message.id}>
+      <div className="w-8 shrink-0">{!grouped && <AgentAvatar avatar={agent?.avatar} id={message.agentId} name={name} size={32} running={streaming} />}</div>
+      <div className={cx("min-w-0 flex-1", grouped && "is-grouped")}>
+        {!grouped && (
+          <div className="mb-1 flex flex-wrap items-baseline gap-x-2 pl-0.5 text-[12.5px] text-muted">
+            <span className="font-semibold text-fg">{name}</span>
+            {details && message.brainRef && <span className="font-mono text-[11px]">{message.brainRef}</span>}
+            <span className="tabular-nums">{formatTime(message.createdAt)}</span>
+          </div>
+        )}
+        <div className="msg-parts text-[15px] leading-relaxed">
           <Parts message={message} />
         </div>
       </div>
@@ -354,10 +415,10 @@ function DefaultMessageForPlugins({ message }: { message: Message }) {
   return <DefaultMessage message={message} />;
 }
 
-export function MessageView({ message, agent }: { message: Message; agent?: AgentDef }) {
+export function MessageView({ message, agent, grouped, fresh }: { message: Message; agent?: AgentDef; grouped?: boolean; fresh?: boolean }) {
   const { contributions } = usePluginRegistry();
   const override = pickMessageRenderer(contributions, message);
-  const core = <DefaultMessage message={message} agentName={agent?.name} agent={agent} />;
+  const core = <DefaultMessage message={message} agentName={agent?.name} agent={agent} grouped={grouped} fresh={fresh} />;
   if (!override) return core;
   const C = override.component;
   return (

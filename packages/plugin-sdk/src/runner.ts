@@ -50,6 +50,8 @@ const hookHandlers = new Map<string, (p: any) => any>();
 const eventHandlers = new Map<string, Array<(p: any) => void>>();
 const settingsCbs: Array<(s: Record<string, any>) => void> = [];
 const uiMessageCbs: Array<(p: any) => void> = [];
+/** Cards shown by the tool calls in progress (ctx.widgets.show), by call id: they travel in the result's _meta. */
+const callWidgets = new Map<string, Array<{ kind: string; data: unknown }>>();
 const localeCbs: Array<(l: Locale) => void> = [];
 let hubLocale: Locale = DEFAULT_LOCALE;
 let messages: Catalog = {};
@@ -123,6 +125,13 @@ peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pl
         void peer.request("register.http", {});
       },
     },
+    widgets: {
+      show(call, kind, data) {
+        const list = call?.callId ? callWidgets.get(call.callId) : undefined;
+        if (!list) throw new Error("widgets.show: call it inside a tool handler, with the handler's context");
+        list.push({ kind: String(kind), data: JSON.parse(JSON.stringify(data ?? null)) });
+      },
+    },
     ui: {
       emit(channel, payload) {
         void peer.request("core.call", { method: "ui.emit", params: { channel, payload } }).catch(() => {});
@@ -191,11 +200,18 @@ peer.onNotification("ui.message", (p: { payload: unknown }) => {
 peer.handle("tool.invoke", async (p: { name: string; input: unknown; context: ToolCallContext }): Promise<ToolResult> => {
   const h = toolHandlers.get(p.name);
   if (!h) throw new Error(`unknown tool ${p.name}`);
+  const callId = p.context?.callId;
+  const widgets: Array<{ kind: string; data: unknown }> = [];
+  if (callId) callWidgets.set(callId, widgets);
   try {
     const r = await h(p.input ?? {}, p.context);
-    return typeof r === "string" ? { content: [{ type: "text", text: r }] } : r;
+    const result: ToolResult = typeof r === "string" ? { content: [{ type: "text", text: r }] } : r;
+    if (!widgets.length) return result;
+    return { ...result, _meta: { ...result._meta, widgets: [...(result._meta?.widgets ?? []), ...widgets] } };
   } catch (e: any) {
     return { content: [{ type: "text", text: `Error: ${e?.message ?? String(e)}` }], isError: true };
+  } finally {
+    if (callId && callWidgets.get(callId) === widgets) callWidgets.delete(callId);
   }
 });
 

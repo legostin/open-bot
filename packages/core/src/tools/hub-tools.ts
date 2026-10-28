@@ -11,7 +11,7 @@
 // The one exception is profile_update at the end: every agent may change its own profile when the user asks.
 
 import type { AgentDef, AgentDraft, JsonSchema, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
-import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, parseAvatar, parseBrainRef } from "@owlbot/shared";
+import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
 import type { Hub } from "../app.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
@@ -117,6 +117,7 @@ export function registerHubTools(hub: Hub): void {
           avatar: a.avatar,
           brains: a.brains,
           model: a.model,
+          thinking: a.thinking,
           initiative: a.initiative,
           source: a.source,
           default: a.id === def,
@@ -132,12 +133,14 @@ export function registerHubTools(hub: Hub): void {
       description:
         "Change an agent: pass its id. New agents go through hub_agent_draft, which shows the user a card to confirm; create one here (with at least a name) only when the user asks to skip that. " +
         `avatar = {color, shape}; colors: ${AVATAR_COLORS.join(", ")}; shapes: ${AVATAR_SHAPES.join(", ")}. ` +
-        "brains is the ordered fallback list (see hub_brains_list), initiative 0 = only reacts, 1 = suggests, 2 = acts within rules.",
+        "brains is the ordered fallback list (see hub_brains_list), initiative 0 = only reacts, 1 = suggests, 2 = acts within rules. " +
+        'thinking: how it thinks per kind of work (chat, task, feed, schedule), each {preset: "fast"|"balanced"|"deep"} or an exact {model, effort, brain}; kinds left out follow chat.',
       inputSchema: obj({
         id: { type: "string", description: "Existing agent id to edit; omit to create (derived from the name)" },
         ...PROFILE_FIELDS,
         brains: { type: "array", items: { type: "string" } },
         model: { type: "string" },
+        thinking: { type: "object", description: "Replaces the agent's choices per kind of work" },
       }),
     },
     (i) => {
@@ -149,6 +152,7 @@ export function registerHubTools(hub: Hub): void {
       if (typeof patch === "string") return text(patch, true);
       if (Array.isArray(i.brains)) patch.brains = i.brains.map(String).filter(Boolean);
       if (i.model !== undefined) patch.model = String(i.model) || undefined;
+      if (i.thinking !== undefined) patch.thinking = parseThinking(i.thinking);
       const saved = hub.saveAgent({ ...patchAgent(prev ?? agentFromMarkdown(id, "", "user"), patch, hubLocale()), id, source: "user" }, "agent");
       return text(`Agent ${saved.id} ${prev ? "updated" : "created"}${saved.avatar ? ` (avatar: ${saved.avatar.color} ${saved.avatar.shape})` : ""}.`);
     },
@@ -389,8 +393,9 @@ export function registerHubTools(hub: Hub): void {
       name: "integrations_list",
       effect: "read",
       description:
-        "The integrations library: services the user can connect (access from anywhere, Google Calendar, Telegram, web search, the browser…) with their status " +
-        "(connected and as whom, needs-setup, off, broken, unavailable). Check it before saying something cannot be done.",
+        "The catalog: services the user can connect and abilities they can turn on (access from anywhere, Google Calendar, Telegram, web search, the browser, " +
+        "weather, currency rates, Wikipedia, holidays, crypto prices, world clock…) with their status (connected and as whom, needs-setup, off, broken, unavailable). " +
+        "Check it before saying something cannot be done: an ability that is off can be turned on with hub_integration_connect.",
       inputSchema: obj({}),
     },
     async () => {

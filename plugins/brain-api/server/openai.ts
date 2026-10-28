@@ -19,6 +19,8 @@ export interface OpenAiConfig {
   maxTokensField: "max_completion_tokens" | "max_tokens";
   extraHeaders?: Record<string, string>;
   proxyEnv?: Record<string, string>;
+  /** How the provider takes a reasoning effort: OpenAI's `reasoning_effort`, OpenRouter's `reasoning: {effort}`. */
+  effortField?: "reasoning_effort" | "reasoning";
 }
 
 type Msg = Record<string, unknown>;
@@ -78,6 +80,8 @@ export function buildOpenAiRequest(call: ModelCall, cfg: OpenAiConfig): { body: 
     messages: toOpenAiMessages(call.system, call.messages, cfg.vision),
     [cfg.maxTokensField]: call.maxTokens,
   };
+  if (call.effort && cfg.effortField === "reasoning_effort") body.reasoning_effort = call.effort;
+  if (call.effort && cfg.effortField === "reasoning") body.reasoning = { effort: call.effort };
   const tools = sortedTools(call.tools);
   if (tools.length) {
     body.tools = tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description ?? "", parameters: toolSchema(t) } }));

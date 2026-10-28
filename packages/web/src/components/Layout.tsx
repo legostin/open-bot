@@ -1,6 +1,7 @@
-// App shell, kept minimal: the team on the left (each agent with its dialog, then group chats, then the machines and what
-// runs there; a drawer on phones), the current view, and the settings panel beside it. Views put their own slim top bar
-// (TopBar) with the shared header actions.
+// App shell, kept minimal: the team on the left, right on the canvas (each agent with its dialog, then group chats,
+// then the machines and what runs there; a drawer on phones), and the current view as a sheet of paper floating on the
+// canvas, with the settings panel as a second sheet beside it. Views put their own slim top bar (TopBar): the view's
+// own content and only the status that needs the person right now.
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
@@ -9,7 +10,7 @@ import { useStore } from "../lib/store";
 import { ACTIVE_STATUSES } from "../lib/format";
 import { agentForPath, chatForPath } from "../lib/team";
 import { feedForPath } from "../lib/feeds";
-import { ensureTasks, session, tasks } from "../state/app";
+import { connection, ensureTasks, session, tasks } from "../state/app";
 import { openPanel, panel, togglePanel } from "../state/panel";
 import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlot } from "../plugins/slots";
 import { cx, IconButton } from "./ui";
@@ -18,6 +19,7 @@ import { CommandPalette } from "./CommandPalette";
 import { LiveViewWindow } from "./LiveViewWindow";
 import { SettingsPanel } from "./SettingsPanel";
 import { MachinesBlock } from "./MachinesBlock";
+import { OwlMark, type OwlMood } from "./OwlMark";
 import { TeamList } from "../pages/chat/TeamList";
 import { t } from "../i18n";
 
@@ -28,13 +30,15 @@ interface Shell {
 }
 const ShellContext = createContext<Shell>({ openDrawer: () => {}, pane: false, togglePane: () => {} });
 
+/** The owl in the corner: its eyes say whether the hub answers. */
 function Brand() {
+  const c = useStore(connection);
   const s = useStore(session);
+  const mood: OwlMood = c === "open" ? "awake" : c === "offline" ? "asleep" : "sleepy";
   return (
-    <Link href="/" className="flex items-center gap-2.5 px-4 py-3.5">
-      <img src="/favicon.svg" alt="" className="size-7" />
-      <span className="text-[15px] font-semibold tracking-tight">Owlbot</span>
-      {s?.version && <span className="text-[11px] text-muted">{s.version}</span>}
+    <Link href="/" className="flex items-center gap-2.5 px-4 pt-4 pb-3" title={s?.version ? `Owlbot ${s.version}` : "Owlbot"}>
+      <OwlMark size={28} mood={mood} />
+      <span className="font-display text-[16px] font-semibold">Owlbot</span>
     </Link>
   );
 }
@@ -48,7 +52,10 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const activeTasks = (taskList ?? []).filter((x) => ACTIVE_STATUSES.includes(x.status)).length;
   const tasksOpen = p.open && p.section === "tasks";
   const item = (on: boolean) =>
-    cx("flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition", on ? "bg-accent-soft text-accent-text" : "text-muted hover:bg-surface-2 hover:text-fg");
+    cx(
+      "press flex w-full items-center gap-2.5 rounded-xl px-3 py-[7px] text-left text-[13.5px] font-medium",
+      on ? "bg-surface text-fg shadow-card" : "text-muted hover:bg-surface/60 hover:text-fg",
+    );
   return (
     <>
       <div className="min-h-0 flex-1">
@@ -59,7 +66,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <PluginSidebarItems />
         <SidebarPanels />
       </div>
-      <div className="flex flex-col gap-0.5 border-t border-border p-2">
+      <div className="flex flex-col gap-0.5 px-2 pt-1 pb-3">
         <button
           type="button"
           onClick={() => {
@@ -70,10 +77,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           aria-pressed={tasksOpen}
           className={item(tasksOpen)}
         >
-          <ListChecks className="size-[18px]" />
+          <ListChecks className="size-[17px]" />
           <span className="min-w-0 flex-1 truncate">{t("nav.tasks")}</span>
           {activeTasks > 0 && (
-            <span className="rounded-full bg-info-soft px-1.5 text-[11px] font-semibold text-info" title={t("team.activeTasks", { n: activeTasks })}>
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-accent-text tabular-nums" title={t("team.activeTasks", { n: activeTasks })}>
+              <span className="live-dot size-1.5 rounded-full" />
               {activeTasks}
             </span>
           )}
@@ -88,7 +96,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           aria-pressed={p.open && !tasksOpen}
           className={item(p.open && !tasksOpen)}
         >
-          <Settings className="size-[18px]" />
+          <Settings className="size-[17px]" />
           {t("nav.settings")}
         </button>
       </div>
@@ -96,41 +104,40 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-/** Status badges, plugin status items, the plugin side pane toggle and the settings button. Plugin status items show
- * only when the bar itself is wide enough (a container query: the settings panel may sit next to the chat). */
+/**
+ * What the bar shows on the right: only what needs the person now (no connection, a sealed vault, approvals waiting),
+ * plugin status items when the bar is wide enough, and the plugin side pane's toggle when a plugin has one. Settings
+ * live in the sidebar.
+ */
 export function HeaderActions() {
   const shell = useContext(ShellContext);
   const panes = useSlot("pane.right");
-  const p = useStore(panel);
   return (
-    <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-      <div className="hidden items-center gap-2 @3xl/top:flex">
+    <div className="flex shrink-0 items-center gap-1 empty:hidden">
+      <div className="hidden items-center gap-2 empty:hidden @3xl/top:flex">
         <PluginStatusItems />
       </div>
       <ConnectionBadge />
       <VaultBadge />
       <ApprovalsBadge />
       {panes.length > 0 && (
-        <IconButton label={t("layout.sidePanel")} onClick={shell.togglePane} active={shell.pane}>
-          <PanelRight className="size-[18px]" />
+        <IconButton label={t("layout.sidePanel")} onClick={shell.togglePane} active={shell.pane} className="size-8">
+          <PanelRight className="size-[17px]" />
         </IconButton>
       )}
-      <IconButton label={t("nav.settings")} onClick={() => (p.open && p.section === "home" ? togglePanel() : openPanel("home"))} active={p.open}>
-        <Settings className="size-[18px]" />
-      </IconButton>
     </div>
   );
 }
 
-/** The slim bar at the top of a view: menu (phones), the view's own content, header actions. */
+/** The slim bar at the top of a view: menu (phones), the view's own content, what needs attention. */
 export function TopBar({ children }: { children?: ReactNode }) {
   const shell = useContext(ShellContext);
   return (
-    <header className="@container/top relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface/70 px-2 backdrop-blur sm:px-3">
-      <IconButton label={t("layout.menu")} onClick={shell.openDrawer} className="md:hidden">
-        <Menu className="size-5" />
+    <header className="glass @container/top relative z-20 flex h-12 shrink-0 items-center gap-1.5 px-2 sm:px-3">
+      <IconButton label={t("layout.menu")} onClick={shell.openDrawer} className="size-8 md:hidden">
+        <Menu className="size-[18px]" />
       </IconButton>
-      <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
       <HeaderActions />
     </header>
   );
@@ -158,16 +165,16 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <ShellContext.Provider value={{ openDrawer: () => setDrawer(true), pane, togglePane: () => setPane((v) => !v) }}>
-      <div className="flex h-dvh overflow-hidden bg-bg">
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface/60 md:flex">
+      <div className="flex h-dvh overflow-hidden bg-canvas">
+        <aside className="hidden w-[272px] shrink-0 flex-col md:flex">
           <Brand />
           <Sidebar />
         </aside>
 
         {drawer && (
           <div className="fixed inset-0 z-40 md:hidden">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawer(false)} />
-            <aside className="animate-in absolute inset-y-0 left-0 flex w-[84%] max-w-80 flex-col border-r border-border bg-surface shadow-card">
+            <div className="animate-fade absolute inset-0 bg-[rgb(20_14_6/0.32)] backdrop-blur-[3px]" onClick={() => setDrawer(false)} />
+            <aside className="animate-in absolute inset-y-0 left-0 flex w-[86%] max-w-80 flex-col bg-canvas shadow-pop">
               <div className="flex items-center justify-between pr-2">
                 <Brand />
                 <IconButton label={t("layout.closeMenu")} onClick={() => setDrawer(false)}>
@@ -179,7 +186,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main className="flex min-w-0 flex-1 flex-col">{children}</main>
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-bg md:my-2 md:mr-2 md:rounded-[22px] md:shadow-sheet">{children}</main>
         <SettingsPanel />
         <RightPane open={pane && panes.length > 0} onClose={() => setPane(false)} />
         <LiveViewWindow />

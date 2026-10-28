@@ -118,9 +118,9 @@ export function CommandPalette() {
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center p-3 pt-[10vh]">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => open.set(false)} />
-      <div className="animate-in relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-surface shadow-card" role="dialog" aria-label={t("palette.title")}>
-        <div className="flex items-center gap-2 border-b border-border px-3">
+      <div className="animate-fade absolute inset-0 bg-[rgb(20_14_6/0.32)] backdrop-blur-[6px]" onClick={() => open.set(false)} />
+      <div className="animate-zoom relative w-full max-w-lg overflow-hidden rounded-3xl border border-hairline bg-surface shadow-pop" role="dialog" aria-label={t("palette.title")}>
+        <div className="flex items-center gap-2 border-b border-hairline px-4">
           <Search className="size-4 text-muted" />
           <input
             ref={input}

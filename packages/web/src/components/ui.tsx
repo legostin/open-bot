@@ -1,6 +1,6 @@
 // Shared UI primitives. Button, Card, Badge, EmptyState and Spinner are also exposed to UI plugins (@owlbot/ui).
 
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { Check, Copy, Loader2, X } from "lucide-react";
 import type { BadgeProps, ButtonProps, CardProps, EmptyStateProps } from "@owlbot/ui";
@@ -14,9 +14,10 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
 
 // ---------- Button ----------
 
+// Pills, like the quick replies in messages. The primary one is amber candy: one per screen.
 const BTN_VARIANTS = {
-  primary: "bg-accent text-accent-fg hover:brightness-110 active:brightness-95 shadow-sm",
-  secondary: "bg-surface text-fg border border-border hover:bg-surface-2",
+  primary: "candy font-semibold",
+  secondary: "bg-surface text-fg border border-hairline shadow-[0_1px_2px_rgb(70_45_10/0.06)] hover:bg-surface-2",
   ghost: "text-fg hover:bg-surface-2",
   danger: "bg-danger-soft text-danger hover:brightness-95 border border-transparent",
 } as const;
@@ -34,9 +35,9 @@ export function Button(
       disabled={disabled || loading}
       onClick={onClick}
       className={cx(
-        "inline-flex items-center justify-center gap-1.5 rounded-xl font-medium transition select-none whitespace-nowrap",
-        "disabled:opacity-50 disabled:pointer-events-none",
-        size === "sm" ? "h-8 px-2.5 text-[13px]" : "h-10 px-4 text-sm",
+        "press inline-flex items-center justify-center gap-1.5 rounded-full font-medium select-none whitespace-nowrap",
+        "disabled:opacity-45 disabled:pointer-events-none",
+        size === "sm" ? "h-8 px-3 text-[13px]" : "h-10 px-[18px] text-sm",
         BTN_VARIANTS[variant],
         className,
       )}
@@ -56,8 +57,8 @@ export function IconButton(props: { label: string; onClick?: () => void; childre
       disabled={props.disabled}
       onClick={props.onClick}
       className={cx(
-        "inline-flex size-9 items-center justify-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-fg disabled:opacity-40",
-        props.active && "bg-surface-2 text-fg",
+        "press inline-flex size-9 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-40",
+        props.active && "bg-accent-soft text-accent-text hover:bg-accent-soft hover:text-accent-text",
         props.className,
       )}
     >
@@ -70,9 +71,9 @@ export function IconButton(props: { label: string; onClick?: () => void; childre
 
 export function Card({ title, actions, children, className }: CardProps) {
   return (
-    <section className={cx("rounded-2xl border border-border bg-surface shadow-card", className)}>
+    <section className={cx("rounded-2xl border border-hairline bg-surface shadow-card", className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3.5 pb-0.5">
           <div className="min-w-0 font-semibold">{title}</div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </header>
@@ -94,8 +95,8 @@ const TONES = {
 
 export function Badge({ children, tone = "neutral", className, dot }: BadgeProps & { className?: string; dot?: boolean }) {
   return (
-    <span className={cx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap", TONES[tone], className)}>
-      {dot && <span className="size-1.5 rounded-full bg-current" />}
+    <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap", TONES[tone], className)}>
+      {dot && <span className="size-1.5 animate-pulse rounded-full bg-current" />}
       {children}
     </span>
   );
@@ -103,14 +104,19 @@ export function Badge({ children, tone = "neutral", className, dot }: BadgeProps
 
 // ---------- EmptyState / Spinner ----------
 
-export function EmptyState({ title, hint, icon }: EmptyStateProps) {
+/** Nothing here yet: a glyph on a paper tile in a soft amber glow (or `art`), a title in the display face, a hint. */
+export function EmptyState({ title, hint, icon, art }: EmptyStateProps & { art?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
-      <div className="mb-1 flex size-12 items-center justify-center rounded-2xl bg-accent-soft text-accent-text">
-        <Icon name={icon ?? "sparkles"} className="size-6" />
+    <div className="animate-in flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
+      <div className="hero-halo mb-3">
+        {art ?? (
+          <div className="flex size-14 items-center justify-center rounded-[18px] border border-hairline bg-surface text-accent-text shadow-card">
+            <Icon name={icon ?? "sparkles"} className="size-6" />
+          </div>
+        )}
       </div>
-      <div className="font-medium">{title}</div>
-      {hint && <div className="max-w-md text-sm text-muted">{hint}</div>}
+      <div className="font-display text-[17px] font-semibold text-balance">{title}</div>
+      {hint && <div className="max-w-sm text-sm leading-relaxed text-balance text-muted">{hint}</div>}
     </div>
   );
 }
@@ -129,7 +135,7 @@ export function Loading({ text }: { text?: string }) {
 
 export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?: () => void }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-danger-soft px-3.5 py-2.5 text-sm text-danger">
       <span className="min-w-0 flex-1">{children}</span>
       {onRetry && (
         <Button size="sm" variant="ghost" onClick={onRetry}>
@@ -142,7 +148,7 @@ export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?
 
 // ---------- form controls ----------
 
-const CONTROL = "w-full rounded-xl border border-border bg-surface px-3 text-sm text-fg placeholder:text-muted/70 transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-60";
+const CONTROL = "w-full rounded-xl border border-border bg-surface px-3.5 text-sm text-fg placeholder:text-muted/70 transition focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/20 disabled:opacity-60";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={mergeClasses(`${CONTROL} h-10`, props.className)} />;
@@ -167,9 +173,14 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
         aria-labelledby={label ? labelId : undefined}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={cx("relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition", checked ? "bg-accent" : "bg-surface-3")}
+        className={cx("relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors duration-200", checked ? "candy" : "bg-surface-3")}
       >
-        <span className={cx("inline-block size-5 rounded-full bg-white shadow transition", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
+        <span
+          className={cx(
+            "inline-block size-5 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition-transform duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)]",
+            checked ? "translate-x-[18px]" : "translate-x-0.5",
+          )}
+        />
       </button>
       {label && <span id={labelId}>{label}</span>}
     </label>
@@ -200,7 +211,7 @@ export function TagInput({ value, onChange, placeholder, inputType = "text" }: {
     setDraft("");
   };
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-surface p-1.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25">
+    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-surface p-1.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/20">
       {value.map((v, i) => (
         <span key={v + i} className="inline-flex items-center gap-1 rounded-lg bg-surface-2 py-0.5 pr-1 pl-2 font-mono text-xs">
           {v}
@@ -266,7 +277,7 @@ export function Modal({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="animate-fade absolute inset-0 bg-[rgb(20_14_6/0.32)] backdrop-blur-[6px]" onClick={onClose} />
       <div
         ref={panel}
         tabIndex={-1}
@@ -274,11 +285,11 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cx(
-          "animate-in relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-border bg-surface shadow-card outline-none sm:rounded-2xl",
+          "animate-zoom relative flex max-h-[92dvh] w-full flex-col rounded-t-3xl border border-hairline bg-surface shadow-pop outline-none sm:rounded-3xl",
           wide ? "sm:max-w-3xl" : "sm:max-w-lg",
         )}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-3 pt-3.5 pr-3 pb-1 pl-5">
           <h2 id={titleId} className="min-w-0 truncate text-base font-semibold">
             {title}
           </h2>
@@ -286,8 +297,8 @@ export function Modal({
             <X className="size-4" />
           </IconButton>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
-        {footer && <div className="pb-safe flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <div className="pb-safe flex flex-wrap justify-end gap-2 px-5 pt-1 pb-4">{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -325,7 +336,7 @@ export function CopyButton({ text, label, className }: { text: string; label?: s
 
 export function CodeLine({ children }: { children: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-border bg-code-bg px-3 py-2">
+    <div className="flex items-center gap-2 rounded-xl border border-hairline bg-code-bg px-3 py-2">
       <code className="min-w-0 flex-1 font-mono text-[13px] break-all whitespace-pre-wrap">{children}</code>
       <CopyButton text={children} label="" />
     </div>
@@ -353,10 +364,10 @@ export function Page({ title, subtitle, actions, children, className }: { title:
     );
   return (
     <div className="h-full overflow-y-auto">
-      <div className={cx("mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-8", className)}>
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <div className={cx("mx-auto w-full max-w-5xl px-4 py-5 sm:px-8 sm:py-10", className)}>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
+            <h1 className="font-display text-xl font-semibold sm:text-2xl">{title}</h1>
             {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -367,17 +378,61 @@ export function Page({ title, subtitle, actions, children, className }: { title:
   );
 }
 
-export function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode }> }) {
+/** A segmented switch; its thumb slides to the chosen option. */
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+  className,
+  compact,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: Array<{ value: T; label: ReactNode; dot?: boolean; title?: string }>;
+  className?: string;
+  /** Tighter options, for a narrow column. */
+  compact?: boolean;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+  const index = options.findIndex((o) => o.value === value);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = box.current?.querySelectorAll<HTMLElement>("[data-seg]")[index];
+      setThumb(el ? { left: el.offsetLeft, width: el.offsetWidth } : null);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined" || !box.current) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(box.current);
+    return () => ro.disconnect();
+  }, [index, options.length]);
   return (
-    <div className="inline-flex max-w-full overflow-x-auto rounded-xl border border-border bg-surface-2 p-0.5">
+    <div ref={box} role="tablist" className={cx("no-scrollbar relative inline-flex max-w-full overflow-x-auto rounded-full bg-surface-2 p-[3px]", className)}>
+      {thumb && (
+        <span
+          aria-hidden
+          className="absolute top-[3px] bottom-[3px] rounded-full bg-surface shadow-[0_1px_2px_rgb(70_45_10/0.1),0_3px_10px_-3px_rgb(70_45_10/0.16)] transition-[left,width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-surface-3"
+          style={{ left: thumb.left, width: thumb.width }}
+        />
+      )}
       {options.map((o) => (
         <button
           key={o.value}
+          data-seg
           type="button"
+          role="tab"
+          title={o.title}
+          aria-selected={value === o.value}
           onClick={() => onChange(o.value)}
-          className={cx("rounded-[10px] px-3 py-1.5 text-[13px] font-medium whitespace-nowrap transition", value === o.value ? "bg-surface text-fg shadow-sm" : "text-muted hover:text-fg")}
+          className={cx(
+            "relative z-[1] flex items-center justify-center gap-1.5 rounded-full py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors",
+            compact ? "min-w-0 flex-1 px-2" : "shrink-0 px-3.5",
+            value === o.value ? "text-fg" : "text-muted hover:text-fg",
+          )}
         >
-          {o.label}
+          <span className="truncate">{o.label}</span>
+          {o.dot && <span className="size-1.5 shrink-0 rounded-full bg-accent" />}
         </button>
       ))}
     </div>
