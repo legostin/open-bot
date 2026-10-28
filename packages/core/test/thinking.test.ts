@@ -191,6 +191,13 @@ describe("how agents think (integration)", () => {
     expect(await ask("owl", 'CALL thinking_set {"model":"huge"}')).toContain("has no model \"huge\". Its models: quick, smart");
   });
 
+  it("lets the hub's default agent set how another agent thinks", async () => {
+    expect(await ask("assistant", 'CALL hub_agent_save {"id":"sage","thinking":{"feed":{"preset":"fast"},"dreams":{"preset":"deep"}}}')).toContain("Agent sage updated");
+    const v = await view("sage");
+    expect(kindOf(v, "feed").own).toEqual({ preset: "fast" });
+    expect(kindOf(v, "chat").own).toBeUndefined();
+  });
+
   it("refuses an unknown kind", async () => {
     await expect(set("sage", "dreams", { preset: "fast" })).rejects.toThrow(/400/);
   });
