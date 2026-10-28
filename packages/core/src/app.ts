@@ -32,6 +32,8 @@ import { SetupChats } from "./setup-chats.ts";
 import { registerFeedTools } from "./tools/feed-tools.ts";
 import { registerThinkingTools } from "./tools/thinking-tools.ts";
 import { thinkingView } from "./thinking.ts";
+import { registerPageTools } from "./tools/page-tools.ts";
+import { Pages } from "./pages.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
 import { McpClientManager } from "./mcp/client.ts";
@@ -84,6 +86,8 @@ export class Hub {
   team: Team;
   /** The user's channels: news an agent gathers on a schedule (feeds.ts). */
   feeds: Feeds;
+  /** Pages agents make (pages.ts). */
+  pages: Pages;
   /** "New channel" and "Add agent" chats (setup-chats.ts). */
   setupChats: SetupChats;
   plugins: PluginHost;
@@ -238,6 +242,7 @@ export class Hub {
       createTask: (task) => this.runner.createTask(task),
       getTask: (id) => this.store.getTask(id),
     });
+    this.pages = new Pages({ db: this.db, bus: this.bus, dir: join(config.dataDir, "pages") });
     this.mcpClients = new McpClientManager({ config, registry: this.tools, vault: this.vault, audit: this.audit, egress: this.egress });
     this.plugins = new PluginHost({
       config,
@@ -322,6 +327,12 @@ export class Hub {
       agents: this.agents,
       view: (a) => this.thinkingView(a),
       save: (a, actor) => this.saveAgent(a, actor),
+      attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
+    });
+    registerPageTools({
+      registry: this.tools,
+      pages: this.pages,
+      agents: this.agents,
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
     });
     // A brain signed in from a card the assistant showed: the assistant hears it and carries on.

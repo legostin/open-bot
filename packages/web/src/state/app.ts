@@ -13,6 +13,7 @@ import { native } from "../lib/native";
 import { adoptHubLocale, t } from "../i18n";
 import { toast } from "./toast";
 import { clearFeeds, feeds, onFeedEvent, refreshFeeds } from "./feeds";
+import { clearPages, onPageEvent } from "./pages";
 
 export interface UiPluginEntry {
   id: string;
@@ -217,6 +218,7 @@ export async function logout(): Promise<void> {
   team.set(null);
   groups.set(null);
   clearFeeds();
+  clearPages();
   machineActivity.set(null);
   conversations.set([]);
   await showLogin();
@@ -329,6 +331,10 @@ function handleEvent(e: UiEvent): void {
     case "feed.deleted":
     case "feed.post":
       onFeedEvent(e);
+      break;
+    case "page.updated":
+    case "page.deleted":
+      onPageEvent(e);
       break;
     case "task.updated":
       tasks.set((list) => (list ? upsertById(list, e.data) : list));

@@ -27,6 +27,7 @@ import { MapCard } from "./MapCard";
 import { NewsCard } from "./NewsCard";
 import { Choices, FeedCard } from "./ChatButtons";
 import { ThinkingCard } from "./ThinkingCard";
+import { PageCard } from "./PageCard";
 import { TaskLine } from "./TaskLine";
 import { ConnectDeviceCard } from "./ConnectDeviceCard";
 import { t, type MessageKey } from "../../i18n";
@@ -288,6 +289,8 @@ function Parts({ message }: { message: Message }) {
             return <FeedCard key={it.key} feedId={p.feedId} />;
           case "thinking":
             return <ThinkingCard key={it.key} agentId={p.agentId} />;
+          case "page":
+            return <PageCard key={it.key} pageId={p.pageId} conversationId={message.conversationId} />;
           default:
             return null;
         }

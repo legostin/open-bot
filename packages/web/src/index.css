@@ -471,7 +471,7 @@
     opacity: 0;
   }
 }
-/* A map full screen (MapCard): the chat's composer steps aside. */
+/* A map or a page full screen (MapCard, PageCard): the chat's composer steps aside. */
 html.owl-map-full .chat-dock {
   display: none;
 }

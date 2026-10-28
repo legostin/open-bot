@@ -6,7 +6,8 @@ Self-hosted personal agent platform. Spec: `docs/superpowers/specs/2026-10-26-op
 - Node ≥ 24 runs TypeScript directly (type stripping): no build step for backend code.
   Import local files with the `.ts` extension; only erasable syntax (no enums, no parameter properties, no namespaces).
   `verbatimModuleSyntax` is on: use `import type` for types.
-- npm workspaces: `packages/*` (core, shared, plugin-sdk, mcp-bridge, brains-cli, node, web, console, ui-sdk, testkit) and `plugins/*` (builtin plugins).
+- npm workspaces: `packages/*` (core, shared, plugin-sdk, mcp-bridge, brains-cli, node, web, console, ui-sdk, pages-kit, testkit) and `plugins/*` (builtin plugins).
+- Pages agents make: TSX on `packages/pages-kit` (React, shadcn/ui, Tailwind's browser runtime, Owlbot blocks), compiled and served sandboxed by `packages/core/src/pages.ts` + `server/pages.ts`; what a page may import is `packages/shared/src/pages.ts`.
 - Contracts live in `packages/shared/src/types.ts`, `packages/shared/src/manifest.ts` and `packages/plugin-sdk/src/types.ts`. Change them deliberately.
 - Plugins only `import type` from `@owlbot/plugin-sdk`; the runner (`packages/plugin-sdk/src/runner.ts`) provides the implementation.
 - Plugin tool names are exposed as `<toolPrefix>_<name>` (prefix defaults to plugin id with `-` → `_`). Names match `[a-zA-Z0-9_-]{1,64}`.

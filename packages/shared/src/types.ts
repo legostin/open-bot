@@ -218,7 +218,30 @@ export type MessagePart =
   /** A channel's live card in the chat: its state and buttons (open, gather now, how often, pause, delete). */
   | { type: "feed"; feedId: string }
   /** How an agent thinks for each kind of work (AgentDef.thinking): a live card with a preset per kind. */
-  | { type: "thinking"; agentId: string };
+  | { type: "thinking"; agentId: string }
+  /** A page the agent made (page_create, page_show): its card, which opens the page full screen. */
+  | { type: "page"; pageId: string };
+
+/** A page an agent made: TSX on the pages kit plus its data, served sandboxed at `url` (core/src/pages.ts). */
+export interface PageView {
+  id: string;
+  title: string;
+  /** One or two lines for the card in the chat. */
+  summary?: string;
+  /** The card's picture: an http(s) URL (through the image proxy) or `file:<path>`. */
+  cover?: string;
+  agentId: string;
+  /** The chat it was made in. */
+  conversationId?: string;
+  /** The page's own address with its secret token: `/p/<id>/<token>/`. */
+  url: string;
+  /** Goes up with every change, so open pages reload. */
+  version: number;
+  /** The last error the page hit in a browser, until the next change. */
+  lastError?: string;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
 
 /** One card of a `news` part. */
 export interface NewsItem {
@@ -880,6 +903,8 @@ export type UiEvent =
   | { type: "feed.updated"; data: Feed }
   | { type: "feed.deleted"; data: { id: string } }
   | { type: "feed.post"; data: FeedPost }
+  | { type: "page.updated"; data: PageView }
+  | { type: "page.deleted"; data: { id: string } }
   | { type: "task.updated"; data: Task }
   | { type: "notification.created"; data: Notification }
   | { type: "approval.pending"; data: { count: number } }
