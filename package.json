@@ -15,9 +15,9 @@
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
     "start": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
-    "build": "npm run build:ui-plugins && npm run build:node && npm run build -w @owlbot/web && npm run build -w @owlbot/console",
+    "build": "npm run build:ui-plugins && npm run build:node && npm run build -w @owlbot/pages-kit && npm run build -w @owlbot/web && npm run build -w @owlbot/console",
     "build:ui-plugins": "node scripts/build-ui-plugins.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/pages-kit/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

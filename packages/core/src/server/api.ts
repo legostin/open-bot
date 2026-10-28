@@ -163,6 +163,14 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     return hub.setupChats.start(purpose, requestLocale(req));
   });
 
+  // ----- pages agents make (pages.ts): their cards in the chat; the pages themselves are at their links -----
+  api.get("/api/pages", async () => hub.pages.list());
+  api.get("/api/pages/:id", async (req) => {
+    const p = hub.pages.get((req.params as { id: string }).id);
+    if (!p) throw new HttpError(404, "pages.notFound");
+    return p;
+  });
+
   // ----- channels (feeds.ts): news an agent of the team gathers on a schedule -----
   api.get("/api/feeds", async () => hub.feeds.list());
   api.post("/api/feeds", async (req) => {
