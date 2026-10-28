@@ -20,9 +20,10 @@ export function mentionQuery(text: string, caret: number): { start: number; quer
 /**
  * Members matching the query: id or name (or a word of it) starting with it first, then the ones containing it; "@all"
  * last when it matches too. An empty query offers everyone. `everyone` is the word for "@all" in the UI's language
- * ("all" or its Russian form); the one the user started typing wins.
+ * ("all" or its Russian form); the one the user started typing wins. Null offers no "@all" (an agent's dialog, where a
+ * mention names one teammate).
  */
-export function filterMentions(members: readonly Mentionable[], query: string, limit = 8, everyone = "all"): MentionOption[] {
+export function filterMentions(members: readonly Mentionable[], query: string, limit = 8, everyone: string | null = "all"): MentionOption[] {
   const q = query.toLocaleLowerCase();
   const starts: MentionOption[] = [];
   const contains: MentionOption[] = [];
@@ -33,6 +34,7 @@ export function filterMentions(members: readonly Mentionable[], query: string, l
     else if (id.includes(q) || name.includes(q)) contains.push({ id: m.id, name: m.name });
   }
   const out = [...starts, ...contains].slice(0, limit);
+  if (everyone === null) return out;
   const words = [...MENTION_ALL].sort((a, b) => (a === everyone ? -1 : b === everyone ? 1 : 0));
   const all = words.find((a) => a.startsWith(q));
   if (members.length > 1 && all) out.push({ id: all, name: all, all: true });

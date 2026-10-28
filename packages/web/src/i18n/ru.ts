@@ -146,6 +146,13 @@ export default {
   "taskStatus.done": "готово",
   "taskStatus.failed": "ошибка",
   "taskStatus.cancelled": "отменена",
+  "threadStatus.sent": "отправлено",
+  "threadStatus.answering": "отвечает…",
+  "threadStatus.asksBack": "переспрашивает",
+  "threadStatus.answered": "есть ответ",
+  "threadStatus.failed": "не удалось ответить",
+  "threadStatus.interrupted": "прервано",
+  "threadStatus.cancelled": "отменено",
 
   // notification levels
   "notifyLevel.silent": "тихо",
@@ -394,6 +401,8 @@ export default {
   "task.subtaskOf": "Подзадача для {parent}",
   "task.parent": "родительской задачи",
   "task.notStarted": "Агент ещё не начал работу над задачей.",
+  "thread.open": "Открыть переписку",
+  "thread.hint": "Переписка агентов: ответ сам вернётся тому, кто написал. Можно вмешаться — просто напишите сюда.",
 
   // notifications
   "notifications.subtitle": "Что агенты сочли достойным вашего внимания. Оценки помогают им понять, что важно.",

@@ -62,6 +62,9 @@ const taskFrom = (r: any): Task => ({
   error: r.error ?? undefined,
   resumeAt: r.resume_at ?? undefined,
   question: r.question ?? undefined,
+  ...(r.kind === "message" ? { kind: "message" as const } : {}),
+  ...(r.from_agent ? { from: r.from_agent } : {}),
+  ...(r.tainted ? { tainted: true } : {}),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -200,6 +203,12 @@ export class Store {
     return rows.map(msgFrom).reverse();
   }
 
+  /** The conversation's first message (a task's goal, a thread's opening message). */
+  firstMessage(conversationId: string): Message | undefined {
+    const r = this.db.prepare("select * from messages where conversation_id = ? order by created_at, rowid limit 1").get(conversationId);
+    return r ? msgFrom(r) : undefined;
+  }
+
   /** Mark leftover streaming messages as errored (after a crash). */
   failStreamingMessages(): void {
     const rows = this.db.prepare("select * from messages where status = 'streaming'").all().map(msgFrom);
@@ -217,7 +226,7 @@ export class Store {
     const task: Task = { ...t, id, conversationId: conv.id, status: t.status ?? "queued", createdAt: now, updatedAt: now };
     this.db
       .prepare(
-        "insert into tasks(id, conversation_id, parent_conversation_id, parent_task_id, agent_id, title, goal, status, brain_ref, created_by, trigger_id, background, result, error, resume_at, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "insert into tasks(id, conversation_id, parent_conversation_id, parent_task_id, agent_id, title, goal, status, brain_ref, created_by, trigger_id, background, result, error, resume_at, kind, tainted, from_agent, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       )
       .run(
         task.id,
@@ -235,6 +244,9 @@ export class Store {
         null,
         null,
         null,
+        task.kind ?? null,
+        task.tainted ? 1 : 0,
+        task.from ?? null,
         now,
         now,
       );
@@ -256,11 +268,12 @@ export class Store {
     return this.db.prepare("select * from tasks order by created_at desc limit ?").all(limit).map(taskFrom);
   }
 
-  updateTask(id: string, patch: Partial<Pick<Task, "status" | "brainRef" | "result" | "error" | "resumeAt" | "title" | "question">>): Task | undefined {
+  updateTask(id: string, patch: Partial<Pick<Task, "status" | "brainRef" | "result" | "error" | "resumeAt" | "title" | "question" | "tainted">>): Task | undefined {
     const cols: Record<string, string> = { status: "status", brainRef: "brain_ref", result: "result", error: "error", resumeAt: "resume_at", title: "title", question: "question" };
     for (const [k, col] of Object.entries(cols)) {
       if (k in patch) this.db.prepare(`update tasks set ${col} = ? where id = ?`).run((patch as any)[k] ?? null, id);
     }
+    if (patch.tainted !== undefined) this.db.prepare("update tasks set tainted = ? where id = ?").run(patch.tainted ? 1 : 0, id);
     this.db.prepare("update tasks set updated_at = ? where id = ?").run(nowIso(), id);
     const t = this.getTask(id);
     if (t) this.bus.emit("task.updated", t);

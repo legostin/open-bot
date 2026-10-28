@@ -83,6 +83,19 @@ interface TurnOpts {
   speech?: Record<string, string>;
   /** Group chats: the user message this round answers, and why the member has the floor if not addressed by it. */
   group?: { triggerId?: string; floorNote?: string };
+  /** The input carries outside content (a tainted task's result, a tainted teammate's message): mark the session first. */
+  taint?: boolean;
+}
+
+/** Who writes to a teammate (team_message): the agent, where it writes from, and whether it may start a nested thread. */
+export interface TeamSender {
+  agentId: string;
+  conversationId: string;
+  taskId?: string;
+  background: boolean;
+  tainted: boolean;
+  /** False when tasks are nested too deep here to start one more thread (continuing one is fine). */
+  nest: boolean;
 }
 
 interface Live {
@@ -121,6 +134,10 @@ const OPEN_TASK: TaskStatus[] = ["queued", "running", "waiting_approval", "waiti
 /** Harness built-in tools whose results come from the outside world. */
 const NATIVE_SOURCE_TOOLS = /^(WebFetch|WebSearch|web_search|fetch)$/i;
 const MAX_TASK_CONCURRENCY = 4;
+/** Messages to teammates from one conversation since the user last wrote there: more is agents talking among themselves. */
+const MAX_TEAM_MESSAGES = 6;
+/** A thread answered this recently still continues when the agent writes to the same teammate again. */
+const THREAD_FRESH_MS = 60 * 60_000;
 /** Settings key: agent id → when the user last changed that agent's brains. */
 const BRAINS_CHANGED_KEY = "brainsChangedAt";
 /** Workspace images a channel gets inline with one reply, in all. */
@@ -253,9 +270,11 @@ export class SessionRunner {
   }
 
   /** More input for the turn running in the conversation: true when its brain took it (the reply goes on there). */
-  private async steerInto(conversationId: string, text: string, opts: Pick<TurnOpts, "replyChannel" | "attachments" | "speech"> = {}): Promise<boolean> {
+  private async steerInto(conversationId: string, text: string, opts: Pick<TurnOpts, "replyChannel" | "attachments" | "speech" | "taint"> = {}): Promise<boolean> {
     const a = this.activeTurns.get(conversationId);
     if (!a) return false;
+    // Outside content joining the turn marks its session before the brain can read it.
+    if (opts.taint) this.markTainted(a.row);
     if (!(await a.handle.steer(this.turnInput(a.row, text, opts)))) return false;
     if (this.activeTurns.get(conversationId) === a) {
       a.split();
@@ -485,9 +504,13 @@ export class SessionRunner {
     triggerId?: string;
     /** The brain (and so the computer) the task runs on, instead of the agent's own order. */
     brainRef?: string;
+    kind?: Task["kind"];
+    tainted?: boolean;
+    /** A thread's sender: its opening message is theirs. */
+    from?: string;
   }): Task {
-    const task = this.d.store.createTask({ ...t });
-    this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete" });
+    const task = this.d.store.createTask({ ...t, ...(t.tainted ? { tainted: true } : {}) });
+    this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete", ...(t.from ? { agentId: t.from } : {}) });
     this.d.audit.append(t.createdBy === "user" ? "user" : `agent:${t.agentId}`, "task.create", task.id, { title: t.title, background: t.background, triggerId: t.triggerId });
     setImmediate(() => this.scheduleTasks());
     return task;
@@ -578,18 +601,26 @@ export class SessionRunner {
     const resumed = fresh.status === "paused" || history.some((m) => m.role === "assistant");
     // What reached the task before it started (its starter's clarifications, the user's words on its page).
     const notes = resumed ? [] : history.slice(1).flatMap((m) => m.parts.flatMap((p) => (p.type === "text" && p.text.trim() ? [p.text.trim()] : [])));
-    const prompt = resumed
-      ? "Continue working on the task from where you stopped."
-      : [
-          `Task: ${fresh.title}`,
-          "",
-          fresh.goal,
-          ...(notes.length ? ["", "Messages that came after the task was created:", ...notes] : []),
-          "",
-          fresh.background
-            ? "When you are done, call notify (once) with a short summary of the outcome."
-            : "When you are done, briefly describe the result — it will be passed to whoever created the task.",
-        ].join("\n");
+    const sender = fresh.kind === "message" ? this.threadSender(fresh) : undefined;
+    // A teammate's thread reads as their message; the reply is the answer.
+    const thread = (): string =>
+      resumed
+        ? "Continue where you stopped; your reply goes back to your teammate."
+        : [`Message from your teammate ${sender!.name} (agent "${sender!.id}"). Your reply goes back to them automatically.`, "", fresh.goal, ...notes.flatMap((n) => ["", n])].join("\n");
+    const prompt = sender
+      ? thread()
+      : resumed
+        ? "Continue working on the task from where you stopped."
+        : [
+            `Task: ${fresh.title}`,
+            "",
+            fresh.goal,
+            ...(notes.length ? ["", "Messages that came after the task was created:", ...notes] : []),
+            "",
+            fresh.background
+              ? "When you are done, call notify (once) with a short summary of the outcome."
+              : "When you are done, briefly describe the result — it will be passed to whoever created the task.",
+          ].join("\n");
 
     const r = await this.runTurn(conv, prompt, { task: fresh });
     await this.afterTaskTurn(fresh.id, r);
@@ -609,6 +640,11 @@ export class SessionRunner {
     }
     if (r.error && !r.text) {
       this.d.store.updateTask(cur.id, { status: "failed", error: r.error });
+      // A teammate who cannot answer tells the sender, not the user.
+      if (cur.kind === "message") {
+        await this.tellStarter(cur, `[System] ${this.agentLabel(cur.agentId)} could not answer your message (thread ${cur.id}): ${r.error}`);
+        return;
+      }
       if (!cur.background || cur.createdBy !== "trigger") {
         await this.d.notifier.notify({ level: "notify", title: t("notify.taskFailed", { title: cur.title }), body: r.error, agentId: cur.agentId, taskId: cur.id });
       }
@@ -622,7 +658,8 @@ export class SessionRunner {
       this.d.store.updateTask(cur.id, { status: "waiting_input", result: r.text || cur.result, error: undefined });
       return;
     }
-    this.d.store.updateTask(cur.id, { status: "done", result: r.text, error: undefined });
+    // A thread's result is the reply itself, without the narration around tool calls.
+    this.d.store.updateTask(cur.id, { status: "done", result: cur.kind === "message" ? r.answer || r.text : r.text, error: undefined });
     await this.reportTaskDone(this.d.store.getTask(cur.id)!);
   }
 
@@ -630,9 +667,11 @@ export class SessionRunner {
    * Something for a task (its starter's answer or clarification, the user's words on its page): it joins the running
    * turn, waits for the first turn of a task that has not started, or gives the task another turn.
    */
-  async wakeTask(task: Task, text: string, opts: Pick<TurnOpts, "replyChannel" | "quote" | "attachments" | "speech"> = {}): Promise<"steered" | "queued" | "started" | "cancelled"> {
+  async wakeTask(task: Task, text: string, opts: Pick<TurnOpts, "replyChannel" | "quote" | "attachments" | "speech" | "taint"> = {}): Promise<"steered" | "queued" | "started" | "cancelled"> {
     const cur = this.d.store.getTask(task.id) ?? task;
     if (cur.status === "cancelled") return "cancelled";
+    // Outside content stays marked in every session of the task from now on.
+    if (opts.taint && !cur.tainted) this.d.store.updateTask(cur.id, { tainted: true });
     if (await this.steerInto(cur.conversationId, text, opts)) return "steered";
     if (cur.status === "queued") return "queued";
     const conv = this.d.store.getConversation(cur.conversationId);
@@ -652,18 +691,141 @@ export class SessionRunner {
     return task.parentConversationId ? this.d.store.getConversation(task.parentConversationId) : this.d.store.agentConversation(task.agentId);
   }
 
-  /** A task's question or result for whoever started it: joins their turn if one is running, else starts one. */
+  /**
+   * A task's question or result for whoever started it: joins their turn if one is running, else starts one. What a
+   * task that read outside content says marks the starter's session too: relaying it does not make it clean.
+   */
   private async tellStarter(task: Task, note: string): Promise<void> {
     const parent = this.starterOf(task);
     if (!parent) return;
     this.d.store.addMessage({ conversationId: parent.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: task.id });
+    const taint = this.carriesTaint(task) ? { taint: true } : {};
     const parentTask = parent.taskId ? this.d.store.getTask(parent.taskId) : undefined;
     if (parentTask) {
-      await this.wakeTask(parentTask, note);
+      await this.wakeTask(parentTask, note, taint);
       return;
     }
-    if (parent.kind !== "group" && (await this.steerInto(parent.id, note))) return;
-    void this.enqueue(parent.id, () => this.runTurn(parent, note, {}));
+    if (parent.kind !== "group" && (await this.steerInto(parent.id, note, taint))) return;
+    // In a group chat, the member who wrote to the teammate hears the reply.
+    const sender = parent.kind === "group" && task.kind === "message" ? { agentId: this.threadSender(task).id } : {};
+    void this.enqueue(parent.id, () => this.runTurn(parent, note, { ...taint, ...sender }));
+  }
+
+  /** The task (or thread) was started or messaged with outside content, or read some itself. */
+  private carriesTaint(task: Task): boolean {
+    return !!(this.d.store.getTask(task.id) ?? task).tainted || !!this.d.store.activeSession(task.conversationId, task.agentId)?.tainted;
+  }
+
+  private markTainted(row: SessionRow): void {
+    if (row.tainted) return;
+    this.d.store.updateSession(row.id, { tainted: true });
+    row.tainted = true;
+  }
+
+  private agentLabel(agentId: string): string {
+    const a = this.d.agents.get(agentId);
+    return a ? agentName(a, hubLocale()) : agentId;
+  }
+
+  /** Who opened a teammate's thread: its `from`, else the agent of its first message or of the conversation it came from. */
+  private threadSender(task: Task): { id: string; name: string } {
+    const id =
+      task.from ??
+      this.d.store.firstMessage(task.conversationId)?.agentId ??
+      (task.parentConversationId ? this.d.store.getConversation(task.parentConversationId)?.agentId : undefined) ??
+      task.agentId;
+    return { id, name: this.agentLabel(id) };
+  }
+
+  /** An agent of the team by id or by name (in any language), "@" or not. */
+  private findAgent(ref: string): AgentDef | undefined {
+    const key = ref.trim().replace(/^@/, "").toLocaleLowerCase();
+    const list = this.d.agents.list();
+    return (
+      list.find((a) => a.id.toLocaleLowerCase() === key) ??
+      list.find((a) => [a.name, ...Object.values(a.i18n ?? {}).map((x) => x?.name)].some((n) => n?.trim().toLocaleLowerCase() === key))
+    );
+  }
+
+  /** Messages to teammates written from the conversation since the user last wrote there (a teammate writing in a thread is not the user). */
+  private teamMessagesSinceUser(conversationId: string): number {
+    const msgs = this.d.store.listMessages(conversationId, { limit: 200 });
+    const from = msgs.findLastIndex((m) => m.role === "user" && !m.agentId) + 1;
+    return msgs.slice(from).reduce((n, m) => n + m.parts.filter((p) => p.type === "task" && p.text !== undefined).length, 0);
+  }
+
+  /** The thread this agent has with the teammate from this conversation that a new message continues: open, or answered within the hour. */
+  private openThread(conversationId: string, to: string, from: string): Task | undefined {
+    return this.d.store
+      .listTasks({ limit: 300 })
+      .find(
+        (t) =>
+          t.kind === "message" &&
+          t.parentConversationId === conversationId &&
+          t.agentId === to &&
+          !["cancelled", "failed"].includes(t.status) &&
+          (OPEN_TASK.includes(t.status) || Date.now() - Date.parse(t.updatedAt) < THREAD_FRESH_MS) &&
+          this.threadSender(t).id === from,
+      );
+  }
+
+  /**
+   * team_message: an agent writes to a teammate, the way a person writes to a colleague. Underneath it is a task of
+   * kind "message" (a thread): the teammate answers there, and the reply comes back like a task's result. Writing to
+   * the same teammate again continues the thread. Nothing waits for the reply, so agents cannot deadlock each other.
+   */
+  async messageTeammate(to: string, text: string, from: TeamSender): Promise<{ ok: boolean; text: string }> {
+    const agent = this.findAgent(to);
+    if (!agent) return { ok: false, text: `No teammate "${to}". The team: ${this.d.agents.list().map((a) => `${a.id} (${agentName(a, hubLocale())})`).join(", ")}.` };
+    if (agent.id === from.agentId) return { ok: false, text: "That is you. Write to a teammate, or do it yourself." };
+    if (!text.trim()) return { ok: false, text: "Nothing to send: write what you want to say." };
+    const sent = this.teamMessagesSinceUser(from.conversationId);
+    if (sent >= MAX_TEAM_MESSAGES) {
+      return { ok: false, text: `You have written to teammates ${sent} times since the user last wrote here. Stop now and tell the user where things stand; go on when they answer.` };
+    }
+    const name = agentName(agent, hubLocale());
+    const thread = this.openThread(from.conversationId, agent.id, from.agentId);
+    let taskId: string;
+    if (thread) {
+      this.d.store.addMessage({ conversationId: thread.conversationId, role: "user", agentId: from.agentId, parts: [{ type: "text", text }], status: "complete", taskId: thread.id });
+      if (thread.question) this.d.store.updateTask(thread.id, { question: undefined });
+      const how = await this.wakeTask(thread, `${this.agentLabel(from.agentId)} (your teammate) writes:\n${text}`, from.tainted ? { taint: true } : {});
+      if (how === "cancelled") return { ok: false, text: `Your thread with ${name} was cancelled meanwhile. Write again to start a new one.` };
+      taskId = thread.id;
+    } else {
+      if (!from.nest) return { ok: false, text: "Tasks and threads are already nested too deep here: do this part yourself." };
+      taskId = this.createTask({
+        agentId: agent.id,
+        goal: text,
+        title: truncate(text.replace(/\s+/g, " ").trim(), 60),
+        parentConversationId: from.conversationId,
+        parentTaskId: from.taskId,
+        background: from.background,
+        createdBy: "agent",
+        kind: "message",
+        tainted: from.tainted,
+        from: from.agentId,
+      }).id;
+    }
+    this.attachPart(from.conversationId, { type: "task", taskId, text });
+    this.d.audit.append(`agent:${from.agentId}`, "team.message", taskId, { to: agent.id, continued: !!thread });
+    return {
+      ok: true,
+      text:
+        `Sent to ${name} (thread ${taskId}${thread ? ", continued" : ""}). Their reply comes back here as a message — into this turn if you are still working. ` +
+        "Do not wait for it: carry on, or tell the user in a few words that you asked and end your turn.",
+    };
+  }
+
+  /** A teammate's reply fills the oldest line in the sender's conversation still waiting for one. */
+  private fillReply(task: Task, reply: string): void {
+    if (!task.parentConversationId) return;
+    for (const m of this.d.store.listMessages(task.parentConversationId, { limit: 100 })) {
+      const i = m.parts.findIndex((p) => p.type === "task" && p.taskId === task.id && p.text !== undefined && p.reply === undefined);
+      if (i < 0) continue;
+      this.d.store.updateMessage(m.id, { parts: m.parts.map((p, j) => (j === i ? { ...p, reply } : p)) });
+      return;
+    }
   }
 
   /** task_ask: the question goes to whoever started the task; the task waits for the answer once its turn ends. */
@@ -695,16 +857,15 @@ export class SessionRunner {
   }
 
   /** task_message: an answer, a clarification or a change of plan for a task, delivered right away. */
-  async messageTask(taskId: string, text: string, from: { agentId: string; conversationId: string; taskId?: string }): Promise<{ ok: boolean; text: string }> {
+  async messageTask(taskId: string, text: string, from: { agentId: string; conversationId: string; taskId?: string; tainted?: boolean }): Promise<{ ok: boolean; text: string }> {
     const task = this.d.store.getTask(taskId);
     if (!task) return { ok: false, text: `No task ${taskId}.` };
     if (!this.mayDirect(task, from)) return { ok: false, text: "You can message only the tasks you started." };
     if (task.status === "cancelled") return { ok: false, text: "That task was cancelled. Start a new one with task_delegate if the work is still needed." };
-    const sender = this.d.agents.get(from.agentId);
-    const note = `[System] ${sender ? agentName(sender, hubLocale()) : from.agentId}, who started this task, writes: ${text}`;
+    const note = `[System] ${this.agentLabel(from.agentId)}, who started this task, writes: ${text}`;
     this.d.store.addMessage({ conversationId: task.conversationId, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: task.id });
     if (task.question) this.d.store.updateTask(task.id, { question: undefined });
-    const how = await this.wakeTask(task, note);
+    const how = await this.wakeTask(task, note, from.tainted ? { taint: true } : {});
     const said = {
       steered: "Delivered: the task is working and takes it at its next step.",
       queued: "Delivered: the task reads it when it starts.",
@@ -785,13 +946,21 @@ export class SessionRunner {
     const lines = open.slice(0, 12).map((t) => {
       const a = this.d.agents.get(t.agentId);
       const asked = t.question ? `; asked you: ${truncate(t.question, 300)}` : "";
-      return `- ${t.id} “${t.title}” — ${a ? agentName(a, hubLocale()) : t.agentId}${this.taskWhere(t)}: ${state[t.status] ?? t.status}${asked}`;
+      const who = a ? agentName(a, hubLocale()) : t.agentId;
+      if (t.kind === "message") return `- ${t.id} your message to ${who} “${t.title}”: ${t.status === "running" ? "answering" : (state[t.status] ?? t.status)}${asked}`;
+      return `- ${t.id} “${t.title}” — ${who}${this.taskWhere(t)}: ${state[t.status] ?? t.status}${asked}`;
     });
     return `[Open tasks you started]\n${lines.join("\n")}`;
   }
 
   private async reportTaskDone(task: Task): Promise<void> {
     const result = truncate(task.result ?? "", 6000);
+    // A teammate's reply: under the sender's message line, and to the sender, who carries on with it.
+    if (task.kind === "message") {
+      this.fillReply(task, truncate(task.result ?? "", 4000));
+      await this.tellStarter(task, `[System] ${this.agentLabel(task.agentId)} replied (thread ${task.id}):\n${result}`);
+      return;
+    }
     if (task.createdBy === "agent" && task.parentConversationId) {
       await this.tellStarter(task, `[System] Task ${task.id} “${task.title}” is finished.\nResult:\n${result}`);
       return;
@@ -975,6 +1144,7 @@ export class SessionRunner {
       setup: background || task ? undefined : await this.d.setup?.promptBlock(agent.id),
       group: conv.kind === "group" ? { title: conv.title, members: this.groupMembers(conv) } : undefined,
       dispatch: conv.kind === "main" && !task && !background ? this.dispatchContext() : undefined,
+      thread: task?.kind === "message" ? this.threadSender(task) : undefined,
     });
 
     const env: Record<string, string> = {};
@@ -1008,12 +1178,19 @@ export class SessionRunner {
     return { row, handle };
   }
 
+  /** The reply has a message to a teammate in it. */
+  private wroteToTeammate(messageId: string | undefined): boolean {
+    return !!messageId && !!this.d.store.getMessage(messageId)?.parts.some((p) => p.type === "task" && p.text !== undefined);
+  }
+
   /** Text transcript of recent messages for handing a conversation to a different brain. */
   private handoffSummary(conversationId: string): string {
     const msgs = this.d.store.listMessages(conversationId, { limit: 30 });
     // In a group chat every member speaks under its own name.
     const group = this.d.store.getConversation(conversationId)?.kind === "group";
     const speaker = (m: Message) => {
+      // A teammate writing in a thread.
+      if (m.role === "user" && m.agentId) return this.agentLabel(m.agentId);
       if (m.role !== "assistant") return m.role === "user" ? "User" : "System";
       const a = group && m.agentId ? this.d.agents.get(m.agentId) : undefined;
       return a ? agentName(a, hubLocale()) : group && m.agentId ? m.agentId : "Assistant";
@@ -1032,7 +1209,9 @@ export class SessionRunner {
                   ? `[showed ${p.items.length} image(s)${p.items.some((it) => it.caption) ? `: ${p.items.map((it) => it.caption ?? "").filter(Boolean).join("; ")}` : ""}]`
                   : p.type === "map"
                     ? `[showed a map${p.title ? ` of ${p.title}` : ""} at ${p.lat}, ${p.lon}]`
-                    : "",
+                    : p.type === "task" && p.text !== undefined
+                      ? `[wrote to a teammate (thread ${p.taskId}): ${p.text}]${p.reply ? ` [reply: ${p.reply}]` : ""}`
+                      : "",
         )
         .filter(Boolean)
         .join(" ");
@@ -1167,6 +1346,8 @@ export class SessionRunner {
         this.d.brains.invalidate(ref);
         continue;
       }
+      // Outside content in this turn's input, or a task started with some: the session is marked before the brain reads it.
+      if (opts.taint || task?.tainted) this.markTainted(row!);
 
       let text = prompt;
       if (conv.kind === "group") {
@@ -1191,8 +1372,10 @@ export class SessionRunner {
           void this.closeLive(row!.id);
           continue;
         }
-        // Group chats live in the web UI only.
-        if (conv.kind !== "group") {
+        // Group chats live in the web UI only. A turn nobody typed that wrote to a teammate again is agents talking
+        // among themselves: the phone gets the outcome, not that.
+        const chatter = !opts.replyChannel && opts.quote === undefined && this.wroteToTeammate(r.messageId);
+        if (conv.kind !== "group" && !chatter) {
           const broadcast = await this.deliver(conv, r.answer ?? r.text, opts, r.messageId);
           // Messages from other channels joined the turn: those channels get the reply too (unless all of them did).
           if (!broadcast) for (const ch of r.channels ?? []) if (ch !== opts.replyChannel) await this.deliver(conv, r.answer ?? r.text, { replyChannel: ch }, r.messageId);
@@ -1365,7 +1548,8 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "brain_login") return `login:${p.ref}`;
   if (p.type === "device_pairing") return "device_pairing";
   if (p.type === "integration") return `integration:${p.id}`;
-  if (p.type === "task") return `task:${p.taskId}`;
+  // Each message to a teammate has its own line, even in the same thread.
+  if (p.type === "task") return p.text === undefined ? `task:${p.taskId}` : `task:${p.taskId}|${p.text}`;
   // Pictures and maps carry no id: the same content shown twice in one reply is one card.
   if (p.type === "images") return `images:${JSON.stringify(p.items)}`;
   if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers])}`;

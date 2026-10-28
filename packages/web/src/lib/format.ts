@@ -18,6 +18,23 @@ const TASK_STATUS: Record<TaskStatus, { key: MessageKey; tone: Tone }> = {
   cancelled: { key: "taskStatus.cancelled", tone: "neutral" },
 };
 
+// A teammate's thread reads as a message: sent, answering, answered.
+const THREAD_STATUS: Partial<Record<TaskStatus, { key: MessageKey; tone: Tone }>> = {
+  queued: { key: "threadStatus.sent", tone: "neutral" },
+  running: { key: "threadStatus.answering", tone: "info" },
+  waiting_input: { key: "threadStatus.asksBack", tone: "warning" },
+  done: { key: "threadStatus.answered", tone: "success" },
+  failed: { key: "threadStatus.failed", tone: "danger" },
+  interrupted: { key: "threadStatus.interrupted", tone: "warning" },
+  cancelled: { key: "threadStatus.cancelled", tone: "neutral" },
+};
+
+/** Label and tone of a teammate's thread (team_message): the task's own label where a thread has none of its own. */
+export function threadStatus(s: string): { label: string; tone: Tone } {
+  const st = THREAD_STATUS[s as TaskStatus];
+  return st ? { label: t(st.key), tone: st.tone } : taskStatus(s);
+}
+
 /** Label and badge tone of a task status (unknown statuses are shown as they are). */
 export function taskStatus(s: string): { label: string; tone: Tone } {
   const st = TASK_STATUS[s as TaskStatus];

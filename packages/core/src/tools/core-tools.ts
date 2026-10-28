@@ -20,7 +20,7 @@ export interface CoreToolDeps {
   store: Store;
   notifier: Notifier;
   agents: AgentRegistry;
-  createTask: (t: { agentId: string; goal: string; title: string; parentConversationId?: string; parentTaskId?: string; background: boolean; createdBy: "agent"; brainRef?: string }) => { id: string; title: string };
+  createTask: (t: { agentId: string; goal: string; title: string; parentConversationId?: string; parentTaskId?: string; background: boolean; createdBy: "agent"; brainRef?: string; tainted?: boolean }) => { id: string; title: string };
   /** The live line between tasks and whoever started them (SessionRunner). */
   tasks: TaskLine;
   /** Add a card to the reply the agent is writing (SessionRunner.attachPart). */
@@ -31,8 +31,8 @@ export interface CoreToolDeps {
   transcriber?: Transcriber;
 }
 
-/** Who is writing to a task: the agent, its conversation and, inside a task, that task. */
-export type TaskSender = { agentId: string; conversationId: string; taskId?: string };
+/** Who is writing to a task: the agent, its conversation and, inside a task, that task; tainted when it had read outside content. */
+export type TaskSender = { agentId: string; conversationId: string; taskId?: string; tainted?: boolean };
 
 export interface TaskLine {
   place(agentId: string, machine: string): { brainRef?: string; machineName: string; note?: string } | { error: string };
@@ -40,6 +40,8 @@ export interface TaskLine {
   message(taskId: string, text: string, from: TaskSender): Promise<{ ok: boolean; text: string }>;
   cancel(taskId: string, from: TaskSender): { ok: boolean; text: string };
   computers(): Array<{ id: string; name: string; online: boolean }>;
+  /** team_message: write to a teammate (a thread on the side; the reply comes back like a task's result). */
+  teammate(to: string, text: string, from: TaskSender & { background: boolean; tainted: boolean; nest: boolean }): Promise<{ ok: boolean; text: string }>;
 }
 
 /** Tasks under tasks under tasks: deeper delegation is refused. */
@@ -101,6 +103,12 @@ const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "t
 export function registerCoreTools(d: CoreToolDeps): void {
   const reg = (spec: Omit<ToolDescriptor, "owner">, fn: (input: any, ctx: any) => Promise<ToolResult> | ToolResult) =>
     d.registry.register({ ...spec, owner: "core" }, async (input, ctx) => fn(input ?? {}, ctx));
+  /** How many tasks (and threads) deep the caller already is. */
+  const depthOf = (taskId: string | undefined): number => {
+    let depth = 0;
+    for (let id = taskId; id && depth <= MAX_TASK_DEPTH; id = d.store.getTask(id)?.parentTaskId) depth++;
+    return depth;
+  };
 
   reg(
     {
@@ -137,7 +145,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
     {
       name: "task_delegate",
       description:
-        "Start a task for an agent (yourself or a teammate): it works on the side, in parallel, while you stay with the user, and its result comes back here as a message. One task per independent piece of work. Returns the task id.",
+        "Start a task for an agent (yourself or a teammate): it works on the side, in parallel, while you stay with the user, and its result comes back here as a message. One task per independent piece of work. Returns the task id. For a question or a small request to a teammate, write to them with team_message instead.",
       effect: "local-write",
       inputSchema: {
         type: "object",
@@ -153,9 +161,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
     (i, ctx) => {
       const agentId = i.agent ? String(i.agent) : ctx.agentId;
       if (!d.agents.get(agentId)) return text(`No agent ${agentId}. See task_agents.`, true);
-      let depth = 0;
-      for (let id = ctx.taskId; id && depth <= MAX_TASK_DEPTH; id = d.store.getTask(id)?.parentTaskId) depth++;
-      if (depth >= MAX_TASK_DEPTH) return text("Tasks are already nested too deep here: do this part yourself.", true);
+      if (depthOf(ctx.taskId) >= MAX_TASK_DEPTH) return text("Tasks are already nested too deep here: do this part yourself.", true);
       let goal = String(i.goal);
       let place: { brainRef?: string; machineName: string; note?: string } | undefined;
       if (i.machine) {
@@ -173,6 +179,8 @@ export function registerCoreTools(d: CoreToolDeps): void {
         background: ctx.background,
         createdBy: "agent",
         ...(place?.brainRef ? { brainRef: place.brainRef } : {}),
+        // Instructions from a session that read outside content may carry it: the task starts marked too.
+        ...(ctx.tainted ? { tainted: true } : {}),
       });
       d.attachPart(ctx.conversationId, { type: "task", taskId: t.id });
       const where = place ? ` on ${place.machineName}${place.brainRef ? "" : " (through the machine tools)"}` : "";
@@ -182,8 +190,38 @@ export function registerCoreTools(d: CoreToolDeps): void {
 
   reg(
     {
+      name: "team_message",
+      description:
+        "Write to a teammate (another agent on the user's team) the way you would write to a colleague: a question, a quick check, a small request. " +
+        "They answer in a thread on the side that the user can follow, and their reply comes back here as a message — into your current turn if you are still working — so do not wait for it. " +
+        "Writing to the same teammate again continues that thread. For work with steps, use task_delegate.",
+      effect: "local-write",
+      inputSchema: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "The teammate's agent id (or name). See task_agents." },
+          text: { type: "string", description: "Your message, self-contained: they do not see this conversation" },
+        },
+        required: ["to", "text"],
+      },
+    },
+    async (i, ctx) => {
+      const r = await d.tasks.teammate(String(i.to ?? ""), String(i.text ?? "").slice(0, 8000), {
+        agentId: ctx.agentId,
+        conversationId: ctx.conversationId,
+        taskId: ctx.taskId,
+        background: ctx.background,
+        tainted: ctx.tainted,
+        nest: depthOf(ctx.taskId) < MAX_TASK_DEPTH,
+      });
+      return text(r.text, !r.ok);
+    },
+  );
+
+  reg(
+    {
       name: "task_agents",
-      description: "List the agents you can delegate to (role, where their brains run) and the computers tasks can run on.",
+      description: "List your teammates (role, where their brains run) for team_message and task_delegate, and the computers tasks can run on.",
       effect: "read",
       inputSchema: { type: "object", properties: {} },
     },
@@ -212,7 +250,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
       },
     },
     async (i, ctx) => {
-      const r = await d.tasks.message(String(i.taskId), String(i.text), { agentId: ctx.agentId, conversationId: ctx.conversationId, taskId: ctx.taskId });
+      const r = await d.tasks.message(String(i.taskId), String(i.text), { agentId: ctx.agentId, conversationId: ctx.conversationId, taskId: ctx.taskId, tainted: ctx.tainted });
       return text(r.text, !r.ok);
     },
   );
