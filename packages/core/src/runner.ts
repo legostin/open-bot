@@ -69,6 +69,11 @@ export interface RunnerDeps {
   };
   /** Speech to text for voice messages (set by the hub). */
   transcriber?: Transcriber;
+  /**
+   * The names of every tool there is now (set by the hub). A plugin turned on or off changes them, and the session's
+   * next turn reopens it, resuming the same conversation: a CLI brain reads the tool list only when it starts.
+   */
+  toolNames?: () => string;
 }
 
 /** What the web UI passes as the channel of a typed message (not a registered channel). */
@@ -1297,7 +1302,7 @@ export class SessionRunner {
       env,
       background,
     });
-    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv, kind) });
+    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv, kind, this.d.toolNames?.()) });
     if (!sameBrain) this.d.audit.append("core", "session.open", row.id, { agent: agent.id, brain: formatBrainRef(ref), conversation: conv.id, task: task?.id });
     return { row, handle, fresh: !!prior && !resume };
   }
@@ -1516,7 +1521,7 @@ export class SessionRunner {
       let live = curPrior ? this.live.get(curPrior.id) : undefined;
       let row = curPrior;
       try {
-        if (!live || live.brainRef !== key || live.stamp !== sessionStamp(agent, conv, kind)) {
+        if (!live || live.brainRef !== key || live.stamp !== sessionStamp(agent, conv, kind, this.d.toolNames?.())) {
           // The same brain resumes the same conversation with the new instructions: let the old process finish first.
           if (live && curPrior) {
             if (live.brainRef === key) await this.closeLive(curPrior.id);
@@ -1730,9 +1735,9 @@ export class SessionRunner {
  * What a live session was opened with: a changed agent, a group's new members, or a setup chat that became its channel
  * or agent get a fresh session (resumed).
  */
-function sessionStamp(agent: AgentDef, conv: Conversation, kind: WorkKind): string {
+function sessionStamp(agent: AgentDef, conv: Conversation, kind: WorkKind, tools = ""): string {
   // Only this kind's choice: changing how tasks think leaves the dialog's session alone.
-  const stamp = JSON.stringify({ ...agent, thinking: thinkingFor(agent, kind) });
+  const stamp = `${JSON.stringify({ ...agent, thinking: thinkingFor(agent, kind) })}|${tools}`;
   if (conv.kind === "setup") return `${stamp}|${conv.entity ?? ""}`;
   return conv.kind === "group" ? `${stamp}|${conv.title}|${(conv.members ?? []).join(",")}` : stamp;
 }

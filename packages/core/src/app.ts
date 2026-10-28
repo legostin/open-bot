@@ -211,6 +211,11 @@ export class Hub {
       locations: this.locations,
       secrets: this.secrets,
       transcriber: this.transcriber,
+      toolNames: () =>
+        this.tools
+          .list()
+          .map((t) => t.name)
+          .join(","),
     });
     this.setup = new SetupGuide({
       brains: this.brains,
