@@ -1,0 +1,6 @@
+{
+  "name": "Yandex Maps and 2GIS",
+  "description": "Adds Yandex Maps and 2GIS to “Open in…” on the maps agents show in the chat: places and planned routes open in those apps.",
+  "app.yandex": "Yandex Maps",
+  "app.2gis": "2GIS"
+}

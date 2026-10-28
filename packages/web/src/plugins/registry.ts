@@ -3,7 +3,7 @@
 
 import type { ComponentType } from "react";
 import type { Message } from "@owlbot/shared";
-import type { SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
+import type { MapAppContribution, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
 import { createStore } from "../lib/store";
 import { globSpecificity, matchesGlob } from "../lib/glob";
 
@@ -49,15 +49,21 @@ export interface SettingsEntry {
   component: ComponentType<SlotProps>;
 }
 
+export interface MapAppEntry extends MapAppContribution {
+  pluginId: string;
+  key: string;
+}
+
 export interface RegistryState {
   contributions: Contribution[];
   routes: RouteEntry[];
   statusbar: StatusEntry[];
   commands: CommandEntry[];
   settings: SettingsEntry[];
+  mapApps: MapAppEntry[];
 }
 
-export const registry = createStore<RegistryState>({ contributions: [], routes: [], statusbar: [], commands: [], settings: [] });
+export const registry = createStore<RegistryState>({ contributions: [], routes: [], statusbar: [], commands: [], settings: [], mapApps: [] });
 
 let seq = 0;
 function nextKey(pluginId: string): { key: string; seq: number } {
@@ -96,6 +102,11 @@ export function addSettings(pluginId: string, s: { id: string; title: string; co
   return addTo("settings", { pluginId, key: nextKey(pluginId).key, id: s.id, title: s.title, component: s.component });
 }
 
+export function addMapApp(pluginId: string, a: MapAppContribution): () => void {
+  if (!a || typeof a.place !== "function") throw new Error("maps.addApp: place() is required");
+  return addTo("mapApps", { ...a, pluginId, key: nextKey(pluginId).key });
+}
+
 /** Drop everything a plugin registered (on unload / disable). */
 export function removePlugin(pluginId: string): void {
   registry.set((s) => ({
@@ -104,6 +115,7 @@ export function removePlugin(pluginId: string): void {
     statusbar: s.statusbar.filter((x) => x.pluginId !== pluginId),
     commands: s.commands.filter((x) => x.pluginId !== pluginId),
     settings: s.settings.filter((x) => x.pluginId !== pluginId),
+    mapApps: s.mapApps.filter((x) => x.pluginId !== pluginId),
   }));
 }
 

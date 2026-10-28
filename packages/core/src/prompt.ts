@@ -17,7 +17,8 @@ export interface PromptContext {
   /** True when the brain loads skills natively (Claude Code, Codex): we still list them briefly. */
   nativeSkills: boolean;
   appended: string[];
-  machineName?: string;
+  /** The computer the session's brain runs on; `local` is the hub's own. */
+  machine?: { name: string; local: boolean };
   /** What is left of the hub's first-run setup (the default agent, interactive sessions only). */
   setup?: string;
   /** A group chat the agent takes part in: its title and members, the lead first. */
@@ -101,7 +102,8 @@ export function buildSystemPrompt(c: PromptContext): string {
     `You are "${c.agent.name}", an agent inside Owlbot — the user's self-hosted personal agent platform.`,
     `Local time when this session started: ${now} (${c.timezone}); the latest \`[Now: …]\` line before a message is the current time. Reply in the user's language (default: ${LANGUAGE_NAMES[c.language as Locale] ?? c.language}).`,
     where,
-    c.machineName ? `You are running on the machine "${c.machineName}".` : "",
+    c.machine ? `You are running on the computer "${c.machine.name}"${c.machine.local ? " (the hub's own computer)" : ""}.` : "",
+    "Your dialog with the user, your tasks and your threads with teammates are all you, in separate sessions. The `[You now]` block before a message says where this session runs, what else you are doing, what each teammate is busy with and where the user is; it is current, so answer from it when asked what you or a teammate are doing.",
     "",
     "Tools from the `owlbot` MCP server are your hands: browser, memory, tasks, triggers, notifications, machines, vault references, and anything plugins add.",
     "",
@@ -116,7 +118,7 @@ export function buildSystemPrompt(c: PromptContext): string {
     lines.push("- When the user asks you to change your own name, description, look or instructions, do it yourself with `profile_update`; never send them to a settings page.");
   }
   if (c.task) lines.push(...(c.thread ? inAThread(c.thread) : IN_A_TASK));
-  if (!c.machineName) {
+  if (!c.machine || c.machine.local) {
     lines.push(
       "- Internet: use `web_search`, `web_fetch` and the `browser_*` tools. Direct network access from your shell and built-in fetch tools is limited to model APIs, package registries and GitHub; if a job truly needs more, ask the user to add the host to `brainEgressAllow` in settings.",
     );

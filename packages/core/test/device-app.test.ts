@@ -244,6 +244,32 @@ describe("device port", () => {
     expect((await pageRequest(devicePort, fp, "GET", "/api/bootstrap", undefined, { cookie })).status).toBe(401);
   });
 
+  it("takes where the user is from the phone that shares it, for the agents, and forgets it when sharing stops or the phone goes", async () => {
+    const pairing = (await web.req("POST", "/api/devices/pairing", {})).json;
+    const fp = parsePairingLink(pairing.link)!.fingerprint;
+    const paired = (await phoneRequest(devicePort, fp, "POST", "/api/devices/pair", { code: pairing.code, name: "Walking phone", platform: "ios", publicKey: phoneKey().publicKey })).json;
+    const token = paired.token as string;
+    const where = () => hub.tools.get("user_location")!.invoke({}, { sessionId: "s", agentId: "assistant", callId: "c", tainted: false, background: false, workspace: "", machineId: "local", conversationId: "c" });
+    const said = async () => (await where()).content.map((c) => (c.type === "text" ? c.text : "")).join("");
+
+    expect(await said()).toMatch(/^Unknown: the user's phone does not share their location/);
+    expect((await phoneRequest(devicePort, fp, "POST", "/api/devices/location", { lat: 120, lon: 0 }, token)).status).toBe(400);
+    const at = new Date(Date.now() - 5 * 60_000).toISOString();
+    const sent = { lat: 43.2513, lon: 76.9545, accuracy: 35.4, at, place: "Dostyk Ave 52,  Almaty" };
+    expect((await phoneRequest(devicePort, fp, "POST", "/api/devices/location", sent, token)).status).toBe(200);
+    expect(hub.locations.get()).toEqual({ lat: 43.2513, lon: 76.9545, accuracyM: 35, place: "Dostyk Ave 52, Almaty", at, deviceId: paired.deviceId, deviceName: "Walking phone" });
+    expect(await said()).toMatch(/^lat 43\.2513, lon 76\.9545 \(within 35 m\)\nPlace: Dostyk Ave 52, Almaty\nReported 5 min ago .* by the phone “Walking phone”\.$/);
+    expect(hub.locations.line(() => "23:05")).toBe("Dostyk Ave 52, Almaty (from the phone “Walking phone”, as of 23:05)");
+    expect(hub.locations.line(() => "23:05", Date.parse(at) + 7 * 3600_000)).toBe("last known near Dostyk Ave 52, Almaty (from the phone “Walking phone”, as of 23:05; may be out of date)");
+
+    // Sharing turned off on the phone, then on again and the phone unpaired: gone both times.
+    expect((await phoneRequest(devicePort, fp, "DELETE", "/api/devices/location", undefined, token)).status).toBe(200);
+    expect(hub.locations.get()).toBeUndefined();
+    await phoneRequest(devicePort, fp, "POST", "/api/devices/location", { lat: 1, lon: 2 }, token);
+    expect(hub.locations.get()).toMatchObject({ lat: 1, lon: 2 });
+    await web.req("DELETE", `/api/devices/${paired.deviceId}`);
+    expect(hub.locations.get()).toBeUndefined();
+  });
 });
 
 describe("device port closed by OWLBOT_DEVICES=0", () => {
