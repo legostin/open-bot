@@ -67,7 +67,9 @@ export function createCoreCall(hub: Hub) {
           goal: String(p.goal ?? ""),
           title: String(p.title ?? String(p.goal ?? "").slice(0, 60)),
           background: p.background !== false,
-          createdBy: p.triggerId ? "trigger" : "user",
+          // quiet: a plugin's own background work (memory's nightly reflection) reports like a trigger's run, only
+          // through the agent's notify(), not with a "Task done" notification.
+          createdBy: p.triggerId || p.quiet === true ? "trigger" : "user",
           triggerId: p.triggerId,
           parentConversationId: p.parentConversationId,
         });

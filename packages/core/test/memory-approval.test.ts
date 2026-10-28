@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { ToolCallContext } from "@owlbot/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { agentFromMarkdown } from "../src/agents.ts";
+import { createCoreCall } from "../src/core-call.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 const repoPlugins = join(import.meta.dirname, "..", "..", "..", "plugins");
@@ -171,5 +172,15 @@ describe("memory changes after outside content", () => {
     expect(said).toContain("[Memory] What you remember that may matter here");
     // Nothing relevant: nothing added.
     expect(await say("ECHO? What time is it?", /saw:/)).not.toContain("[Memory]");
+  });
+
+  it("a plugin's quiet background task reports like a trigger's run, not with a Task done notification", async () => {
+    const call = createCoreCall(hub);
+    const quiet: any = await call("memory", "tasks.create", { agentId: "lyapa", goal: "Memory reflection", title: "Memory: reflect on the day", background: true, quiet: true });
+    expect(quiet.createdBy).toBe("trigger");
+    hub.runner.cancelTask(quiet.id);
+    const loud: any = await call("memory", "tasks.create", { agentId: "lyapa", goal: "Something", title: "Something", background: true });
+    expect(loud.createdBy).toBe("user");
+    hub.runner.cancelTask(loud.id);
   });
 });

@@ -665,7 +665,7 @@ export function outcome(name: string, output: string | undefined, isError?: bool
 
 function MemoryLine({ call, result }: ToolResultProps) {
   const o = outcome(call.name, result?.output, result?.isError);
-  const [done, setDone] = useState<"" | "undone" | "approved" | "rejected" | "restored">("");
+  const [done, setDone] = useState<"" | "undone" | "approved" | "rejected" | "restored" | "settled">("");
   const [busy, setBusy] = useState(false);
   useEffect(ensureStyles, []);
   // The line is drawn again later (a reload, another device): it says what is true now, not what was clicked here.
@@ -673,7 +673,12 @@ function MemoryLine({ call, result }: ToolResultProps) {
     if (!o.path || (o.state !== "remembered" && o.state !== "review")) return;
     let alive = true;
     http<Detail>("GET", `/fact?path=${enc(o.path)}`)
-      .then((d) => alive && o.state === "review" && d.fact.status !== "review" && setDone("approved"))
+      .then((d) => {
+        if (!alive) return;
+        if (o.state === "review" && d.fact.status !== "review") setDone("approved");
+        // Replaced since by a newer fact, or put away: nothing to undo here any more.
+        else if (o.state === "remembered" && (d.fact.status !== "active" || d.fact.supersededBy)) setDone("settled");
+      })
       .catch(() => alive && setDone(o.state === "review" ? "rejected" : "undone"));
     return () => {
       alive = false;
@@ -705,6 +710,7 @@ function MemoryLine({ call, result }: ToolResultProps) {
             <button className="l" disabled={busy} onClick={() => void go("/restore", { path: o.path }, "restored")}>{t("chat.rememberAgain")}</button>
           </div>
         );
+      if (done === "settled") return <div className="owm-line">{Icon.brain}<span>{t("chat.remembered")}</span>{what}</div>;
       return (
         <div className="owm-line">{Icon.brain}<span>{t("chat.remembered")}</span>{what}<span className="sep">·</span>
           <button className="l" disabled={busy} onClick={() => void go("/undo", { path: o.path }, "undone")}>{t("ui.undo")}</button>

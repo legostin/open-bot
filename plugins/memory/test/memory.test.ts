@@ -389,16 +389,66 @@ describe("capture: remember", () => {
     const said = await h.invokeText("remember", { fact: "The user has type 2 diabetes.", kind: "self", slot: "health" });
     expect(said).toMatch(/^Waiting for the user's OK \[you\/[\w-]+\.md\]: The user has type 2 diabetes\. Sensitive facts are remembered only after the user approves/);
     const path = pathOf(said);
-    expect(file(h, path)).toContain("sensitive: true");
-    expect(file(h, path)).toContain("status: review");
+    // It waits outside the memory folder's history: a fact the user declines never reaches git.
+    expect(at(h, path)).toBe(false);
+    expect(file(h, `.pending/${path}`)).toContain("sensitive: true");
+    expect(file(h, `.pending/${path}`)).toContain("status: review");
+    if (hasGit()) expect(gitLog(join(h.dataDir, "memory")).join("\n")).not.toContain(path);
     expect(await h.invokeText("search", { query: "diabetes" })).toBe('No facts match "diabetes".');
     const r = (await h.http({ method: "GET", path: "/facts" })).body as any;
     expect(r.review).toBe(1);
     expect(((await h.http({ method: "GET", path: "/review" })).body as any).items[0]).toMatchObject({ path, sensitive: true, status: "review" });
     expect((await post(h, "/review/approve", { path })).status).toBe(200);
     expect(await h.invokeText("search", { query: "diabetes" })).toContain(path);
+    expect(file(h, path)).toContain("status: active");
+    expect(at(h, `.pending/${path}`)).toBe(false);
+    // Declined: gone, and never in git.
+    const no = pathOf(await h.invokeText("remember", { fact: "The user's salary is 5000 a month.", kind: "self", slot: "salary" }));
+    expect((await post(h, "/review/reject", { path: no })).status).toBe(200);
+    expect(at(h, `.pending/${no}`)).toBe(false);
+    if (hasGit()) expect(gitLog(join(h.dataDir, "memory")).join("\n")).not.toContain(no);
+    // Edited while waiting is a yes too, and it replaces what it was meant to replace.
+    const a = pathOf(await h.invokeText("remember", { fact: "The user has a mortgage until 2040.", kind: "self", slot: "mortgage" }));
+    await post(h, "/review/approve", { path: a });
+    const b = pathOf(await h.invokeText("remember", { fact: "The user paid the mortgage off early.", kind: "self", slot: "mortgage" }));
+    expect(file(h, a)).toContain("status: active");
+    expect((await h.http({ method: "PATCH", path: "/fact", body: { path: b, text: "The user paid the mortgage off in October 2026." } })).status).toBe(200);
+    expect(file(h, a)).toContain(`superseded_by: ${b}`);
     // Approved on the chat's approval card (a tainted session), it is the user's yes already.
     expect(await h.invokeText("remember", { fact: "The user takes metformin every morning.", kind: "self" }, { tainted: true, approved: true })).toMatch(/^Remembered/);
+  });
+
+  it("never archives a longer note through replaces, and keeps yes and no apart", async () => {
+    await h.invoke("write", { path: "profile.md", title: "Profile", content: "Oleg, 34, backend developer in Perm. Has a sister Anna. Likes cycling." });
+    const said = await h.invokeText("remember", { fact: "The user now lives in Berlin.", kind: "self", replaces: ["profile.md"] });
+    expect(said).toContain("Not replaced (longer notes hold many facts; update the part that changed with memory_write): profile.md");
+    expect(file(h, "profile.md")).toContain("status: active");
+    expect(((await h.hook("session.start", { sessionId: "s_p", agentId: "assistant" })) as any).appendSystemPrompt).toContain("Oleg, 34");
+
+    expect(await h.invokeText("remember", { fact: "The user eats meat.", kind: "preference" })).toMatch(/^Remembered/);
+    expect(await h.invokeText("remember", { fact: "The user does not eat meat.", kind: "preference" })).toMatch(/^Remembered/);
+    expect(await h.invokeText("remember", { fact: "The user drinks coffee with milk.", kind: "preference" })).toMatch(/^Remembered/);
+    expect(await h.invokeText("remember", { fact: "The user drinks coffee without milk.", kind: "preference" })).toMatch(/^Remembered/);
+    // A correction with `replaces` is never swallowed as "already known".
+    const tea = pathOf(await h.invokeText("remember", { fact: "The user drinks green tea in the morning.", kind: "preference" }));
+    expect(await h.invokeText("remember", { fact: "The user drinks green tea in the morning", kind: "preference", replaces: [tea] })).toMatch(/^Remembered/);
+  });
+
+  it("supersedes by slot only for a known subject; undo of an old fact does not revive older ones", async () => {
+    const tax = pathOf(await h.invokeText("remember", { fact: "Tax report is due on 30 April.", kind: "note", slot: "deadline" }));
+    await h.invokeText("remember", { fact: "Kitchen renovation should be done by June.", kind: "note", slot: "deadline" });
+    expect(file(h, tax)).toContain("status: active");
+
+    const moscow = pathOf(await h.invokeText("remember", { fact: "Anna lives in Moscow.", kind: "person", about: ["Anna"], slot: "city" }));
+    const kazan = pathOf(await h.invokeText("remember", { fact: "Anna lives in Kazan now.", kind: "person", about: ["Anna"], slot: "city" }));
+    const berlin = pathOf(await h.invokeText("remember", { fact: "Anna moved to Berlin.", kind: "person", about: ["Anna"], slot: "city" }));
+    expect((await post(h, "/undo", { path: kazan })).body).toMatchObject({ restored: [] });
+    expect(file(h, moscow)).toContain("status: archived");
+    expect(file(h, berlin)).toContain("status: active");
+
+    // Russian facts about the user are about the user (kind self) without saying so.
+    const ru = pathOf(await h.invokeText("remember", { fact: "Пользователь любит зелёный чай." }));
+    expect(ru.startsWith("you/")).toBe(true);
   });
 
   it("keeps an agent's own facts to itself", async () => {
@@ -536,7 +586,8 @@ describe("control and consolidation over HTTP", () => {
     expect((await facts(h, { q: "Berlin" })).facts).toHaveLength(0);
 
     expect(tasks).toHaveLength(1);
-    expect(tasks[0]).toMatchObject({ title: "Memory: reflect on the day", background: true });
+    // quiet: it reports through its own silent notify(), not with a "Task done" notification.
+    expect(tasks[0]).toMatchObject({ title: "Memory: reflect on the day", background: true, quiet: true });
     expect(tasks[0].goal).toContain("Memory reflection");
     expect(tasks[0].goal).toContain("поехать в Грузию");
     expect(tasks[0].goal).toContain("день рождения 3 марта");

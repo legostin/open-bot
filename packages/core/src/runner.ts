@@ -157,6 +157,8 @@ const MAX_TEAM_MESSAGES = 6;
 const THREAD_FRESH_MS = 60 * 60_000;
 /** Settings key: agent id → when the user last changed that agent's brains. */
 const BRAINS_CHANGED_KEY = "brainsChangedAt";
+/** What plugins may add before one turn's input (turn.context), in characters. */
+const MAX_TURN_CONTEXT = 12_000;
 /** Workspace images a channel gets inline with one reply, in all. */
 const MAX_INLINE_MEDIA_BYTES = 4 * MAX_IMAGE_BYTES;
 
@@ -277,7 +279,7 @@ export class SessionRunner {
     if (this.activeTurns.has(conversationId)) {
       void (async () => {
         const files: Pick<TurnOpts, "attachments" | "speech"> = attachments.length ? await this.transcribeParts(msg.id, attachments) : {};
-        if (await this.steerInto(conversationId, prompt, { ...reply, ...files })) return;
+        if (await this.steerInto(conversationId, prompt, { ...reply, ...files, fromUser: true })) return;
         if (task) await this.wakeTask(task, prompt, { ...reply, ...files, fromUser: true });
         else this.queueUserTurn(conv, { messageId: msg.id, prompt, attachments: files.attachments ?? [], ...reply });
       })();
@@ -326,11 +328,19 @@ export class SessionRunner {
   }
 
   /** More input for the turn running in the conversation: true when its brain took it (the reply goes on there). */
-  private async steerInto(conversationId: string, text: string, opts: Pick<TurnOpts, "replyChannel" | "attachments" | "speech" | "taint"> = {}): Promise<boolean> {
+  private async steerInto(conversationId: string, text: string, opts: Pick<TurnOpts, "replyChannel" | "attachments" | "speech" | "taint" | "fromUser"> = {}): Promise<boolean> {
     const a = this.activeTurns.get(conversationId);
     if (!a) return false;
     // Outside content joining the turn marks its session before the brain can read it.
     if (opts.taint) this.markTainted(a.row);
+    // What plugins add for this input (the memories that matter now), as for a turn of its own.
+    const conv = this.d.store.getConversation(conversationId);
+    const agent = this.d.agents.get(a.row.agentId);
+    if (conv && agent) {
+      const extra = await this.turnContext(a.row, conv, agent, a.row.taskId ? this.d.store.getTask(a.row.taskId) : undefined, text, opts);
+      if (this.activeTurns.get(conversationId) !== a) return false;
+      if (extra) text = `${extra}\n\n${text}`;
+    }
     if (!(await a.handle.steer(this.turnInput(a.row, text, opts)))) return false;
     if (this.activeTurns.get(conversationId) === a) {
       a.split();
@@ -1368,7 +1378,7 @@ export class SessionRunner {
   }
 
   /** Blocks plugins add before a turn's input (turn.context hook), or undefined. Never fails the turn. */
-  private async turnContext(row: SessionRow, conv: Conversation, agent: AgentDef, task: Task | undefined, prompt: string, opts: TurnOpts): Promise<string | undefined> {
+  private async turnContext(row: SessionRow, conv: Conversation, agent: AgentDef, task: Task | undefined, prompt: string, opts: Pick<TurnOpts, "fromUser">): Promise<string | undefined> {
     try {
       const r = await this.d.hooks.run(
         "turn.context",
@@ -1376,7 +1386,7 @@ export class SessionRunner {
         (p) => p,
       );
       const blocks = r.results.map((x) => (typeof x?.context === "string" ? x.context.trim() : "")).filter(Boolean);
-      return blocks.length ? this.d.redactor.text(blocks.join("\n\n")) : undefined;
+      return blocks.length ? this.d.redactor.text(truncate(blocks.join("\n\n"), MAX_TURN_CONTEXT)) : undefined;
     } catch {
       return undefined;
     }

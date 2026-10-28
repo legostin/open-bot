@@ -84,6 +84,9 @@ function rememberText(r: RememberResult, mem: Memory): string {
     lines.push("Replaced (kept in history as no longer true):");
     for (const p of r.replaced) lines.push(`- ${mem.store.facts.get(p)?.title ?? p} [${p}]`);
   }
+  if (r.kept?.length) {
+    lines.push(`Not replaced (longer notes hold many facts; update the part that changed with memory_write): ${r.kept.join(", ")}`);
+  }
   if (r.related.length) {
     lines.push("Related facts already in memory (if one of them is now wrong, call memory_remember again with `replaces`):");
     for (const f of r.related) lines.push(factLine(f, 200));
@@ -158,7 +161,8 @@ const plugin: PluginModule = {
         ...lines,
       ].join("\n");
       try {
-        await ctx.core.call("tasks.create", { goal, title: t("task.reflect"), background: true });
+        // quiet: like a trigger's run it reports only through its own notify() (silent here), not "Task done".
+        await ctx.core.call("tasks.create", { goal, title: t("task.reflect"), background: true, quiet: true });
       } catch (e: any) {
         ctx.log.warn(`memory reflection could not start: ${e?.message ?? e}`);
         return false;
@@ -168,11 +172,20 @@ const plugin: PluginModule = {
       return true;
     }
 
+    /** One pass at a time (the hourly check and the "Tidy up" button may meet). */
+    let running: Promise<{ expired: number; merged: number; archived: number; reflection: boolean }> | undefined;
     async function nightly(force = false) {
       const last = Date.parse(mem.state.get("lastTidy") ?? "") || 0;
       if (!force && Date.now() - last < 20 * 3600_000) return undefined;
-      const r = await mem.tidy();
-      return { ...r, reflection: await reflect() };
+      running ??= (async () => {
+        try {
+          const r = await mem.tidy();
+          return { ...r, reflection: await reflect() };
+        } finally {
+          running = undefined;
+        }
+      })();
+      return running;
     }
     const check = () => void nightly().catch((e) => ctx.log.warn(`memory tidy failed: ${e?.message ?? e}`));
     timers = [setTimeout(check, 2 * 60_000), setInterval(check, 60 * 60_000)];

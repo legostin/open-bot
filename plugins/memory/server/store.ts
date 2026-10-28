@@ -1,7 +1,8 @@
 // Memory files on disk: one fact per markdown file with YAML frontmatter.
-// Active and archived facts live in the memory root. Facts pending the user's review carry status: review in place,
-// or wait in .review/<path> (written from tainted sessions by earlier versions). Forgotten facts go to .trash/<path>
-// (not in git: the deletion is the commit), from where Undo brings them back.
+// Active and archived facts live in the memory root. Sensitive facts waiting for the user's yes wait in .pending/<path>
+// (not in git: a fact the user declines never reaches the history); earlier versions kept such facts in .review/<path>
+// or as status: review in place. Forgotten facts go to .trash/<path> (not in git: the deletion is the commit), from
+// where Undo brings them back.
 //
 // Schema v2 (see docs/superpowers/specs/2026-10-29-memory-design.md) adds kind, entities, slot, importance, confidence,
 // validity dates, supersession, scope, sensitivity and provenance. Every new field is optional: v1 files load as they
@@ -73,15 +74,20 @@ export interface Fact {
 }
 
 export interface ReviewItem extends Fact {
-  /** True when an active-tree file itself carries status: review; false for .review/ copies. */
+  /** True when an active-tree file itself carries status: review; false for .pending/ and .review/ copies. */
   inPlace: boolean;
+  /** Where a copy waits: .pending/ (new, outside git) or .review/ (v1). */
+  area?: "pending" | "review";
 }
 
 export const INDEX_FILE = "MEMORY.md";
 export const PROFILE_FILE = "profile.md";
 export const DEFAULT_FOLDERS = ["people", "projects", "notes"];
 const REVIEW_DIR = ".review";
+const PENDING_DIR = ".pending";
 const TRASH_DIR = ".trash";
+/** Kept out of git: the trash (the deletion is the commit) and facts not approved yet. */
+const IGNORED = [`${TRASH_DIR}/`, `${PENDING_DIR}/`, ".tmp-*"];
 
 const KNOWN_KEYS = new Set([
   "title",
@@ -323,9 +329,9 @@ export class MemoryStore {
   }
 
   /** Absolute path of a fact (validated). `area` → its .review/ or .trash/ copy. */
-  abs(path: string, area: "" | "review" | "trash" | boolean = ""): string {
+  abs(path: string, area: "" | "review" | "pending" | "trash" | boolean = ""): string {
     const p = normalizePath(path);
-    const dir = area === "review" || area === true ? REVIEW_DIR : area === "trash" ? TRASH_DIR : "";
+    const dir = area === "review" || area === true ? REVIEW_DIR : area === "pending" ? PENDING_DIR : area === "trash" ? TRASH_DIR : "";
     const abs = dir ? join(this.root, dir, ...p.split("/")) : join(this.root, ...p.split("/"));
     const rel = relative(this.root, abs);
     if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new PathError("outsideRoot", `Path is outside the memory folder: ${path}`, { path });
@@ -338,7 +344,9 @@ export class MemoryStore {
     for (const d of DEFAULT_FOLDERS) mkdirSync(join(this.root, d), { recursive: true });
     // Forgotten facts stay out of git: the deletion is the commit, the trash is for Undo.
     const ignore = join(this.root, ".gitignore");
-    if (!existsSync(ignore)) writeFileSync(ignore, `${TRASH_DIR}/\n.tmp-*\n`, "utf8");
+    const had = existsSync(ignore) ? readFileSync(ignore, "utf8") : "";
+    const missing = IGNORED.filter((l) => !had.split(/\r?\n/).includes(l));
+    if (missing.length) writeFileSync(ignore, `${had}${had && !had.endsWith("\n") ? "\n" : ""}${missing.join("\n")}\n`, "utf8");
     this.scan();
   }
 
@@ -353,11 +361,12 @@ export class MemoryStore {
       if (f.status === "review") this.review.set(path, { ...f, inPlace: true });
       else this.facts.set(path, f);
     }
-    const rr = join(this.root, REVIEW_DIR);
-    if (existsSync(rr)) {
-      for (const path of this.walk(rr, "")) {
-        const f = this.load(path, "review");
-        if (f) this.review.set(path, { ...f, status: "review", inPlace: false });
+    for (const area of ["review", "pending"] as const) {
+      const dir = join(this.root, area === "review" ? REVIEW_DIR : PENDING_DIR);
+      if (!existsSync(dir)) continue;
+      for (const path of this.walk(dir, "")) {
+        const f = this.load(path, area);
+        if (f) this.review.set(path, { ...f, status: "review", inPlace: false, area });
       }
     }
   }
@@ -385,7 +394,7 @@ export class MemoryStore {
     return out;
   }
 
-  private load(path: string, area: "" | "review" | "trash"): Fact | undefined {
+  private load(path: string, area: "" | "review" | "pending" | "trash"): Fact | undefined {
     try {
       return parseFact(path, readFileSync(this.abs(path, area), "utf8"));
     } catch {
@@ -409,12 +418,11 @@ export class MemoryStore {
     if (r?.inPlace) this.review.delete(fact.path);
   }
 
-  /** Write a fact that waits for the user's yes (in place, status: review). */
+  /** Write a fact that waits for the user's yes, in .pending/ (outside git until they approve). */
   putReview(f: Fact): void {
     const fact: Fact = { ...f, status: "review" };
-    this.writeFile(this.abs(fact.path), serializeFact(fact));
-    this.facts.delete(fact.path);
-    this.review.set(fact.path, { ...fact, inPlace: true });
+    this.writeFile(this.abs(fact.path, "pending"), serializeFact(fact));
+    this.review.set(fact.path, { ...fact, inPlace: false, area: "pending" });
   }
 
   removeActive(path: string): boolean {
@@ -433,7 +441,7 @@ export class MemoryStore {
     const r = this.review.get(path);
     if (!r) return false;
     this.review.delete(path);
-    const abs = this.abs(path, r.inPlace ? "" : "review");
+    const abs = this.abs(path, r.inPlace ? "" : (r.area ?? "review"));
     if (existsSync(abs)) rmSync(abs);
     return true;
   }
@@ -487,6 +495,21 @@ export class MemoryStore {
       out.push({ ...f, trashedAt: at });
     }
     return out.sort((a, b) => b.trashedAt.localeCompare(a.trashedAt));
+  }
+
+  /** Forget for good what has been in the trash longer than `ms` (only while git keeps the history). */
+  purgeTrash(ms: number, now = Date.now()): number {
+    let n = 0;
+    for (const f of this.trashed()) {
+      if (!f.trashedAt || now - Date.parse(f.trashedAt) < ms) continue;
+      try {
+        rmSync(this.abs(f.path, "trash"));
+        n++;
+      } catch {
+        /* gone meanwhile */
+      }
+    }
+    return n;
   }
 
   inTrash(path: string): boolean {

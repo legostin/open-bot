@@ -33,7 +33,7 @@ import {
   type Source,
 } from "./store.ts";
 import { dirOf, MemoryError, normalizePath, NotFoundError, PathError, slugify } from "./paths.ts";
-import { containment, headline, looksSensitive, overlap, sameEntity, secretReason, stem, stems, words } from "./text.ts";
+import { containment, headline, looksSensitive, negated, overlap, sameEntity, secretReason, stem, stems, words } from "./text.ts";
 import { factLine, rank, strongest, within, type Scored } from "./recall.ts";
 import { MemoryState } from "./state.ts";
 
@@ -85,6 +85,8 @@ export interface RememberResult {
   title: string;
   replaced: string[];
   related: Fact[];
+  /** Named in `replaces` but longer notes: left as they are (memory_write updates them). */
+  kept?: string[];
 }
 
 export interface FactEdit {
@@ -132,8 +134,14 @@ function subject(f: Pick<Fact, "about" | "kind">): string {
   return f.about.length ? key(f.about[0]) : "";
 }
 
-function factStems(f: Pick<Fact, "title" | "body">): string[] {
-  return stems(`${f.body || f.title}`);
+function factStems(f: Pick<Fact, "title" | "body">, max = 64): string[] {
+  return stems(`${f.body || f.title}`, max);
+}
+
+/** A single fact a newer one can replace (or merge with); longer notes such as the profile hold many facts. */
+const SHORT = 600;
+function replaceable(f: Fact): boolean {
+  return f.path !== PROFILE_FILE && f.body.length <= SHORT;
 }
 
 function sameSource(a: Source, b: Source): boolean {
@@ -257,7 +265,7 @@ export class Memory {
       }
       const scope = input.scope === "me" || input.scope === `agent:${actor.agentId}` ? `agent:${actor.agentId}` : "team";
       const about = normalizeEntities(input.about ?? []);
-      const kind: FactKind = isKind(input.kind) ? input.kind : about.length ? "person" : /\b(user|пользовател)/i.test(text) ? "self" : "note";
+      const kind: FactKind = isKind(input.kind) ? input.kind : about.length ? "person" : /(?<!\p{L})(user|пользовател)/iu.test(text) ? "self" : "note";
       const slot = String(input.slot ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
       const draft = { title, body: text, about, kind };
       const mine = stems(text);
@@ -265,10 +273,33 @@ export class Memory {
       const now = new Date().toISOString();
       const src = this.source(actor);
 
+      // What it replaces: named by the agent, or the same subject and slot (newest wins, the old one keeps its history).
+      // Longer notes (the profile, a person's page) hold many facts: they are updated with memory_write, never archived whole.
+      const named = (Array.isArray(input.replaces) ? input.replaces : input.replaces ? [input.replaces] : []).map((p) => {
+        try {
+          return normalizePath(String(p));
+        } catch {
+          return "";
+        }
+      });
+      const replaced = new Set<string>();
+      const kept: string[] = [];
+      for (const p of named) {
+        const f = this.store.facts.get(p);
+        if (!f || !isCurrent(f) || !visibleTo(f, actor.agentId)) continue;
+        if (replaceable(f)) replaced.add(p);
+        else kept.push(p);
+      }
+      const subj = subject(draft);
+      if (slot && subj) {
+        for (const f of pool) if (f.slot && key(f.slot) === key(slot) && subject(f) === subj && replaceable(f)) replaced.add(f.path);
+      }
+
       // Already known: the same claim, maybe in other words. It gains a source and confidence.
-      const dup = this.duplicateOf(mine, pool) ?? this.duplicateOf(mine, [...this.store.review.values()].filter((f) => f.scope === scope));
+      const candidates = (list: Fact[]) => list.filter((f) => !replaced.has(f.path) && !(slot && f.slot && key(f.slot) === key(slot)));
+      const dup = this.duplicateOf(text, mine, candidates(pool)) ?? this.duplicateOf(text, mine, candidates([...this.store.review.values()].filter((f) => f.scope === scope)));
       if (dup) {
-        if (dup.status === "review") return { status: "known", path: dup.path, title: dup.title, replaced: [], related: [] };
+        if (dup.status === "review") return { status: "known", path: dup.path, title: dup.title, replaced: [], related: [], kept };
         const fact: Fact = {
           ...dup,
           sources: mergeSources(dup.sources, [src]),
@@ -280,21 +311,7 @@ export class Memory {
         this.store.put(fact);
         this.sync(fact, fact.path);
         await this.commit("confirm", fact.path);
-        return { status: "known", path: fact.path, title: fact.title, replaced: [], related: [] };
-      }
-
-      // What it replaces: named by the agent, or the same subject and slot (newest wins, the old one keeps its history).
-      const named = (Array.isArray(input.replaces) ? input.replaces : input.replaces ? [input.replaces] : []).map((p) => {
-        try {
-          return normalizePath(String(p));
-        } catch {
-          return "";
-        }
-      });
-      const replaced = new Set(named.filter((p) => this.store.facts.get(p) && isCurrent(this.store.facts.get(p)!) && visibleTo(this.store.facts.get(p)!, actor.agentId)));
-      if (slot) {
-        const subj = subject(draft);
-        for (const f of pool) if (f.slot && key(f.slot) === key(slot) && subject(f) === subj) replaced.add(f.path);
+        return { status: "known", path: fact.path, title: fact.title, replaced: [], related: [], kept };
       }
 
       const sensitive = input.sensitive === true || looksSensitive(`${title}\n${text}`);
@@ -324,24 +341,27 @@ export class Memory {
       if (review) {
         // Waits for the user's yes; what it would replace stays as it is meanwhile.
         this.store.putReview(fact);
-        await this.commit("remember (review)", path);
-        return { status: "review", path, title, replaced: [], related };
+        this.o.changed(path, "review");
+        return { status: "review", path, title, replaced: [], related, kept };
       }
       this.store.put(fact);
       this.sync(fact, path);
       this.supersede([...replaced], fact);
       await this.commit("remember", path);
-      return { status: "created", path, title, replaced: [...replaced], related };
+      return { status: "created", path, title, replaced: [...replaced], related, kept };
     });
   }
 
-  private duplicateOf(mine: string[], pool: Fact[]): Fact | undefined {
+  /** The same claim already known: near-identical words, and both say yes or both say no. */
+  private duplicateOf(text: string, mine: string[], pool: Fact[]): Fact | undefined {
     let best: { f: Fact; s: number } | undefined;
+    const no = negated(text);
     for (const f of pool) {
+      if (negated(f.body || f.title) !== no) continue;
       const theirs = factStems(f);
       const o = overlap(mine, theirs);
       const c = containment(mine, theirs);
-      const same = o >= 0.75 || (c >= 0.9 && Math.min(mine.length, theirs.length) >= 4 && o >= 0.5);
+      const same = o >= 0.8 || (c >= 0.9 && Math.min(mine.length, theirs.length) >= 4 && o >= 0.6);
       if (same && (!best || o > best.s)) best = { f, s: o };
     }
     return best?.f;
@@ -374,7 +394,9 @@ export class Memory {
     for (const p of fact.supersedes) {
       const old = this.store.facts.get(p);
       if (!old || old.supersededBy !== fact.path) continue;
-      const restored: Fact = { ...old, status: "active", validUntil: "", supersededBy: "" };
+      // The end it got from `fact` goes; an earlier end of its own stays.
+      const setBy = fact.validFrom || fact.created.slice(0, 10);
+      const restored: Fact = { ...old, status: "active", validUntil: old.validUntil && old.validUntil < setBy ? old.validUntil : "", supersededBy: "" };
       this.store.put(restored);
       this.sync(restored, p);
       back.push(p);
@@ -465,8 +487,11 @@ export class Memory {
       const path = normalizePath(rawPath);
       const f = this.store.facts.get(path) ?? this.store.review.get(path);
       if (!f) throw factNotFound(path);
-      const restored = this.unsupersede(f);
+      // A fact replaced meanwhile by a newer one: undoing it must not bring back what it had replaced.
+      const restored = f.status === "active" && !f.supersededBy && isCurrent(f) ? this.unsupersede(f) : [];
       this.store.trash(path);
+      const r = this.store.review.get(path);
+      if (r && !r.inPlace) this.store.removeReview(path);
       this.index.remove(path);
       await this.commit("undo", path);
       return { path, restored };
@@ -504,6 +529,16 @@ export class Memory {
       if (f.status === "review" && !(f as ReviewItem).inPlace) this.store.removeReview(path);
       this.store.put(fact);
       this.sync(fact, path);
+      // Editing a fact that waited for review is the user's yes: it replaces what it was meant to replace.
+      if (f.status === "review") {
+        this.supersede(
+          fact.supersedes.filter((p) => {
+            const o = this.store.facts.get(p);
+            return !!o && isCurrent(o);
+          }),
+          fact,
+        );
+      }
       await this.commit("edit", path);
       return fact;
     });
@@ -592,13 +627,14 @@ export class Memory {
       // Near-duplicates (the same claim saved twice): the newer one keeps everything.
       const current = [...this.store.facts.values()].filter((f) => isCurrent(f, nowMs));
       if (current.length <= 3000) {
-        const st = new Map(current.map((f) => [f.path, factStems(f)]));
+        const st = new Map(current.map((f) => [f.path, factStems(f, 1000)]));
         const gone = new Set<string>();
         for (let i = 0; i < current.length; i++) {
           for (let j = i + 1; j < current.length; j++) {
             const a = current[i];
             const b = current[j];
-            if (gone.has(a.path) || gone.has(b.path) || a.scope !== b.scope || a.path === PROFILE_FILE || b.path === PROFILE_FILE) continue;
+            if (gone.has(a.path) || gone.has(b.path) || a.scope !== b.scope || a.kind !== b.kind || subject(a) !== subject(b)) continue;
+            if (!replaceable(a) || !replaceable(b) || negated(a.body || a.title) !== negated(b.body || b.title)) continue;
             if (overlap(st.get(a.path)!, st.get(b.path)!) < 0.85) continue;
             const [keep, drop] = (b.updated || b.created) >= (a.updated || a.created) ? [b, a] : [a, b];
             const k = this.store.facts.get(keep.path)!;
@@ -633,6 +669,9 @@ export class Memory {
           archived++;
         }
       }
+      // Forgotten facts leave the trash after a month, but only while git still keeps every version.
+      const purged = this.git.enabled ? this.store.purgeTrash(30 * DAY, nowMs) : 0;
+      if (purged) this.o.warn(`memory: ${purged} forgotten fact(s) left the trash (still in the git history)`);
       this.state.set("lastTidy", new Date(nowMs).toISOString());
       if (expired + merged + archived) await this.commit(`tidy: ${expired} expired, ${merged} merged, ${archived} archived`, "");
       return { expired, merged, archived };

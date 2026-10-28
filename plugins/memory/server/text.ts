@@ -5,13 +5,13 @@ const STOP = new Set(
   (
     // English
     "the a an and or but if then so of to in on at by for with from about into over after before as is are was were be been " +
-    "being have has had do does did not no yes this that these those it its i me my mine you your yours we our they them their " +
+    "being have has had do does did yes this that these those it its i me my mine you your yours we our they them their " +
     "he him his she her what which who whom when where why how all any some can could will would should shall may might must " +
     "just very also too more most much many such than there here only own same other each both few out up down off again once " +
     "user user's users please thanks thank ok okay hello hi hey let lets want need like know think tell said say get got make " +
     // Russian
-    "и в во не что он на я с со как а то все она так его но да ты к у же вы за бы по только ее мне было вот от меня еще нет о из " +
-    "ему теперь когда даже ну вдруг ли если уже или ни быть был него до вас нибудь опять уж вам ведь там потом себя ничего ей " +
+    "и в во что он на я с со как а то все она так его но да ты к у же вы за бы по только ее мне было вот от меня еще о из " +
+    "ему теперь когда даже ну вдруг ли если уже или быть был него до вас нибудь опять уж вам ведь там потом себя ей " +
     "может они тут где есть надо ней для мы тебя их чем была сам чтоб без будто чего раз тоже себе под будет ж тогда кто этот " +
     "того потому этого какой совсем ним здесь этом один почти мой тем чтобы нее сейчас были куда зачем всех никогда можно при " +
     "наконец два об другой хоть после над больше тот через эти нас про всего них какая много разве три эту моя впрочем хорошо " +
@@ -42,11 +42,18 @@ export function stem(word: string): string {
   return w;
 }
 
-/** Distinct content stems of a text (stop words and very short words dropped). */
+const NEGATIONS = new Set(["not", "no", "never", "without", "nor", "dont", "doesnt", "didnt", "isnt", "не", "нет", "ни", "никогда", "без"]);
+
+/** Does the text deny something ("does not", "без", "никогда")? Claims that differ in this are not the same claim. */
+export function negated(text: string): boolean {
+  return words(text.replace(/n't\b/gi, " not")).some((w) => NEGATIONS.has(w));
+}
+
+/** Distinct content stems of a text (stop words and very short words dropped; negations kept). */
 export function stems(text: string, max = 64): string[] {
   const out = new Set<string>();
   for (const w of words(text)) {
-    if (w.length < 3 && !/^\d+$/.test(w)) continue;
+    if (w.length < 3 && !/^\d+$/.test(w) && !NEGATIONS.has(w)) continue;
     if (STOP.has(w)) continue;
     out.add(stem(w));
     if (out.size >= max) break;

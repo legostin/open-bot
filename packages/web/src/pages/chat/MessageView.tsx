@@ -218,11 +218,11 @@ function partShown(p: MessagePart, role: Message["role"], details: boolean): boo
 function Parts({ message }: { message: Message }) {
   const { contributions } = usePluginRegistry();
   const details = useStore(showDetails);
-  // Without the details mode, a plugin's inline lines ("Remembered: …") go under the message, after its words.
+  // Without the details mode, a plugin's inline lines ("Remembered: …") go under a finished message, after its words.
+  const streaming = message.status === "streaming";
   const grouped = groupParts(message.parts);
   const inline = (it: (typeof grouped)[number]) => it.kind === "tool" && !!pickToolRenderer(contributions, it.call.name)?.inline;
-  const items = details ? grouped : [...grouped.filter((it) => !inline(it)), ...grouped.filter(inline)];
-  const streaming = message.status === "streaming";
+  const items = details || streaming ? grouped : [...grouped.filter((it) => !inline(it)), ...grouped.filter(inline)];
   const lastPart = message.parts[message.parts.length - 1];
   return (
     <>

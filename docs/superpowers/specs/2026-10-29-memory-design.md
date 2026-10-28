@@ -64,7 +64,10 @@ recall never makes a git commit.
    - **supersedes** facts named in `replaces`, or with the same subject + slot: they are archived with
      `valid_until` and `superseded_by`, the new fact lists them in `supersedes`;
    - sends **sensitive** facts (health, money, beliefs, intimate life, documents; or `sensitive: true`) to the review
-     queue: not recalled until the person says yes, right in the chat line or in the manager;
+     queue: they wait in `.pending/`, outside git, and are not recalled until the person says yes, right in the chat
+     line or in the manager; a declined one never reaches the history;
+   - never archives a longer note (the profile, a v1 page about a person) through `replaces`: those are updated with
+     `memory_write`; a negated claim ("does not", "без") is never a duplicate of the positive one;
    - after untrusted content the existing approval card applies (`askWhenTainted`).
    - returns related facts so the agent can correct itself (`replaces`) in the next call.
 2. **After the day, by reflection.** The plugin keeps a short journal of the person's own messages (from the
@@ -76,7 +79,7 @@ recall never makes a git commit.
 
 - **Session start** (`session.start`): instructions plus the core block: the strongest facts about the user and their
   preferences (importance ≥ 4) and the v1 `profile.md`, within `promptMaxChars`. No more whole-index dumps.
-- **Every turn** (new hook `turn.context`): the person's message is scored against active facts the agent may see
+- **Every turn** (new hook `turn.context`, also for input that joins a running turn): the person's message is scored against active facts the agent may see
   (team facts and its own private ones). Facts above the gate, not shown to this session in its last turns, go before
   the message as a `[Memory]` block within `recallMaxChars`. Nothing relevant → nothing added.
 - `memory_search` uses the same ranking; archived facts appear only when asked (`include_archived`).
@@ -95,8 +98,9 @@ Every change is one git commit, so a pass can be rolled back.
 ## Control and privacy
 
 - Everything is visible and editable in the manager; edits by the person get confidence 1 and source "user".
-- **Forget** moves the file to `.trash/` (hidden, kept 30 days) and commits; **Undo** puts it back (and restores what it
-  had superseded). Git keeps every version: the detail shows the history and can restore a version.
+- **Forget** moves the file to `.trash/` (hidden, outside git) and commits the deletion; **Undo** puts it back (and
+  restores what it had superseded, unless it was itself replaced meanwhile). The nightly pass empties trash older than
+  30 days only while git keeps the history. Git keeps every version: the detail shows the history and can restore one.
 - **Export**: one JSON file with every fact and its raw markdown.
 - Secrets never enter memory; sensitive facts wait for a yes.
 
@@ -105,6 +109,10 @@ Every change is one git commit, so a pass can be rolled back.
 - Hook `turn.context` (plugin-sdk `HookName`, `HookPayloads`, `HookResults`; core `hooks.ts`):
   payload `{ sessionId, agentId, conversationId, taskId?, background, text, fromUser }`, result `{ context?: string }`.
   The runner puts the returned blocks before the turn's input (after the time and `[You now]` lines).
+- Core method `tasks.create` accepts `quiet: true`: the task reports like a trigger's run, only through the agent's
+  own `notify()` (the nightly reflection is silent), not with a "Task done" notification.
+- Policy: `memory_remember` and `memory_list` join the tools a background run may always use (the reflection runs in
+  the background; a remembered fact is local, shown and undoable). `memory_write` / `memory_forget` do not.
 - UI SDK: `SlotContribution.inline?: boolean` for `chat.toolResult` — the renderer is shown in the chat without the
   details mode (a line meant for the person), and a message holding only such a call is not hidden.
 
@@ -165,17 +173,18 @@ memory for real.
 
 ## Roadmap
 
-1. **Recall while steering**: input that joins a running turn (`steer`) gets no `[Memory]` block yet.
-2. **Local embeddings** behind the `Embedder` seam (a small multilingual model run by the hub), joined into
+1. **Local embeddings** behind the `Embedder` seam (a small multilingual model run by the hub), joined into
    `relevance`; keep lexical + entities as the fallback.
-3. **Entity pages**: a person or place with all its facts and a short summary the nightly pass writes; links between
+2. **Entity pages**: a person or place with all its facts and a short summary the nightly pass writes; links between
    entities (who is whose sister) as a light graph.
-4. **Conflicts in review**: when a new fact contradicts one without a shared slot, show both side by side with "keep
+3. **Conflicts in review**: when a new fact contradicts one without a shared slot, show both side by side with "keep
    the new one / keep both".
-5. **"Why did you say that"**: the memories a reply was given, behind a small toggle under the message.
-6. **Learning importance** from use: facts recalled and then used in replies rise, ones never used fade sooner.
-7. **The phone**: live updates from a socket event and a waiting-count badge on the Hub row; the "Before" and
+4. **"Why did you say that"**: the memories a reply was given, behind a small toggle under the message.
+5. **Learning importance** from use: facts recalled and then used in replies rise, ones never used fade sooner.
+6. **The phone**: live updates from a socket event and a waiting-count badge on the Hub row; the "Before" and
    history sections can restore a version as on the web.
-8. **Agents' own memory**: each agent's notes about how it works with the person (private scope exists already; a
+7. **Agents' own memory**: each agent's notes about how it works with the person (private scope exists already; a
    page per agent to see them).
-9. **Import**: bring memories from ChatGPT / Claude exports as review items.
+8. **Import**: bring memories from ChatGPT / Claude exports as review items.
+9. **Journal hygiene**: forwarded channel context and expanded skill text reach the reflection journal as the user's
+   words; keep only what the person typed.
