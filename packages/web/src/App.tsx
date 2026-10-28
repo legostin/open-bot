@@ -16,6 +16,7 @@ import { sectionForPath, type PanelSection } from "./components/nav";
 import { ChatPage } from "./pages/chat/ChatPage";
 import { AgentPage } from "./pages/chat/AgentPage";
 import { TaskDetailPage } from "./pages/TaskDetail";
+import { ChannelPage } from "./pages/channels/ChannelPage";
 import { MobileApp, useMobileReadyOnError } from "./pages/MobileApp";
 import { mobileMode } from "./lib/mobile";
 import { t } from "./i18n";
@@ -118,6 +119,7 @@ function Routes() {
       <Route path="/agent/:id">{(params) => <AgentPage key={params.id} agentId={params.id} />}</Route>
       <Route path="/chat/:id">{(params) => <ChatRoute id={params.id} />}</Route>
       <Route path="/tasks/:id">{(params) => <TaskDetailPage id={params.id} />}</Route>
+      <Route path="/channels/:id">{(params) => <ChannelPage key={params.id} id={params.id} />}</Route>
       <Route>
         <TopBar />
         <div className="flex min-h-0 flex-1 items-center justify-center">
