@@ -36,6 +36,8 @@ export interface Config {
   builtinPluginsDir: string;
   builtinAgentsDir: string;
   webDist: string;
+  /** The pages kit's build (packages/pages-kit/dist), which pages run on. */
+  pagesKitDir: string;
   consoleDist: string;
   isolation: { users: boolean; hubUser: string; agentUser: string; pluginUser: string };
   egressEnforced: "iptables" | "proxy";
@@ -109,6 +111,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     builtinPluginsDir: join(appRoot, "plugins"),
     builtinAgentsDir: join(appRoot, "agents"),
     webDist: join(appRoot, "packages", "web", "dist"),
+    pagesKitDir: join(appRoot, "packages", "pages-kit", "dist"),
     consoleDist: join(appRoot, "packages", "console", "dist"),
     isolation: {
       users: env.OWLBOT_ISOLATION === "users",

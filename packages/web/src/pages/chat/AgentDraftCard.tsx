@@ -36,7 +36,7 @@ export function AgentDraftCard({ draftId, messageId }: { draftId: string; messag
   const created = d.status === "created";
   if (created || superseded)
     return (
-      <div className="flex w-full max-w-xl items-center gap-3 rounded-2xl border border-border bg-surface px-3 py-2.5 shadow-card">
+      <div className="flex w-full max-w-xl items-center gap-3 rounded-[22px] border border-hairline bg-surface px-3.5 py-3 shadow-card">
         <AgentAvatar avatar={d.avatar} name={d.name} size={36} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{superseded ? d.name : t("agentDraft.created", { name: d.name })}</div>
@@ -45,7 +45,7 @@ export function AgentDraftCard({ draftId, messageId }: { draftId: string; messag
         {created && !superseded && d.agentId && (
           <Link
             href={agentPath(d.agentId, s?.defaultAgent)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition hover:opacity-90"
+            className="candy press inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold"
           >
             <MessageCircle className="size-4" />
             {t("agentDraft.open")}
@@ -67,8 +67,8 @@ export function AgentDraftCard({ draftId, messageId }: { draftId: string; messag
   };
 
   return (
-    <div className="w-full max-w-xl rounded-2xl border border-border bg-surface p-4 shadow-card">
-      <div className="mb-3 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("agentDraft.title")}</div>
+    <div className="w-full max-w-xl rounded-[22px] border border-hairline bg-surface p-4 shadow-card">
+      <div className="mb-3 text-xs font-medium text-muted">{t("agentDraft.title")}</div>
       <div className="flex items-start gap-3">
         <AgentAvatar avatar={d.avatar} name={d.name} size={56} />
         <div className="min-w-0 flex-1">

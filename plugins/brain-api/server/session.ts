@@ -8,11 +8,16 @@ import type { BrainEvent, BrainSessionOptions, BrainTurn, Params } from "@owlbot
 import type { BrainSessionImpl, PluginContext } from "@owlbot/plugin-sdk";
 import { anthropicStream } from "./anthropic.ts";
 import {
+  compacted,
+  compactionCut,
   contentText,
+  digest,
   estimateTokens,
   hasThinking,
   saveSession,
   stripThinking,
+  SUMMARY_SYSTEM,
+  transcriptOf,
   trimHistory,
   truncate,
   type HistoryMessage,
@@ -33,6 +38,9 @@ const EVENT_OUTPUT_MAX = 8000;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
+/** A history past this share of its budget after a turn is compacted before the next one. */
+const COMPACT_AHEAD = 0.85;
+const SUMMARY_MAX_TOKENS = 8000;
 
 /** The hub's "No vault item" error (hubs before i18n said "Net zapisi" in Russian, matched as escapes). */
 const VAULT_MISSING_RE = /No vault item|not.?found|\u041d\u0435\u0442 \u0437\u0430\u043f\u0438\u0441\u0438/i;
@@ -100,6 +108,11 @@ export class ApiBrainSession implements BrainSessionImpl {
   private inbox: BrainTurn[] = [];
   /** Messages in the previous model request (cache read point). */
   private lastSent = 0;
+  /** A compaction started after the last turn (while the user reads the reply): the next turn waits for it. */
+  private compacting?: Promise<void>;
+  private compactAbort?: AbortController;
+  /** The provider refused the reasoning effort parameter (an OpenAI-compatible model without reasoning). */
+  private noEffort = false;
 
   constructor(d: SessionDeps) {
     this.ctx = d.ctx;
@@ -130,6 +143,9 @@ export class ApiBrainSession implements BrainSessionImpl {
     const ac = new AbortController();
     this.abort = ac;
     try {
+      await this.compacting;
+      // A session that was to resume but has no history left starts from the hub's recap.
+      if (!this.history.length && turn.recap) turn = { ...turn, text: `${turn.recap}\n\n---\n${turn.text}` };
       yield* this.runTurn(turn, ac.signal);
       // Arrived as the model gave its last answer: the turn goes on with it.
       while (this.inbox.length && !ac.signal.aborted) yield* this.runTurn(this.takeInbox(), ac.signal);
@@ -141,6 +157,7 @@ export class ApiBrainSession implements BrainSessionImpl {
       this.inbox = [];
       this.persist();
     }
+    this.compactSoon();
     yield { type: "done", resumeToken: this.sessionId };
   }
 
@@ -163,6 +180,7 @@ export class ApiBrainSession implements BrainSessionImpl {
   close(): void {
     this.closed = true;
     this.abort?.abort();
+    this.compactAbort?.abort();
     this.persist();
   }
 
@@ -220,8 +238,84 @@ export class ApiBrainSession implements BrainSessionImpl {
       maxTokensField: v.id === "openai" ? ("max_completion_tokens" as const) : ("max_tokens" as const),
       extraHeaders: v.id === "openrouter" ? { "X-Title": "Owlbot" } : undefined,
       proxyEnv,
+      effortField: v.id === "openai" ? ("reasoning_effort" as const) : v.id === "openrouter" ? ("reasoning" as const) : undefined,
     };
     return (call) => openAiStream(cfg, call);
+  }
+
+  /** The session's reasoning effort when the provider takes it (the hub's choice for this kind of work). */
+  private effort(): string | undefined {
+    const e = this.opts.effort;
+    return e && !this.noEffort && this.variant.efforts.includes(e) ? e : undefined;
+  }
+
+  // ---------- compaction: the older part becomes a summary, unnoticed ----------
+
+  /** After a turn, a history near its budget is compacted while the user reads the reply: the next turn waits for it. */
+  private compactSoon(): void {
+    const s = this.settings();
+    const budget = this.variant.historyBudget(s);
+    if (this.closed || this.compacting || estimateTokens(this.history) <= budget * COMPACT_AHEAD) return;
+    const ac = new AbortController();
+    this.compactAbort = ac;
+    this.compacting = this.compact(Math.floor(budget * COMPACT_AHEAD), ac.signal)
+      .then(
+        () => {},
+        (e: any) => this.ctx.log.warn(`session ${this.sessionId}: compaction failed: ${e?.message ?? e}`),
+      )
+      .finally(() => {
+        this.compacting = undefined;
+        this.compactAbort = undefined;
+      });
+  }
+
+  /**
+   * Over `budget`: the older part of the history becomes a summary the model writes (a line per message when it
+   * cannot), and the latest messages stay as they are. Nothing of it reaches the chat.
+   */
+  private async compact(budget: number, signal: AbortSignal): Promise<boolean> {
+    if (estimateTokens(this.history) <= budget) return false;
+    const cut = compactionCut(this.history, budget);
+    if (cut <= 0) {
+      this.trim(budget);
+      return true;
+    }
+    const older = this.history.slice(0, cut);
+    let summary: string | undefined;
+    try {
+      summary = await this.summarize(older, signal);
+    } catch (e: any) {
+      if (signal.aborted || this.closed) return false;
+      this.ctx.log.warn(`session ${this.sessionId}: the model could not summarize (${e?.message ?? e}), keeping a digest`);
+    }
+    if (signal.aborted || this.closed) return false;
+    const before = this.history.length;
+    this.history = compacted(this.history, cut, summary || digest(older));
+    this.lastSent = 0;
+    this.persist();
+    this.ctx.log.info(`session ${this.sessionId}: compacted ${before} → ${this.history.length} messages (${summary ? "summary" : "digest"})`);
+    return true;
+  }
+
+  /** The summary of `older`, written by the session's model with little effort; its text never reaches the chat. */
+  private async summarize(older: HistoryMessage[], signal: AbortSignal): Promise<string> {
+    const s = this.settings();
+    const key = await readKey(this.ctx, this.variant, s);
+    if (key.error) throw new Error(key.error);
+    const stream = this.streamFor(s, key.key)({
+      model: resolveModel(this.variant, this.opts.model, s),
+      system: SUMMARY_SYSTEM,
+      tools: [],
+      messages: [{ role: "user", parts: [{ type: "text", text: `Transcript of the older part:\n\n${transcriptOf(older)}\n\nWrite the summary now.` }] }],
+      maxTokens: Math.min(s.maxTokens, SUMMARY_MAX_TOKENS),
+      signal,
+      ...(this.variant.efforts.includes("low") && !this.noEffort ? { effort: "low" } : {}),
+    });
+    let r = await stream.next();
+    while (!r.done) r = await stream.next();
+    const text = r.value.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("").trim();
+    if (!text || r.value.stop === "refusal" || r.value.stop === "aborted") throw new Error(`no summary (${r.value.stop})`);
+    return text;
   }
 
   private userParts(turn: BrainTurn): Part[] {
@@ -304,6 +398,7 @@ export class ApiBrainSession implements BrainSessionImpl {
     const budget = this.variant.historyBudget(s);
     let contextRetry = false;
     let thinkingRetry = false;
+    let effortRetry = false;
 
     for (let step = 0; ; step++) {
       if (step >= s.maxSteps) {
@@ -312,8 +407,10 @@ export class ApiBrainSession implements BrainSessionImpl {
         this.history.push({ role: "assistant", parts: [{ type: "text", text: note.trim() }] });
         return;
       }
-      this.trim(budget);
-      const call: ModelCall = { model, system: this.opts.systemPrompt, tools, messages: [...this.history], maxTokens: s.maxTokens, signal, prevMessageCount: this.lastSent };
+      await this.compact(budget, signal);
+      if (signal.aborted) return;
+      const effort = this.effort();
+      const call: ModelCall = { model, system: this.opts.systemPrompt, tools, messages: [...this.history], maxTokens: s.maxTokens, signal, prevMessageCount: this.lastSent, ...(effort ? { effort } : {}) };
 
       let result: CallResult;
       try {
@@ -323,7 +420,14 @@ export class ApiBrainSession implements BrainSessionImpl {
         if (err.partial?.length) this.history.push({ role: "assistant", parts: err.partial });
         if (err.kind === "context" && !contextRetry && !err.partial?.length) {
           contextRetry = true;
-          this.trim(Math.floor(estimateTokens(this.history) / 2));
+          await this.compact(Math.floor(estimateTokens(this.history) / 2), signal);
+          step--;
+          continue;
+        }
+        // A model without reasoning refused the effort parameter: the session goes on without it.
+        if (effort && this.variant.protocol === "openai" && err.status === 400 && /reason/i.test(err.message) && !effortRetry && !err.partial?.length) {
+          effortRetry = true;
+          this.noEffort = true;
           step--;
           continue;
         }

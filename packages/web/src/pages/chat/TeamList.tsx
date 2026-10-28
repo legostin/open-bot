@@ -15,7 +15,7 @@ import { addAgent } from "../../state/panel";
 import { setSidebarTab, sidebarTab, type SidebarTab } from "../../state/prefs";
 import { AgentAvatar, AvatarPair } from "../../components/AgentAvatar";
 import { UnreadBadge } from "../../components/UnreadBadge";
-import { cx, Spinner } from "../../components/ui";
+import { cx, Segmented, Spinner } from "../../components/ui";
 import { t } from "../../i18n";
 import { GroupDialog } from "./GroupDialog";
 import { ChannelList } from "../channels/ChannelList";
@@ -26,35 +26,38 @@ function MemberRow({ agent, member, href, active, onNavigate }: { agent: AgentDe
   const last = member?.lastMessage;
   const preview = last ? (last.role === "user" ? t("team.you", { text: last.text }) : last.text) : agent.description || t("team.noMessages");
   return (
-    <Link
-      href={href}
-      onClick={onNavigate}
-      aria-current={active ? "page" : undefined}
-      className={cx("flex items-center gap-3 rounded-xl px-2.5 py-2 transition", active ? "bg-accent-soft" : "hover:bg-surface-2")}
-    >
-      <span className="relative shrink-0">
-        <AgentAvatar avatar={agent.avatar} id={agent.id} name={agent.name} size={36} />
-        {running && (
-          <span className="absolute -right-0.5 -bottom-0.5 flex size-3.5 items-center justify-center rounded-full bg-surface">
-            <span className="size-2 animate-pulse rounded-full bg-accent" />
-          </span>
-        )}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline gap-2">
-          <span className={cx("min-w-0 flex-1 truncate text-sm", unread ? "font-semibold" : "font-medium", active && "text-accent-text")}>{agent.name}</span>
-          {last && <span className="shrink-0 text-[11px] text-muted">{shortTime(last.createdAt)}</span>}
-        </span>
-        <span className="mt-0.5 flex items-center gap-2">
-          {running ? (
-            <span className="min-w-0 flex-1 truncate text-xs text-accent-text">{t("team.working")}</span>
-          ) : (
-            <span className={cx("min-w-0 flex-1 truncate text-xs", unread ? "text-fg" : "text-muted")}>{preview}</span>
-          )}
-          {unread > 0 && <UnreadBadge n={unread} />}
-        </span>
-      </span>
+    <Link href={href} onClick={onNavigate} aria-current={active ? "page" : undefined} className={rowClass(active)}>
+      <AgentAvatar avatar={agent.avatar} id={agent.id} name={agent.name} size={38} running={running} />
+      <RowText title={agent.name} time={last ? shortTime(last.createdAt) : undefined} unread={unread} running={running ? t("team.working") : undefined} preview={preview} />
     </Link>
+  );
+}
+
+/** A row on the canvas; the open one is a sheet of paper lifted off it. */
+function rowClass(active: boolean): string {
+  return cx(
+    "press group flex items-center gap-3 rounded-2xl px-2.5 py-2",
+    active ? "bg-surface shadow-card" : "hover:bg-surface/55",
+  );
+}
+
+/** Name and time, then the last line (or what is happening now) and what is unread. */
+function RowText({ title, time, unread, running, preview }: { title: string; time?: string; unread: number; running?: string; preview: string }) {
+  return (
+    <span className="min-w-0 flex-1">
+      <span className="flex items-baseline gap-2">
+        <span className={cx("min-w-0 flex-1 truncate text-[14px]", unread ? "font-semibold" : "font-medium")}>{title}</span>
+        {time && <span className={cx("shrink-0 text-[11px] tabular-nums", unread ? "font-medium text-accent-text" : "text-muted")}>{time}</span>}
+      </span>
+      <span className="mt-0.5 flex items-center gap-2">
+        {running ? (
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-accent-text">{running}</span>
+        ) : (
+          <span className={cx("min-w-0 flex-1 truncate text-[12.5px]", unread ? "text-fg" : "text-muted")}>{preview}</span>
+        )}
+        {unread > 0 && <UnreadBadge n={unread} />}
+      </span>
+    </span>
   );
 }
 
@@ -71,35 +74,28 @@ function GroupRow({ group, byId, active, onNavigate }: { group: GroupChat; byId:
         : last.text
     : members.map((m) => m.name).join(", ");
   return (
-    <Link
-      href={groupPath(group.conversationId)}
-      onClick={onNavigate}
-      aria-current={active ? "page" : undefined}
-      className={cx("group flex items-center gap-3 rounded-xl px-2.5 py-2 transition", active ? "bg-accent-soft" : "hover:bg-surface-2")}
-    >
-      <span className="relative shrink-0">
-        <AvatarPair agents={members} size={36} ring={active ? "bg-accent-soft ring-accent-soft" : "bg-surface ring-surface group-hover:bg-surface-2 group-hover:ring-surface-2"} />
-        {group.running && (
-          <span className="absolute -right-0.5 -bottom-0.5 flex size-3.5 items-center justify-center rounded-full bg-surface">
-            <span className="size-2 animate-pulse rounded-full bg-accent" />
-          </span>
-        )}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline gap-2">
-          <span className={cx("min-w-0 flex-1 truncate text-sm", group.unread ? "font-semibold" : "font-medium", active && "text-accent-text")}>{group.title}</span>
-          {last && <span className="shrink-0 text-[11px] text-muted">{shortTime(last.createdAt)}</span>}
-        </span>
-        <span className="mt-0.5 flex items-center gap-2">
-          {group.running ? (
-            <span className="min-w-0 flex-1 truncate text-xs text-accent-text">{speaker ? t("group.speaking", { name: name(speaker) }) : t("team.working")}</span>
-          ) : (
-            <span className={cx("min-w-0 flex-1 truncate text-xs", group.unread ? "text-fg" : "text-muted")}>{preview}</span>
-          )}
-          {group.unread > 0 && <UnreadBadge n={group.unread} />}
-        </span>
-      </span>
+    <Link href={groupPath(group.conversationId)} onClick={onNavigate} aria-current={active ? "page" : undefined} className={rowClass(active)}>
+      <AvatarPair agents={members} size={38} running={group.running} ring={active ? "bg-surface ring-surface" : "bg-canvas ring-canvas"} />
+      <RowText
+        title={group.title}
+        time={last ? shortTime(last.createdAt) : undefined}
+        unread={group.unread}
+        running={group.running ? (speaker ? t("group.speaking", { name: name(speaker) }) : t("team.working")) : undefined}
+        preview={preview}
+      />
     </Link>
+  );
+}
+
+/** "Add agent", "New group", "New channel": quiet, at the end of the list; it opens the chat that makes the thing. */
+export function AddRow({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="press group flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left text-[13.5px] font-medium text-muted hover:bg-surface/55 hover:text-fg">
+      <span className="flex size-[38px] shrink-0 items-center justify-center rounded-full border border-dashed border-muted/40 transition-colors group-hover:border-accent group-hover:bg-accent-soft group-hover:text-accent-text">
+        {icon}
+      </span>
+      {label}
+    </button>
   );
 }
 
@@ -111,23 +107,19 @@ function Tabs({ value, unread }: { value: SidebarTab; unread: Record<SidebarTab,
     { id: "channels", label: t("team.tab.channels") },
   ];
   return (
-    <div className="mx-3 mb-1 flex rounded-xl bg-surface-2 p-0.5" role="tablist">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          role="tab"
-          aria-selected={value === tab.id}
-          onClick={() => setSidebarTab(tab.id)}
-          className={cx(
-            "relative flex min-w-0 flex-1 items-center justify-center rounded-[10px] px-1 py-1.5 text-[13px] font-medium transition",
-            value === tab.id ? "bg-surface text-fg shadow-sm" : "text-muted hover:text-fg",
-          )}
-        >
-          <span className="truncate">{tab.label}</span>
-          {value !== tab.id && unread[tab.id] > 0 && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-accent" aria-label={t("team.unread", { n: unread[tab.id] })} />}
-        </button>
-      ))}
+    <div className="mx-3 mb-2">
+      <Segmented<SidebarTab>
+        value={value}
+        onChange={setSidebarTab}
+        className="flex w-full bg-surface-3/60 dark:bg-surface"
+        compact
+        options={tabs.map((tab) => ({
+          value: tab.id,
+          label: tab.label,
+          dot: value !== tab.id && unread[tab.id] > 0,
+          title: value !== tab.id && unread[tab.id] > 0 ? t("team.unread", { n: unread[tab.id] }) : undefined,
+        }))}
+      />
     </div>
   );
 }
@@ -186,12 +178,7 @@ export function TeamList({
     onNavigate?.();
   };
 
-  const addRow = (label: string, icon: React.ReactNode, onClick: () => void) => (
-    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-accent-text transition hover:bg-surface-2">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-accent/60">{icon}</span>
-      {label}
-    </button>
-  );
+  const addRow = (label: string, icon: React.ReactNode, onClick: () => void) => <AddRow label={label} icon={icon} onClick={onClick} />;
 
   return (
     <div className="flex h-full min-h-0 flex-col">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyFallbackBoundary, buildAnthropicRequest } from "../server/anthropic.ts";
-import { TRIM_NOTE, estimateTokens, trimHistory, type HistoryMessage } from "../server/history.ts";
+import { SUMMARY_HEAD, TRIM_NOTE, compacted, compactionCut, digest, estimateTokens, transcriptOf, trimHistory, type HistoryMessage } from "../server/history.ts";
 import { classifyHttpError, proxyEnvFrom, resetAtFromHeaders } from "../server/http.ts";
 import { toOpenAiMessages } from "../server/openai.ts";
 import { parseToolInput } from "../server/provider.ts";
@@ -108,6 +108,38 @@ describe("history trimming", () => {
   it("leaves short histories alone", () => {
     const msgs = [user("a"), asst("b"), user("c")];
     expect(trimHistory(msgs, 10_000)).toEqual({ messages: msgs, trimmed: false });
+  });
+});
+
+describe("history compaction", () => {
+  const big = (n: number) => "x".repeat(n * 4);
+  const user = (t: string): HistoryMessage => ({ role: "user", parts: [{ type: "text", text: t }] });
+
+  it("cuts where the kept part starts cleanly, folds an earlier summary in, and strips thinking", () => {
+    const msgs: HistoryMessage[] = [user("task")];
+    for (let i = 0; i < 10; i++) {
+      msgs.push({ role: "assistant", parts: [{ type: "raw", provider: "anthropic", block: { type: "thinking", thinking: "", signature: "s" } }, { type: "tool_call", id: `t${i}`, name: "echo", input: { i } }] });
+      msgs.push({ role: "user", parts: [{ type: "tool_result", id: `t${i}`, content: [{ type: "text", text: big(200) }] }] });
+    }
+    const cut = compactionCut(msgs, 1000);
+    expect(cut).toBeGreaterThan(1);
+    expect(msgs[cut].role).toBe("assistant");
+    const next = compacted(msgs, cut, "what happened");
+    expect(next[0]).toEqual(user(`${SUMMARY_HEAD}\nwhat happened`));
+    expect(JSON.stringify(next)).not.toContain("thinking");
+    expect(estimateTokens(next)).toBeLessThan(estimateTokens(msgs));
+    // The next compaction reads the summary as what came before.
+    expect(transcriptOf(next.slice(0, 2))).toMatch(/^Earlier summary:\nwhat happened\nAgent called echo/);
+    // Only a big summary before short recent messages: nothing new to fold.
+    expect(compactionCut([user(`${SUMMARY_HEAD}\n${big(500)}`), user("a"), { role: "assistant", parts: [{ type: "text", text: "b" }] }], 100)).toBe(0);
+  });
+
+  it("keeps a line per message, newest first, when the model cannot summarize", () => {
+    const msgs = Array.from({ length: 50 }, (_, i) => user(`message ${i} ${big(100)}`));
+    const d = digest(msgs, 2000);
+    expect(d.length).toBeLessThanOrEqual(2100);
+    expect(d).toMatch(/^\(\d+ earlier messages left out\)/);
+    expect(d).toContain("- User: message 49");
   });
 });
 

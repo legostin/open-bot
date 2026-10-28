@@ -9,6 +9,8 @@ export class CodexAppParser {
   limit?: { resetAt?: string; detail: string };
   failed?: string;
   auth = false;
+  /** The thread no longer fits the model's context: it goes on as a fresh thread from the hub's recap. */
+  full = false;
   completed = false;
   private streamed = new Set<string>();
   private input = 0;
@@ -81,8 +83,56 @@ export class CodexAppParser {
       this.limit = { detail: message, resetAt: parseCodexReset(message) };
     } else {
       if (kind === "unauthorized") this.auth = true;
+      if (kind === "contextWindowExceeded" || /context window|context length|maximum context/i.test(message)) this.full = true;
       this.failed ??= message;
     }
+  }
+}
+
+/** A model as `model/list` describes it. */
+export interface CodexModel {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  efforts: string[];
+  defaultEffort?: string;
+}
+
+/** The models this Codex offers (app-server `model/list`), or undefined when it cannot say (old Codex, not signed in). */
+export async function listCodexModels(command: string, env: Record<string, string>, cwd?: string, timeoutMs = 15_000): Promise<CodexModel[] | undefined> {
+  const proc = runLines(command, ["app-server"], { cwd, env, keepInput: true });
+  const write = (o: unknown) => proc.write(`${JSON.stringify(o)}\n`);
+  const timer = setTimeout(() => proc.child.kill("SIGKILL"), timeoutMs);
+  try {
+    write({ id: 1, method: "initialize", params: { clientInfo: { name: "owlbot", title: "Owlbot", version: "1" }, capabilities: null } });
+    write({ method: "initialized" });
+    write({ id: 2, method: "model/list", params: {} });
+    for await (const line of proc.lines) {
+      if (!line.trim().startsWith("{")) continue;
+      let m: any;
+      try {
+        m = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (m.id !== 2) continue;
+      const data: any[] = Array.isArray(m.result?.data) ? m.result.data : [];
+      const models = data
+        .filter((x) => x && typeof x.id === "string" && !x.hidden)
+        .map((x) => ({
+          id: String(x.model ?? x.id),
+          name: String(x.displayName || x.id),
+          isDefault: !!x.isDefault,
+          efforts: (x.supportedReasoningEfforts ?? []).map((e: any) => String(e?.reasoningEffort ?? e)).filter(Boolean),
+          ...(x.defaultReasoningEffort ? { defaultEffort: String(x.defaultReasoningEffort) } : {}),
+        }));
+      return models.length ? models : undefined;
+    }
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+    proc.endInput();
+    if (proc.child.exitCode === null) proc.child.kill("SIGTERM");
   }
 }
 
@@ -103,6 +153,8 @@ export interface AppServerSetup {
   cwd: string;
   env: Record<string, string>;
   model?: string;
+  /** Reasoning effort for the turn (and the thread from then on). */
+  effort?: string;
   sandbox: string;
   threadId?: string;
 }
@@ -208,9 +260,11 @@ export class CodexAppTurn {
       const thread = { cwd: this.s.cwd, approvalPolicy: "never", sandbox: this.s.sandbox, ...(this.s.model ? { model: this.s.model } : {}) };
       let r: any;
       if (this.threadId) r = await this.request("thread/resume", { threadId: this.threadId, ...thread }).catch(() => undefined);
+      // The thread to resume is gone: a fresh one, which starts from the hub's recap when it sent one.
+      if (!r && this.threadId && turn.recap) turn = { ...turn, text: `${turn.recap}\n\n---\n${turn.text}` };
       if (!r) r = await this.request("thread/start", thread);
       this.threadId = r?.thread?.id ?? this.threadId;
-      const t = await this.request("turn/start", { threadId: this.threadId, input: this.input(turn) });
+      const t = await this.request("turn/start", { threadId: this.threadId, input: this.input(turn), ...(this.s.effort ? { effort: this.s.effort } : {}) });
       this.parser.turnId = t?.turn?.id;
       this.started = true;
     } catch (e) {

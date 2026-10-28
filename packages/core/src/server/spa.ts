@@ -31,7 +31,8 @@ export function sendSpaIndex(webDist: string, req: FastifyRequest, reply: Fastif
       "font-src 'self' data:",
       `connect-src 'self' ws://${host} wss://${host}`,
       "media-src 'self' blob:",
-      "frame-src 'none'",
+      // Pages agents make open in a sandboxed frame from /p/ (server/pages.ts).
+      "frame-src 'self'",
       "frame-ancestors 'none'",
       "base-uri 'none'",
       "form-action 'self'",

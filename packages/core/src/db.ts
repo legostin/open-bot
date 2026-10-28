@@ -82,6 +82,12 @@ const MIGRATIONS: string[] = [
   alter table conversations add column entity text;
   alter table feeds add column chat_id text;
   `,
+  // Pages agents make (pages.ts): the code, data and compiled script are files under <dataDir>/pages/<id>/.
+  `
+  create table pages(id text primary key, token text not null, title text not null, summary text, cover text, agent_id text not null,
+    conversation_id text, state text not null default '{}', version integer not null default 1,
+    last_error text, created_at text not null, updated_at text not null);
+  `,
 ];
 
 export function openDb(file: string): Db {

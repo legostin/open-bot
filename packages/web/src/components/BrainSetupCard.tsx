@@ -84,7 +84,7 @@ function SetupCardView({ state, refresh }: { state: SetupState; refresh: () => P
   };
   const rows = cliRows(state);
   return (
-    <div className="animate-in w-full rounded-2xl border border-accent/25 bg-surface p-4 shadow-card">
+    <div className="animate-in w-full rounded-[22px] border border-accent/30 bg-surface p-4 shadow-card">
       <div className="mb-1 font-semibold">{t("brainSetup.title")}</div>
       <p className="mb-3 text-sm text-muted">{rows.length ? t("brainSetup.intro") : t("brainSetup.introKeys")}</p>
       <div className="flex flex-col gap-3">

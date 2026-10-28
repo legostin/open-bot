@@ -105,7 +105,8 @@ export function buildAnthropicRequest(call: ModelCall, cfg: AnthropicConfig): { 
   else if (tools.length) tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: "ephemeral" } };
   if (tools.length) body.tools = tools;
   body.messages = messages;
-  if (cfg.effort) body.output_config = { effort: cfg.effort };
+  const effort = call.effort ?? cfg.effort;
+  if (effort) body.output_config = { effort };
 
   const betas: string[] = [];
   if (cfg.refusalFallback && FALLBACK_MODELS.has(call.model)) {

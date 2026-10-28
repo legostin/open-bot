@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, ArrowLeftRight, Ban, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Ban, ChevronDown, RotateCcw } from "lucide-react";
 import type { Task } from "@owlbot/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
@@ -85,39 +85,55 @@ export function TaskDetailPage({ id }: { id: string }) {
     }
   };
 
+  const running = current.status === "running";
   const summary = (
-    <div className="rounded-2xl border border-border bg-surface p-4 shadow-card">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={st.tone} dot={current.status === "running"}>
-          {st.label}
-        </Badge>
-        {current.background && <Badge>{t("tasks.background")}</Badge>}
-        <span className="text-xs text-muted">
-          {agentName}
+    <div className="rounded-[22px] border border-hairline bg-surface p-4 shadow-card">
+      <div className="flex items-center gap-2.5">
+        <AgentAvatar avatar={to?.avatar} id={current.agentId} name={agentName} size={26} running={running} />
+        <span className="min-w-0 flex-1 truncate text-xs text-muted">
+          <span className="font-semibold text-fg">{agentName}</span>
           {current.brainRef ? ` · ${current.brainRef}` : ""} · {t("task.createdAt", { time: formatDateTime(current.createdAt) })}
           {current.resumeAt && current.status === "paused" ? ` · ${t("tasks.resumes", { time: relativeTime(current.resumeAt) })}` : ""}
         </span>
+        {current.background && <Badge>{t("tasks.background")}</Badge>}
+        {running ? (
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-text">
+            <span className="live-dot size-1.5 rounded-full" />
+            {st.label}
+          </span>
+        ) : (
+          <Badge tone={st.tone}>{st.label}</Badge>
+        )}
+        {/* Opens and folds the goal and result; no row of its own. */}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? t("task.collapse") : t("task.expand")}
+          title={expanded ? t("task.collapse") : t("task.expand")}
+          className="press -mr-1.5 flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-fg"
+        >
+          <ChevronDown className={expanded ? "size-4 rotate-180 transition-transform duration-300" : "size-4 transition-transform duration-300"} />
+        </button>
       </div>
       {current.question && (
-        <div className="mt-3 text-sm">
-          <div className="mb-1 text-[11px] font-semibold tracking-wide text-warning uppercase">{t("task.question")}</div>
+        <div className="mt-3 rounded-2xl bg-warning-soft px-3.5 py-2.5 text-sm">
+          <div className="mb-0.5 text-xs font-semibold text-warning">{t("task.question")}</div>
           {current.question}
         </div>
       )}
-      <div className={expanded ? "mt-3" : "mt-3 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"}>
-        <div className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("task.goal")}</div>
+      <div
+        onClick={expanded ? undefined : () => setExpanded(true)}
+        className={expanded ? "mt-3" : "mt-3 max-h-24 cursor-pointer overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"}
+      >
+        <div className="mb-1 text-xs font-medium text-muted">{t("task.goal")}</div>
         <Markdown text={current.goal} className="text-sm" />
         {current.result && (
           <>
-            <div className="mt-3 mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("task.result")}</div>
+            <div className="mt-3 mb-1 text-xs font-medium text-muted">{t("task.result")}</div>
             <Markdown text={current.result} className="text-sm" />
           </>
         )}
       </div>
-      <button type="button" onClick={() => setExpanded((v) => !v)} className="mt-1 inline-flex items-center gap-1 text-xs text-muted hover:text-fg">
-        {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-        {expanded ? t("task.collapse") : t("task.expand")}
-      </button>
       {current.error && (
         <div className="mt-2">
           <ErrorNote>{current.error}</ErrorNote>
@@ -147,7 +163,7 @@ export function TaskDetailPage({ id }: { id: string }) {
   return (
     <div className="flex h-full flex-col">
       <TopBar>
-        <Link href="/tasks" aria-label={t("task.toTasks")} className="inline-flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-fg">
+        <Link href="/tasks" aria-label={t("task.toTasks")} className="press inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-fg">
           <ArrowLeft className="size-[18px]" />
         </Link>
         {thread ? (
@@ -166,10 +182,10 @@ export function TaskDetailPage({ id }: { id: string }) {
             </Badge>
           </span>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{current.title || t("task.untitled")}</span>
+          <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold">{current.title || t("task.untitled")}</span>
         )}
         {active && (
-          <Button size="sm" variant="danger" icon={<Ban className="size-3.5" />} onClick={() => void act("cancel")} loading={busy === "cancel"}>
+          <Button size="sm" variant="ghost" className="text-danger!" icon={<Ban className="size-3.5" />} onClick={() => void act("cancel")} loading={busy === "cancel"}>
             {t("task.cancel")}
           </Button>
         )}

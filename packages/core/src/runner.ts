@@ -3,8 +3,8 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ToolResult } from "@owlbot/shared";
-import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@owlbot/shared";
+import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ToolResult, WorkKind } from "@owlbot/shared";
+import { brainsFor, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import type { Store, SessionRow } from "./store.ts";
 import type { Settings } from "./settings.ts";
@@ -34,6 +34,7 @@ import { attachmentNote, forSession, isSpeech, SPEECH_NOT_SET_UP, type Attachmen
 import { MAX_AUTO_TRANSCRIBE_SEC, type Transcriber } from "./transcribe.ts";
 import { firstSpeakers, groupTurn, groupTurnText, handOff, MAX_HANDOFFS, USER_LABEL } from "./group-chat.ts";
 import { hubName } from "./pairing.ts";
+import { recap } from "./continuity.ts";
 
 export interface RunnerDeps {
   config: Config;
@@ -459,8 +460,10 @@ export class SessionRunner {
       seenUserUpTo: this.groupSeen.get(key),
     });
     if (turn.seenUserUpTo) this.groupSeen.set(key, turn.seenUserUpTo);
-    // A new brain has none of the history: the recent transcript instead of just the unseen part.
-    if (newBrain) return `[System] This conversation continues on a different brain. Recent history:\n${this.handoffSummary(conv.id)}\n\n---\n${turn.tail}`;
+    // A fresh session of a member who spoke here before has none of that: the recap instead of just the unseen part.
+    const spoke = newBrain && this.d.store.listMessages(conv.id, { limit: 160 }).some((m) => m.role === "assistant" && m.agentId === agent.id);
+    const seed = spoke ? this.recapOf(conv.id, agent) : undefined;
+    if (seed) return `${seed}\n\n---\n${turn.tail}`;
     return groupTurnText({ ...turn, lines: turn.lines.map((l) => this.d.redactor.text(l)) });
   }
 
@@ -1213,9 +1216,14 @@ export class SessionRunner {
     }
   }
 
-  private async openSession(conv: Conversation, agent: AgentDef, brainRef: string, task: Task | undefined, prior?: SessionRow): Promise<{ row: SessionRow; handle: BrainHandle }> {
+  /** `fresh`: the session replaces one that cannot be resumed (another brain, no token): its first turn needs the recap. */
+  private async openSession(conv: Conversation, agent: AgentDef, brainRef: string, task: Task | undefined, prior?: SessionRow): Promise<{ row: SessionRow; handle: BrainHandle; fresh: boolean }> {
     const background = task?.background ?? false;
     const ref = parseBrainRef(brainRef);
+    // How it thinks: the choice for this kind of work, as a model and an effort of this brain.
+    const kind = workKind(task);
+    const probe = await this.d.brains.probe(formatBrainRef(ref)).catch(() => undefined);
+    const thinking = resolveThinking(thinkingFor(agent, kind), formatBrainRef(ref), probe, agent.model);
     const sameBrain = prior && formatBrainRef(parseBrainRef(prior.brainRef)) === formatBrainRef(ref);
     let row: SessionRow;
     let token: string;
@@ -1258,6 +1266,7 @@ export class SessionRunner {
       dispatch: conv.kind === "main" && !task && !background ? this.dispatchContext() : undefined,
       thread: task?.kind === "message" ? this.threadSender(task) : undefined,
       making: conv.kind === "setup" && conv.purpose ? { purpose: conv.purpose, ...(conv.entity ? { entity: conv.entity } : {}) } : undefined,
+      thinking: { brain: this.d.brains.list().find((b) => b.ref === formatBrainRef(ref))?.label ?? formatBrainRef(ref), kind, ...thinking },
     });
 
     const env: Record<string, string> = {};
@@ -1268,11 +1277,13 @@ export class SessionRunner {
       Object.assign(env, { HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: "127.0.0.1,localhost,::1", no_proxy: "127.0.0.1,localhost,::1" });
     }
 
+    const resume = sameBrain ? prior?.resumeToken : undefined;
     const handle = await this.d.brains.create(formatBrainRef(ref), {
       sessionId: row.id,
       agent,
       variant: ref.variant,
-      model: agent.model,
+      ...(thinking.model ? { model: thinking.model } : {}),
+      ...(thinking.effort ? { effort: thinking.effort } : {}),
       workspace,
       mcp: {
         url: `${local ? this.d.config.internalUrl : this.d.config.publicUrl}/mcp`,
@@ -1282,13 +1293,13 @@ export class SessionRunner {
       systemPrompt,
       skillsDir,
       claudePluginDirs: local && ref.brainId === "claude-code" ? this.d.claudePluginDirs() : [],
-      resume: sameBrain ? prior?.resumeToken : undefined,
+      resume,
       env,
       background,
     });
-    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv) });
+    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv, kind) });
     if (!sameBrain) this.d.audit.append("core", "session.open", row.id, { agent: agent.id, brain: formatBrainRef(ref), conversation: conv.id, task: task?.id });
-    return { row, handle };
+    return { row, handle, fresh: !!prior && !resume };
   }
 
   /** The reply has a message to a teammate in it. */
@@ -1296,41 +1307,25 @@ export class SessionRunner {
     return !!messageId && !!this.d.store.getMessage(messageId)?.parts.some((p) => p.type === "task" && p.text !== undefined);
   }
 
-  /** Text transcript of recent messages for handing a conversation to a different brain. */
-  private handoffSummary(conversationId: string): string {
-    const msgs = this.d.store.listMessages(conversationId, { limit: 30 });
+  /**
+   * What came before in a conversation, for a fresh session of `agent` there (continuity.ts): undefined when the agent
+   * has not replied there yet.
+   */
+  private recapOf(conversationId: string, agent: AgentDef): string | undefined {
+    const msgs = this.d.store.listMessages(conversationId, { limit: 160 });
     // In a group chat every member speaks under its own name.
     const group = this.d.store.getConversation(conversationId)?.kind === "group";
     const speaker = (m: Message) => {
       // A teammate writing in a thread.
       if (m.role === "user" && m.agentId) return this.agentLabel(m.agentId);
       if (m.role !== "assistant") return m.role === "user" ? "User" : "System";
-      const a = group && m.agentId ? this.d.agents.get(m.agentId) : undefined;
-      return a ? agentName(a, hubLocale()) : group && m.agentId ? m.agentId : "Assistant";
+      if (!m.agentId || m.agentId === agent.id) return "You";
+      const a = this.d.agents.get(m.agentId);
+      return a ? agentName(a, hubLocale()) : group ? m.agentId : "Assistant";
     };
-    const lines: string[] = [];
-    for (const m of msgs) {
-      const t = m.parts
-        .map((p) =>
-          p.type === "text"
-            ? p.text
-            : p.type === "tool_call"
-              ? `[called ${p.name}]`
-              : p.type === "notification"
-                ? `[notification: ${p.title}]`
-                : p.type === "images"
-                  ? `[showed ${p.items.length} image(s)${p.items.some((it) => it.caption) ? `: ${p.items.map((it) => it.caption ?? "").filter(Boolean).join("; ")}` : ""}]`
-                  : p.type === "map"
-                    ? `[showed a map${p.title ? ` of ${p.title}` : ""} at ${p.lat}, ${p.lon}]`
-                    : p.type === "task" && p.text !== undefined
-                      ? `[wrote to a teammate (thread ${p.taskId}): ${p.text}]${p.reply ? ` [reply: ${p.reply}]` : ""}`
-                      : "",
-        )
-        .filter(Boolean)
-        .join(" ");
-      if (t) lines.push(`${speaker(m)}: ${truncate(t, 800)}`);
-    }
-    return this.d.redactor.text(lines.join("\n"));
+    const first = this.d.store.firstMessage(conversationId);
+    const r = recap(msgs, { speaker, self: agentName(agent, hubLocale()), ...(first && first.id !== msgs[0]?.id ? { first } : {}) });
+    return r && this.d.redactor.text(r);
   }
 
   async runTurn(conv: Conversation, prompt: string, opts: TurnOpts): Promise<TurnResult> {
@@ -1476,15 +1471,17 @@ export class SessionRunner {
     const changedAt = this.d.settings.getKey<Record<string, string>>(BRAINS_CHANGED_KEY, {})[agent.id];
     const stay = prior && !(changedAt && changedAt > prior.createdAt) ? prior.brainRef : undefined;
     const tried = new Set<string>();
-    let handoff = false;
+    // The session starts without the history (another brain, or none to resume): its first turn gets the recap.
+    let fresh = false;
     let lastError = "";
+    const kind = workKind(task);
     let earliestReset: string | undefined;
 
     // A task placed on a computer runs on the brain there or not at all.
     const pinned = task?.brainRef ? [task.brainRef] : undefined;
     let waits = 0;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates(agent, stay, pinned, !!task);
+      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates({ ...agent, brains: brainsFor(agent, kind) }, stay, pinned, !!task);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
       // The agent's brains are busy with other turns (a teammate wrote while it works): the turn waits in line.
@@ -1519,7 +1516,7 @@ export class SessionRunner {
       let live = curPrior ? this.live.get(curPrior.id) : undefined;
       let row = curPrior;
       try {
-        if (!live || live.brainRef !== key || live.stamp !== sessionStamp(agent, conv)) {
+        if (!live || live.brainRef !== key || live.stamp !== sessionStamp(agent, conv, kind)) {
           // The same brain resumes the same conversation with the new instructions: let the old process finish first.
           if (live && curPrior) {
             if (live.brainRef === key) await this.closeLive(curPrior.id);
@@ -1528,7 +1525,7 @@ export class SessionRunner {
           const opened = await this.openSession(conv, agent, ref, task, curPrior);
           row = opened.row;
           live = this.live.get(row.id)!;
-          handoff = !!curPrior && formatBrainRef(parseBrainRef(curPrior.brainRef)) !== key;
+          fresh = opened.fresh;
         }
       } catch (e: any) {
         lastError = `${ref}: ${e.message}`;
@@ -1539,13 +1536,15 @@ export class SessionRunner {
       if (opts.taint || task?.tainted) this.markTainted(row!);
 
       let text = prompt;
+      // A session that resumes gets the recap too, for the brain to start afresh with if it cannot (BrainTurn.recap).
+      const seed = fresh || row!.resumeToken ? this.recapOf(conv.id, agent) : undefined;
       if (conv.kind === "group") {
-        text = this.groupText(conv, agent, prompt, opts, handoff);
-        handoff = false;
-      } else if (handoff) {
-        text = `[System] This conversation continues on a different brain. Recent history:\n${this.handoffSummary(conv.id)}\n\n---\n${prompt}`;
-        handoff = false;
+        text = this.groupText(conv, agent, prompt, opts, fresh);
+      } else if (fresh && seed) {
+        text = `${seed}\n\n---\n${prompt}`;
       }
+      const backup = !fresh && seed ? { recap: seed } : {};
+      fresh = false;
       // The dialog's agent sees the tasks it started that are still going, whatever this turn is about.
       if (conv.kind === "main" && !task) {
         const open = this.openTasks(conv.id);
@@ -1554,7 +1553,7 @@ export class SessionRunner {
 
       this.brainLoad.set(key, (this.brainLoad.get(key) ?? 0) + 1);
       try {
-        const r = await this.streamTurn(conv, row!, live!, agent, this.turnInput(row!, text, opts), task, opts.replyChannel, opts.replyTo);
+        const r = await this.streamTurn(conv, row!, live!, agent, { ...this.turnInput(row!, text, opts), ...backup }, task, opts.replyChannel, opts.replyTo);
         if (r.retry) {
           lastError = r.error ?? lastError;
           if (r.limited) earliestReset = r.limited.resetAt ?? earliestReset;
@@ -1731,8 +1730,9 @@ export class SessionRunner {
  * What a live session was opened with: a changed agent, a group's new members, or a setup chat that became its channel
  * or agent get a fresh session (resumed).
  */
-function sessionStamp(agent: AgentDef, conv: Conversation): string {
-  const stamp = JSON.stringify(agent);
+function sessionStamp(agent: AgentDef, conv: Conversation, kind: WorkKind): string {
+  // Only this kind's choice: changing how tasks think leaves the dialog's session alone.
+  const stamp = JSON.stringify({ ...agent, thinking: thinkingFor(agent, kind) });
   if (conv.kind === "setup") return `${stamp}|${conv.entity ?? ""}`;
   return conv.kind === "group" ? `${stamp}|${conv.title}|${(conv.members ?? []).join(",")}` : stamp;
 }
@@ -1749,6 +1749,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "news") return `news:${JSON.stringify(p.items.map((x) => x.url ?? x.title))}`;
   if (p.type === "choices") return `choices:${JSON.stringify(p.options)}`;
   if (p.type === "feed") return `feed:${p.feedId}`;
+  if (p.type === "thinking") return `thinking:${p.agentId}`;
   if (p.type === "integration") return `integration:${p.id}`;
   // Each message to a teammate has its own line, even in the same thread.
   if (p.type === "task") return p.text === undefined ? `task:${p.taskId}` : `task:${p.taskId}|${p.text}`;

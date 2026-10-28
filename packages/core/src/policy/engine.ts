@@ -21,10 +21,10 @@ export interface PolicyResult {
 }
 
 /** Tools background tasks may always use regardless of effect. */
-export const BACKGROUND_ALWAYS_ALLOWED = ["notify", "task_status", "skill_load", "vault_list", "memory_search", "memory_read", "feed_post", "feed_sources", "feed_update"];
+export const BACKGROUND_ALWAYS_ALLOWED = ["notify", "task_status", "skill_load", "vault_list", "memory_search", "memory_read", "feed_post", "feed_sources", "feed_update", "page_create", "page_update"];
 
 /** Local changes that outlive the session: after outside content they need the user's yes (a call with no input only reads). */
-export const ASK_WHEN_TAINTED = ["profile_update"];
+export const ASK_WHEN_TAINTED = ["profile_update", "thinking_set"];
 
 function getField(input: unknown, path: string): unknown {
   let v: any = input;

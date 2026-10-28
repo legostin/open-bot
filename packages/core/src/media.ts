@@ -17,6 +17,9 @@ export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_PROXY_BYTES = 15 * 1024 * 1024;
 export const MEDIA_TTL_MS = 7 * 24 * 3600_000;
 export const TILE_TTL_MS = 30 * 24 * 3600_000;
+/** API answers pages fetch (a forecast) stay fresh this long. */
+export const API_TTL_MS = 10 * 60_000;
+const MAX_API_BYTES = 2 * 1024 * 1024;
 /** tile.openstreetmap.org serves zoom levels 0–19. */
 export const MAX_TILE_ZOOM = 19;
 const MAX_TILE_BYTES = 1024 * 1024;
@@ -88,6 +91,12 @@ export function imageContentType(header: string | undefined): string | undefined
   return /^image\/[a-z0-9.+-]+$/.test(t) ? t : undefined;
 }
 
+/** The body types a page's API fetch passes on: JSON, plain text, CSV, XML. */
+export function apiContentType(header: string | undefined): string | undefined {
+  const t = (header ?? "").split(";")[0].trim().toLowerCase();
+  return /^(application\/([a-z0-9.-]+\+)?(json|xml)|text\/(plain|csv|json|xml))$/.test(t) ? t : undefined;
+}
+
 /** A failure with the HTTP status and core message key the routes answer with. */
 export class MediaError extends Error {
   status: number;
@@ -106,6 +115,10 @@ export interface FetchOptions {
   maxBytes: number;
   timeoutMs?: number;
   accept?: string;
+  /** What body types to take (the type to pass on, or undefined to refuse); images by default. */
+  contentType?: (header: string | undefined) => string | undefined;
+  /** Hosts the fetch may reach, checked on every redirect hop too; any by default. */
+  hostAllowed?: (host: string) => boolean;
 }
 
 interface Upstream {
@@ -133,10 +146,10 @@ function requestOnce(url: URL, addrs: string[], o: FetchOptions): Promise<Upstre
           resolve({ status, location });
           return;
         }
-        const type = imageContentType(res.headers["content-type"]);
+        const type = (o.contentType ?? imageContentType)(res.headers["content-type"]);
         if (!type) {
           res.destroy();
-          reject(new MediaError(415, "media.notImage"));
+          reject(new MediaError(415, o.contentType ? "media.badType" : "media.notImage"));
           return;
         }
         if (Number(res.headers["content-length"] ?? 0) > o.maxBytes) {
@@ -171,8 +184,14 @@ function requestOnce(url: URL, addrs: string[], o: FetchOptions): Promise<Upstre
 
 /** GET an image: every hop is resolved and checked, at most a few redirects, only image/* bodies within the limit. */
 export async function fetchImage(url: URL, o: FetchOptions): Promise<{ data: Buffer; type: string }> {
+  return fetchChecked(url, o);
+}
+
+/** GET with the checks of fetchImage, for the body types and hosts `o` allows. */
+export async function fetchChecked(url: URL, o: FetchOptions): Promise<{ data: Buffer; type: string }> {
   let current = url;
   for (let hop = 0; ; hop++) {
+    if (o.hostAllowed && !o.hostAllowed(current.hostname)) throw new MediaError(403, "media.hostNotAllowed", current.hostname);
     let addrs: string[];
     try {
       addrs = await o.resolve(current.hostname);
@@ -275,6 +294,7 @@ export class MediaService {
   readonly userAgent: string;
   private media: FileCache;
   private tiles: FileCache;
+  private apis: FileCache;
   private o: MediaServiceOptions;
   private inflight = new Map<string, Promise<{ data: Buffer; type: string }>>();
   private tileLimit = new Limiter(TILE_CONNECTIONS);
@@ -284,6 +304,7 @@ export class MediaService {
     this.userAgent = `Owlbot/${o.version} (+https://github.com/legostin/open-bot)`;
     this.media = new FileCache(join(o.dataDir, "cache", "media"), MEDIA_TTL_MS);
     this.tiles = new FileCache(join(o.dataDir, "cache", "tiles"), TILE_TTL_MS);
+    this.apis = new FileCache(join(o.dataDir, "cache", "api"), API_TTL_MS);
   }
 
   /** An external image by its address (validated here), from the cache when it is fresh. */
@@ -328,10 +349,41 @@ export class MediaService {
     }).then((r) => r.data);
   }
 
+  /** An API's answer for a page (pages.ts says which hosts), cached for a few minutes for every open copy. */
+  api(raw: unknown, hostAllowed: (host: string) => boolean): Promise<{ data: Buffer; type: string }> {
+    const url = parseImageUrl(raw);
+    if (!url) return Promise.reject(new MediaError(400, "media.badUrl"));
+    if (!hostAllowed(url.hostname)) return Promise.reject(new MediaError(403, "media.hostNotAllowed", url.hostname));
+    const key = createHash("sha256").update(url.href).digest("hex");
+    return this.once(`a:${key}`, async () => {
+      const cached = this.apis.get(key);
+      const type = this.apis.get(`${key}.type`)?.data.toString("utf8");
+      if (cached?.fresh && type) return { data: cached.data, type };
+      try {
+        const got = await fetchChecked(url, {
+          resolve: this.o.resolve,
+          userAgent: this.userAgent,
+          maxBytes: MAX_API_BYTES,
+          timeoutMs: 15_000,
+          accept: "application/json, text/plain;q=0.8, */*;q=0.5",
+          contentType: apiContentType,
+          hostAllowed,
+        });
+        this.apis.put(`${key}.type`, got.type);
+        this.apis.put(key, got.data);
+        return got;
+      } catch (e) {
+        if (cached && type && e instanceof MediaError && e.status === 502) return { data: cached.data, type };
+        throw e;
+      }
+    });
+  }
+
   /** Drop cache entries nobody used for a long time. */
   prune(): void {
     this.media.prune();
     this.tiles.prune();
+    this.apis.prune();
   }
 
   private once(key: string, fn: () => Promise<{ data: Buffer; type: string }>): Promise<{ data: Buffer; type: string }> {

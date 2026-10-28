@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { AgentAvatar as AgentAvatarValue, AgentDef } from "@owlbot/shared";
-import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar } from "@owlbot/shared/avatar";
+import { AVATAR_COLORS, AVATAR_PALETTE, AVATAR_SHAPES, defaultAvatar } from "@owlbot/shared/avatar";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { agentForPath } from "../lib/team";
@@ -13,7 +13,7 @@ import { activeBrain, brainName, brainReady, brains, brainStatus, ensureBrains, 
 import { addAgent, clearPanelIntent, panel } from "../state/panel";
 import { toast } from "../state/toast";
 import { t, tRich, type MessageKey } from "../i18n";
-import { AgentAvatar, AVATAR_HEX } from "../components/AgentAvatar";
+import { AgentAvatar } from "../components/AgentAvatar";
 import { Badge, Button, cx, EmptyState, ErrorNote, Field, IconButton, Input, Loading, Modal, Page, TagInput, Textarea } from "../components/ui";
 
 const INITIATIVE: Array<{ value: 0 | 1 | 2; title: MessageKey; text: MessageKey }> = [
@@ -217,25 +217,28 @@ function BrainsEditor({ value, onChange }: { value: string[]; onChange: (v: stri
   );
 }
 
-/** Colour swatches and shape tiles; the big preview (unless the caller shows the avatar itself) has the agent's initial. */
+/** Colour swatches and shape tiles; the big preview (unless the caller shows the avatar itself) wears the agent's face. */
 export function AvatarPicker({
   value,
   onChange,
   name,
+  id,
   preview = true,
   disabled,
 }: {
   value: AgentAvatarValue;
   onChange: (v: AgentAvatarValue) => void;
   name: string;
+  /** The agent's id, for its face (a new agent's face comes from its name until it has one). */
+  id?: string;
   preview?: boolean;
   disabled?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
       {preview && (
-        <div className="flex size-32 shrink-0 items-center justify-center rounded-3xl bg-surface-2/70">
-          <AgentAvatar avatar={value} name={name || "?"} size={96} />
+        <div className="hero-halo flex size-32 shrink-0 items-center justify-center rounded-3xl bg-surface-2/70">
+          <AgentAvatar avatar={value} id={id} name={name || "?"} size={96} />
         </div>
       )}
       <div className="flex w-full min-w-0 flex-col gap-4">
@@ -252,8 +255,8 @@ export function AvatarPicker({
                 title={t(`avatar.color.${c}` as MessageKey)}
                 disabled={disabled}
                 onClick={() => onChange({ ...value, color: c })}
-                className={cx("size-8 rounded-full transition", value.color === c ? "ring-2 ring-fg ring-offset-2 ring-offset-surface" : "hover:scale-110")}
-                style={{ background: AVATAR_HEX[c] }}
+                className={cx("press size-8 rounded-full shadow-[inset_0_1px_0_rgb(255_255_255/0.35)] transition", value.color === c ? "ring-2 ring-accent ring-offset-2 ring-offset-surface" : "hover:scale-110")}
+                style={{ background: `linear-gradient(180deg, ${AVATAR_PALETTE[c].top}, ${AVATAR_PALETTE[c].bottom})` }}
               />
             ))}
           </div>
@@ -273,10 +276,10 @@ export function AvatarPicker({
                 onClick={() => onChange({ ...value, shape: sh })}
                 className={cx(
                   "flex size-11 items-center justify-center rounded-xl border transition",
-                  value.shape === sh ? "border-accent bg-accent-soft/60 ring-2 ring-accent/20" : "border-border hover:bg-surface-2",
+                  value.shape === sh ? "border-accent bg-accent-soft/60 ring-4 ring-accent/15" : "border-hairline hover:bg-surface-2",
                 )}
               >
-                <AgentAvatar avatar={{ color: value.color, shape: sh }} size={28} initial={false} />
+                <AgentAvatar avatar={{ color: value.color, shape: sh }} id={id} name={name} size={28} />
               </button>
             ))}
           </div>
@@ -355,7 +358,7 @@ export function AgentEditor({ agent, onClose }: { agent: AgentDef; onClose: () =
         <Field label={t("agents.name")}>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("agents.namePlaceholder")} maxLength={60} />
         </Field>
-        <AvatarPicker value={avatar} onChange={setAvatar} name={name} />
+        <AvatarPicker value={avatar} onChange={setAvatar} name={name} id={agent.id} />
         <Field label={t("agents.description")} hint={t("agents.descriptionHint")}>
           <Input value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>

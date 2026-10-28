@@ -30,9 +30,9 @@ function WorkRow({ work, agent, href, onNavigate }: { work: MachineWork; agent?:
       href={href}
       onClick={onNavigate}
       title={work.title ? `${name}: ${work.title}` : name}
-      className="animate-in flex items-center gap-2 rounded-lg py-1 pr-2 pl-[22px] text-xs transition hover:bg-surface-2"
+      className="animate-in flex items-center gap-2 rounded-xl py-1 pr-2 pl-[22px] text-xs transition-colors hover:bg-surface/55"
     >
-      <AgentAvatar avatar={agent?.avatar} id={work.agentId} name={name} size={16} initial={false} />
+      <AgentAvatar avatar={agent?.avatar} id={work.agentId} name={name} size={18} running={!waiting} />
       <span className="min-w-0 flex-1 truncate text-fg">{work.title ?? name}</span>
       <span className={cx("shrink-0", waiting ? "text-warning" : "text-muted")}>{t(STEP[work.step])}</span>
     </Link>
@@ -44,7 +44,7 @@ function MachineRow({ machine, byId, pathOf, onNavigate }: { machine: MachineAct
   return (
     <li>
       <div className="flex items-center gap-2.5 px-2.5 py-1" title={t(machine.online ? "machines.online" : "machines.offline")}>
-        <span className={cx("size-1.5 shrink-0 rounded-full", !machine.online ? "ring-1 ring-muted/60" : busy ? "animate-pulse bg-accent" : "bg-success")} />
+        <span className={cx("size-1.5 shrink-0 rounded-full", !machine.online ? "ring-1 ring-muted/60" : busy ? "live-dot" : "bg-success")} />
         <span className={cx("min-w-0 flex-1 truncate text-[13px]", machine.online ? "text-fg" : "text-muted")}>{machine.name}</span>
       </div>
       {machine.work.map((w) => (
@@ -72,7 +72,7 @@ export function MachinesBlock({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <section aria-label={t("nav.machines")} className="max-h-[40%] shrink-0 overflow-y-auto px-2 pb-2">
-      <div className="py-1 pl-3 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("nav.machines")}</div>
+      <div className="pt-1 pb-1 pl-3 text-[12px] font-medium text-muted">{t("nav.machines")}</div>
       <ul className="flex flex-col gap-0.5">
         {list.map((m) => (
           <MachineRow key={m.id} machine={m} byId={byId} pathOf={pathOf} onNavigate={onNavigate} />

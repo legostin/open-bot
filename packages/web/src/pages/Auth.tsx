@@ -8,14 +8,15 @@ import { init, type AuthState } from "../state/app";
 import { t, tRich } from "../i18n";
 import { Button, ErrorNote, Field, Input } from "../components/ui";
 import { LanguageSwitch } from "../components/LanguageSelect";
+import { OwlMark } from "../components/OwlMark";
 
 function Logo() {
   return (
-    <div className="mb-6 flex flex-col items-center gap-3">
-      <img src="/favicon.svg" alt="" className="size-14" />
+    <div className="animate-zoom mb-7 flex flex-col items-center gap-4">
+      <OwlMark size={76} className="rounded-[22px] shadow-[0_18px_40px_-14px_rgb(245_158_11/0.55)]" />
       <div className="text-center">
-        <div className="text-2xl font-semibold tracking-tight">Owlbot</div>
-        <div className="text-sm text-muted">{t("auth.tagline")}</div>
+        <div className="font-display text-[30px] leading-none font-semibold">Owlbot</div>
+        <div className="mt-2.5 text-sm text-muted">{t("auth.tagline")}</div>
       </div>
     </div>
   );
@@ -23,11 +24,16 @@ function Logo() {
 
 export function AuthScreen({ mode, auth }: { mode: "setup" | "login"; auth: AuthState }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg px-4 py-10">
+    <div className="relative isolate flex min-h-dvh items-center justify-center overflow-hidden bg-bg px-4 py-10">
+      {/* Two warm glows behind the card: the owl's eyes in the dark. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute top-[8%] left-1/2 size-[520px] -translate-x-[78%] rounded-full bg-[radial-gradient(closest-side,var(--candy-glow),transparent)] opacity-60 blur-2xl" />
+        <div className="absolute top-[8%] left-1/2 size-[520px] -translate-x-[22%] rounded-full bg-[radial-gradient(closest-side,var(--candy-glow),transparent)] opacity-60 blur-2xl" />
+      </div>
       <div className="w-full max-w-sm">
         <Logo />
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-card sm:p-6">{mode === "setup" ? <SetupForm /> : <LoginForm auth={auth} />}</div>
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted">
+        <div className="animate-in rounded-[28px] border border-hairline bg-surface p-6 shadow-pop sm:p-7">{mode === "setup" ? <SetupForm /> : <LoginForm auth={auth} />}</div>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted">
           <LanguageSwitch />
           {auth.version && <span>{t("auth.version", { version: auth.version })}</span>}
         </div>
@@ -74,12 +80,12 @@ function SetupForm() {
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold">{t("auth.setup.title")}</h1>
+        <h1 className="text-[17px] font-semibold">{t("auth.setup.title")}</h1>
         <p className="mt-1 text-sm text-muted">{t(fromLink ? "auth.setup.introDesktop" : "auth.setup.intro")}</p>
       </div>
       {!fromLink && (
         <>
-          <div className="flex gap-2.5 rounded-xl bg-surface-2 p-3 text-xs leading-relaxed text-muted">
+          <div className="flex gap-2.5 rounded-2xl bg-surface-2 p-3 text-xs leading-relaxed text-muted">
             <Terminal className="mt-0.5 size-4 shrink-0" />
             <span>{tRich("auth.setup.codeHint", { command: <code className="font-mono">docker logs owlbot</code> })}</span>
           </div>
@@ -137,7 +143,7 @@ function LoginForm({ auth }: { auth: AuthState }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">{t("auth.login.title")}</h1>
+      <h1 className="sr-only">{t("auth.login.title")}</h1>
       <Field label={t("auth.login.password")}>
         <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus required />
       </Field>

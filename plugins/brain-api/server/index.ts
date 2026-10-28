@@ -9,7 +9,7 @@ import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
 import { isSafeSessionId, loadSession, type HistoryMessage } from "./history.ts";
 import { request, trimSlash } from "./http.ts";
 import { ApiBrainSession, readKey } from "./session.ts";
-import { ANTHROPIC_MODELS, VARIANTS, resolveSettings, type ApiSettings } from "./settings.ts";
+import { ANTHROPIC_MODEL_NAMES, ANTHROPIC_MODELS, VARIANTS, resolveSettings, type ApiSettings } from "./settings.ts";
 
 const SESSION_TTL_MS = 30 * 24 * 3600_000;
 
@@ -77,19 +77,25 @@ const plugin: PluginModule = {
       }
       const def = v.defaultModel(s);
       let models = v.protocol === "anthropic" ? [...new Set([...ANTHROPIC_MODELS, def])] : [def];
+      // How it thinks: the models' names, the efforts the provider takes and what each preset means here.
+      const thinking = {
+        ...(v.protocol === "anthropic" ? { modelNames: ANTHROPIC_MODEL_NAMES } : {}),
+        ...(v.efforts.length ? { efforts: v.efforts } : {}),
+        presets: v.presets(s),
+      };
       const key = await readKey(ctx, v, s);
-      if (key.error) return { available: true, authenticated: false, models, model: def, detail: key.error };
+      if (key.error) return { available: true, authenticated: false, models, model: def, ...thinking, detail: key.error };
       if (v.id === "custom") {
         const url = v.baseUrl(s);
         const listed = await localServerModels(url, key.key);
-        if (listed === "down") return { available: true, authenticated: false, models, model: def, detail: ctx.i18n.t("probe.serverDown", { url }) };
+        if (listed === "down") return { available: true, authenticated: false, models, model: def, ...thinking, detail: ctx.i18n.t("probe.serverDown", { url }) };
         if (listed && !hasModel(listed, def)) {
           const detail = ctx.i18n.t(listed.length ? "probe.modelMissing" : "probe.noModels", { model: def, url, models: listed.join(", ") });
-          return { available: true, authenticated: false, models: listed, model: def, detail };
+          return { available: true, authenticated: false, models: listed, model: def, ...thinking, detail };
         }
         if (listed) models = listed;
       }
-      return { available: true, authenticated: true, models, model: def, ...(v.id === "custom" ? { detail: v.baseUrl(s) } : {}) };
+      return { available: true, authenticated: true, models, model: def, ...thinking, ...(v.id === "custom" ? { detail: v.baseUrl(s) } : {}) };
     }
 
     async function createSession(opts: BrainSessionOptions): Promise<ApiBrainSession> {

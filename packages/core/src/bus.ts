@@ -1,6 +1,6 @@
 // In-process event bus. Web clients and plugin subscribers are attached by the server and plugin host.
 
-import type { AgentDraft, BrainLoginState, DeviceNetwork, Feed, FeedPost, GroupChat, InviteUsed, MachineActivity, RemoteView, TeamMember, UiEvent } from "@owlbot/shared";
+import type { AgentDraft, BrainLoginState, DeviceNetwork, Feed, FeedPost, GroupChat, InviteUsed, MachineActivity, PageView, RemoteView, TeamMember, UiEvent } from "@owlbot/shared";
 
 export type BusEvents = {
   "message.created": any;
@@ -15,6 +15,9 @@ export type BusEvents = {
   "feed.updated": Feed;
   "feed.deleted": { id: string };
   "feed.post": FeedPost;
+  /** A page was made or changed (pages.ts), or deleted. */
+  "page.updated": PageView;
+  "page.deleted": { id: string };
   "task.updated": any;
   "notification.created": any;
   "notification.feedback": any;
@@ -95,6 +98,8 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "feed.updated":
     case "feed.deleted":
     case "feed.post":
+    case "page.updated":
+    case "page.deleted":
     case "task.updated":
     case "notification.created":
     case "plugins.updated":

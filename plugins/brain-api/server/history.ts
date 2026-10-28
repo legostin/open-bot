@@ -124,6 +124,90 @@ export function trimHistory(messages: HistoryMessage[], budget: number): { messa
   return { messages: stripThinking(kept), trimmed: true };
 }
 
+// ---------- compaction: a summary instead of the older part ----------
+
+/** Model-facing header of the summary that stands in for the older part of the conversation. */
+export const SUMMARY_HEAD = "[System] Summary of the earlier part of this conversation (it stands in for those messages, which are no longer here):";
+
+/** Instructions for the request that writes the summary. */
+export const SUMMARY_SYSTEM = [
+  "You keep the memory of an AI agent in a long conversation with its user. The older part of the conversation is about to be replaced by your summary, and the agent will go on from it as if it remembered everything.",
+  "Summarize the transcript you are given. Keep: who the user is and what they want; what was said, asked and decided; facts and results found (names, numbers, dates, links, file paths, ids); what the agent did, promised or still has to do; open tasks and questions; the user's preferences and the agent's own commitments and way of working with them.",
+  'Write it from the agent\'s point of view ("I", "the user"), in English, quoting the user\'s exact words where they matter. Be concise but leave nothing important out: short sections with bullet points, no preamble. If the transcript starts with an earlier summary, fold it in.',
+].join("\n");
+
+const isSummaryMessage = (m: HistoryMessage | undefined) => m?.role === "user" && m.parts[0]?.type === "text" && (m.parts[0].text.startsWith(SUMMARY_HEAD) || m.parts[0].text === TRIM_NOTE);
+
+/**
+ * Where to cut for compaction: the kept part (the latest messages, about `keepShare` of `budget`) starts at a cut point.
+ * 0 when there is nothing to fold (a single message is bigger than that).
+ */
+export function compactionCut(messages: HistoryMessage[], budget: number, keepShare = 0.4): number {
+  if (messages.length < 3) return 0;
+  const target = Math.floor(budget * keepShare);
+  let cut = 0;
+  let acc = 0;
+  for (let i = messages.length - 1; i >= 1; i--) {
+    acc += estimateTokens([messages[i]]);
+    if (acc > target && cut) break;
+    if (isCutPoint(messages[i])) cut = i;
+  }
+  // Only an earlier summary before the cut: nothing new to fold.
+  return cut === 1 && isSummaryMessage(messages[0]) ? 0 : cut;
+}
+
+/** The part to summarize as a plain transcript: tool calls and results shortened, pictures as placeholders. */
+export function transcriptOf(messages: HistoryMessage[], maxChars = 300_000): string {
+  const lines: string[] = [];
+  for (const m of messages) {
+    if (isSummaryMessage(m)) {
+      lines.push(`Earlier summary:\n${(m.parts[0] as TextPart).text.replace(SUMMARY_HEAD, "").trim()}`);
+      continue;
+    }
+    const who = m.role === "user" ? "User" : "Agent";
+    for (const p of m.parts) {
+      if (p.type === "text" && p.text.trim()) lines.push(`${who}: ${truncate(p.text.trim(), 6000)}`);
+      else if (p.type === "image") lines.push(`${who}: [image]`);
+      else if (p.type === "tool_call") lines.push(`Agent called ${p.name}(${truncate(JSON.stringify(p.input ?? {}), 600)})`);
+      else if (p.type === "tool_result") lines.push(`Result${p.isError ? " (error)" : ""}: ${truncate(contentText(p.content).trim(), 1500)}`);
+    }
+  }
+  const text = lines.join("\n");
+  return text.length <= maxChars ? text : `…\n${text.slice(text.length - maxChars)}`;
+}
+
+/** A summary without the model (it could not write one): the older part as a line per message, newest kept. */
+export function digest(messages: HistoryMessage[], maxChars = 12_000): string {
+  const lines: string[] = [];
+  let used = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    const line = isSummaryMessage(m)
+      ? truncate((m.parts[0] as TextPart).text.replace(SUMMARY_HEAD, "").trim(), 4000)
+      : `- ${m.role === "user" ? "User" : "Me"}: ${truncate(
+          m.parts
+            .map((p) => (p.type === "text" ? p.text : p.type === "tool_call" ? `[called ${p.name}]` : ""))
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim(),
+          240,
+        )}`;
+    if (line.endsWith(": ")) continue;
+    if (used + line.length > maxChars) {
+      lines.unshift(`(${i + 1} earlier messages left out)`);
+      break;
+    }
+    lines.unshift(line);
+    used += line.length + 1;
+  }
+  return lines.join("\n");
+}
+
+/** The history after compaction: the summary first, then the kept messages (thinking stripped: its signatures covered the rest). */
+export function compacted(messages: HistoryMessage[], cut: number, summary: string): HistoryMessage[] {
+  return stripThinking([{ role: "user", parts: [{ type: "text", text: `${SUMMARY_HEAD}\n${summary.trim()}` }] }, ...messages.slice(cut)]);
+}
+
 export function hasThinking(messages: HistoryMessage[]): boolean {
   return messages.some((m) => m.parts.some((p) => p.type === "raw"));
 }

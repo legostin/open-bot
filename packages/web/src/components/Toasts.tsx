@@ -14,13 +14,10 @@ export function Toasts() {
         return (
           <div
             key={item.id}
-            className={cx(
-              "animate-in pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-xl border bg-surface px-3 py-2.5 text-sm shadow-card",
-              item.kind === "error" ? "border-danger/40" : item.kind === "success" ? "border-success/40" : "border-border",
-            )}
+            className="animate-zoom glass pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-2xl border border-hairline py-2.5 pr-2.5 pl-3 text-sm shadow-pop"
             role={item.kind === "error" ? "alert" : "status"}
           >
-            <I className={cx("mt-0.5 size-4 shrink-0", item.kind === "error" ? "text-danger" : item.kind === "success" ? "text-success" : "text-accent")} />
+            <I className={cx("mt-0.5 size-4 shrink-0", item.kind === "error" ? "text-danger" : item.kind === "success" ? "text-success" : "text-accent-text")} />
             <span className="min-w-0 flex-1 break-words">{item.text}</span>
             <button type="button" aria-label={t("common.close")} onClick={() => dismissToast(item.id)} className="shrink-0 rounded p-0.5 text-muted hover:text-fg">
               <X className="size-3.5" />
