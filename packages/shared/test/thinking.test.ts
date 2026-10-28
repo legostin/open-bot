@@ -51,6 +51,9 @@ describe("thinking per kind of work", () => {
     expect(patchChoice({ preset: "deep", brain: "b" }, { model: "opus" })).toEqual({ model: "opus", brain: "b" });
     expect(patchChoice({ preset: "deep", model: "opus", brain: "b" }, { brain: "c" })).toEqual({ preset: "deep", brain: "c" });
     expect(patchChoice({ preset: "deep" }, { follow: true })).toBeUndefined();
+    // "" goes back to the brain's default; from a preset, the other half stays exact.
+    expect(patchChoice({ model: "opus", effort: "high", brain: "b" }, { model: "" })).toEqual({ effort: "high", brain: "b" });
+    expect(patchChoice({ preset: "deep" }, { model: "", effort: "xhigh" })).toEqual({ effort: "xhigh" });
     expect(withChoice({ chat: { preset: "fast" }, task: { preset: "deep" } }, "task", undefined)).toEqual({ chat: { preset: "fast" } });
     expect(withChoice({ task: { preset: "deep" } }, "task", undefined)).toBeUndefined();
   });

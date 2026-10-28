@@ -49,6 +49,7 @@ export function parseThinking(v: unknown): AgentThinking | undefined {
 /** A change to one kind's choice, as the header, the card and the agents' tool make it. */
 export interface ThinkingPatch {
   preset?: ThinkingPreset;
+  /** "" goes back to the brain's default model (and effort). */
   model?: string;
   effort?: string;
   brain?: string;
@@ -84,6 +85,8 @@ export function patchChoice(prev: ThinkingChoice | undefined, patch: ThinkingPat
     }
     next.brain = p.brain;
   }
+  if (patch.model === "") delete next.model;
+  if (patch.effort === "") delete next.effort;
   return Object.keys(next).length ? next : undefined;
 }
 

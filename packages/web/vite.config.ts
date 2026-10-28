@@ -34,6 +34,7 @@ export default defineConfig({
       "@owlbot/shared/i18n": resolve(import.meta.dirname, "../shared/src/i18n.ts"),
       "@owlbot/shared/avatar": resolve(import.meta.dirname, "../shared/src/avatar.ts"),
       "@owlbot/shared/group": resolve(import.meta.dirname, "../shared/src/group.ts"),
+      "@owlbot/shared/thinking": resolve(import.meta.dirname, "../shared/src/thinking.ts"),
     },
   },
   build: {
