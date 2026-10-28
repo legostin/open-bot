@@ -3,10 +3,10 @@
 
 import { useEffect, useMemo } from "react";
 import { Link } from "wouter";
-import { parseBrainRef } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
 import { taskStatus } from "../../lib/format";
 import { agents, ensureAgents, ensureMachineActivity, ensureTasks, machineActivity, tasks } from "../../state/app";
+import { brainMachine } from "../../state/brains";
 import { AgentAvatar } from "../../components/AgentAvatar";
 import { cx } from "../../components/ui";
 
@@ -23,7 +23,7 @@ export function TaskLine({ taskId }: { taskId: string }) {
   if (!task) return null;
   const agent = agentList?.find((a) => a.id === task.agentId);
   const name = agent?.name ?? task.agentId;
-  const machineId = task.brainRef ? parseBrainRef(task.brainRef).machineId : "local";
+  const machineId = task.brainRef ? brainMachine(task.brainRef) : "local";
   const where = machineId === "local" ? undefined : (machines?.find((m) => m.id === machineId)?.name ?? machineId);
   const st = taskStatus(task.status);
   const working = task.status === "running" || task.status === "queued";

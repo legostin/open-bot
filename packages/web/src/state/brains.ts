@@ -54,6 +54,11 @@ export function normalizeBrainRef(ref: string): string {
   return r.includes("@") ? r : `${r}@local`;
 }
 
+/** The machine a ref runs on, "local" for the hub (parseBrainRef(ref).machineId without the node-only module). */
+export function brainMachine(ref: string): string {
+  return normalizeBrainRef(ref).split("@")[1] || "local";
+}
+
 export function findBrain(list: BrainRow[] | null, ref: string): BrainRow | undefined {
   const key = normalizeBrainRef(ref);
   return list?.find((b) => normalizeBrainRef(b.ref) === key);
