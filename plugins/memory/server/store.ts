@@ -1,5 +1,6 @@
 // Memory files on disk: one fact per markdown file with YAML frontmatter.
-// Active facts live in the memory root; facts written from tainted sessions wait in .review/<path>.
+// Active facts live in the memory root. Facts pending the user's review wait in .review/<path> (written from tainted
+// sessions by earlier versions; changes from such sessions are now approved in the chat) or carry status: review.
 
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, isAbsolute, dirname } from "node:path";
@@ -193,13 +194,6 @@ export class MemoryStore {
     this.facts.set(fact.path, fact);
     const r = this.review.get(fact.path);
     if (r?.inPlace) this.review.delete(fact.path);
-  }
-
-  /** Queue a fact for review (.review/<path>), leaving any active version untouched. */
-  putReview(f: Fact): void {
-    const item: ReviewItem = { ...f, status: "review", inPlace: false };
-    this.writeFile(this.abs(f.path, true), serializeFact(item));
-    this.review.set(f.path, item);
   }
 
   removeActive(path: string): boolean {

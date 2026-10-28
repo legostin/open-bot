@@ -147,7 +147,7 @@ export class ToolGateway {
           _meta: { status: "awaiting_approval", approvalId: approval.id },
         };
       }
-      const result = await this.execute(s, tool, input, ctx);
+      const result = await this.execute(s, tool, input, { ...ctx, approved: true });
       this.d.approvals.markExecuted(approval.id, result);
       return result;
     }
@@ -160,7 +160,7 @@ export class ToolGateway {
     const s = this.d.store.getSession(a.sessionId);
     const entry = this.d.registry.get(a.tool);
     if (!s || !entry) return { content: [{ type: "text", text: "The tool or session is no longer available" }], isError: true };
-    const result = await this.execute(s, entry.descriptor, a.input, this.contextFor(s, newId("call_")));
+    const result = await this.execute(s, entry.descriptor, a.input, { ...this.contextFor(s, newId("call_")), approved: true });
     this.d.approvals.markExecuted(a.id, result);
     return result;
   }

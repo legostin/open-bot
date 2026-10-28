@@ -1,5 +1,6 @@
 // Builtin plugin "memory": long-term memory about the user as markdown facts (one per file) in <dataDir>/memory,
-// versioned with git when available, searchable via SQLite FTS5. Facts written from tainted sessions wait for review.
+// versioned with git when available, searchable via SQLite FTS5. After untrusted content the user approves every
+// write and delete on an approval card in the chat (askWhenTainted).
 
 import type { PluginContext, PluginHttpRequest, PluginHttpResponse, PluginModule } from "@owlbot/plugin-sdk";
 import type { ToolCallContext, ToolResult } from "@owlbot/shared";
@@ -23,6 +24,15 @@ function errorBody(e: MemoryError): { error: string; code: string; params: Recor
 }
 
 const NOT_FOUND: PluginHttpResponse = { status: 404, body: { error: "Not found", code: "notFound", params: {} } };
+
+/**
+ * Untrusted content could plant or wipe memories, so the hub asks the user before a tainted session changes memory
+ * and runs the call once they approve. A tainted call that arrives without that approval changes nothing.
+ */
+function unapproved(call: ToolCallContext, outcome: string): ToolResult | undefined {
+  if (!call.tainted || call.approved) return undefined;
+  return text(`${outcome}: this session has read untrusted content (web pages, emails or external tools), so memory changes here need the user's approval.`, true);
+}
 
 function fail(e: any): PluginHttpResponse {
   if (e instanceof PathError) return { status: 400, body: errorBody(e) };
@@ -135,6 +145,7 @@ const plugin: PluginModule = {
         "so include everything that should stay (read it first). Folders: profile.md (who the user is, key preferences), people/, projects/, notes/. " +
         "Never store passwords, tokens or other secrets.",
       effect: "local-write",
+      askWhenTainted: true,
       approvalSummary: "%approval.write%",
       inputSchema: {
         type: "object",
@@ -148,17 +159,12 @@ const plugin: PluginModule = {
         additionalProperties: false,
       },
       handler: async (input: { path?: string; title?: string; content?: string; tags?: string[] }, call: ToolCallContext) => {
+        const refused = unapproved(call, "Not saved");
+        if (refused) return refused;
         const r = await mem.write(
           { path: input.path, title: String(input.title ?? ""), content: String(input.content ?? ""), tags: input.tags },
-          { source: `${call.agentId}/${call.sessionId}`, tainted: !!call.tainted },
+          { source: `${call.agentId}/${call.sessionId}` },
         );
-        if (r.status === "review") {
-          return text(
-            `Queued ${r.path} for the user's review. This session has read untrusted content (web pages, emails or external tools), ` +
-              "so new memories from it are held until the user approves them on the Memory page. Until then the fact is NOT in memory_search " +
-              "or the memory index. Do not retry; tell the user briefly if it matters.",
-          );
-        }
         return text(`${r.status === "created" ? "Created" : "Updated"} ${r.path}.`);
       },
     });
@@ -167,6 +173,7 @@ const plugin: PluginModule = {
       name: "forget",
       description: "Delete a fact from memory by path (the deletion is recorded in the memory's history).",
       effect: "local-write",
+      askWhenTainted: true,
       approvalSummary: "%approval.forget%",
       inputSchema: {
         type: "object",
@@ -175,13 +182,8 @@ const plugin: PluginModule = {
         additionalProperties: false,
       },
       handler: async (input: { path?: string }, call: ToolCallContext) => {
-        // Untrusted content could ask the agent to wipe memories; only the user may delete from such a session.
-        if (call.tainted) {
-          return text(
-            "Not deleted: this session has read untrusted content (web pages, emails or external tools), so deleting memories is disabled here. " +
-              "If the user really wants it gone, tell them to delete it on the Memory page.",
-          );
-        }
+        const refused = unapproved(call, "Not deleted");
+        if (refused) return refused;
         const r = await mem.forget(String(input.path ?? ""));
         return text(`Forgot ${r.path}.`);
       },
