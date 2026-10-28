@@ -135,7 +135,7 @@ describe("channels (integration)", () => {
     const posts = (await req("GET", `/api/feeds/${f.id}/posts`)).json as FeedPost[];
     expect(posts.map((p) => p.title)).toEqual(["Second", "Kaspi opens an AI lab"]);
     expect(posts[1]).toMatchObject({ url: "https://example.kz/a", source: "Example", text: "In Almaty." });
-    expect((await req("GET", `/api/feeds/${f.id}/posts?limit=1&before=${encodeURIComponent(posts[0].createdAt)}`)).json.map((p: FeedPost) => p.title)).toEqual(["Kaspi opens an AI lab"]);
+    expect((await req("GET", `/api/feeds/${f.id}/posts?limit=1&before=${posts[0].id}`)).json.map((p: FeedPost) => p.title)).toEqual(["Kaspi opens an AI lab"]);
 
     // Every agent can see the channels and read them.
     expect((await call("feed_list", {})).text).toMatch(new RegExp(`- ${f.id} “KZ tech”, edited by [^:]+: 09:00 daily; 2 unread, last post .* “Second”\\n  About: Kazakhstan tech news`));

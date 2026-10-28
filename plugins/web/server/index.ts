@@ -88,12 +88,13 @@ const plugin: PluginModule = {
           return text(`Error: unsupported content type "${page.contentType}" at ${page.url} (${page.bytes} bytes); web_fetch only reads HTML, text and JSON.`, true);
         }
         let title = "";
+        let image: string | undefined;
         let content: string;
         if (kind === "html") {
           if (format === "html") {
             content = page.text;
             title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(page.text)?.[1]?.replace(/\s+/g, " ").trim() ?? "";
-          } else ({ title, content } = extractHtml(page.text, page.url, format));
+          } else ({ title, content, image } = extractHtml(page.text, page.url, format));
         } else if (kind === "json") {
           try {
             content = JSON.stringify(JSON.parse(page.text), null, 2);
@@ -106,6 +107,7 @@ const plugin: PluginModule = {
         const lines: string[] = [];
         if (title) lines.push(`Title: ${title}`);
         lines.push(`URL: ${page.url}`);
+        if (image) lines.push(`Picture: ${image}`);
         if (page.redirects.length) lines.push(`Redirected from: ${page.redirects[0]}`);
         if (kind !== "html") lines.push(`Content-Type: ${page.contentType || "unknown"}`);
         if (page.status >= 400) lines.push(`Status: HTTP ${page.status} ${page.statusText}`.trim());

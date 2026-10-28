@@ -50,7 +50,7 @@ export function clearFeeds(): void {
 export async function loadPosts(id: string, more = false): Promise<void> {
   const cur = feedPosts.get()[id];
   if (more && (!cur || cur.done)) return;
-  const before = more ? cur!.posts[cur!.posts.length - 1]?.createdAt : undefined;
+  const before = more ? cur!.posts[cur!.posts.length - 1]?.id : undefined;
   const page = await api.get<FeedPost[]>(`/api/feeds/${encodeURIComponent(id)}/posts?limit=${PAGE}${before ? `&before=${encodeURIComponent(before)}` : ""}`);
   feedPosts.set((all) => {
     const have = more ? (all[id]?.posts ?? []) : [];
