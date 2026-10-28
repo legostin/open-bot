@@ -27,7 +27,7 @@ import { SessionRunner } from "./runner.ts";
 import { Team } from "./team.ts";
 import { roadRoute } from "./routing.ts";
 import { UserLocations } from "./user-location.ts";
-import { Feeds } from "./feeds.ts";
+import { FEED_RUN_TOOLS, Feeds } from "./feeds.ts";
 import { registerFeedTools } from "./tools/feed-tools.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
@@ -159,6 +159,7 @@ export class Hub {
       settings: this.settings,
       agents: this.agents,
       workspaceFor: (s) => this.runner.workspacePath(s),
+      jobTools: (s) => (s.taskId && this.store.getTask(s.taskId)?.feedId ? FEED_RUN_TOOLS : []),
       // "%key%" approval summaries resolve against the owner's messages in the hub language.
       localize: (owner, text) =>
         owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),

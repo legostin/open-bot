@@ -28,9 +28,14 @@ export interface GatewayDeps {
   settings: Settings;
   agents: AgentLookup;
   workspaceFor: (s: SessionRow) => string;
+  /** Tools a session's job needs whatever its agent's list says: a channel's run publishes in it (feeds.ts). */
+  jobTools?: (s: SessionRow) => string[];
   /** Resolve "%key%" in user-facing tool texts (approval summaries) against the tool owner's messages. */
   localize?: (owner: string, text: string) => string;
 }
+
+/** Tools that only draw in the person's chat (buttons, maps, pictures, cards): every agent has them. */
+const SHOW_TOOLS = ["show_choices", "show_map", "show_images", "show_news", "feed_show"];
 
 function textOf(r: ToolResult): string {
   return r.content.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join("\n");
@@ -55,7 +60,8 @@ export class ToolGateway {
   }
 
   private visible(t: ToolDescriptor, agent: AgentDef, s: SessionRow): boolean {
-    if (!matchesAny(t.name, agent.tools.length ? agent.tools : ["*"])) return false;
+    const job = this.d.jobTools?.(s) ?? [];
+    if (!matchesAny(t.name, agent.tools.length ? agent.tools : ["*"]) && !SHOW_TOOLS.includes(t.name) && !job.includes(t.name)) return false;
     // Hub administration belongs to the default agent alone (see tools/hub-tools.ts).
     if (t.owner === "core" && t.name.startsWith(HUB_TOOL_PREFIX) && agent.id !== this.d.settings.get().defaultAgent) return false;
     if (t.availability === "background" && !s.background) return false;

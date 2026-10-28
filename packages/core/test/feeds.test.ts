@@ -190,6 +190,23 @@ describe("channels (integration)", () => {
     await until(async () => !hub.runner.isRunning(main), "the turn to end");
   });
 
+  it("gives its editor the channel's tools in a run whatever the agent's own list, and the chat's show tools everywhere", async () => {
+    await req("PUT", "/api/agents/narrow", { name: "Narrow", description: "", brains: ["fake@local"], prompt: "", tools: ["memory_*"] });
+    const f = (await req("POST", "/api/feeds", { brief: "Narrow news", agentId: "narrow", times: ["09:00"] })).json as Feed;
+    const run = await until(() => runOf(f.id), "the run");
+    await until(() => !["queued", "running"].includes(hub.store.getTask(run.id)!.status), "the run to end");
+    const inRun = hub.gateway.listFor(hub.store.activeSession(run.conversationId, "narrow")!).map((t) => t.name);
+    expect(inRun).toEqual(expect.arrayContaining(["feed_post", "feed_sources", "feed_update"]));
+    expect(inRun).not.toContain("feed_create");
+
+    const dialog = hub.store.agentConversation("narrow");
+    await req("POST", `/api/conversations/${dialog.id}/messages`, { text: "hi" });
+    await until(() => hub.store.activeSession(dialog.id, "narrow"), "the dialog's session");
+    const inChat = hub.gateway.listFor(hub.store.activeSession(dialog.id, "narrow")!).map((t) => t.name);
+    expect(inChat).toEqual(expect.arrayContaining(["show_choices", "show_map", "feed_show"]));
+    expect(inChat).not.toContain("feed_post");
+  });
+
   it("is made, renamed, paused and deleted by agents and the user", async () => {
     const made = await call("feed_create", { brief: "Weekly digest of Almaty events", times: ["10:00"], weekdays: [6] });
     expect(made.text).toMatch(/^Channel f_\S+ “Weekly digest of Almaty events” made, edited by .*, gathered at 10:00\. Its first run has started/);

@@ -13,6 +13,8 @@ import type { AgentRegistry } from "./agents.ts";
 import { LocalizedError, t } from "./i18n.ts";
 
 const OPEN: TaskStatus[] = ["queued", "running", "waiting_approval", "waiting_input", "paused", "interrupted"];
+/** What a channel's run works with, whatever its editor's tool list says. */
+export const FEED_RUN_TOOLS = ["feed_post", "feed_sources", "feed_update", "web_rss", "web_fetch", "web_search"];
 /** Gathered when nothing else is said: morning and evening. */
 export const DEFAULT_TIMES = ["08:00", "19:00"];
 const MAX_TIMES = 12;
