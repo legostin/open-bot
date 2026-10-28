@@ -607,13 +607,14 @@ export function registerHubTools(hub: Hub): void {
   // ---------- the calling agent's own profile ----------
 
   // Not a hub_* tool: every agent sees it and edits only itself. After outside content the policy asks the user
-  // (policy/engine.ts ASK_WHEN_TAINTED), so a web page cannot rewrite an agent's instructions.
+  // (askWhenTainted), so a web page cannot rewrite an agent's instructions.
   hub.tools.register(
     {
       name: "profile_update",
       owner: "core",
       effect: "local-write",
       availability: "interactive",
+      askWhenTainted: true,
       approvalSummary: "%agent.selfEditApproval%",
       description:
         "Change your own profile when the user asks for it in this conversation: name, description, avatar, initiative or your instructions (prompt). " +
