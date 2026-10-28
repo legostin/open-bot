@@ -98,8 +98,12 @@ export function registerFeedTools(d: FeedToolDeps): void {
     },
     (i, ctx) => {
       try {
-        const f = d.feeds.create({ brief: i.brief, title: i.title, agentId: i.agent, times: i.times, weekdays: i.weekdays });
+        // Made in a "New channel" chat: that chat becomes the channel's, where its settings are talked over.
+        const conv = d.store.getConversation(ctx.conversationId);
+        const setup = conv?.kind === "setup" && conv.purpose === "feed" && !conv.entity ? conv : undefined;
+        const f = d.feeds.create({ brief: i.brief, title: i.title, agentId: i.agent, times: i.times, weekdays: i.weekdays }, setup ? { chatId: setup.id } : {});
         d.attachPart(ctx.conversationId, { type: "feed", feedId: f.id });
+        if (setup) d.store.setEntity(setup.id, f.id);
         return text(`Channel ${f.id} “${f.title}” made, edited by ${name(f.agentId)}, gathered at ${f.times.join(", ")}. Its first run has started. The user sees its card with buttons under your reply and the channel in the Channels tab.`);
       } catch (e) {
         return text((e as Error).message, true);

@@ -27,6 +27,20 @@ export interface PromptContext {
   dispatch?: { team: Array<{ id: string; name: string; description: string; where: string[] }>; computers: Array<{ id: string; name: string; online: boolean }> };
   /** A thread where the agent answers a teammate who wrote to it (team_message): who that is. */
   thread?: { id: string; name: string };
+  /** A short setup chat ("New channel", "Add agent"): what it makes, and what it already became. */
+  making?: { purpose: "feed" | "agent"; entity?: string };
+}
+
+/** Where the agent is in a setup chat, and how it ends. */
+function setupWhere(s: NonNullable<PromptContext["making"]>): string {
+  if (s.purpose === "feed") {
+    return s.entity
+      ? `This short chat made the user's channel ${s.entity} and is now that channel's settings chat: show its card with \`feed_show\` when it helps, and change what they ask with \`feed_update\`.`
+      : "This is a short setup chat: the person tapped \"New channel\" and you already asked what it should follow. Ask only what is still missing (how often: `show_choices`; the editor, if more than one agent fits), in one short message at a time, then make it with `feed_create`. This chat then becomes the channel's settings chat.";
+  }
+  return s.entity
+    ? `This short chat made the agent "${s.entity}"; its own dialog is where they talk with it now.`
+    : "This is a short setup chat: the person tapped \"Add agent\" and you already asked what it should do. Ask only what is still missing, in one short message at a time, then draft it with `hub_agent_draft` (create it on their yes). This chat then becomes the new agent's.";
 }
 
 /** A dialog's agent is the user's entry point: quick things itself, everything with steps as tasks on the side. */
@@ -94,7 +108,9 @@ export function buildSystemPrompt(c: PromptContext): string {
         ? `You are working on a ${c.background ? "background " : ""}task "${c.task.title}" (id ${c.task.id}, created by ${c.task.createdBy}${c.task.triggerId ? `, trigger ${c.task.triggerId}` : ""}).`
         : c.group
           ? groupWhere({ ...c, group: c.group })
-          : `You are one of the agents on the user's team, talking with them in your own long-lived dialog (${c.defaultAgent ? "web UI and/or Telegram" : "web UI"}). There are no separate chats: this dialog is your ongoing thread with the user.`;
+          : c.making
+            ? setupWhere(c.making)
+            : `You are one of the agents on the user's team, talking with them in your own long-lived dialog (${c.defaultAgent ? "web UI and/or Telegram" : "web UI"}). There are no separate chats: this dialog is your ongoing thread with the user.`;
   const lines: string[] = [];
   if (c.agent.prompt) lines.push(c.agent.prompt.trim(), "");
   lines.push(

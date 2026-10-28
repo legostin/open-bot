@@ -124,7 +124,9 @@ export function ChannelPage({ id }: { id: string }) {
             </IconButton>
             <IconButton
               label={t("channel.settings")}
-              onClick={() => askInChat(feed.agentId, t("channel.settingsRequest", { title: feed.title }), navigate).catch((e) => toast(errorText(e), "error"))}
+              onClick={() =>
+                feed.chatId ? navigate(`/chat/${encodeURIComponent(feed.chatId)}`) : askInChat(feed.agentId, t("channel.settingsRequest", { title: feed.title }), navigate).catch((e) => toast(errorText(e), "error"))
+              }
             >
               <SlidersHorizontal className="size-[18px]" />
             </IconButton>

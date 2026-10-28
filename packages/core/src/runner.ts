@@ -1257,6 +1257,7 @@ export class SessionRunner {
       group: conv.kind === "group" ? { title: conv.title, members: this.groupMembers(conv) } : undefined,
       dispatch: conv.kind === "main" && !task && !background ? this.dispatchContext() : undefined,
       thread: task?.kind === "message" ? this.threadSender(task) : undefined,
+      making: conv.kind === "setup" && conv.purpose ? { purpose: conv.purpose, ...(conv.entity ? { entity: conv.entity } : {}) } : undefined,
     });
 
     const env: Record<string, string> = {};
@@ -1726,9 +1727,13 @@ export class SessionRunner {
   }
 }
 
-/** What a live session was opened with: a changed agent, or a group's new members, get a fresh session (resumed). */
+/**
+ * What a live session was opened with: a changed agent, a group's new members, or a setup chat that became its channel
+ * or agent get a fresh session (resumed).
+ */
 function sessionStamp(agent: AgentDef, conv: Conversation): string {
   const stamp = JSON.stringify(agent);
+  if (conv.kind === "setup") return `${stamp}|${conv.entity ?? ""}`;
   return conv.kind === "group" ? `${stamp}|${conv.title}|${(conv.members ?? []).join(",")}` : stamp;
 }
 
