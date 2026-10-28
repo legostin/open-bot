@@ -22,7 +22,7 @@ Delete what you create once it has served its purpose: nothing temporary outlive
 - Tests write temp files only under `tmpdir()`. Each vitest run gets its own temp folder (`packages/testkit/src/temp-dir.ts`), deleted at the end, so single tests needn't clean up. Scripts and checks run outside vitest delete their own temp folders.
 - Remove a worktree (`git worktree remove`, then any folder left behind) as soon as its branch is merged.
 - Throwaway hubs (demos, manual checks): stop them and delete their data dirs when the check is done.
-- Build output made only to check something (Rust `target/`, Xcode DerivedData, downloaded CI artifacts, mounted DMGs) is deleted afterwards; installable builds come from CI.
+- Build output (Rust `target/`, Xcode DerivedData, downloaded CI artifacts, mounted DMGs) is deleted once the build is installed or the check is done. Installing on the person's Mac from a local build is fine; it need not wait for CI.
 - Never delete hub data that holds the person's conversations (the installed hub's, old copies): move it to the Trash and say so.
 
 ## Commands
