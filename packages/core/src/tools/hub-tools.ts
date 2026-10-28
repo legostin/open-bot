@@ -17,6 +17,7 @@ import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { hubLocale } from "../i18n.ts";
 import { listIntegrations } from "../integrations.ts";
+import { machineHubUrl } from "../pairing.ts";
 import { isSetupStep, SETUP_STEPS } from "../setup.ts";
 
 export const HUB_TOOL_PREFIX = "hub_";
@@ -320,7 +321,7 @@ export function registerHubTools(hub: Hub): void {
     },
     (i) => {
       const c = hub.machines.createPairingCode(i.name ? String(i.name) : undefined);
-      const url = hub.config.publicUrl;
+      const url = machineHubUrl(hub.config.publicUrl, hub.remote.link());
       return text(
         `Pairing code ${c.code} (valid until ${c.expiresAt}). On the computer (Node.js 24+):\n` +
           `curl -fsSLo owlbot-node.mjs ${url}/download/owlbot-node.mjs && node owlbot-node.mjs pair ${url} ${c.code}`,

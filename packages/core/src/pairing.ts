@@ -1,8 +1,9 @@
 // What a phone needs to pair: the link the QR carries (owlbot://pair?…), the hub's addresses on the device port and
-// the QR itself (SVG for the web UI, text for the terminal).
+// the QR itself (SVG for the web UI, text for the terminal). And the address other machines pair with.
 
 import { hostname, networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 import qrcode from "qrcode-generator";
+import { isLocalHost } from "./config.ts";
 
 export const PAIRING_LINK_VERSION = "1";
 
@@ -21,6 +22,14 @@ export function parsePairingLink(link: string): { code: string; hubName: string;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Where other machines pair: the link (`link`, remote.ts) when the hub's own address works only on this computer.
+ * Never the phones' address behind the link: that port serves the hub's own certificate, which only phones pin.
+ */
+export function machineHubUrl(publicUrl: string, link?: string): string {
+  return link && isLocalHost(new URL(publicUrl).hostname) ? link : publicUrl;
 }
 
 /** The hub's name on phones: the computer's name without ".local". */

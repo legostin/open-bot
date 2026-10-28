@@ -14,8 +14,7 @@ import { draftPatch } from "../agent-drafts.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
 import { googleScopes, listIntegrations } from "../integrations.ts";
-import { qrSvg } from "../pairing.ts";
-import { isLocalHost } from "../config.ts";
+import { machineHubUrl, qrSvg } from "../pairing.ts";
 import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
 
 export interface ApiOptions {
@@ -345,10 +344,7 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   // The hub's computer and the paired machines with the turns running there now; "machines.activity" keeps it current.
   api.get("/api/machines/activity", async () => hub.activity.view());
   // A hub only this computer can reach gives other machines its link, when it has one.
-  api.post("/api/machines/pairing-code", async (req) => {
-    const link = hub.remote.view().state === "running" ? hub.remote.view().url : undefined;
-    return { ...hub.machines.createPairingCode((req.body as any)?.name), hubUrl: link && isLocalHost(new URL(cfg.publicUrl).hostname) ? link : cfg.publicUrl };
-  });
+  api.post("/api/machines/pairing-code", async (req) => ({ ...hub.machines.createPairingCode((req.body as any)?.name), hubUrl: machineHubUrl(cfg.publicUrl, hub.remote.link()) }));
   api.patch("/api/machines/:id", async (req) => hub.machines.rename((req.params as any).id, String((req.body as any)?.name ?? "")));
   api.delete("/api/machines/:id", async (req) => {
     hub.machines.revoke((req.params as any).id);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deviceUrls, pairingLink, parsePairingLink, qrSvg, qrText } from "../src/pairing.ts";
+import { deviceUrls, machineHubUrl, pairingLink, parsePairingLink, qrSvg, qrText } from "../src/pairing.ts";
 
 describe("pairing link", () => {
   it("carries the code, name, fingerprint and every address, and parses back", () => {
@@ -29,5 +29,15 @@ describe("pairing link", () => {
     const text = qrText(link);
     expect(text.split("\n").length).toBeGreaterThan(10);
     expect(text).toMatch(/[█▀▄]/);
+  });
+});
+
+describe("machine pairing address", () => {
+  it("is the link when the hub's own address works only on this computer, never the phones' port", () => {
+    const link = "https://owlbot.tail1234.ts.net";
+    expect(machineHubUrl("http://localhost:8080", link)).toBe(link);
+    expect(machineHubUrl("http://127.0.0.1:8080", link)).toBe(link);
+    expect(machineHubUrl("https://bot.example.com", link)).toBe("https://bot.example.com");
+    expect(machineHubUrl("http://localhost:8080")).toBe("http://localhost:8080");
   });
 });

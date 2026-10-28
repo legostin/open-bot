@@ -105,6 +105,11 @@ export class RemoteAccess {
     }
   }
 
+  /** The link itself, while it is up. */
+  link(): string | undefined {
+    return this.node.state === "running" ? this.node.url : undefined;
+  }
+
   /** The phones' address behind the link, while it is up. */
   deviceLink(): string | undefined {
     return this.node.state === "running" ? this.node.deviceUrl : undefined;

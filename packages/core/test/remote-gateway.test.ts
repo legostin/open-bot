@@ -220,6 +220,12 @@ describe("the link's gateways", () => {
     expect(remote.json.qrSvg).toMatch(/^<svg/);
     const machine = await web.req("POST", "/api/machines/pairing-code", {});
     expect(machine.json.hubUrl).toBe(`https://${LINK}`);
+    // The chat's tool gives the same address, never the phones' one.
+    const conversationId = hub.store.agentConversation("assistant").id;
+    const r = await hub.tools.get("hub_machine_pairing_code")!.invoke({}, { conversationId, agentId: "assistant", sessionId: "s", machineId: "local", workspace: tmpdir(), tainted: false, background: false } as any);
+    const said = r.content.map((c: any) => c.text).join("");
+    expect(said).toContain(`pair https://${LINK} `);
+    expect(said).not.toContain(":8443");
   });
 
   it("pauses sign-in through the link after 30 failures from anywhere, while the computer's own works", async () => {
