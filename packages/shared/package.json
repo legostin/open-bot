@@ -8,6 +8,7 @@
     "./i18n": "./src/i18n.ts",
     "./avatar": "./src/avatar.ts",
     "./group": "./src/group.ts",
+    "./thinking": "./src/thinking.ts",
     "./pages": "./src/pages.ts"
   },
   "dependencies": {

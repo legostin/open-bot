@@ -156,19 +156,57 @@ export function parseResetFromText(text: string): string | undefined {
   return undefined;
 }
 
+/**
+ * `full`: the conversation no longer fits the model's context (its own compaction did not save it): the session goes on
+ * afresh from the hub's recap.
+ */
 export function classifyClaudeFailure(
   stderr: string,
   resultError?: string,
   t: Translate = brainsT(),
-): { message: string; fatal: boolean; auth: boolean; noSession: boolean } {
+): { message: string; fatal: boolean; auth: boolean; noSession: boolean; full: boolean } {
   const text = `${resultError ?? ""}\n${stderr}`;
   const noSession = /No conversation found|session .* not found/i.test(text);
+  const full = /prompt is too long|context (window|length) (exceeded|limit)|exceeds? the (model's )?(context|maximum)|too many tokens/i.test(text);
   const auth = /not logged in|please run .*login|invalid api key|authentication|OAuth token|401|\/login/i.test(text) && !noSession;
   const enoent = /ENOENT|not recognized|command not found/i.test(text);
-  if (enoent) return { message: t("claude.notInstalled"), fatal: true, auth: false, noSession: false };
-  if (auth) return { message: t("claude.notSignedIn"), fatal: true, auth: true, noSession: false };
+  if (enoent) return { message: t("claude.notInstalled"), fatal: true, auth: false, noSession: false, full: false };
+  if (auth) return { message: t("claude.notSignedIn"), fatal: true, auth: true, noSession: false, full: false };
   const tail = text.trim().split("\n").slice(-6).join("\n").slice(0, 1500);
-  return { message: tail || t("claude.failed"), fatal: true, auth: false, noSession };
+  return { message: tail || t("claude.failed"), fatal: true, auth: false, noSession, full };
+}
+
+// ---------- models and effort ----------
+
+/** Claude Code's own model aliases: each names the latest model of its line. */
+export const CLAUDE_MODELS = ["fable", "opus", "sonnet", "haiku"];
+const CLAUDE_MODEL_NAMES: Record<string, string> = { fable: "Fable", opus: "Opus", sonnet: "Sonnet", haiku: "Haiku" };
+
+/** What the installed CLI takes, from its --help. */
+export interface ClaudeCaps {
+  /** --effort levels; undefined when the CLI has no --effort. */
+  efforts?: string[];
+  /** --system-prompt-snapshot: a resumed conversation would keep its first system prompt unless it is off. */
+  snapshot: boolean;
+}
+
+export function parseClaudeHelp(help: string): ClaudeCaps {
+  const at = help.search(/^\s*--effort\b/m);
+  let efforts: string[] | undefined;
+  if (at >= 0) {
+    const rest = help.slice(at);
+    const next = rest.slice(2).search(/\n\s*-{1,2}[a-z]/i);
+    const block = next >= 0 ? rest.slice(0, next + 2) : rest;
+    const list = /\(([a-z]+(?:,\s*(?:or\s+)?[a-z]+)+)\)/i.exec(block.replace(/\s+/g, " "));
+    efforts = list ? list[1].split(",").map((s) => s.replace(/^\s*or\s+/i, "").trim().toLowerCase()).filter(Boolean) : ["low", "medium", "high"];
+  }
+  return { ...(efforts ? { efforts } : {}), snapshot: /^\s*--system-prompt-snapshot\b/m.test(help) };
+}
+
+/** Fast: Sonnet with little thinking; balanced: Opus at medium effort; deep: Opus at extra-high effort. */
+export function claudePresets(efforts?: string[]): NonNullable<ProbeResult["presets"]> {
+  const e = (x: string) => (efforts?.includes(x) ? { effort: x } : {});
+  return { fast: { model: "sonnet", ...e("low") }, balanced: { model: "opus", ...e("medium") }, deep: { model: "opus", ...(efforts?.includes("xhigh") ? e("xhigh") : e("high")) } };
 }
 
 /** One user message on stream-json stdin. */
@@ -190,10 +228,12 @@ class ClaudeCodeSession implements BrainSessionImpl {
   private o: BrainSessionOptions;
   private p: ClaudeCodeOptions;
   private dir: string;
+  private caps: () => Promise<ClaudeCaps>;
 
-  constructor(opts: BrainSessionOptions, p: ClaudeCodeOptions) {
+  constructor(opts: BrainSessionOptions, p: ClaudeCodeOptions, caps: () => Promise<ClaudeCaps>) {
     this.o = opts;
     this.p = p;
+    this.caps = caps;
     this.resumeId = opts.resume;
     this.dir = join(p.stateDir, "sessions", opts.sessionId.replace(/[^\w-]/g, "_"));
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
@@ -207,7 +247,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
     writePrivate(join(this.dir, "prompt.md"), opts.systemPrompt);
   }
 
-  private args(): string[] {
+  private args(caps: ClaudeCaps): string[] {
     const tools = this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS;
     const a = [
       "-p",
@@ -229,6 +269,9 @@ class ClaudeCodeSession implements BrainSessionImpl {
       join(this.dir, "prompt.md"),
     ];
     if (this.o.model) a.push("--model", this.o.model);
+    if (this.o.effort && caps.efforts?.includes(this.o.effort)) a.push("--effort", this.o.effort);
+    // A resumed conversation takes the agent's current instructions (they change with its profile and how it thinks).
+    if (caps.snapshot) a.push("--system-prompt-snapshot", "off");
     if (this.resumeId) a.push("--resume", this.resumeId);
     for (const d of this.o.claudePluginDirs ?? []) a.push("--plugin-dir", d);
     return a;
@@ -237,6 +280,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
   async *send(turn: BrainTurn): AsyncGenerator<BrainEvent> {
     this.interrupted = false;
     this.inputs = [turn.text];
+    const caps = await this.caps().catch((): ClaudeCaps => ({ snapshot: false }));
     for (let attempt = 0; attempt < 2; attempt++) {
       const env = childEnv(process.env, {
         ...this.o.env,
@@ -247,7 +291,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
       const t = brainsT(this.p.locale?.());
       const parser = new ClaudeStreamParser(t);
       this.closing = false;
-      const proc = runLines(this.p.command?.() ?? "claude", this.args(), { cwd: this.o.workspace, env, input: this.inputs.map(userLine).join(""), keepInput: true });
+      const proc = runLines(this.p.command?.() ?? "claude", this.args(caps), { cwd: this.o.workspace, env, input: this.inputs.map(userLine).join(""), keepInput: true });
       this.child = proc;
       // The turn is over once a result comes and the CLI has taken every message: then stdin closes and it exits.
       // A message it has not taken yet gets its own answer right after, in this process.
@@ -287,9 +331,11 @@ class ClaudeCodeSession implements BrainSessionImpl {
       }
       if (exit.code !== 0 || parser.resultError || !parser.sawResult) {
         const f = classifyClaudeFailure(proc.stderr(), parser.resultError, t);
-        if (f.noSession && attempt === 0 && this.resumeId) {
-          this.p.log?.(`resume ${this.resumeId} not found, starting a fresh Claude Code session`);
+        // The conversation is gone or too full to go on: a fresh one, which starts from the hub's recap when it sent one.
+        if ((f.noSession || (f.full && turn.recap)) && attempt === 0 && this.resumeId) {
+          this.p.log?.(`resume ${this.resumeId} ${f.noSession ? "not found" : "is full"}, starting a fresh Claude Code session${turn.recap ? " from the recap" : ""}`);
           this.resumeId = undefined;
+          if (turn.recap) this.inputs = [`${turn.recap}\n\n---\n${this.inputs[0]}`, ...this.inputs.slice(1)];
           continue;
         }
         if (parser.resultError && exit.code === 0) yield { type: "error", message: parser.resultError };
@@ -337,6 +383,20 @@ function writePrivate(file: string, content: string): void {
 }
 
 export function createClaudeCodeProvider(p: ClaudeCodeOptions): BrainProviderImpl {
+  // What the installed CLI takes, read from its --help once per command and version.
+  let caps: { key: string; caps: Promise<ClaudeCaps> } | undefined;
+  const capsOf = (command: string, version: string, env: Record<string, string>): Promise<ClaudeCaps> => {
+    const key = `${command}|${version}`;
+    if (caps?.key !== key) caps = { key, caps: capture(command, ["--help"], env).then((h) => parseClaudeHelp(`${h.stdout}\n${h.stderr}`)) };
+    return caps.caps;
+  };
+  const currentCaps = async (): Promise<ClaudeCaps> => {
+    const command = p.command?.() ?? "claude";
+    if (caps?.key.startsWith(`${command}|`)) return caps.caps;
+    const env = childEnv(process.env, { DISABLE_AUTOUPDATER: "1" });
+    const v = await capture(command, ["--version"], env);
+    return v.code === 0 ? capsOf(command, v.stdout.trim().split(/\s+/)[0], env) : { snapshot: false };
+  };
   return {
     id: "claude-code",
     label: brainsT()("claude.label"),
@@ -347,18 +407,20 @@ export function createClaudeCodeProvider(p: ClaudeCodeOptions): BrainProviderImp
       const v = await capture(command, ["--version"], env);
       if (v.code !== 0) return { available: false, authenticated: false, detail: t("claude.notInstalledShort") };
       const version = v.stdout.trim().split(/\s+/)[0];
-      if (env.CLAUDE_CODE_OAUTH_TOKEN || env.ANTHROPIC_API_KEY) return { available: true, authenticated: true, version, detail: t("claude.vaultToken") };
+      const c = await capsOf(command, version, env).catch((): ClaudeCaps => ({ snapshot: false }));
+      const thinking = { models: CLAUDE_MODELS, modelNames: CLAUDE_MODEL_NAMES, ...(c.efforts ? { efforts: c.efforts } : {}), presets: claudePresets(c.efforts) };
+      if (env.CLAUDE_CODE_OAUTH_TOKEN || env.ANTHROPIC_API_KEY) return { available: true, authenticated: true, version, ...thinking, detail: t("claude.vaultToken") };
       const s = await capture(command, ["auth", "status", "--json"], env);
       try {
         const j = JSON.parse(s.stdout);
         const method = `${j.authMethod ?? "ok"}${j.subscriptionType ? ` (${j.subscriptionType})` : ""}`;
-        return { available: true, authenticated: !!j.loggedIn, version, detail: j.loggedIn ? t("claude.signedIn", { method }) : t("claude.noLogin") };
+        return { available: true, authenticated: !!j.loggedIn, version, ...thinking, detail: j.loggedIn ? t("claude.signedIn", { method }) : t("claude.noLogin") };
       } catch {
-        return { available: true, authenticated: false, version, detail: t("claude.loginUnknown") };
+        return { available: true, authenticated: false, version, ...thinking, detail: t("claude.loginUnknown") };
       }
     },
     async createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl> {
-      return new ClaudeCodeSession(opts, p);
+      return new ClaudeCodeSession(opts, p, currentCaps);
     },
     // Browser sign-in to the subscription, kept in HOME like a terminal `/login`: the page shows a code to paste back.
     login({ env, onUpdate }) {

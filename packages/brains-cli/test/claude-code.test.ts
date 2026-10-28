@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
-import { ClaudeStreamParser, createClaudeCodeProvider, createCodexProvider, CodexStreamParser, parseCodexReset } from "../src/index.ts";
+import { claudePresets, ClaudeStreamParser, codexThinking, createClaudeCodeProvider, createCodexProvider, CodexStreamParser, listCodexModels, parseClaudeHelp, parseCodexReset } from "../src/index.ts";
 
 const fake = join(import.meta.dirname, "fixtures", "fake-claude.mjs");
 
@@ -119,6 +119,48 @@ describe("Claude Code provider (fake CLI)", () => {
     expect((await createClaudeCodeProvider(missing).probe()).detail).toBe("Claude Code is not installed");
     expect((await createClaudeCodeProvider({ ...missing, locale: () => "ru" }).probe()).detail).toBe("Claude Code не установлен");
   });
+
+  it("offers its model aliases and the efforts its --help lists, with presets on them", async () => {
+    const r = await provider.probe();
+    expect(r.models).toEqual(["fable", "opus", "sonnet", "haiku"]);
+    expect(r.modelNames?.opus).toBe("Opus");
+    expect(r.efforts).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(r.presets).toEqual({ fast: { model: "sonnet", effort: "low" }, balanced: { model: "opus", effort: "medium" }, deep: { model: "opus", effort: "xhigh" } });
+  });
+
+  it("reads --effort and --system-prompt-snapshot from the help of the installed CLI", () => {
+    expect(parseClaudeHelp("  --effort <level>   Effort level\n                    (low, medium, high)\n  --model <m>  x")).toEqual({ efforts: ["low", "medium", "high"], snapshot: false });
+    expect(parseClaudeHelp("  --model <m>  x\n  --system-prompt-snapshot <on|off>  y")).toEqual({ snapshot: true });
+    // An old CLI without --effort: presets name a model only.
+    expect(claudePresets(undefined).deep).toEqual({ model: "opus" });
+  });
+
+  it("thinks with the model and effort it is given, and takes the current instructions on resume", async () => {
+    const argsFile = join(mkdtempSync(join(tmpdir(), "owl-cc-args-")), "args.jsonl");
+    const s = await provider.createSession(opts({ model: "opus", effort: "high", resume: "sess-9", env: { FAKE_ARGS_FILE: argsFile } }));
+    const ev = await collect(s.send({ text: "hi" }));
+    expect(ev.filter((e) => e.type === "text").map((e: any) => e.delta).join("")).toBe("echo:hiresume=sess-9 model=opus effort=high");
+    const args = JSON.parse(readFileSync(argsFile, "utf8").trim().split("\n")[0]) as string[];
+    expect(args.slice(args.indexOf("--system-prompt-snapshot"), args.indexOf("--system-prompt-snapshot") + 2)).toEqual(["--system-prompt-snapshot", "off"]);
+    // An effort the CLI does not take is not passed.
+    const t = await provider.createSession(opts({ effort: "ultra" }));
+    expect((await collect(t.send({ text: "x" }))).filter((e) => e.type === "text").map((e: any) => e.delta).join("")).toBe("echo:xresume=none model=default");
+  });
+
+  it("goes on from the hub's recap when the conversation is gone or too full", async () => {
+    for (const resume of ["missing", "full"]) {
+      const s = await provider.createSession(opts({ resume }));
+      const ev = await collect(s.send({ text: "and now?", recap: "RECAP: we chose Lisbon" }));
+      expect(ev.some((e) => e.type === "error")).toBe(false);
+      const text = ev.filter((e) => e.type === "text").map((e: any) => e.delta).join("");
+      expect(text).toBe("echo:RECAP: we chose Lisbon\n\n---\nand now?resume=none model=default");
+      expect(ev.at(-1)).toEqual({ type: "done", resumeToken: "sess-1" });
+    }
+    // Too full and no recap: an error, not a blank start.
+    const s = await provider.createSession(opts({ resume: "full" }));
+    const ev = await collect(s.send({ text: "x" }));
+    expect(ev.find((e) => e.type === "error")).toMatchObject({ message: expect.stringContaining("Prompt is too long") });
+  });
 });
 
 describe("CodexStreamParser", () => {
@@ -186,6 +228,35 @@ describe("Codex provider (fake CLI)", () => {
     const s = await provider.createSession(opts());
     const ev = await collect(s.send({ text: "LIMIT" }));
     expect(ev.find((e) => e.type === "limit_hit")).toMatchObject({ detail: expect.stringContaining("usage limit") });
+  });
+
+  it("thinks with the effort it is given", async () => {
+    const s = await provider.createSession(opts({ model: "gpt-main", effort: "high" }));
+    expect(text(await collect(s.send({ text: "ping" })))).toMatch(/model=gpt-main effort=high\n$/);
+  });
+
+  it("lists its own models and puts the presets on the default one", async () => {
+    const models = await listCodexModels(fakeCodex, { ...process.env } as Record<string, string>);
+    expect(models?.map((m) => m.id)).toEqual(["gpt-fast", "gpt-main"]);
+    const th = codexThinking(models);
+    expect(th.model).toBe("gpt-main");
+    expect(th.modelNames).toEqual({ "gpt-fast": "GPT Fast", "gpt-main": "GPT Main" });
+    expect(th.efforts).toEqual(["low", "medium", "high", "xhigh"]);
+    expect(th.presets).toEqual({ fast: { model: "gpt-main", effort: "low" }, balanced: { model: "gpt-main", effort: "medium" }, deep: { model: "gpt-main", effort: "xhigh" } });
+    // A Codex that cannot list them: efforts only.
+    expect(codexThinking(undefined).presets?.deep).toEqual({ effort: "high" });
+  });
+
+  it("goes on in a fresh thread from the hub's recap when the thread is gone or too full", async () => {
+    const gone = await provider.createSession(opts({ resume: "missing" }));
+    expect(text(await collect(gone.send({ text: "next", recap: "RECAP" })))).toMatch(/^echo:RECAP\n\n---\nnext\n/);
+    const s = await provider.createSession(opts());
+    const first = await collect(s.send({ text: "hi" }));
+    const thread = (first.at(-1) as any).resumeToken;
+    const ev = await collect(s.send({ text: "go on FULL", recap: "RECAP" }));
+    expect(ev.some((e) => e.type === "error")).toBe(false);
+    expect(text(ev)).toMatch(/^echo:RECAP\n\n---\ngo on FULL\n/);
+    expect((ev.at(-1) as any).resumeToken).not.toBe(thread);
   });
 
   it("falls back to codex exec without an app server, and cannot steer there", async () => {

@@ -5,12 +5,13 @@ import { join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
 import type { AgentDef, TaskStatus } from "@owlbot/shared";
-import { formatBrainRef, GROUP_MAX_MEMBERS, GROUP_MIN_MEMBERS, LOCALES, parseBrainRef, type Locale } from "@owlbot/shared";
+import { formatBrainRef, GROUP_MAX_MEMBERS, GROUP_MIN_MEMBERS, isWorkKind, LOCALES, parseBrainRef, type Locale, type ThinkingPatch } from "@owlbot/shared";
 import { hubLocale, localizePluginValue, requestLocale, tFor } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { toUiEvent } from "../bus.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
+import { applyThinking } from "../thinking.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
 import { googleScopes, listIntegrations } from "../integrations.ts";
@@ -241,6 +242,22 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   api.delete("/api/agents/:id", async (req) => {
     hub.removeAgent((req.params as any).id as string, "user");
     return { ok: true };
+  });
+  // How the agent thinks for each kind of work: the header picker, the chat card and the phone.
+  api.get("/api/agents/:id/thinking", async (req) => {
+    const a = hub.agents.get((req.params as any).id);
+    if (!a) throw new HttpError(404, "agent.notFound");
+    return hub.thinkingView(a);
+  });
+  api.put("/api/agents/:id/thinking/:kind", async (req) => {
+    const { id, kind } = req.params as { id: string; kind: string };
+    const a = hub.agents.get(id);
+    if (!a) throw new HttpError(404, "agent.notFound");
+    if (!isWorkKind(kind)) throw new HttpError(400, "thinking.badKind");
+    const b = (req.body ?? {}) as ThinkingPatch;
+    const now = (await hub.thinkingView(a)).kinds.find((k) => k.kind === kind)?.brain;
+    const saved = hub.saveAgent({ ...applyThinking(a, kind, b, now), source: "user" }, "user");
+    return hub.thinkingView(saved);
   });
 
   // ----- new agents put together in the chat (the card) -----

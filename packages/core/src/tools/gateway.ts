@@ -35,7 +35,7 @@ export interface GatewayDeps {
 }
 
 /** Tools that only draw in the person's chat (buttons, maps, pictures, cards): every agent has them. */
-const SHOW_TOOLS = ["show_choices", "show_map", "show_images", "show_news", "feed_show", "page_create", "page_update", "page_read", "page_list", "page_show"];
+const SHOW_TOOLS = ["show_choices", "show_map", "show_images", "show_news", "feed_show", "page_create", "page_update", "page_read", "page_list", "page_show", "thinking_show"];
 
 function textOf(r: ToolResult): string {
   return r.content.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join("\n");

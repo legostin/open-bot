@@ -6,4 +6,5 @@ export * from "./i18n.ts";
 export * from "./avatar.ts";
 export * from "./group.ts";
 export * from "./map.ts";
+export * from "./thinking.ts";
 export * from "./pages.ts";

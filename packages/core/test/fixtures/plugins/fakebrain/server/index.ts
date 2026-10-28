@@ -44,7 +44,18 @@ export default {
         id,
         label: id,
         variants: id === "fake2" ? ["a", "b"] : undefined,
-        probe: async () => ({ available: true, authenticated: true }),
+        // `fake` thinks with two models and three efforts; `fake2` has no choice.
+        probe: async () =>
+          id === "fake"
+            ? {
+                available: true,
+                authenticated: true,
+                models: ["quick", "smart"],
+                modelNames: { quick: "Quick", smart: "Smart" },
+                efforts: ["low", "medium", "high"],
+                presets: { fast: { model: "quick", effort: "low" }, balanced: { model: "smart", effort: "medium" }, deep: { model: "smart", effort: "high" } },
+              }
+            : { available: true, authenticated: true },
         createSession: async (o: BrainSessionOptions) => ({
           async *send(raw): AsyncGenerator<BrainEvent> {
             // The hub's "[Now: …]" line comes first; the scripts below read the rest.
@@ -59,6 +70,19 @@ export default {
             const turn = { ...raw, text: rest };
             if (lastLine(turn.text) === "SELF?") {
               yield { type: "text", delta: `${id} self: ${selves.get(o.sessionId) ?? "none"}` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
+            // The model and effort this session was opened with.
+            if (lastLine(turn.text.replace(/\n+When you are done[^\n]*\s*$/, "")) === "THINKING?") {
+              yield { type: "text", delta: `${id} thinks: model=${o.model ?? "default"} effort=${o.effort ?? "default"}` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
+            // What this session knows of the conversation before it: the recap it started with, or the one for a lost resume.
+            if (lastLine(turn.text) === "RECAP?") {
+              const fresh = /^\[System\] Your session in this conversation was renewed[\s\S]*?\n\n---\n/.exec(turn.text)?.[0];
+              yield { type: "text", delta: fresh ? `${id} started from: ${fresh.replace(/\s+/g, " ").trim()}` : `${id} backup: ${turn.recap ? "yes" : "none"}` };
               yield { type: "done", resumeToken: `${id}-resume` };
               return;
             }

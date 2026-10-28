@@ -1,5 +1,7 @@
 // Plugin settings (defaults applied here: the hub stores only what the user changed) and API variants.
 
+import type { ProbeResult } from "@owlbot/shared";
+
 export interface ApiSettings {
   defaultVariant: string;
   anthropicModel: string;
@@ -80,7 +82,14 @@ export interface VariantInfo {
   keyRequired: boolean;
   vision: (s: ApiSettings) => boolean;
   historyBudget: (s: ApiSettings) => number;
+  /** Reasoning efforts the provider takes, least first (none: it takes no effort). */
+  efforts: string[];
+  /** What the presets mean here: a model (unset: the variant's default) and an effort. */
+  presets: (s: ApiSettings) => NonNullable<ProbeResult["presets"]>;
 }
+
+const OPENAI_EFFORTS = ["low", "medium", "high"];
+const OPENAI_PRESETS = { fast: { effort: "low" }, balanced: { effort: "medium" }, deep: { effort: "high" } };
 
 export const VARIANTS: Record<string, VariantInfo> = {
   anthropic: {
@@ -93,6 +102,9 @@ export const VARIANTS: Record<string, VariantInfo> = {
     keyRequired: true,
     vision: () => true,
     historyBudget: (s) => s.historyTokenBudget,
+    efforts: ["low", "medium", "high", "xhigh", "max"],
+    // Fast: Sonnet with little thinking; balanced: the default model at medium effort; deep: Opus at extra-high effort.
+    presets: (s) => ({ fast: { model: "claude-sonnet-5-5", effort: "low" }, balanced: { model: s.anthropicModel, effort: "medium" }, deep: { model: "claude-opus-5-5", effort: "xhigh" } }),
   },
   openai: {
     id: "openai",
@@ -104,6 +116,8 @@ export const VARIANTS: Record<string, VariantInfo> = {
     keyRequired: true,
     vision: () => true,
     historyBudget: (s) => s.historyTokenBudget,
+    efforts: OPENAI_EFFORTS,
+    presets: () => OPENAI_PRESETS,
   },
   openrouter: {
     id: "openrouter",
@@ -115,6 +129,8 @@ export const VARIANTS: Record<string, VariantInfo> = {
     keyRequired: true,
     vision: () => true,
     historyBudget: (s) => s.historyTokenBudget,
+    efforts: OPENAI_EFFORTS,
+    presets: () => OPENAI_PRESETS,
   },
   custom: {
     id: "custom",
@@ -126,6 +142,8 @@ export const VARIANTS: Record<string, VariantInfo> = {
     keyRequired: false,
     vision: (s) => s.customVision,
     historyBudget: (s) => s.customHistoryTokenBudget,
+    efforts: [],
+    presets: () => ({}),
   },
 };
 
@@ -137,6 +155,12 @@ export const CLAUDE_ALIASES: Record<string, string> = {
 };
 
 export const ANTHROPIC_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"];
+export const ANTHROPIC_MODEL_NAMES: Record<string, string> = {
+  "claude-opus-5-5": "Opus 5.5",
+  "claude-sonnet-5-5": "Sonnet 5.5",
+  "claude-haiku-5-5": "Haiku 5.5",
+  "claude-fable-5-1": "Fable 5.1",
+};
 
 const looksClaude = (m: string) => m in CLAUDE_ALIASES || /^claude-/i.test(m);
 

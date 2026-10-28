@@ -71,6 +71,9 @@ function appServer() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let threadId;
   let model = "default";
+  let effort;
+  /** The turn goes on in a thread resumed from before ("FULL" overflows only such a thread). */
+  let resumed = false;
   let turn; // { id, steered: string[], wake?, interrupted }
   let turns = 0;
   const textOf = (input) => (input ?? []).filter((i) => i.type === "text").map((i) => i.text).join("");
@@ -92,6 +95,11 @@ function appServer() {
       note("error", { error, willRetry: false, threadId, turnId: turn.id });
       return complete("failed", error);
     }
+    if (text.endsWith("FULL") && resumed) {
+      const error = { message: "Codex ran out of room in the model's context window.", codexErrorInfo: "contextWindowExceeded" };
+      note("error", { error, willRetry: false, threadId, turnId: turn.id });
+      return complete("failed", error);
+    }
     if (text.endsWith("SLOW")) {
       note("item/started", { item: { type: "commandExecution", id: "c1", command: "sleep 1" }, threadId, turnId: turn.id });
       await new Promise((r) => {
@@ -108,7 +116,7 @@ function appServer() {
     agent("a1", `echo:${text}`);
     note("item/started", { item: { type: "mcpToolCall", id: "m1", server: "owlbot", tool: "notify", arguments: { title: "x" }, status: "inProgress" }, threadId, turnId: turn.id });
     note("item/completed", { item: { type: "mcpToolCall", id: "m1", server: "owlbot", tool: "notify", status: "completed", result: { content: [{ type: "text", text: "ok" }] } }, threadId, turnId: turn.id });
-    agent("a2", `thread=${threadId} model=${model}`);
+    agent("a2", `thread=${threadId} model=${model}${effort ? ` effort=${effort}` : ""}`);
     complete("completed");
   }
   let buf = "";
@@ -139,9 +147,20 @@ function appServer() {
       case "thread/resume":
         if (p.threadId === "missing") return fail("thread not found");
         threadId = p.threadId;
+        resumed = true;
         model = p.model ?? "default";
         return ok({ thread: { id: threadId }, model });
+      case "model/list":
+        return ok({
+          data: [
+            { id: "gpt-fast", model: "gpt-fast", displayName: "GPT Fast", description: "", hidden: false, isDefault: false, defaultReasoningEffort: "low", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "medium" }] },
+            { id: "gpt-main", model: "gpt-main", displayName: "GPT Main", description: "", hidden: false, isDefault: true, defaultReasoningEffort: "medium", supportedReasoningEfforts: ["low", "medium", "high", "xhigh"].map((reasoningEffort) => ({ reasoningEffort })) },
+            { id: "gpt-old", model: "gpt-old", displayName: "Old", description: "", hidden: true, isDefault: false, defaultReasoningEffort: "medium", supportedReasoningEfforts: [] },
+          ],
+          nextCursor: null,
+        });
       case "turn/start": {
+        if (p.effort) effort = p.effort;
         turn = { id: `turn-${++turns}`, steered: [], interrupted: false };
         ok({ turn: { id: turn.id, status: "inProgress", items: [] } });
         void sleep(20).then(() => runTurn(textOf(p.input)));
