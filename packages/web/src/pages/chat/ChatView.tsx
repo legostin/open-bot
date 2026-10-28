@@ -1,15 +1,19 @@
-// A conversation: top bar (agent, title), scrolling message list with history loading, composer.
+// A conversation: top bar (agent and title, or a group's members), scrolling message list with history loading, composer.
+// Files dropped anywhere on it go to the composer.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, Check, Pencil, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { ArrowDown, Check, Paperclip, Pencil, X } from "lucide-react";
 import { useStore } from "../../lib/store";
+import { stickAfterScroll } from "../../lib/stick";
 import { errorText } from "../../lib/api";
 import { agents, conversations, ensureAgents, loadMessages, loadOlder, updateConversation, useConversationMessages } from "../../state/app";
 import { toast } from "../../state/toast";
+import { addFiles } from "../../state/attachments";
 import { Button, EmptyState, ErrorNote, IconButton, Input, Spinner } from "../../components/ui";
 import { TopBar } from "../../components/Layout";
 import { useComposerInsetRef } from "../../components/LiveViewWindow";
 import { AgentHeader } from "./AgentHeader";
+import { GroupFloor, GroupHeader } from "./GroupHeader";
 import { DetailsToggle } from "./DetailsToggle";
 import { t } from "../../i18n";
 import { MessageView } from "./MessageView";
@@ -61,12 +65,15 @@ function TitleEditor({ id, title }: { id: string; title: string }) {
 export function ChatView({
   conversationId,
   top,
+  bottom,
   header = true,
   emptyHint,
 }: {
   conversationId: string;
-  /** Rendered above the messages (e.g. first-run checklist, task summary). */
+  /** Rendered above the messages (e.g. a task summary). */
   top?: ReactNode;
+  /** Rendered after the messages (e.g. the setup card while no brain works). */
+  bottom?: ReactNode;
   header?: boolean;
   emptyHint?: ReactNode;
 }) {
@@ -83,8 +90,15 @@ export function ChatView({
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const prevHeight = useRef<number | null>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const lastId = useRef<string | undefined>(undefined);
+  const lastTop = useRef(0);
   const [showDown, setShowDown] = useState(false);
   const composerArea = useComposerInsetRef();
+  const [dropping, setDropping] = useState(false);
+  // dragenter/dragleave fire for every child the pointer crosses: count them.
+  const dragDepth = useRef(0);
+  const carriesFiles = (e: DragEvent) => [...e.dataTransfer.types].includes("Files");
 
   useEffect(() => {
     stick.current = true;
@@ -96,11 +110,29 @@ export function ChatView({
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
+    // The person's own new message brings the view down, wherever they were reading.
+    const last = conv.messages[conv.messages.length - 1];
+    if (last && lastId.current !== undefined && last.id !== lastId.current && last.role === "user") stick.current = true;
+    lastId.current = last?.id;
     if (prevHeight.current !== null) {
       el.scrollTop += el.scrollHeight - prevHeight.current;
       prevHeight.current = null;
     } else if (stick.current) el.scrollTop = el.scrollHeight;
   }, [conv.messages]);
+
+  // Content that grows after it rendered (plugin cards, images) and a list that shrinks (the phone's keyboard) keep
+  // a pinned view at the bottom.
+  useEffect(() => {
+    const el = scroller.current;
+    const inner = content.current;
+    if (!el || !inner || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (stick.current && prevHeight.current === null) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, []);
 
   const older = () => {
     if (!scroller.current) return;
@@ -115,27 +147,64 @@ export function ChatView({
     const el = scroller.current;
     if (!el) return;
     const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stick.current = fromBottom < 120;
+    stick.current = stickAfterScroll(stick.current, lastTop.current, el);
+    lastTop.current = el.scrollTop;
     setShowDown(fromBottom > 400);
     if (el.scrollTop < 60 && conv.hasMore && !conv.loadingOlder && prevHeight.current === null) older();
   };
 
   const title = meta?.title || (meta?.kind === "main" ? t("chat.main") : t("chat.defaultTitle"));
   const editable = meta?.kind === "chat";
+  const isGroup = meta?.kind === "group";
+  const groupHint = isGroup ? t("group.emptyHint", { lead: agentById.get(meta.agentId)?.name ?? meta.agentId }) : undefined;
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col">
+    <div
+      className="relative flex h-full min-w-0 flex-1 flex-col"
+      onDragEnter={(e) => {
+        if (!carriesFiles(e)) return;
+        e.preventDefault();
+        dragDepth.current++;
+        setDropping(true);
+      }}
+      onDragOver={(e) => {
+        if (carriesFiles(e)) e.preventDefault();
+      }}
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (!dragDepth.current) setDropping(false);
+      }}
+      onDrop={(e) => {
+        if (!carriesFiles(e)) return;
+        e.preventDefault();
+        dragDepth.current = 0;
+        setDropping(false);
+        addFiles(conversationId, [...e.dataTransfer.files]);
+      }}
+    >
+      {dropping && (
+        <div className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-accent/60 bg-bg/85 text-sm font-medium backdrop-blur-sm">
+          <Paperclip className="size-6 text-muted" />
+          {t("composer.dropHere")}
+        </div>
+      )}
       {header && (
         <TopBar>
-          {meta && <AgentHeader agentId={meta.agentId} settings={meta.kind !== "task"} />}
-          <span className="hidden text-border sm:inline">/</span>
-          <div className="hidden min-w-0 flex-1 text-sm text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
+          {meta && isGroup ? (
+            <GroupHeader conv={meta} />
+          ) : (
+            <>
+              {meta && <AgentHeader agentId={meta.agentId} settings={meta.kind !== "task"} />}
+              <span className="hidden text-border sm:inline">/</span>
+              <div className="hidden min-w-0 flex-1 text-sm text-muted sm:block">{editable ? <TitleEditor id={conversationId} title={title} /> : <span className="block truncate">{title}</span>}</div>
+            </>
+          )}
           <DetailsToggle />
         </TopBar>
       )}
 
-      <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-3 py-5 sm:px-6">
+      <div ref={scroller} onScroll={onScroll} className="chat-scroll relative min-h-0 flex-1 overflow-y-auto">
+        <div ref={content} className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-3 py-5 sm:px-6">
           {top}
           {conv.hasMore && (
             <div className="flex justify-center">
@@ -151,13 +220,15 @@ export function ChatView({
             </div>
           )}
           {conv.loaded && !conv.messages.length && !conv.error && (
-            <EmptyState icon="sparkles" title={t("chat.empty")} hint={emptyHint ?? t("chat.emptyHint")} />
+            <EmptyState icon={isGroup ? "users" : "sparkles"} title={isGroup ? t("group.emptyTitle") : t("chat.empty")} hint={emptyHint ?? groupHint ?? t("chat.emptyHint")} />
           )}
           <LatestDraftCards.Provider value={latestDrafts}>
             {conv.messages.map((m) => (
               <MessageView key={m.id} message={m} agent={m.agentId ? agentById.get(m.agentId) : undefined} />
             ))}
           </LatestDraftCards.Provider>
+          {isGroup && <GroupFloor conversationId={conversationId} />}
+          {bottom}
         </div>
         {showDown && (
           <button
@@ -174,7 +245,7 @@ export function ChatView({
         )}
       </div>
 
-      <div ref={composerArea} className="shrink-0 px-3 pt-1 pb-3 sm:px-6">
+      <div ref={composerArea} className="chat-dock shrink-0 px-3 pt-1 pb-3 sm:px-6">
         <div className="mx-auto w-full max-w-3xl">
           <Composer key={conversationId} conversationId={conversationId} />
         </div>

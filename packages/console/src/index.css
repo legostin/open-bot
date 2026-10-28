@@ -6,99 +6,99 @@
    so the user always notices they are in the security console.
    `static`: always emit these variables, they are referenced from the semantic tokens below. */
 @theme static {
-  --color-accent-50: oklch(98.4% 0.014 180.72);
-  --color-accent-100: oklch(95.3% 0.051 180.801);
-  --color-accent-200: oklch(91% 0.096 180.426);
-  --color-accent-300: oklch(85.5% 0.138 181.071);
-  --color-accent-400: oklch(77.7% 0.152 181.912);
-  --color-accent-500: oklch(70.4% 0.14 182.503);
-  --color-accent-600: oklch(60% 0.118 184.704);
-  --color-accent-700: oklch(51.1% 0.096 186.391);
-  --color-accent-800: oklch(43.7% 0.078 188.216);
-  --color-accent-900: oklch(38.6% 0.063 188.416);
-  --color-accent-950: oklch(27.7% 0.046 192.524);
+  --color-accent-50: oklch(98.4% 0 0);
+  --color-accent-100: oklch(95.3% 0 0);
+  --color-accent-200: oklch(91% 0 0);
+  --color-accent-300: oklch(85.5% 0 0);
+  --color-accent-400: oklch(77.7% 0 0);
+  --color-accent-500: oklch(70.4% 0 0);
+  --color-accent-600: oklch(60% 0 0);
+  --color-accent-700: oklch(51.1% 0 0);
+  --color-accent-800: oklch(43.7% 0 0);
+  --color-accent-900: oklch(38.6% 0 0);
+  --color-accent-950: oklch(27.7% 0 0);
 
   --font-mono: ui-monospace, "Cascadia Mono", "Cascadia Code", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 @theme inline {
-  --color-bg: var(--ob-bg);
-  --color-surface: var(--ob-surface);
-  --color-inset: var(--ob-inset);
-  --color-line: var(--ob-line);
-  --color-line-strong: var(--ob-line-strong);
-  --color-fg: var(--ob-fg);
-  --color-muted: var(--ob-muted);
-  --color-faint: var(--ob-faint);
-  --color-brand: var(--ob-brand);
-  --color-brand-fg: var(--ob-brand-fg);
-  --color-brand-soft: var(--ob-brand-soft);
-  --color-brand-line: var(--ob-brand-line);
-  --color-warn: var(--ob-warn);
-  --color-warn-soft: var(--ob-warn-soft);
-  --color-warn-line: var(--ob-warn-line);
-  --color-danger: var(--ob-danger);
-  --color-danger-soft: var(--ob-danger-soft);
-  --color-danger-line: var(--ob-danger-line);
-  --color-ok: var(--ob-ok);
-  --color-ok-soft: var(--ob-ok-soft);
-  --color-ok-line: var(--ob-ok-line);
+  --color-bg: var(--owl-bg);
+  --color-surface: var(--owl-surface);
+  --color-inset: var(--owl-inset);
+  --color-line: var(--owl-line);
+  --color-line-strong: var(--owl-line-strong);
+  --color-fg: var(--owl-fg);
+  --color-muted: var(--owl-muted);
+  --color-faint: var(--owl-faint);
+  --color-brand: var(--owl-brand);
+  --color-brand-fg: var(--owl-brand-fg);
+  --color-brand-soft: var(--owl-brand-soft);
+  --color-brand-line: var(--owl-brand-line);
+  --color-warn: var(--owl-warn);
+  --color-warn-soft: var(--owl-warn-soft);
+  --color-warn-line: var(--owl-warn-line);
+  --color-danger: var(--owl-danger);
+  --color-danger-soft: var(--owl-danger-soft);
+  --color-danger-line: var(--owl-danger-line);
+  --color-ok: var(--owl-ok);
+  --color-ok-soft: var(--owl-ok-soft);
+  --color-ok-line: var(--owl-ok-line);
 }
 
 :root {
-  --ob-bg: oklch(97.2% 0.005 230);
-  --ob-surface: oklch(100% 0 0);
-  --ob-inset: oklch(96.4% 0.006 230);
-  --ob-line: oklch(90.5% 0.009 235);
-  --ob-line-strong: oklch(83% 0.012 235);
-  --ob-fg: oklch(23% 0.02 245);
-  --ob-muted: oklch(48% 0.02 245);
-  --ob-faint: oklch(62% 0.015 245);
-  --ob-brand: var(--color-accent-700);
-  --ob-brand-fg: var(--color-accent-800);
-  --ob-brand-soft: var(--color-accent-50);
-  --ob-brand-line: var(--color-accent-200);
-  --ob-warn: oklch(47% 0.11 60);
-  --ob-warn-soft: oklch(97.5% 0.035 85);
-  --ob-warn-line: oklch(87% 0.1 85);
-  --ob-danger: oklch(50% 0.19 27);
-  --ob-danger-soft: oklch(97.2% 0.015 17);
-  --ob-danger-line: oklch(86% 0.07 20);
-  --ob-ok: oklch(48% 0.12 155);
-  --ob-ok-soft: oklch(97.5% 0.025 155);
-  --ob-ok-line: oklch(87% 0.08 155);
+  --owl-bg: oklch(97.2% 0.005 230);
+  --owl-surface: oklch(100% 0 0);
+  --owl-inset: oklch(96.4% 0.006 230);
+  --owl-line: oklch(90.5% 0.009 235);
+  --owl-line-strong: oklch(83% 0.012 235);
+  --owl-fg: oklch(23% 0.02 245);
+  --owl-muted: oklch(48% 0.02 245);
+  --owl-faint: oklch(62% 0.015 245);
+  --owl-brand: var(--color-accent-700);
+  --owl-brand-fg: var(--color-accent-800);
+  --owl-brand-soft: var(--color-accent-50);
+  --owl-brand-line: var(--color-accent-200);
+  --owl-warn: oklch(47% 0.11 60);
+  --owl-warn-soft: oklch(97.5% 0.035 85);
+  --owl-warn-line: oklch(87% 0.1 85);
+  --owl-danger: oklch(50% 0.19 27);
+  --owl-danger-soft: oklch(97.2% 0.015 17);
+  --owl-danger-line: oklch(86% 0.07 20);
+  --owl-ok: oklch(48% 0.12 155);
+  --owl-ok-soft: oklch(97.5% 0.025 155);
+  --owl-ok-line: oklch(87% 0.08 155);
   color-scheme: light;
 }
 
 .dark {
-  --ob-bg: oklch(15.5% 0.012 240);
-  --ob-surface: oklch(20% 0.014 240);
-  --ob-inset: oklch(17.5% 0.012 240);
-  --ob-line: oklch(29% 0.016 240);
-  --ob-line-strong: oklch(37% 0.018 240);
-  --ob-fg: oklch(94% 0.006 240);
-  --ob-muted: oklch(72% 0.014 240);
-  --ob-faint: oklch(58% 0.014 240);
-  --ob-brand: var(--color-accent-600);
-  --ob-brand-fg: var(--color-accent-300);
-  --ob-brand-soft: oklch(26% 0.04 190);
-  --ob-brand-line: oklch(40% 0.07 188);
-  --ob-warn: oklch(83% 0.13 80);
-  --ob-warn-soft: oklch(26% 0.045 70);
-  --ob-warn-line: oklch(45% 0.09 70);
-  --ob-danger: oklch(75% 0.14 22);
-  --ob-danger-soft: oklch(25% 0.05 20);
-  --ob-danger-line: oklch(45% 0.12 22);
-  --ob-ok: oklch(80% 0.13 155);
-  --ob-ok-soft: oklch(25% 0.04 155);
-  --ob-ok-line: oklch(43% 0.08 155);
+  --owl-bg: oklch(15.5% 0.012 240);
+  --owl-surface: oklch(20% 0.014 240);
+  --owl-inset: oklch(17.5% 0.012 240);
+  --owl-line: oklch(29% 0.016 240);
+  --owl-line-strong: oklch(37% 0.018 240);
+  --owl-fg: oklch(94% 0.006 240);
+  --owl-muted: oklch(72% 0.014 240);
+  --owl-faint: oklch(58% 0.014 240);
+  --owl-brand: var(--color-accent-600);
+  --owl-brand-fg: var(--color-accent-300);
+  --owl-brand-soft: oklch(26% 0 0);
+  --owl-brand-line: oklch(40% 0 0);
+  --owl-warn: oklch(83% 0.13 80);
+  --owl-warn-soft: oklch(26% 0.045 70);
+  --owl-warn-line: oklch(45% 0.09 70);
+  --owl-danger: oklch(75% 0.14 22);
+  --owl-danger-soft: oklch(25% 0.05 20);
+  --owl-danger-line: oklch(45% 0.12 22);
+  --owl-ok: oklch(80% 0.13 155);
+  --owl-ok-soft: oklch(25% 0.04 155);
+  --owl-ok-line: oklch(43% 0.08 155);
   color-scheme: dark;
 }
 
 html,
 body {
-  background: var(--ob-bg);
-  color: var(--ob-fg);
+  background: var(--owl-bg);
+  color: var(--owl-fg);
 }
 
 body {
@@ -113,7 +113,7 @@ body {
   outline-offset: 2px;
 }
 
-@keyframes ob-flash {
+@keyframes owl-flash {
   0%,
   100% {
     box-shadow: 0 0 0 0 transparent;
@@ -123,11 +123,11 @@ body {
   }
 }
 
-.ob-flash {
-  animation: ob-flash 1.6s ease-out 2;
+.owl-flash {
+  animation: owl-flash 1.6s ease-out 2;
 }
 
-@keyframes ob-in {
+@keyframes owl-in {
   from {
     opacity: 0;
     transform: translateY(4px);
@@ -138,13 +138,13 @@ body {
   }
 }
 
-.ob-in {
-  animation: ob-in 160ms ease-out;
+.owl-in {
+  animation: owl-in 160ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ob-flash,
-  .ob-in {
+  .owl-flash,
+  .owl-in {
     animation: none;
   }
 }

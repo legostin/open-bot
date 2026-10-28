@@ -1,12 +1,13 @@
 {
-  "name": "@openbot/shared",
+  "name": "@owlbot/shared",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./i18n": "./src/i18n.ts",
-    "./avatar": "./src/avatar.ts"
+    "./avatar": "./src/avatar.ts",
+    "./group": "./src/group.ts"
   },
   "dependencies": {
     "yaml": "^2.9.1",

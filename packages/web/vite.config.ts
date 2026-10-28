@@ -13,13 +13,13 @@ const IMPORT_MAP = {
     "react/jsx-runtime": "/shared/react-jsx-runtime.js",
     "react-dom": "/shared/react-dom.js",
     "react-dom/client": "/shared/react-dom-client.js",
-    "@openbot/ui": "/shared/openbot-ui.js",
+    "@owlbot/ui": "/shared/owlbot-ui.js",
   },
 };
 
 function devImportMap(): Plugin {
   return {
-    name: "openbot-dev-import-map",
+    name: "owlbot-dev-import-map",
     apply: "serve",
     transformIndexHtml: () => [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify(IMPORT_MAP), injectTo: "head-prepend" }],
   };
@@ -29,10 +29,11 @@ export default defineConfig({
   base: "/",
   plugins: [react(), tailwindcss(), devImportMap()],
   resolve: {
-    // The browser-safe part of @openbot/shared, taken from this checkout (not whatever node_modules links to).
+    // The browser-safe part of @owlbot/shared, taken from this checkout (not whatever node_modules links to).
     alias: {
-      "@openbot/shared/i18n": resolve(import.meta.dirname, "../shared/src/i18n.ts"),
-      "@openbot/shared/avatar": resolve(import.meta.dirname, "../shared/src/avatar.ts"),
+      "@owlbot/shared/i18n": resolve(import.meta.dirname, "../shared/src/i18n.ts"),
+      "@owlbot/shared/avatar": resolve(import.meta.dirname, "../shared/src/avatar.ts"),
+      "@owlbot/shared/group": resolve(import.meta.dirname, "../shared/src/group.ts"),
     },
   },
   build: {

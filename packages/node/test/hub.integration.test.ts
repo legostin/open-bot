@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentDef, BrainEvent, BrainSessionOptions } from "@openbot/shared";
+import type { AgentDef, BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 import { Hub } from "../../core/src/app.ts";
 import { loadConfig } from "../../core/src/config.ts";
 import { PolicyStore } from "../src/policy.ts";
@@ -58,7 +58,7 @@ const agent: AgentDef = {
 const root = realpathSync.native(mkdtempSync(join(tmpdir(), "obn-hub-")));
 const nodeHomeDir = join(root, "node-home");
 const userHome = join(root, "user");
-const workspace = join(userHome, "openbot-workspace");
+const workspace = join(userHome, "owlbot-workspace");
 let hub: Hub;
 let daemon: NodeDaemon;
 let machineId: string;
@@ -75,11 +75,12 @@ function editPolicy(mut: (p: any) => void): void {
 beforeAll(async () => {
   const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
   const config = loadConfig({
-    OPENBOT_DATA_DIR: join(root, "hub-data"),
-    OPENBOT_PORT: String(port),
-    OPENBOT_CONSOLE_PORT: String(consolePort),
-    OPENBOT_EGRESS_PORT: String(egressPort),
-    OPENBOT_PLUGINS: "none",
+    OWLBOT_DATA_DIR: join(root, "hub-data"),
+    OWLBOT_PORT: String(port),
+    OWLBOT_DEVICES: "0",
+    OWLBOT_CONSOLE_PORT: String(consolePort),
+    OWLBOT_EGRESS_PORT: String(egressPort),
+    OWLBOT_PLUGINS: "none",
   });
   hub = new Hub(config);
   await hub.start();
@@ -161,7 +162,7 @@ describe("files and commands through the hub", () => {
   });
 
   it("refuses paths outside the allowed dirs and the daemon home", async () => {
-    await expect(hub.machines.call(machineId, "fs.read", { path: join(root, "hub-data", "openbot.db") })).rejects.toThrow(/outside the allowed/);
+    await expect(hub.machines.call(machineId, "fs.read", { path: join(root, "hub-data", "owlbot.db") })).rejects.toThrow(/outside the allowed/);
     await expect(hub.machines.call(machineId, "fs.write", { path: join(nodeHomeDir, "policy.json"), content: "{}" })).rejects.toThrow(/outside the allowed|state folder/);
     await expect(hub.machines.call(machineId, "fs.read", { path: `${workspace}/../../node-home/key.json` })).rejects.toThrow(/must not contain/);
   });
@@ -198,10 +199,10 @@ describe("remote brain session", () => {
 
     // MCP bridge runs from this checkout and talks to the hub URL the node paired with.
     const stateDir = join(nodeHomeDir, "brains", "claude-code", "sessions", "sess_remote1");
-    const mcp = JSON.parse(readFileSync(join(stateDir, "mcp.json"), "utf8")).mcpServers.openbot;
+    const mcp = JSON.parse(readFileSync(join(stateDir, "mcp.json"), "utf8")).mcpServers.owlbot;
     expect(mcp.command).toBe(process.execPath);
     expect(realpathSync.native(mcp.args[mcp.args.length - 1])).toBe(realpathSync.native(MCP_BRIDGE));
-    expect(mcp.env.OPENBOT_URL).toBe(`${hub.config.publicUrl}/mcp`);
+    expect(mcp.env.OWLBOT_URL).toBe(`${hub.config.publicUrl}/mcp`);
 
     const events: BrainEvent[] = [];
     await handle.send({ text: "hello" }, (e) => events.push(e));
@@ -219,7 +220,7 @@ describe("remote brain session", () => {
     const { row, token } = hub.store.createSession({ conversationId: conv.id, agentId: "assistant", brainRef: `claude-code@${machineId}`, background: false });
     const handle = await hub.brains.create(`claude-code@${machineId}`, { ...opts(row.id, "assistant/c_mcp"), mcp: { url: "http://unused.invalid/mcp", token, bridgeCommand: [] } });
     const stateDir = join(nodeHomeDir, "brains", "claude-code", "sessions", row.id.replace(/[^\w-]/g, "_"));
-    const mcp = JSON.parse(readFileSync(join(stateDir, "mcp.json"), "utf8")).mcpServers.openbot;
+    const mcp = JSON.parse(readFileSync(join(stateDir, "mcp.json"), "utf8")).mcpServers.owlbot;
     // Run the bridge exactly as Claude Code would, and list the hub's tools through it.
     const bridge = spawn(mcp.command, mcp.args, { env: { ...process.env, ...mcp.env }, stdio: ["pipe", "pipe", "inherit"] });
     const lines = createInterface({ input: bridge.stdout! });

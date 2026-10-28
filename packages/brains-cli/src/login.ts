@@ -2,9 +2,9 @@
 // report them, feed back a code the user pasted, and turn the exit into succeeded / failed / cancelled / expired.
 
 import { spawn } from "node:child_process";
-import type { BrainLoginUpdate } from "@openbot/shared";
-import type { BrainLoginImpl } from "@openbot/plugin-sdk";
-import type { Translate } from "@openbot/shared/i18n";
+import type { BrainLoginUpdate } from "@owlbot/shared";
+import type { BrainLoginImpl } from "@owlbot/plugin-sdk";
+import type { Translate } from "@owlbot/shared/i18n";
 import { resolveCommand } from "./proc.ts";
 
 /** What the output printed so far says: the page, the code, whether the CLI waits for a pasted code. */

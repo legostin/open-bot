@@ -1,11 +1,15 @@
-// Global client state: auth/bootstrap, realtime connection, the team (agents and their dialogs), conversations, messages, tasks.
+// Global client state: auth/bootstrap, realtime connection, the team (agents and their dialogs), group chats,
+// conversations, messages, tasks.
 
 import { useSyncExternalStore } from "react";
-import type { AgentDef, Catalog, Conversation, Locale, Message, Task, TeamMember, UiEvent, VaultState } from "@openbot/shared";
+import type { AgentDef, Catalog, Conversation, GroupChat, Locale, MachineActivity, Message, Task, TeamMember, UiEvent, VaultState } from "@owlbot/shared";
 import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
 import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";
 import { applyDelta, mergeFetched, prependOlder, upsertMessage } from "../lib/messages";
+import { desktopTicketFrom } from "../lib/desktop";
+import { mobileMode } from "../lib/mobile";
+import { native } from "../lib/native";
 import { adoptHubLocale, t } from "../i18n";
 import { toast } from "./toast";
 
@@ -52,7 +56,13 @@ export interface AuthState {
   locales?: Locale[];
 }
 
-export type Phase = { kind: "loading" } | { kind: "error"; message: string } | { kind: "setup" | "login"; auth: AuthState } | { kind: "ready" };
+/** `reauth`: the phone app's page lost its session and waits for the app to sign it in again (and reload it). */
+export type Phase =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "setup" | "login"; auth: AuthState }
+  | { kind: "ready" }
+  | { kind: "reauth" };
 
 export interface ConvMessages {
   messages: Message[];
@@ -74,6 +84,10 @@ export const tasks = createStore<Task[] | null>(null);
 export const agents = createStore<AgentDef[] | null>(null);
 /** Each agent's dialog and what happens there (`/api/team`, kept current by "team.updated"). */
 export const team = createStore<TeamMember[] | null>(null);
+/** Group chats and what happens there (`/api/groups`, kept current by "group.updated"). */
+export const groups = createStore<GroupChat[] | null>(null);
+/** The hub's computer and the paired machines with what runs there (`/api/machines/activity`, "machines.activity"). */
+export const machineActivity = createStore<MachineActivity[] | null>(null);
 export const messages = createStore<Record<string, ConvMessages>>({});
 
 /** Every realtime event from the hub. */
@@ -97,8 +111,20 @@ export function useConversationMessages(id: string | undefined): ConvMessages {
 
 let socket: HubSocket | undefined;
 
+/** The desktop app's one-time sign-in ticket: read once when the page loads, then dropped from the address bar. */
+let desktopTicket = (() => {
+  const ticket = desktopTicketFrom(window.location.hash);
+  if (ticket) history.replaceState(null, "", window.location.pathname + window.location.search);
+  return ticket;
+})();
+
 export async function init(): Promise<void> {
   phase.set({ kind: "loading" });
+  if (mobileMode) return initMobile();
+  const ticket = desktopTicket;
+  desktopTicket = undefined;
+  // A used or expired ticket just leaves the usual sign-in form.
+  if (ticket) await request("POST", "/api/auth/desktop", { ticket }).catch(() => undefined);
   try {
     const auth = await request<AuthState>("GET", "/api/auth/state");
     adoptHubLocale(auth.language);
@@ -110,6 +136,31 @@ export async function init(): Promise<void> {
     if (e instanceof ApiError && e.status === 401) return void showLogin();
     phase.set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
   }
+}
+
+/**
+ * The phone app's chat page (/m/*): the device port has no /api/auth/state, the page's cookie session comes from
+ * the app, and /api/bootstrap there returns its CSRF token. The interface follows the phone's language
+ * (navigator.language), like the app around it, rather than the hub language.
+ */
+async function initMobile(): Promise<void> {
+  try {
+    await bootstrap();
+    phase.set({ kind: "ready" });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) return signInAgain();
+    phase.set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** The session is gone: inside the app, the app signs the page in again; elsewhere, the usual sign-in screen. */
+async function signInAgain(): Promise<void> {
+  if (!(mobileMode && native)) return showLogin();
+  if (phase.get().kind === "reauth") return;
+  stopSocket();
+  session.set(null);
+  phase.set({ kind: "reauth" });
+  native.reauth();
 }
 
 async function showLogin(): Promise<void> {
@@ -124,10 +175,10 @@ async function showLogin(): Promise<void> {
 }
 
 onUnauthorized(() => {
-  if (phase.get().kind === "ready") {
-    toast(t("app.sessionExpired"), "info");
-    void showLogin();
-  }
+  if (phase.get().kind !== "ready") return;
+  if (mobileMode && native) return void signInAgain();
+  toast(t("app.sessionExpired"), "info");
+  void showLogin();
 });
 
 export async function bootstrap(): Promise<Bootstrap> {
@@ -137,6 +188,7 @@ export async function bootstrap(): Promise<Bootstrap> {
   startSocket();
   void refreshConversations();
   void refreshTeam();
+  void refreshGroups();
   return b;
 }
 
@@ -162,6 +214,8 @@ export async function logout(): Promise<void> {
   tasks.set(null);
   agents.set(null);
   team.set(null);
+  groups.set(null);
+  machineActivity.set(null);
   conversations.set([]);
   await showLogin();
 }
@@ -177,12 +231,16 @@ function startSocket(): void {
       void refreshBootstrap();
       void refreshConversations();
       void refreshTeam();
+      void refreshGroups();
       if (tasks.get()) void refreshTasks();
+      if (machineActivity.get()) void refreshMachineActivity();
       for (const id of Object.keys(messages.get())) if (messages.get()[id].loaded) void loadMessages(id, true);
       reconnected.emit();
     },
     onRepeatedFailure: async () => {
-      // A failed upgrade may mean the session expired.
+      // A failed upgrade may mean the session expired. The device port has no auth/state: a 401 from the
+      // bootstrap reaches onUnauthorized.
+      if (mobileMode) return refreshBootstrap();
       try {
         const auth = await request<AuthState>("GET", "/api/auth/state");
         if (!auth.authenticated && phase.get().kind === "ready") {
@@ -195,6 +253,16 @@ function startSocket(): void {
     },
   });
   socket.start();
+}
+
+/**
+ * The phone app says the hub answers again: reconnect now, and check the session (a restarted hub forgot it;
+ * the 401 has the app sign the page in again).
+ */
+export function hubIsBack(): void {
+  if (!socket) return;
+  socket.retryNow();
+  void refreshBootstrap();
 }
 
 function stopSocket(): void {
@@ -251,8 +319,14 @@ function handleEvent(e: UiEvent): void {
     case "team.updated":
       team.set((list) => (list ? upsertMember(list, e.data) : list));
       break;
+    case "group.updated":
+      groups.set((list) => (list ? upsertGroup(list, e.data) : list));
+      break;
     case "task.updated":
       tasks.set((list) => (list ? upsertById(list, e.data) : list));
+      break;
+    case "machines.activity":
+      machineActivity.set(e.data);
       break;
     case "approval.pending":
       session.set((s) => (s ? { ...s, pendingApprovals: e.data.count } : s));
@@ -288,7 +362,8 @@ export async function refreshConversations(): Promise<void> {
   }
 }
 
-export async function updateConversation(id: string, patch: { title?: string; agentId?: string }): Promise<Conversation> {
+/** New `members` of a group also make its first member the lead. */
+export async function updateConversation(id: string, patch: { title?: string; agentId?: string; members?: string[] }): Promise<Conversation> {
   const c = await api.patch<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, patch);
   conversations.set((list) => sortConversations(upsertById(list, c)));
   return c;
@@ -326,9 +401,11 @@ export async function loadOlder(id: string): Promise<void> {
   }
 }
 
-export async function sendMessage(id: string, text: string): Promise<void> {
-  const m = await api.post<Message>(`/api/conversations/${encodeURIComponent(id)}/messages`, { text });
-  if (m && m.id) patchConv(id, (c) => ({ ...c, messages: upsertMessage(c.messages, m) }));
+/** A message with the paths of files uploaded for it (state/attachments.ts). */
+export async function sendMessage(id: string, text: string, attachments: string[] = []): Promise<void> {
+  const m = await api.post<Message>(`/api/conversations/${encodeURIComponent(id)}/messages`, attachments.length ? { text, attachments } : { text });
+  // The live events may already have a newer copy (a voice note's transcript): the reply only fills a gap.
+  if (m && m.id) patchConv(id, (c) => (c.messages.some((x) => x.id === m.id) ? c : { ...c, messages: upsertMessage(c.messages, m) }));
 }
 
 export async function interrupt(id: string): Promise<boolean> {
@@ -346,9 +423,18 @@ function upsertMember(list: TeamMember[], m: TeamMember): TeamMember[] {
   return next;
 }
 
+/** When the user last marked each conversation read here (ms): a listing asked for before that is stale on unread. */
+const readHere = new Map<string, number>();
+
+/** A fetched list without unread counts the user cleared after the request went out. */
+function withoutStaleUnread<T extends { conversationId: string; unread: number }>(list: T[], askedAt: number): T[] {
+  return list.map((x) => (x.unread && (readHere.get(x.conversationId) ?? 0) >= askedAt ? { ...x, unread: 0 } : x));
+}
+
 export async function refreshTeam(): Promise<TeamMember[] | null> {
   try {
-    const list = await api.get<TeamMember[]>("/api/team");
+    const askedAt = Date.now();
+    const list = withoutStaleUnread(await api.get<TeamMember[]>("/api/team"), askedAt);
     team.set(list);
     return list;
   } catch {
@@ -360,9 +446,54 @@ export function ensureTeam(): void {
   if (!team.get()) void refreshTeam();
 }
 
+// ---------- group chats ----------
+
+function upsertGroup(list: GroupChat[], g: GroupChat): GroupChat[] {
+  const i = list.findIndex((x) => x.conversationId === g.conversationId);
+  if (i < 0) return [g, ...list];
+  const next = list.slice();
+  next[i] = g;
+  return next;
+}
+
+let groupsLoading: Promise<GroupChat[] | null> | undefined;
+
+export function refreshGroups(): Promise<GroupChat[] | null> {
+  groupsLoading ??= (async () => {
+    try {
+      const askedAt = Date.now();
+      const list = withoutStaleUnread(await api.get<GroupChat[]>("/api/groups"), askedAt);
+      groups.set(list);
+      return list;
+    } catch {
+      return groups.get();
+    } finally {
+      groupsLoading = undefined;
+    }
+  })();
+  return groupsLoading;
+}
+
+/** Load the group chats once (several views ask at start-up; one request answers them all). */
+export function ensureGroups(): void {
+  if (!groups.get() && !groupsLoading) void refreshGroups();
+}
+
+/** A new group chat with these agents (the first one leads). */
+export async function createGroup(title: string, members: string[]): Promise<Conversation> {
+  const c = await api.post<Conversation>("/api/conversations", { kind: "group", title, members });
+  conversations.set((list) => sortConversations(upsertById(list, c)));
+  groups.set((list) =>
+    upsertGroup(list ?? [], { conversationId: c.id, title: c.title, members: c.members ?? members, lastActivityAt: c.updatedAt, running: false, speaking: [], unread: 0 }),
+  );
+  return c;
+}
+
 /** The user has seen the dialog up to the message created at `at`. */
 export async function markRead(conversationId: string, at: string): Promise<void> {
+  readHere.set(conversationId, Date.now());
   team.set((list) => (list ? list.map((m) => (m.conversationId === conversationId && m.unread ? { ...m, unread: 0 } : m)) : list));
+  groups.set((list) => (list ? list.map((g) => (g.conversationId === conversationId && g.unread ? { ...g, unread: 0 } : g)) : list));
   try {
     await api.post(`/api/conversations/${encodeURIComponent(conversationId)}/read`, { at });
   } catch {
@@ -390,4 +521,18 @@ export async function refreshAgents(): Promise<AgentDef[]> {
 
 export function ensureAgents(): void {
   if (!agents.get()) void refreshAgents().catch(() => {});
+}
+
+// ---------- machines ----------
+
+export async function refreshMachineActivity(): Promise<void> {
+  try {
+    machineActivity.set(await api.get<MachineActivity[]>("/api/machines/activity"));
+  } catch {
+    /* the next "machines.activity" brings it */
+  }
+}
+
+export function ensureMachineActivity(): void {
+  if (!machineActivity.get()) void refreshMachineActivity();
 }

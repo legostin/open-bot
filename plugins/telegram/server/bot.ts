@@ -2,10 +2,11 @@
 // approval and feedback buttons. Everything the bot writes is in the hub language (ctx.i18n).
 
 import { randomInt } from "node:crypto";
-import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@openbot/plugin-sdk";
-import type { OutboundMessage, Params, Task, TaskStatus } from "@openbot/shared";
-import { TelegramApi, TelegramError, type InlineButton, type TgCallbackQuery, type TgChat, type TgMessage, type TgUpdate, type TgUser } from "./api.ts";
-import { TELEGRAM_LIMIT, entitiesToHtml, escapeHtml, htmlToPlain, isPublicHttpUrl, markdownToHtml, splitMarkdown } from "./format.ts";
+import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@owlbot/plugin-sdk";
+import type { OutboundMedia, OutboundMessage, Params, Task, TaskStatus } from "@owlbot/shared";
+import { TelegramApi, TelegramError, type InlineButton, type TgCallbackQuery, type TgChat, type TgMessage, type TgUpdate, type TgUser, type UploadFile } from "./api.ts";
+import { MAX_DOWNLOAD_BYTES, messageContext, messageFile, messageWords } from "./inbound.ts";
+import { TELEGRAM_LIMIT, entitiesToHtml, escapeAttr, escapeHtml, htmlToPlain, isPublicHttpUrl, markdownToHtml, splitMarkdown } from "./format.ts";
 
 export interface TelegramSettings {
   botTokenRef: string;
@@ -43,6 +44,8 @@ const TYPING_MAX_MS = 120_000;
 const TYPING_EVERY_MS = 4_500;
 const MAX_FAILS_PER_CHAT = 5;
 const MAX_FAILS_TOTAL = 20;
+/** An album arrives as one update per picture: wait this long after the last one, then pass them on together. */
+const ALBUM_WAIT_MS = 1500;
 
 /** Bot commands handled here; their descriptions (cmd.<name>) go to the Telegram command menu. */
 const COMMANDS = ["tasks", "stop", "help"] as const;
@@ -55,6 +58,35 @@ const FINAL: TaskStatus[] = ["done", "failed", "cancelled"];
 const ALREADY_HANDLED_RE = /(?:already been handled|\u0443\u0436\u0435 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u043d\u043e) \((\w+)\)/;
 
 const fitsCallback = (data: string) => Buffer.byteLength(data, "utf8") <= 64;
+
+type ImageMedia = Extract<OutboundMedia, { kind: "image" }>;
+type MapMedia = Extract<OutboundMedia, { kind: "map" }>;
+
+/** Telegram's limits: 10 pictures per album, 1024 characters per caption. */
+const ALBUM_MAX = 10;
+const CAPTION_MAX = 1024;
+/** Uploaded files Telegram shows as photos; anything else (SVG, AVIF) goes as a document. */
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"]);
+const EXT: Record<string, string> = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/bmp": ".bmp", "image/svg+xml": ".svg", "image/avif": ".avif" };
+
+const clipCaption = (s: string | undefined) => (s && s.length > CAPTION_MAX ? `${s.slice(0, CAPTION_MAX - 1)}…` : s || undefined);
+const asPhoto = (m: ImageMedia) => !m.data || PHOTO_TYPES.has(m.mimeType ?? "");
+
+function uploadOf(m: ImageMedia, field: string): UploadFile {
+  return { field, data: Buffer.from(m.data ?? "", "base64"), name: m.name ?? `image${EXT[m.mimeType ?? ""] ?? ""}`, type: m.mimeType ?? "application/octet-stream" };
+}
+
+/** One caption for an album: Telegram shows the album's caption only when it is on the first item. */
+function albumCaption(group: ImageMedia[]): string | undefined {
+  const caps = group.map((m, i) => (m.caption ? { n: i + 1, text: m.caption } : undefined)).filter((c) => !!c);
+  if (!caps.length) return undefined;
+  if (caps.length === 1 && caps[0].n === 1) return clipCaption(caps[0].text);
+  return clipCaption(caps.map((c) => `${c.n}. ${c.text}`).join("\n"));
+}
+
+export function osmLink(lat: number, lon: number, zoom = 16): string {
+  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=${zoom}/${lat}/${lon}`;
+}
 
 function chatName(chat: TgChat, from?: TgUser): string {
   const person = [chat.first_name ?? from?.first_name, chat.last_name ?? from?.last_name].filter(Boolean).join(" ");
@@ -83,6 +115,7 @@ export class TelegramBot {
   private pairingFails = new Map<number, number>();
   private pairingFailsTotal = 0;
   private lastEmitted = "";
+  private albums = new Map<string, { messages: TgMessage[]; timer: NodeJS.Timeout }>();
 
   constructor(ctx: PluginContext) {
     this.ctx = ctx;
@@ -115,6 +148,8 @@ export class TelegramBot {
     this.ctrl.abort();
     this.wake?.();
     this.stopTyping();
+    for (const a of this.albums.values()) clearTimeout(a.timer);
+    this.albums.clear();
     if (this.loopDone) await Promise.race([this.loopDone, new Promise((r) => setTimeout(r, 3000))]);
   }
 
@@ -336,12 +371,7 @@ export class TelegramBot {
 
   private async onOwner(m: TgMessage): Promise<void> {
     const chatId = m.chat.id;
-    if (typeof m.text !== "string") {
-      await this.sendHtml(chatId, this.t("bot.textOnly"));
-      return;
-    }
-    const text = m.text.trim();
-    if (!text) return;
+    const text = typeof m.text === "string" ? m.text.trim() : "";
     const cmd = /^\/([a-z0-9_]+)(?:@(\w+))?(?:\s+([\s\S]*))?$/i.exec(text);
     if (cmd) {
       if (cmd[2] && this.botUser?.username && cmd[2].toLowerCase() !== this.botUser.username.toLowerCase()) return;
@@ -368,16 +398,76 @@ export class TelegramBot {
       }
       // Other slash commands go to the assistant as text (skills and commands).
     }
+    if (typeof m.media_group_id === "string") return this.collectAlbum(m);
+    await this.forward([m]);
+  }
+
+  /** The pictures of an album come one update each: they go on as one message once no more arrive. */
+  private collectAlbum(m: TgMessage): void {
+    const id = m.media_group_id as string;
+    const album = this.albums.get(id) ?? { messages: [], timer: undefined as unknown as NodeJS.Timeout };
+    clearTimeout(album.timer);
+    album.messages.push(m);
+    album.timer = setTimeout(() => {
+      this.albums.delete(id);
+      void this.forward(album.messages.sort((a, b) => a.message_id - b.message_id));
+    }, ALBUM_WAIT_MS);
+    this.albums.set(id, album);
+  }
+
+  /** The owner's message (or album) to the assistant: words, files downloaded from Telegram, context for the model. */
+  private async forward(messages: TgMessage[]): Promise<void> {
+    const chatId = messages[0].chat.id;
+    const text = messages.map(messageWords).filter(Boolean).join("\n");
+    const context = messageContext(messages[0], this.botUser?.id).join("\n");
+    const refs = messages.flatMap((m) => {
+      const f = messageFile(m);
+      return f ? [f] : [];
+    });
+    if (!text && !refs.length) {
+      await this.sendHtml(chatId, this.t("bot.unsupported"));
+      return;
+    }
     this.startTyping();
+    const files: Array<{ name?: string; mimeType?: string; data: string; kind: string; durationSec?: number }> = [];
+    for (const f of refs) {
+      const label = escapeHtml(f.name ?? this.t(`file.${f.kind}`));
+      if (f.size !== undefined && f.size > MAX_DOWNLOAD_BYTES) {
+        await this.sendHtml(chatId, this.t("bot.fileTooLarge", { name: label }));
+        continue;
+      }
+      try {
+        const { data, path } = await this.api!.download(f.fileId, { maxBytes: MAX_DOWNLOAD_BYTES, signal: this.ctrl.signal });
+        // Telegram's own path keeps the extension of files that come without a name (voice/file_12.oga).
+        const name = f.name ?? (f.kind === "photo" || f.kind === "voice" ? undefined : path.split("/").pop());
+        files.push({ ...(name ? { name } : {}), ...(f.mimeType ? { mimeType: f.mimeType } : {}), data: Buffer.from(data).toString("base64"), kind: f.kind, ...(f.durationSec !== undefined ? { durationSec: f.durationSec } : {}) });
+      } catch (e: any) {
+        const tooBig = /too big/i.test(e?.message ?? "");
+        await this.sendHtml(chatId, this.t(tooBig ? "bot.fileTooLarge" : "bot.downloadFailed", { name: label, error: escapeHtml(e?.message ?? String(e)) }));
+      }
+    }
+    if (!text && !files.length) {
+      this.stopTyping();
+      return;
+    }
     try {
-      const r = await this.ctx.core.call<{ ignored?: boolean; secrets?: number }>("channels.inbound", { channel: "telegram", text });
+      const r = await this.ctx.core.call<{ ignored?: boolean; secrets?: number }>("channels.inbound", {
+        channel: "telegram",
+        text,
+        ...(files.length ? { files } : {}),
+        ...(context ? { context } : {}),
+      });
       if (r?.ignored) this.stopTyping();
       // The hub took a secret out of this message (it is in the vault now): the copy in Telegram goes too.
       if (r?.secrets) {
-        const gone = await this.api!.send("deleteMessage", { chat_id: chatId, message_id: m.message_id }).then(
-          () => true,
-          () => false,
-        );
+        let gone = true;
+        for (const m of messages.filter((x) => messageWords(x))) {
+          gone =
+            (await this.api!.send("deleteMessage", { chat_id: chatId, message_id: m.message_id }).then(
+              () => true,
+              () => false,
+            )) && gone;
+        }
         await this.sendHtml(chatId, this.t(gone ? "bot.secretStored" : "bot.secretStoredDeleteYourself")).catch(() => {});
       }
     } catch (e: any) {
@@ -557,8 +647,11 @@ export class TelegramBot {
       const q = msg.quote.trim();
       header = `<blockquote><i>${escapeHtml(this.t("bot.fromWeb"))}</i> ${escapeHtml(q.length > 300 ? `${q.slice(0, 300)}…` : q)}</blockquote>\n`;
     }
-    const chunks = splitMarkdown(msg.text ?? "", TELEGRAM_LIMIT - 96 - htmlToPlain(footer).length - htmlToPlain(header).length);
-    if (!chunks.length) chunks.push("");
+    const media = msg.media ?? [];
+    // Pictures without words: no "…" message before them (but keep the quote of what they answer).
+    const mediaOnly = media.length > 0 && !(msg.text ?? "").trim() && !header && !footer && !buttons.length;
+    const chunks = mediaOnly ? [] : splitMarkdown(msg.text ?? "", TELEGRAM_LIMIT - 96 - htmlToPlain(footer).length - htmlToPlain(header).length);
+    if (!chunks.length && !mediaOnly) chunks.push("");
     let lastId: number | undefined;
     for (let i = 0; i < chunks.length; i++) {
       let html: string;
@@ -578,7 +671,114 @@ export class TelegramBot {
       });
       lastId = sent?.message_id;
     }
+    if (media.length) lastId = (await this.sendMedia(chatId, media, { silent: msg.silent, link: msg.link })) ?? lastId;
     return lastId !== undefined ? { externalId: String(lastId) } : {};
+  }
+
+  /**
+   * Pictures as a photo or an album (URLs for Telegram to fetch, files uploaded), maps as location pins. Failures stay
+   * soft: what could not be sent becomes a text with links.
+   */
+  private async sendMedia(chatId: number, media: OutboundMedia[], opts: { silent?: boolean; link?: string }): Promise<number | undefined> {
+    let lastId: number | undefined;
+    const keep = (id: number | undefined) => (lastId = id ?? lastId);
+    // Consecutive photos travel together as albums; documents and maps go on their own, in order.
+    let run: ImageMedia[] = [];
+    const flush = async () => {
+      for (let i = 0; i < run.length; i += ALBUM_MAX) {
+        const group = run.slice(i, i + ALBUM_MAX);
+        keep(group.length === 1 ? await this.sendPhoto(chatId, group[0], opts) : await this.sendAlbum(chatId, group, opts));
+      }
+      run = [];
+    };
+    for (const m of media) {
+      if (m.kind === "image" && (m.url || m.data)) {
+        if (asPhoto(m)) run.push(m);
+        else {
+          await flush();
+          keep(await this.sendDocument(chatId, m, opts));
+        }
+      } else if (m.kind === "map") {
+        await flush();
+        keep(await this.sendMap(chatId, m, opts));
+      }
+    }
+    await flush();
+    return lastId;
+  }
+
+  private async sendPhoto(chatId: number, m: ImageMedia, opts: { silent?: boolean; link?: string }): Promise<number | undefined> {
+    const api = this.api!;
+    const params = { chat_id: chatId, caption: clipCaption(m.caption), disable_notification: opts.silent || undefined };
+    try {
+      const r = m.data ? await api.send<TgMessage>("sendPhoto", params, [uploadOf(m, "photo")]) : await api.send<TgMessage>("sendPhoto", { ...params, photo: m.url });
+      return r.message_id;
+    } catch (e: any) {
+      this.ctx.log.warn(`sendPhoto failed: ${e?.message ?? e}`);
+      // Telegram refuses some files as photos (size, proportions): as a document it still arrives.
+      return m.data ? this.sendDocument(chatId, m, opts) : this.mediaFallback(chatId, [m], opts);
+    }
+  }
+
+  private async sendAlbum(chatId: number, group: ImageMedia[], opts: { silent?: boolean; link?: string }): Promise<number | undefined> {
+    const files: UploadFile[] = [];
+    const items: Array<Record<string, unknown>> = group.map((m, i) => {
+      if (!m.data) return { type: "photo", media: m.url };
+      const f = uploadOf(m, `f${i}`);
+      files.push(f);
+      return { type: "photo", media: `attach://${f.field}` };
+    });
+    const caption = albumCaption(group);
+    if (caption) items[0].caption = caption;
+    try {
+      const r = await this.api!.send<TgMessage[]>("sendMediaGroup", { chat_id: chatId, media: items, disable_notification: opts.silent || undefined }, files);
+      return r.at(-1)?.message_id;
+    } catch (e: any) {
+      // One bad picture spoils the album: send them one by one, each with its own fallback.
+      this.ctx.log.warn(`sendMediaGroup failed (${e?.message ?? e}), sending the pictures one by one`);
+      let lastId: number | undefined;
+      for (const m of group) lastId = (await this.sendPhoto(chatId, m, opts)) ?? lastId;
+      return lastId;
+    }
+  }
+
+  private async sendDocument(chatId: number, m: ImageMedia, opts: { silent?: boolean; link?: string }): Promise<number | undefined> {
+    try {
+      const params = { chat_id: chatId, caption: clipCaption(m.caption), disable_notification: opts.silent || undefined };
+      const r = m.data ? await this.api!.send<TgMessage>("sendDocument", params, [uploadOf(m, "document")]) : await this.api!.send<TgMessage>("sendDocument", { ...params, document: m.url });
+      return r.message_id;
+    } catch (e: any) {
+      this.ctx.log.warn(`sendDocument failed: ${e?.message ?? e}`);
+      return this.mediaFallback(chatId, [m], opts);
+    }
+  }
+
+  private async sendMap(chatId: number, m: MapMedia, opts: { silent?: boolean }): Promise<number | undefined> {
+    try {
+      const r = await this.api!.send<TgMessage>("sendLocation", { chat_id: chatId, latitude: m.lat, longitude: m.lon, disable_notification: opts.silent || undefined });
+      if (!m.title) return r.message_id;
+      return (await this.sendHtml(chatId, `<b>${escapeHtml(m.title)}</b>`, { silent: true }).catch(() => undefined))?.message_id ?? r.message_id;
+    } catch (e: any) {
+      this.ctx.log.warn(`sendLocation failed: ${e?.message ?? e}`);
+      const html = `<b>${escapeHtml(m.title ?? this.t("media.location"))}</b>\n${escapeHtml(osmLink(m.lat, m.lon))}`;
+      return (await this.sendHtml(chatId, html, { silent: opts.silent }).catch(() => undefined))?.message_id;
+    }
+  }
+
+  /** The pictures Telegram would not take, as links: their own addresses, or the conversation in Owlbot for files. */
+  private async mediaFallback(chatId: number, items: ImageMedia[], opts: { silent?: boolean; link?: string }): Promise<number | undefined> {
+    const lines = [escapeHtml(this.t("media.failed"))];
+    items.forEach((m, i) => {
+      const label = escapeHtml(m.caption || this.t("media.image", { n: i + 1 }));
+      if (m.url && isPublicHttpUrl(m.url)) lines.push(`• <a href="${escapeAttr(m.url)}">${label}</a>`);
+    });
+    if (items.some((m) => !m.url) && opts.link) lines.push(escapeHtml(this.t("media.inApp", { link: opts.link })));
+    try {
+      return (await this.sendHtml(chatId, lines.join("\n"), { silent: opts.silent }))?.message_id;
+    } catch (e: any) {
+      this.ctx.log.warn(`media fallback failed: ${e?.message ?? e}`);
+      return undefined;
+    }
   }
 
   private async sendHtml(chatId: number, html: string, opts: { buttons?: InlineButton[][]; silent?: boolean; preview?: boolean } = {}): Promise<TgMessage | undefined> {

@@ -2,21 +2,23 @@
 // for the code the page shows) and the live state from the hub. No terminal; the login stays on the server.
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ExternalLink, LogIn } from "lucide-react";
-import type { BrainLoginView } from "@openbot/shared";
+import { ExternalLink, LogIn, CheckCircle2 } from "lucide-react";
+import type { BrainLoginView } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { formatTime } from "../lib/format";
+import { openOutside } from "../lib/native";
 import { hubEvents } from "../state/app";
 import { Badge, Button, CopyButton, Input, Spinner, cx } from "./ui";
 import { t } from "../i18n";
 
-const RUNNING = new Set(["starting", "waiting", "verifying"]);
+const RUNNING = new Set(["installing", "starting", "waiting", "verifying"]);
 
 /**
- * One brain's sign-in. `compact`: a row (name, state, button) for lists like the first-run checklist;
+ * One brain's sign-in. `compact`: a row (name, state, button) for lists like the setup card;
  * `bare`: no frame, for a card that already has one; otherwise a card in the conversation.
+ * `install`: the CLI is not on this computer yet and the hub installs it before the sign-in.
  */
-export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; bare?: boolean; compact?: boolean }) {
+export function BrainLoginCard({ brainRef, bare, compact, install }: { brainRef: string; bare?: boolean; compact?: boolean; install?: boolean }) {
   const [view, setView] = useState<BrainLoginView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,13 +66,21 @@ export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; 
     <Badge tone="info">{t("brainLogin.inProgress")}</Badge>
   ) : signedIn ? (
     <Badge tone="success">{t("brainLogin.signedIn")}</Badge>
+  ) : install ? (
+    <Badge tone="neutral">{t("brainSetup.notInstalledBadge")}</Badge>
   ) : (
     <Badge tone="warning">{t("brainLogin.notSignedIn")}</Badge>
   );
   const canStart = view.connected && view.supported && !running;
   const startButton = canStart && (!signedIn || !compact) && (
     <Button variant={signedIn ? "ghost" : "primary"} size="sm" icon={<LogIn className="size-3.5" />} loading={busy} onClick={() => void act("")}>
-      {signedIn ? t("brainLogin.signInAgain") : ended && ended.status !== "cancelled" && ended.status !== "succeeded" ? t("brainLogin.tryAgain") : t("brainLogin.signIn")}
+      {signedIn
+        ? t("brainLogin.signInAgain")
+        : ended && ended.status !== "cancelled" && ended.status !== "succeeded"
+          ? t("brainLogin.tryAgain")
+          : install
+            ? t("brainSetup.installAndSignIn")
+            : t("brainLogin.signIn")}
     </Button>
   );
 
@@ -78,7 +88,7 @@ export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; 
     <>
       {view.connected && !view.supported && <div className="text-sm text-muted">{t("brainLogin.unsupported")}</div>}
       {!compact && canStart && !signedIn && !ended && <div className="text-sm text-muted">{t("brainLogin.hint")}</div>}
-      {running && login && <Running login={login} busy={busy} onCode={(code) => act("/code", { code })} onCancel={() => void act("/cancel")} />}
+      {running && login && <Running login={login} label={view.label} busy={busy} onCode={(code) => act("/code", { code })} onCancel={() => void act("/cancel")} />}
       {ended?.status === "succeeded" && signedIn && <div className="text-sm text-success">{t("brainLogin.done")}</div>}
       {ended && (ended.status === "failed" || ended.status === "expired") && <div className="text-sm text-danger">{ended.error ?? t("brainLogin.failed")}</div>}
       {ended?.status === "cancelled" && !signedIn && <div className="text-sm text-muted">{t("brainLogin.cancelled")}</div>}
@@ -100,6 +110,15 @@ export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; 
       </div>
     );
   }
+  // Signed in from the chat: one locked line, like any form that is done.
+  if (!bare && signedIn && !running) {
+    return (
+      <div className="animate-in my-2 flex items-center gap-2 rounded-xl border border-border bg-surface-2/60 px-3 py-2">
+        <CheckCircle2 className="size-4 text-success" />
+        <span className="text-sm font-medium">{t("brainLogin.locked", { name: view.label })}</span>
+      </div>
+    );
+  }
   return (
     <div className={cx("flex flex-col gap-2.5", !bare && "my-2 rounded-xl border px-3 py-2.5", !bare && (running ? "border-accent/35 bg-accent-soft/40" : "border-border bg-surface-2/50"))}>
       {/* Bare: the surrounding card already names the brain. */}
@@ -114,7 +133,22 @@ export function BrainLoginCard({ brainRef, bare, compact }: { brainRef: string; 
   );
 }
 
-function Running({ login, busy, onCode, onCancel }: { login: NonNullable<BrainLoginView["login"]>; busy: boolean; onCode: (code: string) => Promise<boolean>; onCancel: () => void }) {
+function Running({ login, label, busy, onCode, onCancel }: { login: NonNullable<BrainLoginView["login"]>; label: string; busy: boolean; onCode: (code: string) => Promise<boolean>; onCancel: () => void }) {
+  if (login.status === "installing") {
+    // The hub installs the missing CLI first (desktop installs); the sign-in goes on by itself afterwards.
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <Spinner size={14} /> {t("brainLogin.installing", { name: label })}
+        </div>
+        <div>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            {t("brainLogin.cancel")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
   if (login.status === "starting" || !login.url) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted">
@@ -131,6 +165,7 @@ function Running({ login, busy, onCode, onCancel }: { login: NonNullable<BrainLo
             href={login.url}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => openOutside(e, login.url)}
             className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-accent px-2.5 text-[13px] font-medium whitespace-nowrap text-accent-fg shadow-sm transition hover:brightness-110"
           >
             {t("brainLogin.open")} <ExternalLink className="size-3.5" />

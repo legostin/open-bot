@@ -1,14 +1,14 @@
-// @openbot/ui — the contract between the web UI host and UI plugins.
+// @owlbot/ui — the contract between the web UI host and UI plugins.
 //
 // A UI plugin is an ES module (built by scripts/build-ui-plugins.mjs) whose default export or named export
-// `activate(ui: OpenBotUI)` registers contributions. "react", "react/jsx-runtime", "react-dom" and "@openbot/ui"
+// `activate(ui: OwlbotUI)` registers contributions. "react", "react/jsx-runtime", "react-dom" and "@owlbot/ui"
 // are provided by the host through an import map (shared instances); plugins must not bundle them.
 //
-// At runtime "@openbot/ui" resolves to /shared/openbot-ui.js, which re-exports `window.__OPENBOT_SHARED__.ui`
+// At runtime "@owlbot/ui" resolves to /shared/owlbot-ui.js, which re-exports `window.__OWLBOT_SHARED__.ui`
 // (the host's implementation of everything exported below as values).
 
 import type { ComponentType, ReactNode } from "react";
-import type { Locale, Message, MessagePart, Params, Task, UiEvent } from "@openbot/shared";
+import type { Locale, Message, MessagePart, Params, Task, UiEvent } from "@owlbot/shared";
 
 // ---------- slots ----------
 
@@ -128,7 +128,7 @@ export interface PluginChannel {
   on(channel: string, cb: (payload: any) => void): () => void;
 }
 
-export interface OpenBotUI {
+export interface OwlbotUI {
   pluginId: string;
   slots: {
     register<P = any>(slot: SlotName, contribution: SlotContribution<P>): () => void;
@@ -149,7 +149,7 @@ export interface OpenBotUI {
   /** All realtime hub events (messages, tasks, notifications...). Returns unsubscribe. */
   events: { on(cb: (e: UiEvent) => void): () => void };
   /**
-   * Interface language and this plugin's translations (.openbot-plugin/locales/<locale>.json, delivered by the hub).
+   * Interface language and this plugin's translations (.owlbot-plugin/locales/<locale>.json, delivered by the hub).
    * The page reloads when the user switches language, so `locale` is fixed for the plugin's lifetime.
    */
   i18n: {
@@ -162,7 +162,7 @@ export interface OpenBotUI {
   };
 }
 
-export type UiPluginModule = { activate(ui: OpenBotUI): void | (() => void) };
+export type UiPluginModule = { activate(ui: OwlbotUI): void | (() => void) };
 
 // ---------- shared components and hooks (values provided by the host at runtime) ----------
 
@@ -191,21 +191,54 @@ export interface EmptyStateProps {
   icon?: string;
 }
 
+// ---------- the iOS app's bridge ----------
+
+/** Haptic feedback the phone can play. */
+export type NativeHapticKind = "light" | "success" | "warning";
+
+/** What the app tells the page (a `owlbot-native` CustomEvent on window): live words while the mic is held. */
+/** What the app tells the page: live dictation words, the "Show steps" switch in its header, the hub answering again. */
+export type NativeEvent = { type: "dictation"; text: string } | { type: "details"; on: boolean } | { type: "online" };
+
+/**
+ * The Owlbot iOS app around the page (its chat screen is the web UI's chat in a WKWebView). Every call is
+ * `window.webkit.messageHandlers.owlbot.postMessage({ type, ... })`; a failed call rejects with an Error whose
+ * message is the app's reason.
+ */
+export interface NativeBridge {
+  /** Any bridge message: resolves with the app's reply object. */
+  call<T = Record<string, unknown>>(type: string, payload?: Record<string, unknown>): Promise<T>;
+  /** The page has rendered the conversation (the app hides its spinner). */
+  ready(conversationId: string): Promise<{ ok: boolean }>;
+  /** The app loads the approval from the hub, asks for Face ID and signs it; `cancelled` when the user backed out. */
+  approve(approvalId: string): Promise<{ ok: boolean; cancelled?: boolean }>;
+  deny(approvalId: string): Promise<{ ok: boolean }>;
+  /** Hold-to-talk: `start` rejects with the reason when the mic or speech recognition is not allowed. */
+  dictation: { start(): Promise<{ ok: boolean }>; stop(): Promise<{ text: string }> };
+  /** Open a link in Safari (sign-in pages, anything outside the hub). */
+  openURL(url: string): Promise<{ ok: boolean }>;
+  haptic(kind: NativeHapticKind): Promise<{ ok: boolean }>;
+  /** The page's session ended: the app gets a new one and reloads the page (no reply). */
+  reauth(): void;
+  /** Messages from the app. Returns unsubscribe. */
+  onEvent(listener: (e: NativeEvent) => void): () => void;
+}
+
 declare global {
   interface Window {
-    __OPENBOT_SHARED__?: {
+    __OWLBOT_SHARED__?: {
       react: unknown;
       reactDom: unknown;
       reactDomClient: unknown;
       jsxRuntime: unknown;
-      ui: OpenBotUIRuntime;
+      ui: OwlbotUIRuntime;
     };
   }
 }
 
-/** What the "@openbot/ui" module exports at runtime. */
-export interface OpenBotUIRuntime {
-  definePluginUI(activate: (ui: OpenBotUI) => void | (() => void)): UiPluginModule;
+/** What the "@owlbot/ui" module exports at runtime. */
+export interface OwlbotUIRuntime {
+  definePluginUI(activate: (ui: OwlbotUI) => void | (() => void)): UiPluginModule;
   Button: ComponentType<ButtonProps>;
   Card: ComponentType<CardProps>;
   Badge: ComponentType<BadgeProps>;
@@ -219,19 +252,26 @@ export interface OpenBotUIRuntime {
   api: HubApi;
   /** Interface language (same as ui.i18n.locale). */
   locale: Locale;
+  /**
+   * The iOS app's bridge when the page runs inside the Owlbot app; `undefined` in a browser, so check it first:
+   * `native?.haptic("success")`.
+   */
+  native: NativeBridge | undefined;
 }
 
-// Value exports: declared here for type-checking only. At runtime the import map points "@openbot/ui"
-// to the host shim (/shared/openbot-ui.js), which provides these values. Plugins must mark "@openbot/ui" external.
-export declare const definePluginUI: OpenBotUIRuntime["definePluginUI"];
-export declare const Button: OpenBotUIRuntime["Button"];
-export declare const Card: OpenBotUIRuntime["Card"];
-export declare const Badge: OpenBotUIRuntime["Badge"];
-export declare const EmptyState: OpenBotUIRuntime["EmptyState"];
-export declare const Spinner: OpenBotUIRuntime["Spinner"];
-export declare const Markdown: OpenBotUIRuntime["Markdown"];
-export declare const useTasks: OpenBotUIRuntime["useTasks"];
-export declare const useHubEvent: OpenBotUIRuntime["useHubEvent"];
-export declare const api: OpenBotUIRuntime["api"];
-export declare const locale: OpenBotUIRuntime["locale"];
+// Value exports: declared here for type-checking only. At runtime the import map points "@owlbot/ui"
+// to the host shim (/shared/owlbot-ui.js), which provides these values. Plugins must mark "@owlbot/ui" external.
+export declare const definePluginUI: OwlbotUIRuntime["definePluginUI"];
+export declare const Button: OwlbotUIRuntime["Button"];
+export declare const Card: OwlbotUIRuntime["Card"];
+export declare const Badge: OwlbotUIRuntime["Badge"];
+export declare const EmptyState: OwlbotUIRuntime["EmptyState"];
+export declare const Spinner: OwlbotUIRuntime["Spinner"];
+export declare const Markdown: OwlbotUIRuntime["Markdown"];
+export declare const useTasks: OwlbotUIRuntime["useTasks"];
+export declare const useHubEvent: OwlbotUIRuntime["useHubEvent"];
+export declare const api: OwlbotUIRuntime["api"];
+export declare const locale: OwlbotUIRuntime["locale"];
+/** The iOS app's bridge; `undefined` in a browser. */
+export declare const native: OwlbotUIRuntime["native"];
 export type { Locale, Message, MessagePart, Params, Task, UiEvent };

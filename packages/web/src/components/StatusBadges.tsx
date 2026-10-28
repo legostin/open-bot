@@ -17,7 +17,7 @@ export function ConnectionBadge() {
   return (
     <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs", map.text)} title={t("status.connection.title", { state: map.label })} role="status">
       <span className={cx("size-2 rounded-full", map.dot)} />
-      <span className={cx(c === "open" ? "hidden xl:inline" : "hidden sm:inline")}>{map.label}</span>
+      <span className={cx(c === "open" ? "hidden @3xl/top:inline" : "hidden @xl/top:inline")}>{map.label}</span>
     </span>
   );
 }
@@ -39,7 +39,7 @@ export function VaultBadge() {
       className={cx("inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-xs font-medium transition hover:brightness-95", v.cls)}
     >
       <v.icon className="size-3.5" />
-      <span className={cx(s.vaultState === "unlocked" ? "hidden xl:inline" : "hidden sm:inline")}>{v.label}</span>
+      <span className={cx(s.vaultState === "unlocked" ? "hidden @3xl/top:inline" : "hidden @xl/top:inline")}>{v.label}</span>
     </a>
   );
 }
@@ -57,7 +57,7 @@ export function ApprovalsBadge() {
     >
       <ShieldAlert className="size-3.5" />
       {s.pendingApprovals}
-      <span className="hidden sm:inline">{t("status.approvals.waiting")}</span>
+      <span className="hidden @xl/top:inline">{t("status.approvals.waiting")}</span>
     </a>
   );
 }

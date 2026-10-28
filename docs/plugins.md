@@ -2,7 +2,7 @@
 
 [Русский](plugins.ru.md)
 
-Almost everything in open-bot is a plugin: brains (Claude Code, Codex, APIs), channels (Telegram), the browser, memory, web search, triggers. The core only wires them together and enforces security. A plugin can add:
+Almost everything in Owlbot is a plugin: brains (Claude Code, Codex, APIs), channels (Telegram), the browser, memory, web search, triggers. The core only wires them together and enforces security. A plugin can add:
 
 | What | Where |
 |---|---|
@@ -14,7 +14,7 @@ Almost everything in open-bot is a plugin: brains (Claude Code, Codex, APIs), ch
 | Skills, commands, agents | `skills/`, `commands/`, `agents/` |
 | MCP servers | `.mcp.json` |
 | UI: panels, tabs, tool-result renderers, a replacement composer | `ui/` |
-| Translations | `.openbot-plugin/locales/` |
+| Translations | `.owlbot-plugin/locales/` |
 
 Claude Code plugins (`.claude-plugin/plugin.json`) and Codex plugins (`.codex-plugin/plugin.json`) install as they are: their skills, commands, agents and MCP servers become available. Claude Code plugins are also passed to the hub's Claude Code brain with `--plugin-dir`, so their hooks run there.
 
@@ -22,9 +22,9 @@ Claude Code plugins (`.claude-plugin/plugin.json`) and Codex plugins (`.codex-pl
 
 ```
 my-plugin/
-  .openbot-plugin/plugin.json
-  .openbot-plugin/locales/en.json   # translations, see Localization
-  .openbot-plugin/locales/ru.json
+  .owlbot-plugin/plugin.json
+  .owlbot-plugin/locales/en.json   # translations, see Localization
+  .owlbot-plugin/locales/ru.json
   server/index.ts        # backend: a separate process, JSON-RPC over stdio
   ui/src/index.tsx       # UI module (built into ui/dist/index.js)
   skills/<name>/SKILL.md
@@ -68,7 +68,8 @@ my-plugin/
 - `contributes` declares what the backend registers, and the hub refuses anything undeclared: `tools: true` for `ctx.tools.register`, `brains` and `channels` with the ids for `ctx.brains.register` and `ctx.channels.register`, `hooks` with the hook names for `ctx.hooks.on`, `http: true` for `ctx.http.handle`. `settings` is a JSON Schema that the web UI renders as a form; the values arrive in `ctx.settings`.
 - `permissions.network` lists the hosts the plugin may reach (`*` means any). All traffic goes through the core's egress proxy, and everything else is blocked (hard-blocked with iptables in Docker with `NET_ADMIN`).
 - `permissions.vault` lists vault item ids or `<type>:*` patterns such as `login:*`. Even an allowed item is handed out only if its scope includes this plugin. The security console can grant a plugin extra items.
-- `permissions.core` lists the core methods the plugin may call: `conversations.post`, `channels.inbound`, `tasks.create`, `tasks.get`, `tasks.list`, `notify`, `approvals.resolve`, `settings.get`, `agents.list`, `ui.emit`, `vault.check`, `machines.list`, `notifications.feedback`, `files.deliver` (writes a file, in base64 chunks, into the `downloads/` folder of a session workspace). `ctx.ui.emit` goes through `ui.emit` too, so it needs this permission.
+- `permissions.core` lists the core methods the plugin may call: `conversations.post`, `channels.inbound`, `tasks.create`, `tasks.get`, `tasks.list`, `notify`, `approvals.resolve`, `settings.get`, `agents.list`, `ui.emit`, `vault.check`, `machines.list`, `notifications.feedback`, `files.deliver` (writes a file, in base64 chunks, into the `downloads/` folder of a session workspace), `connections.token` (an access token of the hub's Google sign-in, for a plugin whose `integration.connect` is `google`). `ctx.ui.emit` goes through `ui.emit` too, so it needs this permission.
+- `integration` puts the plugin into the integrations library as a card: `category`, `icon` (a Lucide name), `connect` (`google`: the hub's Google sign-in, with the OAuth `scopes` the plugin needs; `setup`: the plugin's setup card; `none`: works as it is) and a one-line `summary`.
 - `permissions.ui` and `permissions.fs` are informational and shown in the install dialog.
 
 Permissions are shown at install time. A plugin installed from git is pinned to its commit hash.
@@ -76,7 +77,7 @@ Permissions are shown at install time. A plugin installed from git is pinned to 
 ## Backend
 
 ```ts
-import type { PluginModule } from "@openbot/plugin-sdk";
+import type { PluginModule } from "@owlbot/plugin-sdk";
 
 const plugin: PluginModule = {
   async activate(ctx) {
@@ -100,33 +101,33 @@ const plugin: PluginModule = {
 export default plugin;
 ```
 
-Plugins only `import type` from `@openbot/plugin-sdk`: the runner provides the implementation, so a plugin needs no runtime dependency on the SDK. The SDK also exports a `definePlugin` helper, but that is a value import; a typed object as above does the same job.
+Plugins only `import type` from `@owlbot/plugin-sdk`: the runner provides the implementation, so a plugin needs no runtime dependency on the SDK. The SDK also exports a `definePlugin` helper, but that is a value import; a typed object as above does the same job.
 
 What `ctx` offers: `pluginId`, `pluginDir`, `dataDir` (a private writable folder), `hubUrl`, `appRoot`, `settings`, `onSettingsChange`, `i18n` (see [Localization](#localization)), `log`, `tools`, `brains`, `channels`, `events.on`, `hooks.on`, `http.handle`, `ui.emit` / `ui.onMessage`, `vault.get`, `storage` (the plugin's key-value store: `get`, `set`, `delete`, `list`) and `core.call`. A module may also export `deactivate()`.
 
 **Tools.** A handler receives the input and a context (session, agent, workspace, machine) and returns a string or a `ToolResult` (`{ content: [{ type: "text", text }], isError? }`); a thrown error becomes an error result. Besides `effect`, a tool can set `source: true` when its results come from outside (web, mail): reading them marks the session as untrusted. `availability` limits a tool to `interactive` or `background` sessions. For `effect: "external"` you can set `approvalSummary: "Send {text} to {chat}"`, which is how the action appears on the approval card; `{field}` is filled from the tool input.
 
-**Hooks.** `session.start` can append to the system prompt (`appendSystemPrompt`), `tool.before` can block a call (`block`) or replace its `input`, `tool.after` can replace the `result`, `message.in` can block a message or rewrite its `text`, `notify.before` can block a notification or change its `level`. Hooks run before the policy, so a hook cannot allow what the policy denied or sent for approval; it can only block the call or change its input.
+**Hooks.** `session.start` can append to the system prompt (`appendSystemPrompt`), `tool.before` can block a call (`block`) or replace its `input`, `tool.after` can replace the `result`, `message.in` can block a message or rewrite its `text`, `notify.before` can block a notification or change its `level`, `digest.compose` (`{ date, time, timezone }`) can add a section `{ title, body }` to the digest going out (Google Calendar adds the day's events). Hooks run before the policy, so a hook cannot allow what the policy denied or sent for approval; it can only block the call or change its input.
 
 **Events.** `ctx.events.on(name, cb)` receives `message.created`, `message.updated`, `task.updated`, `notification.created`, `notification.feedback`, `approval.created`, `approval.resolved`, `conversation.updated` and `vault.state`, with secrets redacted.
 
 **HTTP.** `ctx.http.handle` serves `/api/plugins/<id>/http/*` to the signed-in web UI (`ui.plugin.http`). The same handler is also reachable **without authentication** at `/hooks/<id>/*` for webhooks: such requests have `req.public === true`, and the plugin has to check a secret itself.
 
-**Channels.** A channel is `{ id, label, send(message), status?() }`. `send` receives replies, notifications, approval cards (with approve and deny tokens) and the digest. Incoming user messages go to the hub through `ctx.core.call("channels.inbound", { text, channel })`.
+**Channels.** A channel is `{ id, label, send(message), status?() }`. `send` receives replies, notifications, approval cards (with approve and deny tokens) and the digest. Incoming user messages go to the hub through `ctx.core.call("channels.inbound", { text, channel, files? })`. `files` are what the user sent along: `{ name?, mimeType?, data (base64), kind?: "photo" | "voice" | "audio" | "video" | "file", durationSec? }`, at most 10 per message and 25 MB each. The hub saves them in the conversation's workspace (`attachments/`) and the agent gets their paths; text may be empty when there are files. `context` (English, at most 2000 characters) goes to the model before the user's words and is not shown in the chat: where a forward came from, what the message replies to.
 
 ## Brains
 
-A brain is a `BrainProviderImpl`: `probe()` (installed? signed in?) and `createSession(opts)`. The session gets the system prompt, a working folder and MCP access to the hub's tools (`opts.mcp.url`, `opts.mcp.token`, and `opts.mcp.bridgeCommand` for stdio clients). `send(turn)` yields the events `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error` and `done`; the session also implements `interrupt()` and `close()`. On `limit_hit` the core marks the brain busy until `resetAt` and moves on to the next brain in the agent's list. Ready-made adapters for CLIs live in `@openbot/brains-cli`. If a brain has variants (for example, API providers), list them in `variants: ["anthropic", "openai"]`: the UI shows them as separate brains `<id>:<variant>@local`, and the variant arrives in `probe(variant)` and `opts.variant`. Brain ids go into `contributes.brains`.
+A brain is a `BrainProviderImpl`: `probe()` (installed? signed in?) and `createSession(opts)`. The session gets the system prompt, a working folder and MCP access to the hub's tools (`opts.mcp.url`, `opts.mcp.token`, and `opts.mcp.bridgeCommand` for stdio clients). `send(turn)` yields the events `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error` and `done`; the session also implements `interrupt()` and `close()`. On `limit_hit` the core marks the brain busy until `resetAt` and moves on to the next brain in the agent's list. Ready-made adapters for CLIs live in `@owlbot/brains-cli`. If a brain has variants (for example, API providers), list them in `variants: ["anthropic", "openai"]`: the UI shows them as separate brains `<id>:<variant>@local`, and the variant arrives in `probe(variant)` and `opts.variant`. Brain ids go into `contributes.brains`.
 
 ## UI
 
-A UI module is an ES module. React and `@openbot/ui` come from the host through an import map, so they are not bundled.
+A UI module is an ES module. React and `@owlbot/ui` come from the host through an import map, so they are not bundled.
 
 ```tsx
-import { definePluginUI, Card } from "@openbot/ui";
-import type { OpenBotUI, ToolResultProps } from "@openbot/ui";
+import { definePluginUI, Card } from "@owlbot/ui";
+import type { OwlbotUI, ToolResultProps } from "@owlbot/ui";
 
-let ui: OpenBotUI;
+let ui: OwlbotUI;
 
 function Panel() {
   const time = ui.i18n.formatDate(Date.now(), { timeStyle: "short" });
@@ -163,7 +164,7 @@ ui.plugin.on("activity", (a) => view.update({ active: a.busy, agentId: a.agentId
 
 `attention` reopens the window (even if the user minimized or closed it) and highlights it; `userControl` keeps it open while the user drives. A plugin may register several live views and `dispose()` them at any time.
 
-Besides slots, `ui` offers `routes.add` (a full page, optionally in the navigation), `settings.section`, `commands.register` (the command palette), `toast`, `navigate`, `api` (the hub's REST API), `plugin` (`http`, `send` and `on` to talk to the plugin's own backend through `ctx.http`, `ctx.ui.onMessage` and `ctx.ui.emit`), `events.on` (realtime hub events) and `i18n`. `@openbot/ui` also exports the components `Button`, `Card`, `Badge`, `EmptyState`, `Spinner` and `Markdown`, the hooks `useTasks` and `useHubEvent`, plus `api` and `locale`.
+Besides slots, `ui` offers `routes.add` (a full page, optionally in the navigation), `settings.section`, `commands.register` (the command palette), `toast`, `navigate`, `api` (the hub's REST API), `plugin` (`http`, `send` and `on` to talk to the plugin's own backend through `ctx.http`, `ctx.ui.onMessage` and `ctx.ui.emit`), `events.on` (realtime hub events) and `i18n`. `@owlbot/ui` also exports the components `Button`, `Card`, `Badge`, `EmptyState`, `Spinner` and `Markdown`, the hooks `useTasks` and `useHubEvent`, plus `api` and `locale`.
 
 Build every builtin UI plugin with `npm run build:ui-plugins` (`plugins/*/ui/src/index.tsx` → `ui/dist/index.js`), or a single plugin with `node scripts/build-ui-plugins.mjs path/to/my-plugin`. Ship the built `ui/dist/index.js` with the plugin: installing does not build it.
 
@@ -171,11 +172,11 @@ Build every builtin UI plugin with `npm run build:ui-plugins` (`plugins/*/ui/src
 
 ## Localization
 
-open-bot ships in English and Russian, and plugins follow the same rules. English is the source of truth and the fallback: a key missing in the reader's language falls back to English, then to the key itself.
+Owlbot ships in English and Russian, and plugins follow the same rules. English is the source of truth and the fallback: a key missing in the reader's language falls back to English, then to the key itself.
 
 ### Catalogs
 
-Translations live in `.openbot-plugin/locales/en.json` and `ru.json`: flat maps from key to string. A malformed file stops the plugin from loading. Strings use `{name}` placeholders and ICU-style plurals such as `{n, plural, one {# file} other {# files}}`, where `#` is the number formatted for the language and `=0 {…}` matches an exact value; Russian uses the categories `one`, `few`, `many` and `other`. `{kind, select, a {…} other {…}}` picks a branch by value.
+Translations live in `.owlbot-plugin/locales/en.json` and `ru.json`: flat maps from key to string. A malformed file stops the plugin from loading. Strings use `{name}` placeholders and ICU-style plurals such as `{n, plural, one {# file} other {# files}}`, where `#` is the number formatted for the language and `=0 {…}` matches an exact value; Russian uses the categories `one`, `few`, `many` and `other`. `{kind, select, a {…} other {…}}` picks a branch by value.
 
 `en.json`:
 
@@ -261,11 +262,11 @@ brains: [claude-code@local, "api:anthropic"]
 You watch the weather forecast for the user's city and warn about rain a day ahead.
 ```
 
-A file in a plugin's `agents/` folder becomes an open-bot agent only if its frontmatter has `brains:`.
+A file in a plugin's `agents/` folder becomes an Owlbot agent only if its frontmatter has `brains:`.
 
 ### Checks
 
-`packages/core/test/i18n.test.ts` runs with `npm test`. It checks the core catalogs and every plugin under `plugins/` that has locales: each language must have exactly the English keys with the same placeholders, and every `"%key%"` in `plugin.json` must exist in `en.json`. For a plugin kept elsewhere, `catalogProblems(readPluginLayout(dir).messages)` from `@openbot/shared` returns the same list of problems.
+`packages/core/test/i18n.test.ts` runs with `npm test`. It checks the core catalogs and every plugin under `plugins/` that has locales: each language must have exactly the English keys with the same placeholders, and every `"%key%"` in `plugin.json` must exist in `en.json`. For a plugin kept elsewhere, `catalogProblems(readPluginLayout(dir).messages)` from `@owlbot/shared` returns the same list of problems.
 
 In tests, start the plugin in a given language with `startPlugin({ locale })` and switch it with `h.setLocale()`, which fires `ctx.i18n.onChange`:
 
@@ -276,10 +277,10 @@ h.setLocale("en");
 
 ## Tests
 
-`@openbot/testkit` runs the plugin as a real process and plays the role of the core:
+`@owlbot/testkit` runs the plugin as a real process and plays the role of the core:
 
 ```ts
-import { startPlugin } from "@openbot/testkit";
+import { startPlugin } from "@owlbot/testkit";
 
 const h = await startPlugin({ dir: "plugins/weather", settings: { city: "Berlin" } });
 expect(h.tools.has("forecast")).toBe(true);

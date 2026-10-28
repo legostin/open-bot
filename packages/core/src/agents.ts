@@ -4,8 +4,8 @@
 import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { stringify as toYaml } from "yaml";
-import type { AgentDef, Locale } from "@openbot/shared";
-import { normalizeLocale, parseAvatar, parseFrontmatter } from "@openbot/shared";
+import type { AgentDef, Locale } from "@owlbot/shared";
+import { normalizeLocale, parseAvatar, parseFrontmatter } from "@owlbot/shared";
 
 export const DEFAULT_BRAINS = ["claude-code@local", "codex@local", "api:anthropic", "api:openai"];
 
@@ -50,6 +50,18 @@ function parseAgentI18n(v: unknown): AgentDef["i18n"] {
 export function localizedAgent(a: AgentDef, locale: Locale): AgentDef {
   const tr = a.i18n?.[locale];
   return tr ? { ...a, name: tr.name ?? a.name, description: tr.description ?? a.description } : a;
+}
+
+/**
+ * `prev` with `patch` applied. A translated agent keeps its other languages: a new name or description goes into its
+ * `locale` translation when it has one, the rest into the definition.
+ */
+export function patchAgent(prev: AgentDef, patch: Partial<AgentDef>, locale: Locale): AgentDef {
+  const tr = prev.i18n?.[locale];
+  if (!tr || (patch.name === undefined && patch.description === undefined)) return { ...prev, ...patch };
+  const { name, description, ...rest } = patch;
+  const edited = { ...tr, ...(name !== undefined ? { name } : {}), ...(description !== undefined ? { description } : {}) };
+  return { ...prev, ...rest, i18n: { ...prev.i18n, [locale]: edited } };
 }
 
 export function agentName(a: AgentDef, locale: Locale): string {

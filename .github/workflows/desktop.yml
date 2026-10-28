@@ -1,0 +1,162 @@
+# Builds the desktop app and its installers and checks them on clean runners: install, the hub answers, quit,
+# uninstall, the data stays.
+name: desktop app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["packaging/**", "packages/desktop/**", "packages/tailnet/**", "package.json", "package-lock.json", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["packaging/**", "packages/desktop/**", "packages/tailnet/**", "package.json", "package-lock.json", ".github/workflows/desktop.yml"]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # The hub's Tailscale node (packages/tailnet) is Go; staging builds it for the installer's architectures.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tailnet/go.mod
+          cache-dependency-path: packages/tailnet/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+      - run: npm ci
+      - run: npm run build:ui -w @owlbot/desktop
+      - run: cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml
+      - run: npm run package:desktop
+      - name: Install, start, check, quit, uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = (Get-ChildItem dist/desktop/owlbot-setup-*-x64.exe | Select-Object -First 1).FullName
+          $p = Start-Process $setup -ArgumentList "/S", "/NOSTART" -PassThru
+          $p.WaitForExit(600000) | Out-Null
+          if ($p.ExitCode -ne 0) { throw "setup exited with $($p.ExitCode)" }
+          $app = "$env:LOCALAPPDATA\Owlbot"
+          if (-not (Test-Path "$app\Owlbot.exe")) { throw "Owlbot.exe is missing" }
+          if (-not (Test-Path "$app\app\packaging\desktop\launch.mjs")) { throw "the hub is missing" }
+
+          Start-Process "$app\Owlbot.exe" -ArgumentList "--mode", "hub", "--background"
+          $state = $null
+          for ($i = 0; $i -lt 120 -and -not $state; $i++) {
+            try { $state = Invoke-RestMethod http://127.0.0.1:41780/api/auth/state } catch { Start-Sleep 1 }
+          }
+          if (-not $state) { Get-Content "$app\logs\*.log" -ErrorAction SilentlyContinue; throw "the hub did not answer" }
+          if ($state.hasPassword) { throw "a fresh hub has a password" }
+          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."Owlbot"
+          if ($run -ne "`"$app\Owlbot.exe`" --background") { throw "Run value: $run" }
+
+          Start-Process "$app\Owlbot.exe" -ArgumentList "--quit" -Wait
+          $down = $false
+          for ($i = 0; $i -lt 30 -and -not $down; $i++) {
+            try { Invoke-RestMethod http://127.0.0.1:41780/api/auth/state | Out-Null; Start-Sleep 1 } catch { $down = $true }
+          }
+          if (-not $down) { throw "the hub still answers after --quit" }
+
+          Start-Process "$app\uninstall.exe" -ArgumentList "/S" -Wait
+          for ($i = 0; $i -lt 60 -and (Test-Path "$app\Owlbot.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$app\Owlbot.exe") { throw "not uninstalled" }
+          if (-not (Test-Path "$app\owlbot.db")) { throw "the data is gone" }
+          $left = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue)."Owlbot"
+          if ($left) { throw "the Run value is still there" }
+          "ok"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-installer
+          path: dist/desktop/owlbot-setup-*.exe
+          if-no-files-found: ignore
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # The hub's Tailscale node (packages/tailnet) is Go; staging builds it for the installer's architectures.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tailnet/go.mod
+          cache-dependency-path: packages/tailnet/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+      - run: npm ci
+      - run: npm run build:ui -w @owlbot/desktop
+      - run: cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml
+      - run: npm run package:desktop
+      - name: "Disk image: drag to Applications, run, quit"
+        run: |
+          set -eu
+          data="$HOME/Library/Application Support/Owlbot"
+          up() { curl -fsS http://127.0.0.1:41780/api/auth/state >state.json 2>/dev/null; }
+          down() { ! up; }
+          wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 120 ]; then echo "timed out: $*"; cat "$data/logs/"*.log || true; exit 1; fi; sleep 1; done; }
+
+          dmg=$(ls dist/desktop/owlbot-*.dmg | head -n 1)
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/owl-image "$dmg"
+          test "$(readlink /tmp/owl-image/Applications)" = /Applications
+          codesign --verify --strict /tmp/owl-image/Owlbot.app
+          codesign -dv /tmp/owl-image/Owlbot.app/Contents/Resources/app/runtime/arm64/bin/node 2>&1 | grep -q "TeamIdentifier=HX7739G8FX"
+          lipo -archs /tmp/owl-image/Owlbot.app/Contents/MacOS/Owlbot | grep -q x86_64
+          ditto /tmp/owl-image/Owlbot.app /Applications/Owlbot.app
+          hdiutil detach /tmp/owl-image
+
+          /Applications/Owlbot.app/Contents/MacOS/Owlbot --mode hub --background &
+          wait_for up
+          grep -q '"hasPassword":false' state.json
+          node /Applications/Owlbot.app/Contents/Resources/app/packaging/desktop/launch.mjs url | grep -Eq '^http://localhost:41780/#setup=[A-Za-z0-9_-]+$'
+          grep -q "/Applications/Owlbot.app/Contents/MacOS/Owlbot" "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
+
+          /Applications/Owlbot.app/Contents/MacOS/Owlbot --quit
+          wait_for down
+          test -f "$data/owlbot.db"
+          # The package check starts from a first run again (the data stays).
+          rm -rf /Applications/Owlbot.app "$HOME/Library/Application Support/ai.owlbot.app" "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
+          echo ok
+      - name: "Package: silent install, run, uninstall"
+        run: |
+          set -eu
+          data="$HOME/Library/Application Support/Owlbot"
+          up() { curl -fsS http://127.0.0.1:41780/api/auth/state >state.json 2>/dev/null; }
+          down() { ! up; }
+          wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 120 ]; then echo "timed out: $*"; cat "$data/logs/"*.log || true; exit 1; fi; sleep 1; done; }
+
+          pkg=$(ls dist/desktop/owlbot-*.pkg | head -n 1)
+          pkgutil --payload-files "$pkg" | grep -q "Applications/Owlbot.app/Contents/Resources/uninstall.sh"
+          sudo installer -pkg "$pkg" -target /
+          test -x /Applications/Owlbot.app/Contents/MacOS/Owlbot
+          # The postinstall opened the app at its first run; this makes the choice through it (or starts it).
+          /Applications/Owlbot.app/Contents/MacOS/Owlbot --mode hub --background &
+          wait_for up
+
+          sudo /bin/sh /Applications/Owlbot.app/Contents/Resources/uninstall.sh "$(id -u)" "$HOME"
+          wait_for down
+          test ! -e /Applications/Owlbot.app
+          test ! -e "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
+          if pkgutil --pkg-info ai.owlbot.pkg >/dev/null 2>&1; then echo "the package receipt is still there"; exit 1; fi
+          test -f "$data/owlbot.db"
+          echo ok
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-installers
+          path: |
+            dist/desktop/owlbot-*.dmg
+            dist/desktop/owlbot-*.pkg
+          if-no-files-found: ignore

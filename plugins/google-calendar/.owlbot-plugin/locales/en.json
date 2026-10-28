@@ -1,0 +1,14 @@
+{
+  "name": "Google Calendar",
+  "description": "Your Google calendars for the agent: what's on, free time, booking and moving events (with your approval), the day's events in the digest",
+  "integration.summary": "Events, free time and booking meetings; the day's plan in the morning digest",
+  "settings.digest.title": "The day's events in the digest",
+  "settings.digest.description": "The morning digest lists today's events, a later one tomorrow's",
+  "settings.apiBaseUrl.title": "Calendar API address",
+  "digest.today": "Today in your calendar",
+  "digest.tomorrow": "Tomorrow in your calendar",
+  "digest.allDay": "all day",
+  "approval.create": "Create the event “{title}”: {start} – {end}",
+  "approval.update": "Change the event {id}",
+  "approval.delete": "Delete the event {id}"
+}

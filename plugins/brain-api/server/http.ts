@@ -3,7 +3,7 @@
 
 import http from "node:http";
 import https from "node:https";
-import type { Params } from "@openbot/shared";
+import type { Params } from "@owlbot/shared";
 import type { Part } from "./history.ts";
 
 export type LlmErrorKind = "limit" | "auth" | "network" | "http" | "context" | "thinking" | "aborted";

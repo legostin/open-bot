@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions } from "@openbot/shared";
-import { ClaudeStreamParser, createClaudeCodeProvider, CodexStreamParser, parseCodexReset } from "../src/index.ts";
+import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
+import { ClaudeStreamParser, createClaudeCodeProvider, createCodexProvider, CodexStreamParser, parseCodexReset } from "../src/index.ts";
 
 const fake = join(import.meta.dirname, "fixtures", "fake-claude.mjs");
 
@@ -11,7 +11,7 @@ function opts(over: Partial<BrainSessionOptions> = {}): BrainSessionOptions {
   return {
     sessionId: "s_" + Math.random().toString(36).slice(2),
     agent: {} as any,
-    workspace: mkdtempSync(join(tmpdir(), "ob-cc-ws-")),
+    workspace: mkdtempSync(join(tmpdir(), "owl-cc-ws-")),
     mcp: { url: "http://127.0.0.1:1/mcp", token: "tok-secret", bridgeCommand: ["node", "bridge.ts"] },
     systemPrompt: "SYSTEM",
     env: {},
@@ -31,7 +31,7 @@ describe("ClaudeStreamParser", () => {
     const p = new ClaudeStreamParser();
     const ev = [
       ...p.push({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "hi" } }, parent_tool_use_id: null, api_message_id: "m1" }),
-      ...p.push({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "hi" }, { type: "tool_use", id: "t", name: "mcp__openbot__memory_search", input: { q: 1 } }] }, parent_tool_use_id: null }),
+      ...p.push({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "hi" }, { type: "tool_use", id: "t", name: "mcp__owlbot__memory_search", input: { q: 1 } }] }, parent_tool_use_id: null }),
       ...p.push({ type: "assistant", message: { id: "m9", content: [{ type: "text", text: "inner" }] }, parent_tool_use_id: "t" }),
     ];
     expect(ev).toEqual([
@@ -48,7 +48,7 @@ describe("ClaudeStreamParser", () => {
 });
 
 describe("Claude Code provider (fake CLI)", () => {
-  const stateDir = mkdtempSync(join(tmpdir(), "ob-cc-state-"));
+  const stateDir = mkdtempSync(join(tmpdir(), "owl-cc-state-"));
   const provider = createClaudeCodeProvider({ command: () => fake, stateDir });
 
   it("probes version and login", async () => {
@@ -80,6 +80,26 @@ describe("Claude Code provider (fake CLI)", () => {
     expect(ev.at(-1)).toEqual({ type: "done", resumeToken: "sess-1" });
   });
 
+  it("takes more input while a turn runs: at the next step, or as its own answer right after", async () => {
+    const s = await provider.createSession(opts());
+    const joined = s.send({ text: "go SLOW" });
+    const later = setTimeout(() => expect(s.steer?.({ text: "and this" })).toBe(true), 100);
+    const ev = await collect(joined);
+    clearTimeout(later);
+    const text = ev.filter((e) => e.type === "text").map((e: any) => e.delta).join("");
+    expect(text).toBe("slow done also:and this");
+    expect(ev.filter((e) => e.type === "done")).toHaveLength(1);
+    // Over: nothing to join, the hub sends it as the next turn.
+    expect(s.steer?.({ text: "too late" })).toBe(false);
+
+    const own = s.send({ text: "x LATE" });
+    setTimeout(() => s.steer?.({ text: "more" }), 100);
+    const ev2 = await collect(own);
+    const text2 = ev2.filter((e) => e.type === "text").map((e: any) => e.delta).join("");
+    expect(text2).toMatch(/^late done.*echo:more/);
+    expect(ev2.filter((e) => e.type === "usage")).toHaveLength(2);
+  });
+
   it("reports limit_hit", async () => {
     const s = await provider.createSession(opts());
     const ev = await collect(s.send({ text: "LIMIT" }));
@@ -106,7 +126,7 @@ describe("CodexStreamParser", () => {
     const p = new CodexStreamParser();
     const ev = [
       ...p.push({ type: "thread.started", thread_id: "th1" }),
-      ...p.push({ type: "item.started", item: { id: "i1", type: "mcp_tool_call", server: "openbot", tool: "notify", arguments: { title: "x" } } }),
+      ...p.push({ type: "item.started", item: { id: "i1", type: "mcp_tool_call", server: "owlbot", tool: "notify", arguments: { title: "x" } } }),
       ...p.push({ type: "item.completed", item: { id: "i1", type: "mcp_tool_call", status: "completed", result: { content: [{ type: "text", text: "ok" }] } } }),
       ...p.push({ type: "item.completed", item: { id: "i2", type: "agent_message", text: "Готово" } }),
       ...p.push({ type: "turn.completed", usage: { input_tokens: 5, cached_input_tokens: 1, output_tokens: 2 } }),
@@ -126,5 +146,60 @@ describe("CodexStreamParser", () => {
     const p = new CodexStreamParser();
     p.push({ type: "turn.failed", error: { message: "usage limit reached, try again in 30 minutes" } });
     expect(p.limit).toBeTruthy();
+  });
+});
+
+describe("Codex provider (fake CLI)", () => {
+  const fakeCodex = join(import.meta.dirname, "fixtures", "fake-codex.mjs");
+  const stateDir = mkdtempSync(join(tmpdir(), "owl-cx-state-"));
+  const provider = createCodexProvider({ command: () => fakeCodex, stateDir, sandbox: () => "workspace-write" });
+  const text = (ev: BrainEvent[]) => ev.filter((e) => e.type === "text").map((e: any) => e.delta).join("");
+
+  it("runs turns through the app server and resumes the thread", async () => {
+    const s = await provider.createSession(opts({ model: "gpt-x" }));
+    const first = await collect(s.send({ text: "ping" }));
+    expect(text(first)).toMatch(/^echo:ping\nthread=th-\d+ model=gpt-x\n$/);
+    expect(first).toContainEqual({ type: "tool_call", id: "m1", name: "notify", input: { title: "x" } });
+    expect(first).toContainEqual({ type: "tool_result", id: "m1", output: "ok", isError: false });
+    expect(first).toContainEqual({ type: "usage", inputTokens: 7, outputTokens: 2 });
+    const thread = (first.at(-1) as any).resumeToken;
+    expect(thread).toMatch(/^th-/);
+    const second = await collect(s.send({ text: "again" }));
+    expect(text(second)).toContain(`thread=${thread}`);
+  });
+
+  it("takes more input into the turn in progress (turn/steer)", async () => {
+    const s = await provider.createSession(opts());
+    const ev: BrainEvent[] = [];
+    let steered: Promise<boolean | undefined> | undefined;
+    for await (const e of s.send({ text: "go SLOW" })) {
+      ev.push(e);
+      // The command is running: the input joins the turn.
+      if (e.type === "tool_call" && !steered) steered = Promise.resolve(s.steer?.({ text: "and this" }));
+    }
+    expect(await steered).toBe(true);
+    expect(text(ev)).toBe("slow done also:and this\n");
+    expect(await s.steer?.({ text: "too late" })).toBe(false);
+  });
+
+  it("reports the subscription limit", async () => {
+    const s = await provider.createSession(opts());
+    const ev = await collect(s.send({ text: "LIMIT" }));
+    expect(ev.find((e) => e.type === "limit_hit")).toMatchObject({ detail: expect.stringContaining("usage limit") });
+  });
+
+  it("falls back to codex exec without an app server, and cannot steer there", async () => {
+    const old = process.env.FAKE_CODEX_NO_APP;
+    process.env.FAKE_CODEX_NO_APP = "1";
+    try {
+      const s = await provider.createSession(opts());
+      const ev = await collect(s.send({ text: "hello" }));
+      expect(text(ev)).toBe("exec:hello\n");
+      expect(ev.at(-1)).toEqual({ type: "done", resumeToken: "th-exec" });
+      expect(await s.steer?.({ text: "x" })).toBe(false);
+    } finally {
+      if (old === undefined) delete process.env.FAKE_CODEX_NO_APP;
+      else process.env.FAKE_CODEX_NO_APP = old;
+    }
   });
 });

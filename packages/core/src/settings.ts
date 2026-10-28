@@ -1,5 +1,6 @@
-import { DEFAULT_LOCALE, localeFromEnv, type Locale } from "@openbot/shared";
+import { DEFAULT_LOCALE, localeFromEnv, type Locale } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
+import { DEFAULT_TRANSCRIPTION, type TranscriptionSettings } from "./transcribe.ts";
 
 export interface CoreSettings {
   timezone: string;
@@ -22,6 +23,10 @@ export interface CoreSettings {
   approvalExpireHours: number;
   /** Hub language: notifications, channels, approval cards and the default for the UI. */
   language: Locale;
+  /** Access from anywhere: the hub runs its Tailscale node and the Funnel link (remote.ts). */
+  remoteAccess: boolean;
+  /** Speech to text for voice messages (transcribe.ts). */
+  transcription: TranscriptionSettings;
 }
 
 export const DEFAULT_BRAIN_EGRESS = [
@@ -63,6 +68,8 @@ export function defaultSettings(timezone: string, language: Locale = localeFromE
     approvalInlineWaitSec: 45,
     approvalExpireHours: 24,
     language,
+    remoteAccess: false,
+    transcription: DEFAULT_TRANSCRIPTION,
   };
 }
 

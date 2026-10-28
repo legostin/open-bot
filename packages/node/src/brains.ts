@@ -4,9 +4,9 @@
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, ProbeResult } from "@openbot/shared";
-import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
-import { createClaudeCodeProvider, createCodexProvider } from "@openbot/brains-cli";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, ProbeResult } from "@owlbot/shared";
+import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
+import { createClaudeCodeProvider, createCodexProvider } from "@owlbot/brains-cli";
 import type { PolicyStore } from "./policy.ts";
 import { resolveWorkspace } from "./guard.ts";
 import { hubLocale, tHub } from "./messages.ts";
@@ -52,7 +52,8 @@ export function shimTarget(cmdFile: string): string | undefined {
     const text = readFileSync(cmdFile, "utf8");
     const m = /"%~?dp0%?\\([^"]+?\.m?js)"/i.exec(text);
     if (!m) return undefined;
-    const target = join(dirname(cmdFile), m[1]);
+    // The shim spells the path with backslashes; split it so the join is right whatever platform reads the shim.
+    const target = join(dirname(cmdFile), ...m[1].split(/[\\/]/));
     return existsSync(target) ? target : undefined;
   } catch {
     return undefined;
@@ -63,7 +64,7 @@ export function shimTarget(cmdFile: string): string | undefined {
 export function defaultBridgeCommand(): string[] {
   let entry: string | undefined;
   try {
-    entry = fileURLToPath(import.meta.resolve("@openbot/mcp-bridge"));
+    entry = fileURLToPath(import.meta.resolve("@owlbot/mcp-bridge"));
   } catch {
     entry = fileURLToPath(new URL("../../mcp-bridge/src/index.ts", import.meta.url));
   }
@@ -209,6 +210,12 @@ export class BrainHost {
     } catch (e: any) {
       emit({ type: "error", message: e?.message ?? String(e), fatal: true });
     }
+  }
+
+  /** More input for the turn in progress; false sends it as the next turn. */
+  async steer(p: { sessionId: string; turn: BrainTurn }): Promise<boolean> {
+    const s = this.sessions.get(p.sessionId)?.session;
+    return !!(s?.steer && (await s.steer(p.turn)));
   }
 
   async interrupt(p: { sessionId: string }): Promise<void> {

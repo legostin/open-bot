@@ -1,4 +1,4 @@
-// Composition root for `openbot-node run` (also used by tests).
+// Composition root for `owlbot-node run` (also used by tests).
 
 import { loadConfig, loadKey, type NodeConfig } from "./home.ts";
 import { PolicyStore } from "./policy.ts";

@@ -1,0 +1,16 @@
+{
+  "name": "@owlbot/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Owlbot desktop app (Tauri): a window for the hub's UI, a tray icon, the hub or a machine in the background",
+  "scripts": {
+    "build:ui": "node ui/build.mjs",
+    "typecheck": "tsc -p ui/tsconfig.json",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/cli": "^2.12.4"
+  }
+}

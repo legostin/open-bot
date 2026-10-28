@@ -4,8 +4,8 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, cpSync, rmSync, renameSync, statSync, readFileSync } from "node:fs";
 import { join, dirname, basename, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { Catalog, CoreMethod, Locale, OpenbotManifest, PluginLayout, PluginPermissions, ToolDescriptor, ToolSpec } from "@openbot/shared";
-import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, type RpcPeer } from "@openbot/shared";
+import type { Catalog, CoreMethod, Locale, OwlbotManifest, PluginLayout, PluginPermissions, ToolDescriptor, ToolSpec } from "@owlbot/shared";
+import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, type RpcPeer } from "@owlbot/shared";
 import { json, type Db } from "../db.ts";
 import { hubLocale, localizePluginValue, LocalizedError, tFor } from "../i18n.ts";
 import type { Config } from "../config.ts";
@@ -15,6 +15,8 @@ import type { HookRegistry, HookName } from "../hooks.ts";
 import type { VaultService } from "../vault/service.ts";
 import type { AuditLog } from "../audit.ts";
 import type { EgressProxy } from "../egress.ts";
+import { npmEnv, npmInvocation, withPath } from "../cli-tools.ts";
+import { linkUserKeychains } from "./keychains.ts";
 
 export type PluginStatus = "stopped" | "starting" | "running" | "crashed" | "disabled" | "no-server" | "error";
 
@@ -58,6 +60,8 @@ export interface HostDeps {
   coreCall: (pluginId: string, method: CoreMethod, params: any) => Promise<unknown>;
   /** Called after plugin set changes (skills/agents/mcp roots need re-indexing). */
   onLayoutsChanged: () => void;
+  /** Directories of CLIs the hub installed itself; brain hosts find them after the system PATH. */
+  cliBinDirs?: () => string[];
 }
 
 interface Running {
@@ -69,7 +73,7 @@ interface Running {
 
 export interface InstallPreview {
   stagingId: string;
-  manifest: OpenbotManifest;
+  manifest: OwlbotManifest;
   formats: PluginLayout["formats"];
   permissions: PluginPermissions;
   commitHash?: string;
@@ -206,10 +210,11 @@ export class PluginHost {
     const cfg = this.d.config;
     const proxyToken = this.d.egress.issueToken(`plugin:${id}`, rec.granted.network);
     const proxyUrl = `http://${proxyToken}:x@127.0.0.1:${cfg.egressPort}`;
-    // Builtin brain plugins run harness CLIs (claude, codex) as the "agent" user with a persistent home
-    // (CLI logins live there); everything else runs as the unprivileged "plugin" user.
+    // Builtin brain plugins run harness CLIs (claude, codex) as the "agent" user with a persistent home where the CLI
+    // logins live (config.brainHome: the user's own home in the desktop app); everything else runs as the
+    // unprivileged "plugin" user.
     const isBrainHost = rec.source === "builtin" && rec.layout.manifest.contributes.brains.length > 0;
-    const home = isBrainHost ? join(cfg.dataDir, "home", "agent") : dataDir;
+    const home = isBrainHost ? cfg.brainHome : dataDir;
     const runAs = isBrainHost ? cfg.isolation.agentUser : cfg.isolation.pluginUser;
     if (cfg.isolation.users) {
       // Directories must belong to the user the plugin runs as (plugins-data is sticky world-writable, like /tmp).
@@ -217,11 +222,13 @@ export class PluginHost {
     } else {
       mkdirSync(dataDir, { recursive: true });
       mkdirSync(home, { recursive: true });
+      // Running as the user: CLIs that keep logins in the macOS keychain must find it from their own HOME.
+      if (isBrainHost) linkUserKeychains(home);
     }
     const env: Record<string, string> = {
       HOME: home,
-      OPENBOT_DATA_DIR_PLUGIN: dataDir,
-      OPENBOT_PLUGIN_ID: id,
+      OWLBOT_DATA_DIR_PLUGIN: dataDir,
+      OWLBOT_PLUGIN_ID: id,
       NODE_USE_ENV_PROXY: "1",
       HTTP_PROXY: proxyUrl,
       HTTPS_PROXY: proxyUrl,
@@ -238,7 +245,8 @@ export class PluginHost {
       const s = sudoSpawn(runAs, { ...passEnv(), ...env }, process.execPath, nodeArgs);
       child = spawn(s.command, s.args, { cwd: rec.dir, env: s.env, stdio: ["pipe", "pipe", "pipe"] });
     } else {
-      child = spawn(process.execPath, nodeArgs, { cwd: rec.dir, env: { ...scrubEnv(process.env), ...env }, stdio: ["pipe", "pipe", "pipe"] });
+      const base = isBrainHost ? withPath(scrubEnv(process.env), [], this.d.cliBinDirs?.() ?? []) : scrubEnv(process.env);
+      child = spawn(process.execPath, nodeArgs, { cwd: rec.dir, env: { ...base, ...env }, stdio: ["pipe", "pipe", "pipe"] });
     }
 
     const peer = createRpcPeer(ndjsonTransport(child.stdout!, child.stdin!));
@@ -367,7 +375,7 @@ export class PluginHost {
   private log(rec: PluginRecord, level: string, msg: string): void {
     rec.logs.push({ ts: nowIso(), level, msg: this.d.vault.redactor.text(msg) });
     if (rec.logs.length > MAX_LOGS) rec.logs.splice(0, rec.logs.length - MAX_LOGS);
-    if (level === "error" || process.env.OPENBOT_DEBUG) console.error(`[plugin:${rec.id}] ${msg}`);
+    if (level === "error" || process.env.OWLBOT_DEBUG) console.error(`[plugin:${rec.id}] ${msg}`);
   }
 
   // ---------- RPC wiring ----------
@@ -604,12 +612,8 @@ export class PluginHost {
     if (existsSync(pkg)) {
       const deps = JSON.parse(readFileSync(pkg, "utf8")).dependencies;
       if (deps && Object.keys(deps).length) {
-        execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], {
-          cwd: target,
-          stdio: "pipe",
-          timeout: 300_000,
-          shell: process.platform === "win32",
-        });
+        const npm = npmInvocation(["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"]);
+        execFileSync(npm.file, npm.args, { cwd: target, stdio: "pipe", timeout: 300_000, shell: npm.shell, env: npmEnv() });
       }
     }
     const perms = st.layout.manifest.permissions;
@@ -662,7 +666,7 @@ export function scrubEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined) continue;
     if (/KEY|TOKEN|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL/i.test(k)) continue;
-    if (k.startsWith("OPENBOT_")) continue;
+    if (k.startsWith("OWLBOT_")) continue;
     out[k] = v;
   }
   return out;

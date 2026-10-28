@@ -2,8 +2,8 @@
 // deferred execution when the user answers after the inline wait timed out.
 
 import { createHmac, randomBytes } from "node:crypto";
-import type { Approval, ApprovalStatus, Rule, ToolEffect, ToolResult } from "@openbot/shared";
-import { newId, nowIso } from "@openbot/shared";
+import type { Approval, ApprovalStatus, Rule, ToolEffect, ToolResult } from "@owlbot/shared";
+import { newId, nowIso } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";
@@ -32,7 +32,7 @@ const fromRow = (r: any): Approval => ({
 export type Decision = "approve" | "deny";
 
 export interface ResolveOptions {
-  via: "console" | "telegram" | "rule" | "timeout";
+  via: "console" | "telegram" | "device" | "rule" | "timeout";
   /** Create an "always allow" rule from this approval. */
   remember?: boolean;
   /** Custom rule conditions (console can edit before saving). */

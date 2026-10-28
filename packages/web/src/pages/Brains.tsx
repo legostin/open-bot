@@ -104,6 +104,7 @@ export function BrainsPage() {
                     <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted">
                       {b.label !== b.ref && <span className="font-mono">{b.ref}</span>}
                       {hostLabel(b.host) && <span>{hostLabel(b.host)}</span>}
+                      {b.probe?.model && <span>{t("brains.model", { model: b.probe.model })}</span>}
                       {b.probe?.version && <span>{t("brains.version", { version: b.probe.version })}</span>}
                       {b.probe?.checkedAt && <span>{t("brains.checked", { time: relativeTime(b.probe.checkedAt) })}</span>}
                     </div>

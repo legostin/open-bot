@@ -1,0 +1,18 @@
+// Where the brain CLIs keep their logins: the data dir by default, the user's own home in the desktop app.
+import { describe, expect, it } from "vitest";
+import { join } from "node:path";
+import { loadConfig } from "../src/config.ts";
+
+describe("brain home", () => {
+  it("is <data>/home/agent by default", () => {
+    expect(loadConfig({}, { dataDir: "/srv/owl" }).brainHome).toBe(join("/srv/owl", "home", "agent"));
+  });
+
+  it("follows OWLBOT_BRAIN_HOME, as the desktop app sets it", () => {
+    expect(loadConfig({ OWLBOT_BRAIN_HOME: "/Users/u" }, { dataDir: "/srv/owl" }).brainHome).toBe("/Users/u");
+  });
+
+  it("stays in the data dir under user isolation", () => {
+    expect(loadConfig({ OWLBOT_BRAIN_HOME: "/Users/u", OWLBOT_ISOLATION: "users" }, { dataDir: "/srv/owl" }).brainHome).toBe(join("/srv/owl", "home", "agent"));
+  });
+});

@@ -14,7 +14,7 @@ export interface BrainRow {
   /** Can sign in from here (a CLI brain on the hub). */
   login?: boolean;
   connected: boolean;
-  probe?: { available: boolean; authenticated: boolean; version?: string; models?: string[]; detail?: string; checkedAt?: string };
+  probe?: { available: boolean; authenticated: boolean; version?: string; models?: string[]; model?: string; detail?: string; checkedAt?: string };
   limitedUntil?: string;
   limitDetail?: string;
 }
@@ -48,7 +48,7 @@ export function ensureBrains(): void {
   if (!brains.get()) void refreshBrains().catch(() => {});
 }
 
-/** Mirrors parseBrainRef in @openbot/shared: a ref without "@machine" runs on the hub ("@local"). */
+/** Mirrors parseBrainRef in @owlbot/shared: a ref without "@machine" runs on the hub ("@local"). */
 export function normalizeBrainRef(ref: string): string {
   const r = ref.trim();
   return r.includes("@") ? r : `${r}@local`;
@@ -69,7 +69,8 @@ export function brainStatus(b: BrainRow): { label: string; tone: Tone } {
   if (b.limitedUntil) return { label: t("brains.status.limited", { time: formatDateTime(b.limitedUntil) }), tone: "warning" };
   if (!b.probe) return { label: t("brains.status.unchecked"), tone: "neutral" };
   if (!b.probe.available) return { label: t("brains.status.unavailable"), tone: "danger" };
-  if (!b.probe.authenticated) return { label: t("brains.status.needsLogin"), tone: "warning" };
+  // Only CLI brains sign in; an API brain needs a key, a running server or a model it has.
+  if (!b.probe.authenticated) return { label: t(b.login ? "brains.status.needsLogin" : "brains.status.needsSetup"), tone: "warning" };
   return { label: t("brains.status.ready"), tone: "success" };
 }
 

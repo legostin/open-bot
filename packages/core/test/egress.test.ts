@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import http from "node:http";
-import { createServer } from "node:net";
+import { connect, createServer } from "node:net";
 import { EgressProxy, isPrivateAddress } from "../src/egress.ts";
 
 function freePort(): Promise<number> {
@@ -69,5 +69,23 @@ describe("egress proxy", () => {
     const ok = await viaProxy(proxyPort, token, `http://localhost:${upstreamPort}/`);
     expect(ok).toEqual({ status: 200, body: "hello from lan" });
     proxy.privateAllow = () => [];
+  });
+
+  it("survives a client that resets a refused CONNECT", async () => {
+    // A brain or plugin refused a tunnel and dropped the connection hard: the hub must not crash on the reset.
+    for (let i = 0; i < 20; i++) {
+      await new Promise<void>((resolve) => {
+        const s = connect(proxyPort, "127.0.0.1", () => {
+          s.write("CONNECT blocked.example:443 HTTP/1.1\r\nHost: blocked.example:443\r\n\r\n");
+          setTimeout(() => {
+            s.resetAndDestroy();
+            resolve();
+          }, i % 4);
+        });
+        s.on("error", () => resolve());
+      });
+    }
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await viaProxy(proxyPort, undefined, `http://localhost:${upstreamPort}/`)).status).toBe(407);
   });
 });

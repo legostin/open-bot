@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Rule, ToolDescriptor } from "@openbot/shared";
+import type { Rule, ToolDescriptor } from "@owlbot/shared";
 import { decide, extractTargets, suggestRule, type PolicyInput } from "../src/policy/engine.ts";
 import { Redactor } from "../src/vault/redact.ts";
 import { VaultService, VaultError } from "../src/vault/service.ts";
@@ -33,6 +33,14 @@ describe("policy engine", () => {
   it("local writes ask only in the strict profile", () => {
     expect(decide(base({ tool: tool("fs_write", "local-write") }), [], unknownTargets).decision).toBe("allow");
     expect(decide(base({ tool: tool("fs_write", "local-write"), profile: "strict" }), [], unknownTargets).decision).toBe("ask");
+  });
+
+  it("after outside content an agent changes its own profile only with approval; reading it stays free", () => {
+    const self = tool("profile_update", "local-write");
+    expect(decide(base({ tool: self, input: { prompt: "x" } }), [], unknownTargets).decision).toBe("allow");
+    expect(decide(base({ tool: self, input: { prompt: "x" }, tainted: true }), [], unknownTargets).decision).toBe("ask");
+    expect(decide(base({ tool: self, input: {}, tainted: true }), [], unknownTargets).decision).toBe("allow");
+    expect(decide(base({ tool: tool("fs_write", "local-write"), tainted: true }), [], unknownTargets).decision).toBe("allow");
   });
 
   it("deny rules win over allow rules", () => {
@@ -82,7 +90,7 @@ describe("redactor", () => {
 });
 
 describe("vault", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ob-vault-"));
+  const dir = mkdtempSync(join(tmpdir(), "owl-vault-"));
 
   it("encrypts, seals, unlocks and enforces scopes", () => {
     const v = new VaultService(join(dir, "v.db"));

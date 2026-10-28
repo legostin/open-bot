@@ -15,7 +15,7 @@ import type {
   ToolCallContext,
   ToolResult,
   ToolSpec,
-} from "@openbot/shared";
+} from "@owlbot/shared";
 
 export type ToolHandler = (input: any, ctx: ToolCallContext) => Promise<ToolResult | string> | ToolResult | string;
 
@@ -27,6 +27,12 @@ export interface ToolRegistration extends ToolSpec {
 
 export interface BrainSessionImpl {
   send(turn: BrainTurn): AsyncIterable<BrainEvent>;
+  /**
+   * More input for the turn in progress (the user wrote again, a task asked or answered): the brain takes it at its
+   * next step and its reply goes on in the same send(). False when no turn can take it; the hub then sends it as the
+   * next turn.
+   */
+  steer?(turn: BrainTurn): Promise<boolean> | boolean;
   interrupt(): Promise<void> | void;
   close(): Promise<void> | void;
 }
@@ -61,7 +67,7 @@ export interface ChannelImpl {
   status?(): Promise<{ connected: boolean; detail?: string }>;
 }
 
-export type HookName = "session.start" | "tool.before" | "tool.after" | "message.in" | "notify.before";
+export type HookName = "session.start" | "tool.before" | "tool.after" | "message.in" | "notify.before" | "digest.compose";
 
 export interface HookPayloads {
   "session.start": { sessionId: string; agentId: string; conversationId: string; taskId?: string; background: boolean };
@@ -69,6 +75,8 @@ export interface HookPayloads {
   "tool.after": { tool: string; input: unknown; result: ToolResult; context: ToolCallContext };
   "message.in": { conversationId: string; text: string; channel?: string };
   "notify.before": { level: NotifyLevel; title: string; body: string; agentId?: string; triggerId?: string };
+  /** A digest is going out: `date` (YYYY-MM-DD) and `time` (HH:MM) are local in `timezone`. */
+  "digest.compose": { date: string; time: string; timezone: string };
 }
 
 export interface HookResults {
@@ -77,6 +85,8 @@ export interface HookResults {
   "tool.after": { result?: ToolResult } | void;
   "message.in": { block?: string; text?: string } | void;
   "notify.before": { block?: string; level?: NotifyLevel } | void;
+  /** A section of the digest (in the hub language), or nothing. */
+  "digest.compose": { title: string; body: string } | void;
 }
 
 export type EventName =
@@ -130,7 +140,7 @@ export interface PluginContext {
   settings: Record<string, any>;
   onSettingsChange(cb: (settings: Record<string, any>) => void): void;
   /**
-   * Translations from the plugin's .openbot-plugin/locales/<locale>.json. Use them for text people read
+   * Translations from the plugin's .owlbot-plugin/locales/<locale>.json. Use them for text people read
    * (channel messages, notifications, approval summaries); text for the model stays in English.
    */
   i18n: {

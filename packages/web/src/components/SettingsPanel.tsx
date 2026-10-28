@@ -15,7 +15,9 @@ import { GROUPS, SECTIONS, sectionDef, type PanelSection } from "./nav";
 import { AgentsPage } from "../pages/Agents";
 import { BrainsPage } from "../pages/Brains";
 import { PluginsPage } from "../pages/Plugins";
+import { IntegrationsPage } from "../pages/Integrations";
 import { MachinesPage } from "../pages/Machines";
+import { DevicesPage } from "../pages/Devices";
 import { McpPage } from "../pages/Mcp";
 import { NotificationsPage } from "../pages/Notifications";
 import { SkillsPage } from "../pages/Skills";
@@ -31,8 +33,12 @@ function SectionBody({ section }: { section: PanelSection }) {
       return <BrainsPage />;
     case "plugins":
       return <PluginsPage />;
+    case "integrations":
+      return <IntegrationsPage />;
     case "machines":
       return <MachinesPage />;
+    case "devices":
+      return <DevicesPage />;
     case "mcp":
       return <McpPage />;
     case "notifications":
@@ -57,12 +63,12 @@ function SectionBody({ section }: { section: PanelSection }) {
 function Row({ icon, label, hint, onClick, href }: { icon: ReactNode; label: string; hint?: string; onClick?: () => void; href?: string }) {
   const inner = (
     <>
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-muted">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{label}</span>
-        {hint && <span className="block truncate text-xs text-muted">{hint}</span>}
-      </span>
-      {href ? <ExternalLink className="size-4 shrink-0 text-muted" /> : <ChevronRight className="size-4 shrink-0 text-muted" />}
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-muted">{icon}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{label}</span>
+          {hint && <span className="block truncate text-xs text-muted">{hint}</span>}
+        </span>
+        {href ? <ExternalLink className="size-4 shrink-0 text-muted" /> : <ChevronRight className="size-4 shrink-0 text-muted" />}
     </>
   );
   const cls = "flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2";
@@ -148,32 +154,36 @@ export function SettingsPanel() {
   const route = !home && !def ? routes.find((r) => `plugin:${r.key}` === p.section) : undefined;
   const title = home ? t("nav.settings") : def ? t(def.label) : (route?.title ?? t("nav.settings"));
 
-  // A link inside a section that leads to a conversation or task closes the panel on phones (it covers the chat).
+  // A link inside a section that leads to a conversation or task closes the panel while it covers the chat: a full
+  // screen on phones, a sheet over the chat on mid-size windows. Next to the chat only from 1280px, where both fit.
   const onClick = (e: MouseEvent) => {
     const a = (e.target as HTMLElement).closest("a[href^='/']");
-    if (a && window.matchMedia("(max-width: 1023px)").matches) closePanel();
+    if (a && window.matchMedia("(max-width: 1279px)").matches) closePanel();
   };
 
   return (
-    <aside
-      aria-label={t("nav.settings")}
-      className="animate-in fixed inset-0 z-40 flex flex-col bg-bg lg:static lg:z-auto lg:w-[560px] lg:shrink-0 lg:border-l lg:border-border xl:w-[640px]"
-      onClick={onClick}
-    >
-      <div className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-surface/70 px-2 backdrop-blur">
-        {!home && (
-          <IconButton label={t("common.back")} onClick={() => openPanel("home")}>
-            <ArrowLeft className="size-[18px]" />
+    <>
+      <div className="animate-fade fixed inset-0 z-30 hidden bg-black/25 md:block xl:hidden" onClick={closePanel} aria-hidden />
+      <aside
+        aria-label={t("nav.settings")}
+        className="animate-in fixed inset-0 z-40 flex flex-col bg-bg md:left-auto md:w-[560px] md:max-w-[calc(100vw-4rem)] md:border-l md:border-border md:shadow-card xl:static xl:z-auto xl:max-w-none xl:shrink-0 xl:shadow-none 2xl:w-[640px]"
+        onClick={onClick}
+      >
+        <div className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-surface/70 px-2 backdrop-blur">
+          {!home && (
+            <IconButton label={t("common.back")} onClick={() => openPanel("home")}>
+              <ArrowLeft className="size-[18px]" />
+            </IconButton>
+          )}
+          <h2 className={home ? "min-w-0 flex-1 truncate pl-2 text-[15px] font-semibold" : "min-w-0 flex-1 truncate text-[15px] font-semibold"}>{title}</h2>
+          <IconButton label={t("layout.closePanel")} onClick={closePanel}>
+            <X className="size-[18px]" />
           </IconButton>
-        )}
-        <h2 className={home ? "min-w-0 flex-1 truncate pl-2 text-[15px] font-semibold" : "min-w-0 flex-1 truncate text-[15px] font-semibold"}>{title}</h2>
-        <IconButton label={t("layout.closePanel")} onClick={closePanel}>
-          <X className="size-[18px]" />
-        </IconButton>
-      </div>
-      <div ref={body} className="min-h-0 flex-1 overflow-y-auto">
-        <EmbeddedPage.Provider value={true}>{home ? <Home /> : <SectionBody section={p.section as PanelSection} />}</EmbeddedPage.Provider>
-      </div>
-    </aside>
+        </div>
+        <div ref={body} className="min-h-0 flex-1 overflow-y-auto">
+          <EmbeddedPage.Provider value={true}>{home ? <Home /> : <SectionBody section={p.section as PanelSection} />}</EmbeddedPage.Provider>
+        </div>
+      </aside>
+    </>
   );
 }

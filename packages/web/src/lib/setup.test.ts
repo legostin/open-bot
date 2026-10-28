@@ -1,0 +1,50 @@
+import { describe, expect, it } from "vitest";
+import type { Message, SetupBrain, SetupState } from "@owlbot/shared";
+import { cliRows, primaryRef, showGate } from "./setup";
+
+const brain = (ref: string, o: Partial<SetupBrain> = {}): SetupBrain => ({ ref, label: ref, kind: "cli", installed: false, signedIn: false, canInstall: false, ...o });
+const state = (brains: SetupBrain[], usable = false): SetupState => ({
+  agentId: "assistant",
+  brains,
+  usable,
+  vault: "absent",
+  telegram: false,
+  machines: 0,
+  done: [],
+  skipped: [],
+  remaining: [],
+});
+const msg = (role: Message["role"], parts: Message["parts"]): Message =>
+  ({ id: Math.random().toString(36), conversationId: "c", role, parts, status: "complete", createdAt: "2026-10-26T00:00:00Z" }) as Message;
+
+describe("primaryRef", () => {
+  it("offers an installed CLI before one the hub would install", () => {
+    const s = state([brain("claude-code@local", { canInstall: true }), brain("codex@local", { installed: true }), brain("api:anthropic", { kind: "api", installed: true })]);
+    expect(primaryRef(s)).toBe("codex@local");
+    expect(cliRows(s).map((b) => b.ref)).toEqual(["codex@local", "claude-code@local"]);
+  });
+
+  it("falls back to a CLI the hub can install, and to nothing", () => {
+    expect(primaryRef(state([brain("claude-code@local", { canInstall: true }), brain("codex@local")]))).toBe("claude-code@local");
+    expect(primaryRef(state([brain("codex@local")]))).toBeUndefined();
+    expect(primaryRef(state([brain("codex@local", { installed: true, signedIn: true })]))).toBeUndefined();
+  });
+});
+
+describe("showGate", () => {
+  const s = state([brain("codex@local", { installed: true })]);
+
+  it("shows the card while no brain works and none waits in the conversation", () => {
+    expect(showGate([], s)).toBe(true);
+    expect(showGate([msg("user", [{ type: "text", text: "hi" }])], s)).toBe(true);
+    expect(showGate([], null)).toBe(false);
+    expect(showGate([], state([], true))).toBe(false);
+  });
+
+  it("leaves it to the hub's card until an answer comes after it", () => {
+    const card = msg("system", [{ type: "brain_setup" }]);
+    expect(showGate([msg("user", [{ type: "text", text: "hi" }]), card], s)).toBe(false);
+    expect(showGate([card, msg("user", [{ type: "text", text: "again" }])], s)).toBe(false);
+    expect(showGate([card, msg("assistant", [{ type: "text", text: "hello" }])], s)).toBe(true);
+  });
+});

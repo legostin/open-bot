@@ -1,7 +1,7 @@
 // The real Codex brain on the fake CLI (packages/brains-cli/test/fixtures/fake-codex.mjs): sign-in from the chat.
 import { join } from "node:path";
-import type { PluginContext } from "@openbot/plugin-sdk";
-import { createCodexProvider } from "@openbot/brains-cli";
+import type { PluginContext } from "@owlbot/plugin-sdk";
+import { createCodexProvider } from "@owlbot/brains-cli";
 
 export default {
   activate(ctx: PluginContext) {

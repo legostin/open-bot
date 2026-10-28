@@ -3,7 +3,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { Params } from "@openbot/shared";
+import type { Params } from "@owlbot/shared";
 import { LocalizedError } from "../i18n.ts";
 
 export const MIME: Record<string, string> = {
@@ -18,6 +18,8 @@ export const MIME: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".bmp": "image/bmp",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
   ".woff": "font/woff",

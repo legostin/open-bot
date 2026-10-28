@@ -6,7 +6,7 @@ import { join } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
-import { LOCALES, type ApprovalStatus, type Rule, type VaultScope } from "@openbot/shared";
+import { LOCALES, type ApprovalStatus, type Rule, type VaultScope } from "@owlbot/shared";
 import type { Hub } from "../app.ts";
 import type { AuthSession } from "../auth.ts";
 import { VaultError } from "../vault/service.ts";
@@ -14,7 +14,7 @@ import { errorText, localizePluginValue, LocalizedError, requestLocale, tFor } f
 import { suggestRule } from "../policy/engine.ts";
 import { clientIp, hostAllowed, HttpError, originAllowed, originsFor, safeFile, securityHeaders, sendFile } from "./http.ts";
 
-const COOKIE = "ob_console";
+const COOKIE = "owlbot_console";
 
 const CSP = [
   "default-src 'self'",
@@ -32,12 +32,12 @@ const CSP = [
 
 export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
   const cfg = hub.config;
-  const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024, trustProxy: process.env.OPENBOT_TRUST_PROXY === "1" });
+  const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024, trustProxy: process.env.OWLBOT_TRUST_PROXY === "1" });
   await app.register(fastifyCookie);
   await app.register(fastifyWebsocket);
   const secure = cfg.consoleUrl.startsWith("https://");
   const origins = originsFor(cfg.consoleUrl, cfg.allowedHosts, cfg.consolePort);
-  if (process.env.OPENBOT_CONSOLE_DEV_ORIGIN) origins.push(process.env.OPENBOT_CONSOLE_DEV_ORIGIN);
+  if (process.env.OWLBOT_CONSOLE_DEV_ORIGIN) origins.push(process.env.OWLBOT_CONSOLE_DEV_ORIGIN);
 
   app.addHook("onRequest", async (req, reply) => {
     if (!hostAllowed(req, cfg.allowedHosts)) {
@@ -276,7 +276,7 @@ export async function buildConsoleApp(hub: Hub): Promise<FastifyInstance> {
     const file = rel ? safeFile(cfg.consoleDist, rel) : undefined;
     if (file) return sendFile(reply, file, { cache: rel.startsWith("assets/") });
     const index = join(cfg.consoleDist, "index.html");
-    if (!existsSync(index)) return reply.type("text/html; charset=utf-8").send(`<!doctype html><meta charset=utf-8><title>open-bot console</title>${tFor(requestLocale(req))("build.consoleMissing")}`);
+    if (!existsSync(index)) return reply.type("text/html; charset=utf-8").send(`<!doctype html><meta charset=utf-8><title>Owlbot console</title>${tFor(requestLocale(req))("build.consoleMissing")}`);
     return sendFile(reply, index);
   });
 

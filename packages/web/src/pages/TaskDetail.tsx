@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, Ban, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
-import type { Task } from "@openbot/shared";
+import type { Task } from "@owlbot/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { ACTIVE_STATUSES, formatDateTime, relativeTime, taskStatus } from "../lib/format";
@@ -92,6 +92,12 @@ export function TaskDetailPage({ id }: { id: string }) {
           {current.resumeAt && current.status === "paused" ? ` · ${t("tasks.resumes", { time: relativeTime(current.resumeAt) })}` : ""}
         </span>
       </div>
+      {current.question && (
+        <div className="mt-3 text-sm">
+          <div className="mb-1 text-[11px] font-semibold tracking-wide text-warning uppercase">{t("task.question")}</div>
+          {current.question}
+        </div>
+      )}
       <div className={expanded ? "mt-3" : "mt-3 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"}>
         <div className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("task.goal")}</div>
         <Markdown text={current.goal} className="text-sm" />

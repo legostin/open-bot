@@ -47,6 +47,17 @@ const MIGRATIONS: string[] = [
   // New agents put together in the chat: the card shows the live draft; the agent exists once it is created.
   `create table agent_drafts(id text primary key, conversation_id text not null, data text not null, status text not null, agent_id text,
     created_at text not null, updated_at text not null);`,
+  // Phones paired with the hub: a bearer token (hash only) and the phone's Secure Enclave key for approvals.
+  `
+  create table devices(id text primary key, name text not null, platform text not null, model text, token_hash text not null,
+    public_key text not null, created_at text not null, last_seen_at text, revoked integer not null default 0);
+  create index devices_token on devices(token_hash);
+  create table device_pairing_codes(code text primary key, expires_at text not null, used integer not null default 0);
+  `,
+  // Group chats: the agents taking part (JSON array, the lead first; agent_id holds the lead too).
+  `alter table conversations add column members text;`,
+  // A task's open question to whoever started it (task_ask).
+  `alter table tasks add column question text;`,
 ];
 
 export function openDb(file: string): Db {
@@ -65,6 +76,7 @@ export function openDb(file: string): Db {
   const row = db.prepare("select v from schema_version").get() as { v: number } | undefined;
   let v = row?.v ?? 0;
   if (!row) db.prepare("insert into schema_version(v) values (0)").run();
+  v = repairSwappedMigrations(db, v);
   while (v < MIGRATIONS.length) {
     db.exec("begin");
     try {
@@ -78,6 +90,31 @@ export function openDb(file: string): Db {
     }
   }
   return db;
+}
+
+const DEVICES_MIGRATION = MIGRATIONS.findIndex((m) => m.includes("create table devices("));
+const MEMBERS_MIGRATION = MIGRATIONS.findIndex((m) => m.includes("add column members"));
+
+/**
+ * Desktop builds of claude/desktop-app made before the phones' support was merged (2026-10-27) ran the group chats'
+ * migration where the phones' one is now: such a database has the members column but no devices table. It gets the
+ * phones' tables and counts as having run both.
+ */
+function repairSwappedMigrations(db: Db, v: number): number {
+  if (v !== DEVICES_MIGRATION + 1 || MEMBERS_MIGRATION !== DEVICES_MIGRATION + 1) return v;
+  const members = db.prepare("select 1 from pragma_table_info('conversations') where name = 'members'").get();
+  const devices = db.prepare("select 1 from sqlite_master where type = 'table' and name = 'devices'").get();
+  if (!members || devices) return v;
+  db.exec("begin");
+  try {
+    db.exec(MIGRATIONS[DEVICES_MIGRATION]);
+    db.prepare("update schema_version set v = ?").run(MEMBERS_MIGRATION + 1);
+    db.exec("commit");
+  } catch (e) {
+    db.exec("rollback");
+    throw e;
+  }
+  return MEMBERS_MIGRATION + 1;
 }
 
 export function json<T>(s: string | null | undefined, fallback: T): T {

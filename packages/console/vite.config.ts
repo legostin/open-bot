@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 // The console is served by the hub on its own origin with a strict CSP:
 // everything is bundled (no CDNs, no inline scripts), assets are loaded relative to index.html.
-// For `npm run dev`, start the hub with OPENBOT_CONSOLE_DEV_ORIGIN=http://localhost:5174.
+// For `npm run dev`, start the hub with OWLBOT_CONSOLE_DEV_ORIGIN=http://localhost:5174.
 export default defineConfig({
   base: "./",
   plugins: [react(), tailwindcss()],

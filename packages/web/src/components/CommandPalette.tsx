@@ -1,12 +1,12 @@
-// Ctrl/Cmd+K command palette: the team, settings sections, quick actions and plugin commands.
+// Ctrl/Cmd+K command palette: the team and group chats, settings sections, quick actions and plugin commands.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { CornerDownLeft, Search } from "lucide-react";
 import { createStore, useStore } from "../lib/store";
-import { agentPath } from "../lib/team";
-import { agents, ensureAgents, logout, session } from "../state/app";
+import { agentPath, groupPath } from "../lib/team";
+import { agents, ensureAgents, ensureGroups, groups, logout, session } from "../state/app";
 import { toast } from "../state/toast";
 import { usePluginRegistry } from "../plugins/slots";
 import { liveWindowActions } from "../plugins/liveview";
@@ -48,6 +48,7 @@ export function CommandPalette() {
   const { routes, commands, liveViews } = usePluginRegistry();
   const s = useStore(session);
   const agentList = useStore(agents);
+  const groupList = useStore(groups);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -67,6 +68,7 @@ export function CommandPalette() {
   useEffect(() => {
     if (isOpen) {
       ensureAgents();
+      ensureGroups();
       setQ("");
       setSel(0);
       setTimeout(() => input.current?.focus(), 0);
@@ -82,6 +84,7 @@ export function CommandPalette() {
     ];
     for (const v of liveViews) out.push({ id: `live:${v.key}`, title: t("liveView.command", { title: v.title }), group: actions, icon: v.icon, run: () => liveWindowActions.expand(v.key) });
     for (const a of agentList ?? []) out.push({ id: `agent:${a.id}`, title: a.name, group: t("palette.group.team"), icon: "bot", run: () => navigate(agentPath(a.id, s?.defaultAgent)) });
+    for (const g of groupList ?? []) out.push({ id: `group:${g.conversationId}`, title: g.title, group: t("team.groups"), icon: "users", run: () => navigate(groupPath(g.conversationId)) });
     out.push({ id: "settings", title: t("nav.settings"), group: goTo, icon: "settings", run: () => openPanel("home") });
     for (const n of SECTIONS) out.push({ id: `section:${n.id}`, title: t(n.label), group: goTo, run: () => openPanel(n.id), icon: undefined });
     for (const r of routes)
@@ -93,7 +96,7 @@ export function CommandPalette() {
     }
     out.push({ id: "logout", title: t("common.logout"), group: actions, icon: "power", run: () => logout() });
     return out;
-  }, [routes, commands, liveViews, s, agentList, navigate]);
+  }, [routes, commands, liveViews, s, agentList, groupList, navigate]);
 
   const filtered = useMemo(() => filterItems(items, q), [items, q]);
 

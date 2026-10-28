@@ -1,0 +1,70 @@
+{
+  "id": "browser",
+  "name": "%name%",
+  "version": "0.1.0",
+  "description": "%description%",
+  "builtin": true,
+  "server": "./server/index.ts",
+  "ui": "./ui/dist/index.js",
+  "contributes": {
+    "tools": true,
+    "settings": {
+      "type": "object",
+      "properties": {
+        "headless": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "default": "auto",
+          "title": "%settings.headless.title%",
+          "description": "%settings.headless.description%"
+        },
+        "idleMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "title": "%settings.idleMinutes.title%"
+        },
+        "allowLocalNetwork": {
+          "type": "boolean",
+          "default": false,
+          "title": "%settings.allowLocalNetwork.title%",
+          "description": "%settings.allowLocalNetwork.description%"
+        },
+        "takeoverWaitSec": {
+          "type": "number",
+          "default": 10,
+          "minimum": 0,
+          "title": "%settings.takeoverWaitSec.title%",
+          "description": "%settings.takeoverWaitSec.description%"
+        },
+        "maxDownloadMb": {
+          "type": "number",
+          "default": 200,
+          "minimum": 1,
+          "title": "%settings.maxDownloadMb.title%"
+        }
+      }
+    }
+  },
+  "integration": {"category": "browser", "icon": "globe", "connect": "none", "summary": "%integration.summary%"},
+  "permissions": {
+    "network": [
+      "*"
+    ],
+    "vault": [
+      "login:*"
+    ],
+    "core": [
+      "ui.emit",
+      "files.deliver"
+    ],
+    "ui": [
+      "live.view",
+      "chat.toolResult"
+    ]
+  }
+}

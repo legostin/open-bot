@@ -1,17 +1,18 @@
-// Claude Code as a brain: one headless `claude -p` process per turn, `--resume` between turns.
+// Claude Code as a brain: one headless `claude -p` process per turn, `--resume` between turns. The turn's input goes
+// in as stream-json and stdin stays open while it runs: more user messages (steer) join the turn at its next step.
 // Uses the user's subscription (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, or a login in HOME, which the user
 // can make from the chat: `claude auth login` prints a sign-in page and reads the code that page shows from stdin).
 
 import { mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@openbot/shared";
-import type { BrainProviderImpl, BrainSessionImpl } from "@openbot/plugin-sdk";
-import type { Locale, Translate } from "@openbot/shared/i18n";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@owlbot/shared";
+import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
+import type { Locale, Translate } from "@owlbot/shared/i18n";
 import { capture, childEnv, runLines, textOfToolContent } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseClaudeBrowserLogin, runCliLogin } from "./login.ts";
 
-const MCP_PREFIX = "mcp__openbot__";
+const MCP_PREFIX = "mcp__owlbot__";
 
 export const DEFAULT_CLAUDE_TOOLS = [
   "Bash",
@@ -28,7 +29,7 @@ export const DEFAULT_CLAUDE_TOOLS = [
   "Task",
   "Skill",
   "NotebookEdit",
-  "mcp__openbot",
+  "mcp__owlbot",
 ];
 
 export interface ClaudeCodeOptions {
@@ -55,6 +56,8 @@ export class ClaudeStreamParser {
   sawResult = false;
   resultError?: string;
   mcpFailed = false;
+  /** User messages from stdin the CLI has taken (--replay-user-messages echoes each one when it does). */
+  replays = 0;
   private t: Translate;
 
   constructor(t: Translate = brainsT()) {
@@ -69,7 +72,7 @@ export class ClaudeStreamParser {
     switch (msg.type) {
       case "system": {
         if (msg.subtype === "init" && Array.isArray(msg.mcp_servers)) {
-          const ob = msg.mcp_servers.find((s: any) => s.name === "openbot");
+          const ob = msg.mcp_servers.find((s: any) => s.name === "owlbot");
           if (ob && ob.status !== "connected") {
             this.mcpFailed = true;
             out.push({ type: "error", message: this.t("claude.mcpUnavailable", { status: ob.status }) });
@@ -99,8 +102,12 @@ export class ClaudeStreamParser {
         break;
       }
       case "user": {
-        if (!top) break;
-        for (const block of msg.message?.content ?? []) {
+        if (msg.isReplay) {
+          this.replays++;
+          break;
+        }
+        if (!top || !Array.isArray(msg.message?.content)) break;
+        for (const block of msg.message.content) {
           if (block?.type === "tool_result") out.push({ type: "tool_result", id: block.tool_use_id, output: textOfToolContent(block.content), isError: !!block.is_error });
         }
         break;
@@ -117,6 +124,7 @@ export class ClaudeStreamParser {
       }
       case "result": {
         this.sawResult = true;
+        this.resultError = undefined;
         const u = msg.usage ?? {};
         out.push({
           type: "usage",
@@ -163,9 +171,21 @@ export function classifyClaudeFailure(
   return { message: tail || t("claude.failed"), fatal: true, auth: false, noSession };
 }
 
+/** One user message on stream-json stdin. */
+function userLine(text: string): string {
+  return `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text }] } })}\n`;
+}
+
+/** After a result, how long the CLI may stay silent with input it has not taken before stdin is closed anyway. */
+const PENDING_INPUT_GRACE_MS = 30_000;
+
 class ClaudeCodeSession implements BrainSessionImpl {
   private resumeId?: string;
   private child?: ReturnType<typeof runLines>;
+  /** This turn's messages so far: its input, then what steer() added (sent again if the turn has to start over). */
+  private inputs: string[] = [];
+  /** stdin is closed: the turn is ending and takes no more input. */
+  private closing = false;
   private interrupted = false;
   private o: BrainSessionOptions;
   private p: ClaudeCodeOptions;
@@ -177,12 +197,12 @@ class ClaudeCodeSession implements BrainSessionImpl {
     this.resumeId = opts.resume;
     this.dir = join(p.stateDir, "sessions", opts.sessionId.replace(/[^\w-]/g, "_"));
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-    const [command, ...args] = opts.mcp.bridgeCommand.length ? opts.mcp.bridgeCommand : ["openbot-mcp-bridge"];
+    const [command, ...args] = opts.mcp.bridgeCommand.length ? opts.mcp.bridgeCommand : ["owlbot-mcp-bridge"];
     const tokenFile = join(this.dir, "token");
     writePrivate(tokenFile, opts.mcp.token);
     writePrivate(
       join(this.dir, "mcp.json"),
-      JSON.stringify({ mcpServers: { openbot: { type: "stdio", command, args, env: { OPENBOT_URL: opts.mcp.url, OPENBOT_TOKEN_FILE: tokenFile } } } }),
+      JSON.stringify({ mcpServers: { owlbot: { type: "stdio", command, args, env: { OWLBOT_URL: opts.mcp.url, OWLBOT_TOKEN_FILE: tokenFile } } } }),
     );
     writePrivate(join(this.dir, "prompt.md"), opts.systemPrompt);
   }
@@ -191,6 +211,9 @@ class ClaudeCodeSession implements BrainSessionImpl {
     const tools = this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS;
     const a = [
       "-p",
+      "--input-format",
+      "stream-json",
+      "--replay-user-messages",
       "--output-format",
       "stream-json",
       "--verbose",
@@ -213,6 +236,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
 
   async *send(turn: BrainTurn): AsyncGenerator<BrainEvent> {
     this.interrupted = false;
+    this.inputs = [turn.text];
     for (let attempt = 0; attempt < 2; attempt++) {
       const env = childEnv(process.env, {
         ...this.o.env,
@@ -222,18 +246,33 @@ class ClaudeCodeSession implements BrainSessionImpl {
       });
       const t = brainsT(this.p.locale?.());
       const parser = new ClaudeStreamParser(t);
-      const proc = runLines(this.p.command?.() ?? "claude", this.args(), { cwd: this.o.workspace, env, input: turn.text });
+      this.closing = false;
+      const proc = runLines(this.p.command?.() ?? "claude", this.args(), { cwd: this.o.workspace, env, input: this.inputs.map(userLine).join(""), keepInput: true });
       this.child = proc;
+      // The turn is over once a result comes and the CLI has taken every message: then stdin closes and it exits.
+      // A message it has not taken yet gets its own answer right after, in this process.
+      let grace: NodeJS.Timeout | undefined;
+      const close = () => {
+        this.closing = true;
+        proc.endInput();
+      };
       for await (const line of proc.lines) {
+        clearTimeout(grace);
         if (!line.trim().startsWith("{")) continue;
-        let msg: unknown;
+        let msg: any;
         try {
           msg = JSON.parse(line);
         } catch {
           continue;
         }
         for (const ev of parser.push(msg)) yield ev;
+        if (msg?.type === "result" && !this.closing) {
+          if (parser.replays >= this.inputs.length) close();
+          else grace = setTimeout(close, PENDING_INPUT_GRACE_MS);
+        }
       }
+      clearTimeout(grace);
+      this.closing = true;
       const exit = await proc.exited;
       this.child = undefined;
       if (parser.sessionId) this.resumeId = parser.sessionId;
@@ -259,6 +298,13 @@ class ClaudeCodeSession implements BrainSessionImpl {
       yield { type: "done", resumeToken: this.resumeId };
       return;
     }
+  }
+
+  steer(turn: BrainTurn): boolean {
+    if (!this.child || this.closing || this.interrupted) return false;
+    if (!this.child.write(userLine(turn.text))) return false;
+    this.inputs.push(turn.text);
+    return true;
   }
 
   interrupt(): void {

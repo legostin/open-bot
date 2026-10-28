@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Brain, Check, ChevronDown, Plus } from "lucide-react";
-import type { AgentDef } from "@openbot/shared";
+import type { AgentDef } from "@owlbot/shared";
 import { api, errorText } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import { refreshAgents } from "../../state/app";
@@ -58,14 +58,15 @@ export function BrainPicker({ agent }: { agent: AgentDef }) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={t("brainPicker.label")}
+        title={`${t("brainPicker.label")}: ${active ? [active.label, active.probe?.model].filter(Boolean).join(" · ") : t("brainPicker.none")}`}
         className={cx(
           "flex max-w-[11rem] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition",
           active ? "border-border bg-surface-2/70 text-fg hover:bg-surface-2" : "border-warning/40 bg-warning-soft/60 text-warning",
         )}
       >
         <Brain className="size-3.5 shrink-0" />
-        <span className="truncate">{active?.label ?? t("brainPicker.none")}</span>
+        {/* A narrow bar (TopBar's container) keeps the icon; the title says which brain. */}
+        <span className="hidden truncate @lg/top:inline">{active?.label ?? t("brainPicker.none")}</span>
         <ChevronDown className={cx("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
@@ -89,7 +90,10 @@ export function BrainPicker({ agent }: { agent: AgentDef }) {
                 <span className="flex size-4 shrink-0 items-center justify-center">
                   {busy === b.ref ? <Spinner size={14} /> : current ? <Check className="size-4 text-accent-text" /> : null}
                 </span>
-                <span className="min-w-0 flex-1 truncate">{b.label}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{b.label}</span>
+                  {b.probe?.model && <span className="block truncate text-[11px] text-muted">{t("brains.model", { model: b.probe.model })}</span>}
+                </span>
                 {!ready && <Badge tone={st.tone}>{st.label}</Badge>}
               </button>
             );

@@ -3,8 +3,11 @@
 import { memo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, Lock } from "lucide-react";
 import { t } from "../i18n";
+import { mediaSrc } from "../lib/media";
+import { remarkUserText } from "../lib/user-markdown";
+import { openOutside } from "../lib/native";
 import { CopyButton, cx } from "./ui";
 
 type MdNode = { type: string; value?: string; children?: MdNode[] };
@@ -20,10 +23,6 @@ function remarkHtmlAsText() {
   };
 }
 
-function isLocalSrc(src: string): boolean {
-  return src.startsWith("/") && !src.startsWith("//") ? true : src.startsWith("data:image/") || src.startsWith("blob:");
-}
-
 function textOf(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textOf).join("");
@@ -31,18 +30,21 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
+// Inside the iOS app, links that leave the hub open in Safari (openOutside); in a browser, in a new tab.
 const components: Components = {
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer nofollow">
+    <a href={href} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => openOutside(e, href)}>
       {children}
     </a>
   ),
-  // External images would violate the page CSP (img-src 'self' data: blob:): show them as links.
+  // The page CSP loads images from the hub only (img-src 'self' data: blob:): web images come through its proxy.
+  // Anything else (another scheme, a relative path) stays a link.
   img: ({ src, alt }) => {
     const s = typeof src === "string" ? src : "";
-    if (s && isLocalSrc(s)) return <img src={s} alt={alt ?? ""} className="my-2 max-h-96 max-w-full rounded-lg border border-border" loading="lazy" />;
+    const shown = s ? mediaSrc(s) : undefined;
+    if (shown) return <img src={shown} alt={alt ?? ""} className="my-2 inline-block max-h-96 max-w-full rounded-xl border border-border" loading="lazy" decoding="async" />;
     return (
-      <a href={s} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1">
+      <a href={s} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => openOutside(e, s)} className="inline-flex items-center gap-1">
         <ImageIcon className="inline size-4" />
         {alt || t("common.image")}
       </a>
@@ -51,16 +53,30 @@ const components: Components = {
   pre: ({ children }) => (
     <div className="group relative">
       <pre>{children}</pre>
-      <CopyButton text={textOf(children).replace(/\n$/, "")} label="" className="absolute top-1.5 right-1.5 bg-surface/80 opacity-0 transition group-hover:opacity-100 focus:opacity-100" />
+      <CopyButton text={textOf(children).replace(/\n$/, "")} label="" className="absolute top-1.5 right-1.5 bg-surface/80 opacity-0 transition group-hover:opacity-100 focus:opacity-100 mobile:opacity-100" />
     </div>
   ),
   input: ({ checked, type }) => (type === "checkbox" ? <input type="checkbox" checked={!!checked} readOnly disabled /> : null),
+  // A secret the hub took out of the user's message (lib/user-markdown.ts).
+  span: ({ className, children }) =>
+    className === "vault-ref" ? (
+      <span className="vault-ref">
+        <Lock className="size-3" />
+        {children}
+      </span>
+    ) : (
+      <span className={className}>{children}</span>
+    ),
 };
 
-export const Markdown = memo(function Markdown({ text, className }: { text: string; className?: string }) {
+const ASSISTANT_PLUGINS = [remarkGfm, remarkHtmlAsText];
+const USER_PLUGINS = [remarkGfm, remarkHtmlAsText, remarkUserText];
+
+/** `user`: what the user typed (line breaks kept, vault chips) rather than an agent's reply. */
+export const Markdown = memo(function Markdown({ text, className, user }: { text: string; className?: string; user?: boolean }) {
   return (
     <div className={cx("md", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkHtmlAsText]} components={components} skipHtml={false}>
+      <ReactMarkdown remarkPlugins={user ? USER_PLUGINS : ASSISTANT_PLUGINS} components={components} skipHtml={false}>
         {text}
       </ReactMarkdown>
     </div>

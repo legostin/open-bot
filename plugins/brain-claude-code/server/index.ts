@@ -1,7 +1,7 @@
 // Registers the "claude-code" brain (headless Claude Code on the user's subscription).
 
-import type { PluginContext, PluginModule } from "@openbot/plugin-sdk";
-import { createClaudeCodeProvider, DEFAULT_CLAUDE_TOOLS } from "@openbot/brains-cli";
+import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
+import { createClaudeCodeProvider, DEFAULT_CLAUDE_TOOLS } from "@owlbot/brains-cli";
 
 const plugin: PluginModule = {
   activate(ctx: PluginContext) {

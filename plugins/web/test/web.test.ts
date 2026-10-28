@@ -3,7 +3,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { startPlugin, type PluginHarness } from "@openbot/testkit";
+import { startPlugin, type PluginHarness } from "@owlbot/testkit";
 import { isPrivateAddress } from "../server/ssrf.ts";
 import { guardedFetch } from "../server/fetch.ts";
 import { parseDuckDuckGo } from "../server/search.ts";
@@ -265,14 +265,14 @@ describe("web_search", () => {
   it("auto skips providers without keys (missing vault items) and falls back to DuckDuckGo", async () => {
     const h = await startPlugin({ dir: DIR, settings: { duckduckgoUrl: `${base}/html/`, braveBaseUrl: base, tavilyBaseUrl: base } });
     try {
-      const t = await h.invokeText("search", { query: "open-bot test query", count: 2 });
+      const t = await h.invokeText("search", { query: "Owlbot test query", count: 2 });
       expect(t).toContain("(provider: duckduckgo)");
       expect(t).toContain("1. Example Docs & Intro\n   https://example.org/docs/intro?a=1&b=2");
       expect(t).toContain("2. Second result");
       expect(t).not.toContain("3.");
       const req = seen.filter((s) => s.url === "/html/").at(-1)!;
       expect(req.method).toBe("POST");
-      expect(new URLSearchParams(req.body).get("q")).toBe("open-bot test query");
+      expect(new URLSearchParams(req.body).get("q")).toBe("Owlbot test query");
       expect(seen.some((s) => s.url.startsWith("/res/v1/web/search") && !s.headers["x-subscription-token"])).toBe(false);
     } finally {
       await h.stop();

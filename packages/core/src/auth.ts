@@ -10,7 +10,7 @@ import {
   type AuthenticationResponseJSON,
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
-import { nowIso } from "@openbot/shared";
+import { nowIso } from "@owlbot/shared";
 import type { Db } from "./db.ts";
 import { hashToken } from "./store.ts";
 import { hashPassword, verifyPassword } from "./vault/crypto.ts";
@@ -29,6 +29,9 @@ export interface AuthSession {
 const TTL: Record<SessionKind, number> = { main: 30 * 24 * 3600_000, console: 30 * 60_000 };
 const MAX_FAILURES = 10;
 const FAILURE_WINDOW = 15 * 60_000;
+/** Sign-in through the link (remote.ts): failures from every address share this budget, then it pauses. */
+const REMOTE_MAX_FAILURES = 30;
+const REMOTE_WINDOW = 3600_000;
 
 export class AuthError extends LocalizedError {
   declare status: number;
@@ -43,6 +46,10 @@ export class AuthService {
   /** Printed to the log on first start; required to set the initial password. */
   setupToken: string | undefined;
   private failures = new Map<string, number[]>();
+  private remoteFailures: number[] = [];
+  private remotePausedUntil = 0;
+  /** Called when sign-in through the link pauses (the hub tells the user). */
+  onRemotePause?: () => void;
   private challenges = new Map<string, { challenge: string; expires: number }>();
   rpId: string;
   origins: string[];
@@ -69,18 +76,31 @@ export class AuthService {
 
   // ---------- rate limiting ----------
 
-  private checkRate(ip: string): void {
+  private checkRate(ip: string, remote = false): void {
     const now = Date.now();
+    if (remote && now < this.remotePausedUntil) throw new AuthError(429, "auth.remotePaused");
     const list = (this.failures.get(ip) ?? []).filter((t) => now - t < FAILURE_WINDOW);
     this.failures.set(ip, list);
     if (list.length >= MAX_FAILURES) throw new AuthError(429, "auth.tooManyFailures");
   }
 
-  private fail(ip: string, what: string): never {
+  private fail(ip: string, what: string, remote = false): never {
+    const now = Date.now();
     const list = this.failures.get(ip) ?? [];
-    list.push(Date.now());
+    list.push(now);
     this.failures.set(ip, list);
-    this.audit.append("user", "auth.failure", what, { ip });
+    this.audit.append("user", "auth.failure", what, { ip, ...(remote ? { remote: true } : {}) });
+    if (remote) {
+      // Many addresses guessing together: pause the link's sign-in for an hour; the computer's own keeps working.
+      this.remoteFailures = this.remoteFailures.filter((t) => now - t < REMOTE_WINDOW);
+      this.remoteFailures.push(now);
+      if (this.remoteFailures.length >= REMOTE_MAX_FAILURES) {
+        this.remoteFailures = [];
+        this.remotePausedUntil = now + REMOTE_WINDOW;
+        this.audit.append("user", "auth.remotePaused", undefined, { until: new Date(this.remotePausedUntil).toISOString() });
+        this.onRemotePause?.();
+      }
+    }
     throw new AuthError(401, what === "setup" ? "auth.badSetupToken" : "auth.badPassword");
   }
 
@@ -96,11 +116,12 @@ export class AuthService {
     this.audit.append("user", "auth.setup");
   }
 
-  verifyPassword(password: string, ip: string): void {
-    this.checkRate(ip);
+  /** `remote`: the request came through the link (remote.ts) and counts toward its shared budget. */
+  verifyPassword(password: string, ip: string, opts: { remote?: boolean } = {}): void {
+    this.checkRate(ip, opts.remote);
     const h = this.get("password");
     if (!h) throw new AuthError(409, "auth.noPassword");
-    if (!verifyPassword(password, h)) this.fail(ip, "password");
+    if (!verifyPassword(password, h)) this.fail(ip, "password", opts.remote);
     this.failures.delete(ip);
   }
 
@@ -183,10 +204,10 @@ export class AuthService {
   async passkeyRegistrationOptions(): Promise<unknown> {
     const existing = this.db.prepare("select id, transports from passkeys").all() as Array<{ id: string; transports: string | null }>;
     const opts = await generateRegistrationOptions({
-      rpName: "open-bot",
+      rpName: "Owlbot",
       rpID: this.rpId,
       userName: "owner",
-      userDisplayName: "open-bot owner",
+      userDisplayName: "Owlbot owner",
       attestationType: "none",
       excludeCredentials: existing.map((e) => ({ id: e.id, transports: e.transports ? JSON.parse(e.transports) : undefined })),
       authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },

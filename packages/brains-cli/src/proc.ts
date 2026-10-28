@@ -40,6 +40,9 @@ export interface RunningProcess {
   lines: AsyncIterable<string>;
   stderr: () => string;
   exited: Promise<{ code: number | null; signal: string | null }>;
+  /** With `keepInput`: write more to stdin (false once it is closed) and close it. */
+  write(text: string): boolean;
+  endInput(): void;
 }
 
 /** Script paths (fake CLIs in tests, wrappers) run through the current Node binary. */
@@ -47,8 +50,8 @@ export function resolveCommand(command: string, args: string[]): [string, string
   return /\.(m?js|ts)$/.test(command) ? [process.execPath, ["--disable-warning=ExperimentalWarning", command, ...args]] : [command, args];
 }
 
-/** Spawn a CLI and expose stdout as lines; stdin receives `input` and is closed. */
-export function runLines(command: string, args: string[], opts: { cwd?: string; env: Record<string, string>; input?: string }): RunningProcess {
+/** Spawn a CLI and expose stdout as lines; stdin receives `input` and is closed, or stays open with `keepInput`. */
+export function runLines(command: string, args: string[], opts: { cwd?: string; env: Record<string, string>; input?: string; keepInput?: boolean }): RunningProcess {
   const [file, argv] = resolveCommand(command, args);
   const child = spawn(file, argv, { cwd: opts.cwd, env: opts.env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   let err = "";
@@ -64,11 +67,28 @@ export function runLines(command: string, args: string[], opts: { cwd?: string; 
     });
     child.on("close", (code, signal) => resolve({ code, signal }));
   });
-  child.stdin!.on("error", () => {});
-  if (opts.input !== undefined) child.stdin!.end(opts.input);
-  else child.stdin!.end();
+  const stdin = child.stdin!;
+  stdin.on("error", () => {});
+  if (opts.keepInput) {
+    if (opts.input !== undefined) stdin.write(opts.input);
+  } else if (opts.input !== undefined) stdin.end(opts.input);
+  else stdin.end();
+  const open = () => !stdin.writableEnded && !stdin.destroyed && child.exitCode === null;
   const rl = createInterface({ input: child.stdout!, crlfDelay: Infinity });
-  return { child, lines: rl, stderr: () => err, exited };
+  return {
+    child,
+    lines: rl,
+    stderr: () => err,
+    exited,
+    write(text) {
+      if (!open()) return false;
+      stdin.write(text);
+      return true;
+    },
+    endInput() {
+      if (!stdin.writableEnded) stdin.end();
+    },
+  };
 }
 
 /** Run a short command and capture output (for probes). */
@@ -87,7 +107,7 @@ export function childEnv(base: NodeJS.ProcessEnv, extra: Record<string, string |
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(base)) {
     if (v === undefined) continue;
-    if (k.startsWith("OPENBOT_")) continue;
+    if (k.startsWith("OWLBOT_")) continue;
     out[k] = v;
   }
   for (const [k, v] of Object.entries(extra)) if (v !== undefined) out[k] = v;

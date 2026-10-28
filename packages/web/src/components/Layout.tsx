@@ -1,12 +1,13 @@
-// App shell, kept minimal: the team on the left (each agent with its dialog; a drawer on phones), the current view,
-// and the settings panel beside it. Views put their own slim top bar (TopBar) with the shared header actions.
+// App shell, kept minimal: the team on the left (each agent with its dialog, then group chats, then the machines and what
+// runs there; a drawer on phones), the current view, and the settings panel beside it. Views put their own slim top bar
+// (TopBar) with the shared header actions.
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { ListChecks, Menu, PanelRight, Settings, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import { ACTIVE_STATUSES } from "../lib/format";
-import { agentForPath } from "../lib/team";
+import { agentForPath, chatForPath } from "../lib/team";
 import { ensureTasks, session, tasks } from "../state/app";
 import { openPanel, panel, togglePanel } from "../state/panel";
 import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlot } from "../plugins/slots";
@@ -15,6 +16,7 @@ import { ApprovalsBadge, ConnectionBadge, VaultBadge } from "./StatusBadges";
 import { CommandPalette } from "./CommandPalette";
 import { LiveViewWindow } from "./LiveViewWindow";
 import { SettingsPanel } from "./SettingsPanel";
+import { MachinesBlock } from "./MachinesBlock";
 import { TeamList } from "../pages/chat/TeamList";
 import { t } from "../i18n";
 
@@ -30,7 +32,7 @@ function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5 px-4 py-3.5">
       <img src="/favicon.svg" alt="" className="size-7" />
-      <span className="text-[15px] font-semibold tracking-tight">open-bot</span>
+      <span className="text-[15px] font-semibold tracking-tight">Owlbot</span>
       {s?.version && <span className="text-[11px] text-muted">{s.version}</span>}
     </Link>
   );
@@ -49,8 +51,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       <div className="min-h-0 flex-1">
-        <TeamList activeAgentId={agentForPath(loc, s?.defaultAgent)} onNavigate={onNavigate} />
+        <TeamList activeAgentId={agentForPath(loc, s?.defaultAgent)} activeConversationId={chatForPath(loc)} onNavigate={onNavigate} />
       </div>
+      <MachinesBlock onNavigate={onNavigate} />
       <div className="flex flex-col gap-2 px-3 empty:hidden">
         <PluginSidebarItems />
         <SidebarPanels />
@@ -92,14 +95,15 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-/** Status badges, plugin status items, the plugin side pane toggle and the settings button. */
+/** Status badges, plugin status items, the plugin side pane toggle and the settings button. Plugin status items show
+ * only when the bar itself is wide enough (a container query: the settings panel may sit next to the chat). */
 export function HeaderActions() {
   const shell = useContext(ShellContext);
   const panes = useSlot("pane.right");
   const p = useStore(panel);
   return (
     <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-      <div className="hidden items-center gap-2 lg:flex">
+      <div className="hidden items-center gap-2 @3xl/top:flex">
         <PluginStatusItems />
       </div>
       <ConnectionBadge />
@@ -121,7 +125,7 @@ export function HeaderActions() {
 export function TopBar({ children }: { children?: ReactNode }) {
   const shell = useContext(ShellContext);
   return (
-    <header className="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface/70 px-2 backdrop-blur sm:px-3">
+    <header className="@container/top relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface/70 px-2 backdrop-blur sm:px-3">
       <IconButton label={t("layout.menu")} onClick={shell.openDrawer} className="md:hidden">
         <Menu className="size-5" />
       </IconButton>

@@ -1,8 +1,8 @@
 // Repositories for conversations, messages, tasks and brain sessions.
 
 import { createHash, randomBytes } from "node:crypto";
-import type { Conversation, Message, MessagePart, Task, TaskStatus } from "@openbot/shared";
-import { newId, nowIso } from "@openbot/shared";
+import type { Conversation, Message, MessagePart, Task, TaskStatus } from "@owlbot/shared";
+import { newId, nowIso } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import { t } from "./i18n.ts";
@@ -26,6 +26,7 @@ const convFrom = (r: any): Conversation => ({
   kind: r.kind,
   title: r.title,
   agentId: r.agent_id,
+  ...(r.kind === "group" ? { members: json<string[]>(r.members, [r.agent_id]) } : {}),
   taskId: r.task_id ?? undefined,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -60,6 +61,7 @@ const taskFrom = (r: any): Task => ({
   result: r.result ?? undefined,
   error: r.error ?? undefined,
   resumeAt: r.resume_at ?? undefined,
+  question: r.question ?? undefined,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -92,13 +94,16 @@ export class Store {
 
   // ---------- conversations ----------
 
-  createConversation(c: { kind: Conversation["kind"]; title: string; agentId: string; taskId?: string; id?: string }): Conversation {
+  /** A group's lead is its first member: `agentId` is taken from `members` then. */
+  createConversation(c: { kind: Conversation["kind"]; title: string; agentId: string; members?: string[]; taskId?: string; id?: string }): Conversation {
     const now = nowIso();
-    const conv: Conversation = { id: c.id ?? newId("c_"), kind: c.kind, title: c.title, agentId: c.agentId, taskId: c.taskId, createdAt: now, updatedAt: now };
+    const members = c.kind === "group" ? (c.members?.length ? c.members : [c.agentId]) : undefined;
+    const agentId = members ? members[0] : c.agentId;
+    const conv: Conversation = { id: c.id ?? newId("c_"), kind: c.kind, title: c.title, agentId, ...(members ? { members } : {}), taskId: c.taskId, createdAt: now, updatedAt: now };
     // read_at stays empty: everything that arrives in a new conversation is unread until the user looks.
     this.db
-      .prepare("insert into conversations(id, kind, title, agent_id, task_id, created_at, updated_at) values (?,?,?,?,?,?,?)")
-      .run(conv.id, conv.kind, conv.title, conv.agentId, conv.taskId ?? null, now, now);
+      .prepare("insert into conversations(id, kind, title, agent_id, members, task_id, created_at, updated_at) values (?,?,?,?,?,?,?,?)")
+      .run(conv.id, conv.kind, conv.title, conv.agentId, members ? JSON.stringify(members) : null, conv.taskId ?? null, now, now);
     this.bus.emit("conversation.updated", conv);
     return conv;
   }
@@ -120,6 +125,11 @@ export class Store {
 
   listConversations(limit = 100): Conversation[] {
     return this.db.prepare("select * from conversations order by updated_at desc limit ?").all(limit).map(convFrom);
+  }
+
+  /** Every group chat, the latest activity first. */
+  listGroups(): Conversation[] {
+    return this.db.prepare("select * from conversations where kind = 'group' order by updated_at desc").all().map(convFrom);
   }
 
   touchConversation(id: string): void {
@@ -145,9 +155,12 @@ export class Store {
     return r.n;
   }
 
-  updateConversation(id: string, patch: { title?: string; agentId?: string }): Conversation | undefined {
+  /** New `members` of a group also set its lead (`agentId`), the first of them. */
+  updateConversation(id: string, patch: { title?: string; agentId?: string; members?: string[] }): Conversation | undefined {
     if (patch.title !== undefined) this.db.prepare("update conversations set title = ? where id = ?").run(patch.title, id);
-    if (patch.agentId !== undefined) this.db.prepare("update conversations set agent_id = ? where id = ?").run(patch.agentId, id);
+    if (patch.members?.length) {
+      this.db.prepare("update conversations set members = ?, agent_id = ? where id = ?").run(JSON.stringify(patch.members), patch.members[0], id);
+    } else if (patch.agentId !== undefined) this.db.prepare("update conversations set agent_id = ? where id = ?").run(patch.agentId, id);
     const c = this.getConversation(id);
     if (c) this.bus.emit("conversation.updated", c);
     return c;
@@ -243,8 +256,8 @@ export class Store {
     return this.db.prepare("select * from tasks order by created_at desc limit ?").all(limit).map(taskFrom);
   }
 
-  updateTask(id: string, patch: Partial<Pick<Task, "status" | "brainRef" | "result" | "error" | "resumeAt" | "title">>): Task | undefined {
-    const cols: Record<string, string> = { status: "status", brainRef: "brain_ref", result: "result", error: "error", resumeAt: "resume_at", title: "title" };
+  updateTask(id: string, patch: Partial<Pick<Task, "status" | "brainRef" | "result" | "error" | "resumeAt" | "title" | "question">>): Task | undefined {
+    const cols: Record<string, string> = { status: "status", brainRef: "brain_ref", result: "result", error: "error", resumeAt: "resume_at", title: "title", question: "question" };
     for (const [k, col] of Object.entries(cols)) {
       if (k in patch) this.db.prepare(`update tasks set ${col} = ? where id = ?`).run((patch as any)[k] ?? null, id);
     }

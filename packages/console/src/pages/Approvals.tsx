@@ -182,7 +182,7 @@ function ApprovalCard({ a, highlighted, now }: { a: ApprovalView; highlighted: b
   };
 
   return (
-    <Card ref={ref} className={cx("scroll-mt-24 overflow-hidden", highlighted && "ob-flash ring-2 ring-accent-500")} data-approval={a.id}>
+    <Card ref={ref} className={cx("scroll-mt-24 overflow-hidden", highlighted && "owl-flash ring-2 ring-accent-500")} data-approval={a.id}>
       <div className="space-y-4 p-4 sm:p-5">
         <CardHead a={a} now={now} />
         <p className="text-[15px] leading-relaxed font-medium whitespace-pre-wrap text-fg [overflow-wrap:anywhere] sm:text-base">{a.summary}</p>
@@ -500,7 +500,7 @@ function HistoryCard({ a, now, highlighted }: { a: ApprovalView; now: number; hi
   const tone = STATUS_TONE[a.status as Exclude<ApprovalStatus, "pending">];
   const st = tone ? { label: t(`approvals.status.${a.status}` as MessageKey), tone } : { label: a.status, tone: "neutral" as const };
   return (
-    <Card ref={ref} className={cx("scroll-mt-24", highlighted && "ob-flash ring-2 ring-accent-500")}>
+    <Card ref={ref} className={cx("scroll-mt-24", highlighted && "owl-flash ring-2 ring-accent-500")}>
       <div
         role="button"
         tabIndex={0}

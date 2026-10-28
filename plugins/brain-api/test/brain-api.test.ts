@@ -4,8 +4,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
-import type { BrainEvent, BrainSessionOptions } from "@openbot/shared";
-import { startMockLlm, startPlugin, type MockLlm, type PluginHarness } from "@openbot/testkit";
+import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
+import { startMockLlm, startPlugin, type MockLlm, type PluginHarness } from "@owlbot/testkit";
 import { ECHO_TOOL, startFakeMcp, type FakeMcp } from "./fake-mcp.ts";
 
 const PLUGIN_DIR = join(import.meta.dirname, "..");
@@ -41,7 +41,7 @@ describe("brain-api plugin", () => {
     },
     variant: "anthropic",
     model: "sonnet",
-    workspace: mkdtempSync(join(tmpdir(), "ob-api-ws-")),
+    workspace: mkdtempSync(join(tmpdir(), "owl-api-ws-")),
     mcp: { url: mcp.url, token: mcp.token, bridgeCommand: [] },
     systemPrompt: "You are a test assistant.",
     env: {},
@@ -297,6 +297,34 @@ describe("brain-api plugin", () => {
     expect(msgs[1].content[0].text).toBe(partial);
   });
 
+  it("takes input that arrives mid-turn with its next request: after the tool results, or as a new message", async () => {
+    llm.script([
+      { text: "Проверю.", toolCalls: [{ name: "echo", input: { text: "ping" } }], chunkDelayMs: 60 },
+      { text: "Готово, и про второе тоже.", chunkDelayMs: 60 },
+      { text: "И третье." },
+    ]);
+    await h.brainCreate("api", opts("s-steer"));
+    const pending = h.brainSend("s-steer", { text: "Скажи ping" });
+    for (let i = 0; i < 50 && llm.requests.length === 0; i++) await sleep(20);
+    expect(await h.brainSteer("s-steer", { text: "и ещё второе" })).toBe(true);
+    // The second answer is streaming: this one comes after it, as a new message.
+    for (let i = 0; i < 100 && llm.requests.length < 2; i++) await sleep(20);
+    expect(await h.brainSteer("s-steer", { text: "и третье" })).toBe(true);
+    const events = await pending;
+    expect(text(events)).toBe("Проверю.Готово, и про второе тоже.И третье.");
+    expect(events.filter((e) => e.type === "done")).toHaveLength(1);
+
+    expect(llm.requests).toHaveLength(3);
+    const second = llm.requests[1].body.messages;
+    expect(second.at(-1).content.map((b: any) => b.type)).toEqual(["tool_result", "text"]);
+    expect(second.at(-1).content[1].text).toBe("и ещё второе");
+    const third = llm.requests[2].body.messages;
+    expect(third.map((m: any) => m.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
+    expect(third.at(-1).content[0].text).toBe("и третье");
+    // Over: nothing to join.
+    expect(await h.brainSteer("s-steer", { text: "поздно" })).toBe(false);
+  });
+
   it("routes model calls through the session's egress proxy from opts.env", async () => {
     const seen: Array<{ url?: string; auth?: string }> = [];
     const proxy = http.createServer((req, res) => {
@@ -336,7 +364,16 @@ describe("brain-api plugin", () => {
       expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ available: true, authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as anthropic_api_key)" });
       expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ available: true, authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as openrouter_api_key)" });
       expect(await bare.brainProbe("api")).toMatchObject({ authenticated: false, detail: "No API key yet: paste it into the chat (it is stored as anthropic_api_key)" });
-      expect(await bare.brainProbe("api", "custom")).toMatchObject({ available: true, authenticated: true });
+      // A server on this machine must have the model: the mock lists gpt-mock, not the default llama3.1.
+      expect(await bare.brainProbe("api", "custom")).toMatchObject({
+        available: true,
+        authenticated: false,
+        model: "llama3.1",
+        models: expect.arrayContaining(["gpt-mock"]),
+        detail: expect.stringMatching(/has no model "llama3\.1"\. It has: .*gpt-mock.*ollama pull llama3\.1$/),
+      });
+      bare.setSettings({ ...settings, customModel: "gpt-mock" });
+      expect(await bare.brainProbe("api", "custom")).toMatchObject({ available: true, authenticated: true, model: "gpt-mock", detail: `${llm.url}/v1` });
       expect(await bare.brainProbe("api", "nope")).toMatchObject({ available: false, authenticated: false, detail: 'Unknown variant "nope". Available: anthropic, openai, openrouter, custom' });
       // Probe details are shown on the Brains page in the hub language.
       bare.setLocale("ru");
@@ -351,7 +388,7 @@ describe("brain-api plugin", () => {
   });
 
   it("persists history and resumes it in a new plugin process", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "ob-api-data-"));
+    const dataDir = mkdtempSync(join(tmpdir(), "owl-api-data-"));
     const h1 = await startPlugin({ dir: PLUGIN_DIR, settings, vault: VAULT, dataDir });
     llm.script([{ text: "Приятно познакомиться, Оля!" }]);
     await h1.brainCreate("api", opts("s-resume"));

@@ -1,16 +1,16 @@
 {
-  "name": "@openbot/node",
+  "name": "@owlbot/node",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "openbot-node": "./src/cli.ts"
+    "owlbot-node": "./src/cli.ts"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@openbot/mcp-bridge": "*",
+    "@owlbot/mcp-bridge": "*",
     "@noble/curves": "^2.4.0",
     "ws": "^8.22.0"
   }

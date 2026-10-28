@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 400">
+  <!-- The .dmg window (tauri.conf.json bundle.macOS.dmg): Owlbot at (180, 190), Applications at (480, 190), Finder
+       draws their names below them. No words here, so it suits every language. -->
+  <rect width="660" height="400" fill="#f7f7f5"/>
+  <g fill="none" stroke="#c4c4c0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M262 190 H392"/>
+    <path d="M378 176 L394 190 L378 204"/>
+  </g>
+  <g transform="translate(314 342)" opacity="0.5">
+    <rect x="0" y="0" width="32" height="32" rx="8" fill="#111113"/>
+    <rect x="6.25" y="7.5" width="7.5" height="12" rx="3.75" fill="none" stroke="#fff" stroke-width="2.25"/>
+    <rect x="18.25" y="7.5" width="7.5" height="12" rx="3.75" fill="none" stroke="#fff" stroke-width="2.25"/>
+    <rect x="13" y="21.25" width="6" height="2.25" rx="0.75" fill="#fff"/>
+  </g>
+</svg>

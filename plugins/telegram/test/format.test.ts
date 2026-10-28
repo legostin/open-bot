@@ -25,6 +25,14 @@ describe("telegram formatting", () => {
     expect(isPublicHttpUrl("https://localhost/x")).toBe(false);
   });
 
+  it("turns tables into aligned monospace blocks, task lists into boxes, images into links", () => {
+    const html = markdownToHtml("| City | Temp |\n|---|---:|\n| **Berlin** | 12 |\n| Rome | 21 |\n\nafter");
+    expect(html).toBe("<pre>City    Temp\n──────  ────\nBerlin  12\nRome    21</pre>\n\nafter");
+    expect(markdownToHtml("- [ ] milk\n- [x] eggs")).toBe("☐ milk\n☑ eggs");
+    expect(markdownToHtml("![a cat](https://example.com/cat.png)")).toBe('<a href="https://example.com/cat.png">🖼 a cat</a>');
+    expect(markdownToHtml("```\n| a | b |\n|---|---|\n```")).toBe("<pre>| a | b |\n|---|---|</pre>");
+  });
+
   it("splits long text under the limit and keeps code fences balanced", () => {
     const para = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(20);
     const code = "```py\n" + Array.from({ length: 200 }, (_, i) => `print(${i})  # line ${i}`).join("\n") + "\n```";

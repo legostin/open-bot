@@ -1,6 +1,6 @@
 // Realtime connection to the hub (/api/ws) with reconnect + backoff.
 
-import type { UiEvent } from "@openbot/shared";
+import type { UiEvent } from "@owlbot/shared";
 import { backoffDelay } from "./backoff";
 
 export type ConnectionState = "connecting" | "open" | "reconnecting" | "offline";
@@ -47,6 +47,11 @@ export class HubSocket {
     const s = JSON.stringify(msg);
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(s);
     else if (this.queue.length < 200) this.queue.push(s);
+  }
+
+  /** Try now instead of waiting out the backoff (the phone app saw the hub come back). */
+  retryNow(): void {
+    this.wake();
   }
 
   /** Reconnect immediately when the tab becomes visible / network comes back. */
@@ -99,7 +104,8 @@ export class HubSocket {
   private scheduleReconnect(): void {
     const delay = backoffDelay(this.attempt);
     this.attempt++;
-    if (this.attempt === 3) this.h.onRepeatedFailure?.();
+    // Every third failure: the hub may be back with the session gone (it restarted), and the upgrade fails for good.
+    if (this.attempt % 3 === 0) this.h.onRepeatedFailure?.();
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.connect(), delay);
   }

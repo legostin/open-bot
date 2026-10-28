@@ -2,8 +2,8 @@
 // Talks JSON-RPC (NDJSON) with the core over stdin/stdout; console output goes to stderr.
 
 import { pathToFileURL } from "node:url";
-import { createRpcPeer, ndjsonTransport, DEFAULT_LOCALE, isLocale, translator } from "@openbot/shared";
-import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage, Catalog, Locale, Translate } from "@openbot/shared";
+import { createRpcPeer, ndjsonTransport, DEFAULT_LOCALE, isLocale, translator } from "@owlbot/shared";
+import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage, Catalog, Locale, Translate } from "@owlbot/shared";
 import type {
   BrainLoginImpl,
   BrainProviderImpl,
@@ -246,6 +246,12 @@ peer.handle("brain.send", async (p: { sessionId: string; turn: BrainTurn }) => {
     peer.notify("brain.event", { sessionId: p.sessionId, event: { type: "error", message: e?.message ?? String(e), fatal: true } });
   }
   return {};
+});
+
+// More input for the turn in progress; `accepted: false` sends it as the next turn (also brains without steer()).
+peer.handle("brain.steer", async (p: { sessionId: string; turn: BrainTurn }) => {
+  const s = brainSessions.get(p.sessionId);
+  return { accepted: !!(s?.steer && (await s.steer(p.turn))) };
 });
 
 peer.handle("brain.interrupt", async (p: { sessionId: string }) => {

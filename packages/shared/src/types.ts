@@ -108,7 +108,7 @@ export interface Approval {
   result?: ToolResult;
   createdAt: ISODate;
   resolvedAt?: ISODate;
-  resolvedVia?: "console" | "telegram" | "rule" | "timeout";
+  resolvedVia?: "console" | "telegram" | "device" | "rule" | "timeout";
 }
 
 // ---------- Secrets entered in the chat ----------
@@ -181,7 +181,8 @@ export type MessagePart =
   | { type: "approval"; approvalId: string; summary: string; status: ApprovalStatus }
   | { type: "notification"; level: NotifyLevel; title: string; body: string }
   | { type: "error"; message: string }
-  | { type: "attachment"; path: string; name: string; mimeType?: string }
+  /** A file the user sent (or a plugin attached): `path` is relative to the workspaces root, `size` in bytes. */
+  | { type: "attachment"; path: string; name: string; mimeType?: string; size?: number; kind?: AttachmentKind; durationSec?: number; transcript?: string }
   /** A secret the user types into the chat card; the value goes straight to the vault and never into the conversation. */
   | { type: "secret_request"; requestId: string; vaultId: string; title: string; status: SecretRequestStatus }
   /** A plugin's setup card: its secrets and its own setup UI (e.g. Telegram pairing), live. */
@@ -189,7 +190,35 @@ export type MessagePart =
   /** A new agent being put together in the chat: its look, description and proactivity, live, with a button that creates it. */
   | { type: "agent_draft"; draftId: string }
   /** A CLI brain's sign-in card (device code or browser code), live. */
-  | { type: "brain_login"; ref: string };
+  | { type: "brain_login"; ref: string }
+  /** No brain of the agent works yet: the hub's own setup card (sign in, install, API key), live. */
+  | { type: "brain_setup" }
+  /** Connect a phone: the card makes a one-time QR and link when the user asks for it. */
+  | { type: "device_pairing" }
+  /** An integration's card from the library (integration_connect), live: connect, set up, turn on. */
+  | { type: "integration"; id: string }
+  /** Pictures the agent shows (show_images): one item is a single image, two or more a carousel. */
+  | { type: "images"; items: ImageItem[] }
+  /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers. */
+  | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[] }
+  /** A task the agent started (task_delegate): one line with its live status that opens the task. */
+  | { type: "task"; taskId: string };
+
+/** What a sent file is: a voice note and a photo are told apart from an audio file or a document by the channel. */
+export type AttachmentKind = "photo" | "voice" | "audio" | "video" | "file";
+
+/** `src` is an http(s) URL (shown through the hub's image proxy) or `file:<path relative to the workspaces root>`. */
+export interface ImageItem {
+  src: string;
+  alt?: string;
+  caption?: string;
+}
+
+export interface MapMarker {
+  lat: number;
+  lon: number;
+  label?: string;
+}
 
 export interface Message {
   id: string;
@@ -207,10 +236,16 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  /** "main": an agent's long-lived dialog with the user (one per agent); "task": a task's thread; "chat": an older ad-hoc chat. */
-  kind: "main" | "task" | "chat";
+  /**
+   * "main": an agent's long-lived dialog with the user (one per agent); "task": a task's thread; "chat": an older ad-hoc chat;
+   * "group": the user with several agents (`members`).
+   */
+  kind: "main" | "task" | "chat" | "group";
   title: string;
+  /** The agent who answers; in a group, its lead (`members[0]`). */
   agentId: string;
+  /** A group's agents in order, the lead first (2–8, see GROUP_MAX_MEMBERS). */
+  members?: string[];
   taskId?: string;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -227,6 +262,22 @@ export interface TeamMember {
   /** A turn is in progress in the dialog. */
   running: boolean;
   /** Messages from the agent (or the system) the user has not seen yet. */
+  unread: number;
+}
+
+/** A group chat as the sidebar shows it, kept current by "group.updated". */
+export interface GroupChat {
+  conversationId: string;
+  title: string;
+  /** The lead first. */
+  members: string[];
+  /** The latest message worth a preview, as short plain text; `agentId` says who wrote it. */
+  lastMessage?: { role: MessageRole; text: string; createdAt: ISODate; agentId?: string };
+  lastActivityAt: ISODate;
+  /** Members are answering. */
+  running: boolean;
+  /** While running: the member who has the floor, then those who answer after them. */
+  speaking: string[];
   unread: number;
 }
 
@@ -259,6 +310,8 @@ export interface Task {
   result?: string;
   error?: string;
   resumeAt?: ISODate;
+  /** A question the task asked whoever started it (task_ask), until it gets an answer. */
+  question?: string;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -300,16 +353,18 @@ export interface ProbeResult {
   authenticated: boolean;
   version?: string;
   models?: string[];
+  /** The model the brain answers with when the agent names none, for people to see. */
+  model?: string;
   detail?: string;
 }
 
 // ---------- Brain sign-in from the chat ----------
 
 /**
- * starting → waiting (the user signs in on the page) → verifying (a pasted code is being checked) → succeeded,
- * or failed / cancelled / expired (the code ran out before the user finished).
+ * [installing (the hub installs a missing CLI first)] → starting → waiting (the user signs in on the page) → verifying
+ * (a pasted code is being checked) → succeeded, or failed / cancelled / expired (the code ran out before the user finished).
  */
-export type BrainLoginStatus = "starting" | "waiting" | "verifying" | "succeeded" | "failed" | "cancelled" | "expired";
+export type BrainLoginStatus = "installing" | "starting" | "waiting" | "verifying" | "succeeded" | "failed" | "cancelled" | "expired";
 
 /** What a sign-in reports while it runs (from the brain's host to the hub). */
 export interface BrainLoginUpdate {
@@ -343,6 +398,39 @@ export interface BrainLoginView {
   probe?: ProbeResult;
   /** The latest sign-in since the hub started, running or finished. */
   login?: BrainLoginState;
+}
+
+// ---------- First-run setup ----------
+
+/** What the default agent walks the user through once a brain works. */
+export type SetupStep = "telegram" | "backupBrain" | "machines" | "profile";
+
+/** One of the agent's brains on this hub, as the setup card shows it. */
+export interface SetupBrain {
+  ref: string;
+  label: string;
+  /** A CLI that signs in from the chat (Claude Code, Codex), or a brain that takes a key or token. */
+  kind: "cli" | "api";
+  /** The CLI starts on this computer (always true for api brains). */
+  installed: boolean;
+  signedIn: boolean;
+  /** The hub can install the missing CLI itself (desktop installs). */
+  canInstall: boolean;
+  detail?: string;
+}
+
+export interface SetupState {
+  agentId: string;
+  brains: SetupBrain[];
+  /** Some brain of the agent works now (rate limits aside). */
+  usable: boolean;
+  vault: "absent" | "locked" | "open";
+  telegram: boolean;
+  machines: number;
+  done: SetupStep[];
+  skipped: SetupStep[];
+  /** Steps neither done nor skipped, in the order the agent offers them. */
+  remaining: SetupStep[];
 }
 
 export interface BrainSessionOptions {
@@ -419,7 +507,17 @@ export interface OutboundMessage {
   feedback?: { notificationId: string; tokens: { useful: string; less: string; off: string } };
   /** Deliver without sound (quiet hours). */
   silent?: boolean;
+  /** Images and maps of the reply, sent after its text. */
+  media?: OutboundMedia[];
 }
+
+/**
+ * Media for a channel. An image comes as a public URL (the channel may let its service fetch it) or inline as base64
+ * `data` (a file from the agent's workspace, at most 10 MB).
+ */
+export type OutboundMedia =
+  | { kind: "image"; url?: string; data?: string; mimeType?: string; name?: string; caption?: string }
+  | { kind: "map"; lat: number; lon: number; title?: string };
 
 // ---------- Machines ----------
 
@@ -440,6 +538,97 @@ export interface Machine {
   info?: MachineInfo;
   lastSeenAt?: ISODate;
   createdAt: ISODate;
+}
+
+/**
+ * What a brain is doing in a turn right now: thinking (nothing streamed yet, or between tool calls), writing the
+ * answer, running a command, reading or editing files, on the web, calling another tool, or waiting for the user to
+ * approve a call.
+ */
+export type WorkStep = "thinking" | "writing" | "command" | "reading" | "editing" | "web" | "tool" | "approval";
+
+/** One turn in progress on a machine. */
+export interface MachineWork {
+  agentId: string;
+  conversationId: string;
+  /** The task the turn works on. */
+  taskId?: string;
+  /** What the turn is about when the agent's name does not say it: the task's goal or the group chat's title. */
+  title?: string;
+  brainId: string;
+  step: WorkStep;
+  startedAt: ISODate;
+}
+
+/** A computer agents run on and what they do there now (GET /api/machines/activity, "machines.activity"). */
+export interface MachineActivity {
+  /** "local" for the hub's own computer. */
+  id: string;
+  name: string;
+  online: boolean;
+  work: MachineWork[];
+}
+
+// ---------- Devices (phones running the Owlbot app) ----------
+
+export interface Device {
+  id: string;
+  name: string;
+  /** "ios" for now. */
+  platform: string;
+  /** Hardware model identifier, e.g. "iPhone18,1". */
+  model?: string;
+  createdAt: ISODate;
+  lastSeenAt?: ISODate;
+}
+
+/** What the web UI shows to pair a phone: the QR carries the link. */
+export interface DevicePairing {
+  code: string;
+  expiresAt: ISODate;
+  /** owlbot://pair?v=1&c=…&n=…&fp=…&u=…&u=… */
+  link: string;
+  qrSvg: string;
+  /** The device port's addresses, as the phone tries them. */
+  urls: string[];
+  /** base64url SHA-256 of the device port's certificate (DER). */
+  fingerprint: string;
+}
+
+/** The device port: whether phones can reach the hub, and where. */
+export interface DeviceNetwork {
+  /** False only when OWLBOT_DEVICES=0 closed the port: phones then use the link alone. */
+  enabled: boolean;
+  listening: boolean;
+  port: number;
+  urls: string[];
+  error?: string;
+}
+
+/** Access from anywhere: the hub's own Tailscale node and its Funnel link (remote.ts). */
+export type RemoteState = "off" | "starting" | "needs-login" | "needs-funnel" | "running" | "error";
+
+export interface RemoteView {
+  /** The node program is in this build. */
+  available: boolean;
+  enabled: boolean;
+  state: RemoteState;
+  /** The permanent link: https://owlbot.<tailnet>.ts.net */
+  url?: string;
+  /** The phones' address behind the link (port 8443). */
+  deviceUrl?: string;
+  /** Tailscale's sign-in page (needs-login). */
+  authUrl?: string;
+  /** Tailscale's page that allows Funnel in the tailnet (needs-funnel). */
+  enableUrl?: string;
+  /** The tailnet account the node belongs to. */
+  account?: string;
+  /** When the node's key expires (ISO); absent when expiry is off. */
+  keyExpiry?: string;
+  /** Why it is unavailable or failing (in the reader's language). */
+  error?: string;
+  /** The link as a QR code (SVG), from GET /api/remote while it is up. */
+  qrSvg?: string;
 }
 
 // ---------- Vault ----------
@@ -493,6 +682,7 @@ export type UiEvent =
   | { type: "message.updated"; data: Message }
   | { type: "conversation.updated"; data: Conversation }
   | { type: "team.updated"; data: TeamMember }
+  | { type: "group.updated"; data: GroupChat }
   | { type: "task.updated"; data: Task }
   | { type: "notification.created"; data: Notification }
   | { type: "approval.pending"; data: { count: number } }
@@ -500,9 +690,45 @@ export type UiEvent =
   | { type: "plugins.updated"; data: Record<string, never> }
   | { type: "agents.updated"; data: Record<string, never> }
   | { type: "settings.updated"; data: Record<string, unknown> }
+  | { type: "connections.updated"; data: { provider: string } }
   | { type: "machine.updated"; data: Machine }
+  | { type: "machines.activity"; data: MachineActivity[] }
+  | { type: "device.updated"; data: { id: string } }
+  | { type: "devices.network"; data: DeviceNetwork }
+  | { type: "remote.updated"; data: RemoteView }
   | { type: "vault.state"; data: { state: VaultState } }
   | { type: "secret.request"; data: SecretRequest }
   | { type: "agent_draft.updated"; data: AgentDraft }
   | { type: "brain.login"; data: BrainLoginState }
   | { type: "plugin.event"; data: { pluginId: string; channel: string; payload: unknown } };
+
+// ---------- Integrations ----------
+
+export type IntegrationStatus = "connected" | "needs-setup" | "off" | "unavailable" | "broken";
+
+/** A card of the integrations library (GET /api/integrations). */
+export interface IntegrationView {
+  /** The plugin's id, or a core entry's ("remote-access"). */
+  id: string;
+  name: string;
+  summary: string;
+  category: string;
+  icon: string;
+  /** "remote": the core's access from anywhere (RemoteView). */
+  connect: "google" | "setup" | "none" | "remote";
+  status: IntegrationStatus;
+  /** The connected account (e.g. an email), when there is one. */
+  account?: string;
+  /** Why it is broken or unavailable (in the reader's language). */
+  detail?: string;
+}
+
+/** A connected account of a provider (Google), as the hub keeps it. */
+export interface ConnectionAccount {
+  provider: "google";
+  account: string;
+  scopes: string[];
+  connectedAt: ISODate;
+  /** The provider refused the refresh token: the user must connect again. */
+  broken?: boolean;
+}

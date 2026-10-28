@@ -1,0 +1,7 @@
+{
+  "id": "fakegated",
+  "name": "Fake gated brain",
+  "server": "./server/index.ts",
+  "contributes": { "brains": ["gated"] },
+  "permissions": {}
+}

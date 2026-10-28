@@ -1,7 +1,7 @@
 // UI of the memory plugin: page /memory with a folder tree, markdown view/edit, search and the review queue.
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { definePluginUI, Badge, Button, Card, EmptyState, Markdown, Spinner, type OpenBotUI } from "@openbot/ui";
+import { definePluginUI, Badge, Button, Card, EmptyState, Markdown, Spinner, type OwlbotUI } from "@owlbot/ui";
 
 interface FactMeta {
   path: string;
@@ -41,8 +41,8 @@ interface ReviewItem extends FactMeta {
 
 type View = { kind: "empty" } | { kind: "file"; path: string } | { kind: "edit"; path?: string } | { kind: "review" } | { kind: "search"; q: string };
 
-let UI: OpenBotUI;
-let t: OpenBotUI["i18n"]["t"] = (key) => key;
+let UI: OwlbotUI;
+let t: OwlbotUI["i18n"]["t"] = (key) => key;
 
 const http = <T,>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown) => UI.plugin.http<T>(method, path, body);
 const q = (path: string) => encodeURIComponent(path);

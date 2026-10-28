@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { Bot, ChevronRight, Plus, Search, Timer, User, Zap } from "lucide-react";
-import type { Task, TaskStatus } from "@openbot/shared";
+import type { Task, TaskStatus } from "@owlbot/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { ACTIVE_STATUSES, relativeTime, taskStatus } from "../lib/format";

@@ -1,7 +1,8 @@
 // Formatting helpers: status labels, relative times and dates in the interface language.
 
-import type { NotifyLevel, TaskStatus } from "@openbot/shared";
-import { formatDate, formatRelative, t, type MessageKey } from "../i18n";
+import type { NotifyLevel, TaskStatus } from "@owlbot/shared";
+import { formatDate, formatRelative, locale, t, type MessageKey } from "../i18n";
+import { sizeParts } from "./attachments";
 
 export type Tone = "neutral" | "success" | "warning" | "danger" | "info";
 
@@ -70,6 +71,17 @@ export function shortTime(iso: string | undefined, now = new Date()): string {
   return formatDate(iso, { day: "numeric", month: "short" });
 }
 
+/** A one-time code in groups of four, easier to type: "ABCD-2345". */
+export function groupedCode(code: string): string {
+  return code.match(/.{1,4}/g)?.join("-") ?? code;
+}
+
+/** Seconds left as m:ss. */
+export function countdown(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 // Transliteration for ids made from Cyrillic names: U+0430..U+044F in alphabet order, then U+0451 (yo).
 // Built from code points so the source stays ASCII (Cyrillic lives only in i18n/ru.ts).
 const CYRILLIC_LATIN = ["a", "b", "v", "g", "d", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "h", "c", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"];
@@ -86,4 +98,21 @@ export function slugify(s: string): string {
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-")
     .slice(0, 40);
+}
+
+const SIZE_UNITS = { b: "units.bytes", kb: "units.kb", mb: "units.mb" } as const;
+
+/** A file size in the interface language and its number format: 512 B, 47 KB, 1.2 MB. */
+export function fileSize(bytes: number): string {
+  const { n, unit } = sizeParts(bytes);
+  return t(SIZE_UNITS[unit], { n: new Intl.NumberFormat(locale).format(n) });
+}
+
+/** 0:12, 1:12, 1:02:03 (a voice note's length). */
+export function formatDuration(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
 }

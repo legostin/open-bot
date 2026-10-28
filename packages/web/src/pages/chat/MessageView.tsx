@@ -1,16 +1,17 @@
 // Rendering of one message and its parts. Plugins can override whole messages (chat.message) or tool cards
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
-import { memo } from "react";
-import { Bell, CircleAlert, ExternalLink, FileText, Lock, ShieldAlert } from "lucide-react";
-import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@openbot/shared";
+import { memo, useState } from "react";
+import { Bell, Check, CircleAlert, ExternalLink, FileText, Mic, ShieldAlert, X } from "lucide-react";
+import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
-import { formatTime, notifyLevel } from "../../lib/format";
+import { fileSize, formatDuration, formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
+import { native, nativeErrorText, type NativeBridge } from "../../lib/native";
 import { session } from "../../state/app";
 import { showDetails } from "../../state/prefs";
 import { Markdown } from "../../components/markdown";
-import { Badge, cx } from "../../components/ui";
+import { Badge, Button, cx } from "../../components/ui";
 import { AgentAvatar } from "../../components/AgentAvatar";
 import { PluginBoundary } from "../../plugins/boundary";
 import { pickMessageRenderer, pickToolRenderer } from "../../plugins/registry";
@@ -19,7 +20,14 @@ import { ToolCard } from "./ToolCard";
 import { PluginSetupCard, SecretRequestCard } from "../../components/SecretCards";
 import { AgentDraftCard } from "./AgentDraftCard";
 import { BrainLoginCard } from "../../components/BrainLoginCard";
+import { BrainSetupCard } from "../../components/BrainSetupCard";
+import { IntegrationChatCard } from "../../components/IntegrationCard";
+import { ImagesCard } from "./ImagesCard";
+import { MapCard } from "./MapCard";
+import { TaskLine } from "./TaskLine";
+import { DevicePairingCard } from "./DevicePairingCard";
 import { t, type MessageKey } from "../../i18n";
+import { mobileMode } from "../../lib/mobile";
 
 const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "success" | "danger" | "neutral" | "info" }> = {
   pending: { label: "approvalStatus.pending", tone: "warning" },
@@ -29,6 +37,55 @@ const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "s
   executed: { label: "approvalStatus.executed", tone: "success" },
   failed: { label: "approvalStatus.failed", tone: "danger" },
 };
+
+type Answer = "approve" | "deny";
+
+/**
+ * Inside the iOS app: answer the approval on the phone. The app loads it from the hub, asks for Face ID and signs
+ * the answer; backing out of Face ID ({ cancelled }) just puts the buttons back. The card's status follows once the
+ * hub has the answer.
+ */
+function NativeApprovalActions({ approvalId, bridge }: { approvalId: string; bridge: NativeBridge }) {
+  const [busy, setBusy] = useState<Answer | null>(null);
+  const [sent, setSent] = useState<Answer | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const answer = async (kind: Answer) => {
+    setBusy(kind);
+    setError(null);
+    try {
+      const r = kind === "approve" ? await bridge.approve(approvalId) : await bridge.deny(approvalId);
+      if (r.ok) setSent(kind);
+    } catch (e) {
+      setError(t("message.approval.failed", { error: nativeErrorText(e) }));
+    } finally {
+      setBusy(null);
+    }
+  };
+  if (sent)
+    return (
+      <div className={cx("mt-2 flex items-center gap-1.5 text-[13px] font-medium", sent === "approve" ? "text-success" : "text-danger")} role="status">
+        {sent === "approve" ? <Check className="size-4" /> : <X className="size-4" />}
+        {sent === "approve" ? t("message.approval.approvedHere") : t("message.approval.deniedHere")}
+      </div>
+    );
+  return (
+    <div className="mt-2.5 flex flex-col gap-1.5">
+      <div className="flex gap-2">
+        <Button variant="primary" className="flex-1" loading={busy === "approve"} disabled={busy !== null} onClick={() => void answer("approve")}>
+          {t("message.approval.approve")}
+        </Button>
+        <Button variant="secondary" className="flex-1" loading={busy === "deny"} disabled={busy !== null} onClick={() => void answer("deny")}>
+          {t("message.approval.deny")}
+        </Button>
+      </div>
+      {error && (
+        <div className="text-xs break-words text-danger" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" }> }) {
   const s = useStore(session);
@@ -40,10 +97,13 @@ function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" 
       <div className="flex flex-wrap items-center gap-2">
         <ShieldAlert className={cx("size-4", pending ? "text-warning" : "text-muted")} />
         <span className="text-sm font-semibold">{pending ? t("message.approval.titlePending") : t("message.approval.title")}</span>
-        <Badge tone={st.tone}>{st.label}</Badge>
+        {/* "Awaiting approval" is already the title. */}
+        {!pending && <Badge tone={st.tone}>{st.label}</Badge>}
       </div>
       <div className="mt-1.5 text-sm break-words">{part.summary}</div>
-      {s && (
+      {/* On the phone the answer is given here (Face ID); the security console stays on the computer. */}
+      {native && pending && <NativeApprovalActions approvalId={part.approvalId} bridge={native} />}
+      {s && !native && (
         <a
           href={`${s.consoleUrl}/#/approvals/${encodeURIComponent(part.approvalId)}`}
           target="_blank"
@@ -66,7 +126,8 @@ function NotificationCard({ part }: { part: Extract<MessagePart, { type: "notifi
         <span className="text-sm font-semibold">{part.title}</span>
         <Badge tone={lvl.tone}>{lvl.label}</Badge>
       </div>
-      {part.body && <Markdown text={part.body} className="mt-1.5 text-sm" />}
+      {/* The hub's own lines (a digest's items, a calendar section) keep their breaks. */}
+      {part.body && <Markdown text={part.body} className="mt-1.5 text-sm" user />}
     </div>
   );
 }
@@ -83,6 +144,9 @@ function ErrorPart({ message }: { message: string }) {
 function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" }> }) {
   const href = `/api/files?path=${encodeURIComponent(part.path)}`;
   const isImage = part.mimeType?.startsWith("image/");
+  const isAudio = part.mimeType?.startsWith("audio/");
+  const voice = part.kind === "voice";
+  const meta = [part.durationSec !== undefined ? formatDuration(part.durationSec) : undefined, part.size !== undefined ? fileSize(part.size) : part.mimeType].filter(Boolean).join(" · ");
   return (
     <div className="my-1.5">
       {isImage && (
@@ -90,36 +154,19 @@ function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" 
           <img src={href} alt={part.name} className="max-h-72 max-w-full rounded-xl border border-border" loading="lazy" />
         </a>
       )}
+      {isAudio && <audio controls preload="none" src={href} className="mb-1 h-10 w-72 max-w-full" />}
       <a
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm transition hover:bg-surface-2"
+        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg transition hover:bg-surface-2"
       >
-        <FileText className="size-4 shrink-0 text-muted" />
-        <span className="min-w-0 truncate font-medium">{part.name || part.path}</span>
-        {part.mimeType && <span className="shrink-0 text-xs text-muted">{part.mimeType}</span>}
+        {voice ? <Mic className="size-4 shrink-0 text-muted" /> : <FileText className="size-4 shrink-0 text-muted" />}
+        <span className="min-w-0 truncate font-medium">{voice ? t("message.voice") : part.name || part.path}</span>
+        {meta && <span className="shrink-0 text-xs text-muted">{meta}</span>}
       </a>
+      {part.transcript && <p className="mt-1.5 max-w-prose whitespace-pre-wrap">{part.transcript}</p>}
     </div>
-  );
-}
-
-/** A user's text where secrets the hub took out (vault://id) show as lock chips. */
-function UserText({ text }: { text: string }) {
-  const pieces = text.split(/(vault:\/\/[A-Za-z0-9][\w.-]{0,127})/g);
-  if (pieces.length === 1) return <>{text}</>;
-  return (
-    <>
-      {pieces.map((s, i) =>
-        i % 2 ? (
-          <span key={i} className="mx-0.5 inline-flex items-center gap-1 rounded-md bg-surface/70 px-1.5 font-mono text-[13px]">
-            <Lock className="size-3" /> {s.slice("vault://".length)}
-          </span>
-        ) : (
-          s
-        ),
-      )}
-    </>
   );
 }
 
@@ -172,9 +219,7 @@ function Parts({ message }: { message: Message }) {
           case "text": {
             const caret = streaming && idx === items.length - 1 && lastPart?.type === "text";
             return message.role === "user" ? (
-              <div key={it.key} className="break-words whitespace-pre-wrap">
-                <UserText text={p.text} />
-              </div>
+              <Markdown key={it.key} text={p.text} className="md-bubble" user />
             ) : (
               <Markdown key={it.key} text={p.text} className={cx(caret && "stream-caret")} />
             );
@@ -187,6 +232,10 @@ function Parts({ message }: { message: Message }) {
             return <ErrorPart key={it.key} message={p.message} />;
           case "attachment":
             return <Attachment key={it.key} part={p} />;
+          case "images":
+            return <ImagesCard key={it.key} items={p.items} />;
+          case "map":
+            return <MapCard key={it.key} part={p} />;
           case "secret_request":
             return <SecretRequestCard key={it.key} part={p} />;
           case "plugin_setup":
@@ -195,6 +244,14 @@ function Parts({ message }: { message: Message }) {
             return <AgentDraftCard key={it.key} draftId={p.draftId} messageId={message.id} />;
           case "brain_login":
             return <BrainLoginCard key={it.key} brainRef={p.ref} />;
+          case "integration":
+            return <IntegrationChatCard key={it.key} id={p.id} conversationId={message.conversationId} />;
+          case "brain_setup":
+            return <BrainSetupCard key={it.key} conversationId={message.conversationId} />;
+          case "device_pairing":
+            return <DevicePairingCard key={it.key} />;
+          case "task":
+            return <TaskLine key={it.key} taskId={p.taskId} />;
           default:
             return null;
         }
@@ -202,6 +259,12 @@ function Parts({ message }: { message: Message }) {
       {streaming && (items.length === 0 || items[items.length - 1].kind !== "part") && <TypingDots />}
     </>
   );
+}
+
+/** Where a person's message came from, before its time: nothing for the web UI, and on the phone nothing for the phone. */
+function channelLabel(channel: string | undefined): string {
+  if (!channel || channel === "web" || (channel === "app" && mobileMode)) return "";
+  return `${channel === "app" ? t("message.fromPhone") : channel} · `;
 }
 
 /** Core rendering of a message (also passed to chat.message overrides as `Default`). */
@@ -213,10 +276,10 @@ export const DefaultMessage = memo(function DefaultMessage({ message, agentName,
   if (message.role === "user") {
     return (
       <div className="animate-in flex justify-end">
-        <div className="max-w-[88%] rounded-2xl rounded-br-md bg-user-bubble px-3.5 py-2 text-[15px] leading-relaxed sm:max-w-[75%]">
+        <div className="max-w-[88%] rounded-2xl rounded-br-md bg-user-bubble px-3.5 py-2 text-user-bubble-fg text-[15px] leading-relaxed sm:max-w-[75%]">
           <Parts message={message} />
           <div className="mt-0.5 text-right text-[11px] text-muted">
-            {message.channel && message.channel !== "web" ? `${message.channel} · ` : ""}
+            {channelLabel(message.channel)}
             {formatTime(message.createdAt)}
           </div>
         </div>

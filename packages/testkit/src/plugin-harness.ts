@@ -6,13 +6,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@openbot/shared";
-import { createRpcPeer, ndjsonTransport, readPluginLayout, type RpcPeer } from "@openbot/shared";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@owlbot/shared";
+import { createRpcPeer, ndjsonTransport, readPluginLayout, type RpcPeer } from "@owlbot/shared";
 
 const APP_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..", "..", "..");
 
 export interface HarnessOptions {
-  /** Plugin directory (contains .openbot-plugin/plugin.json). */
+  /** Plugin directory (contains .owlbot-plugin/plugin.json). */
   dir: string;
   settings?: Record<string, unknown>;
   /** Vault items by id → fields. */
@@ -51,6 +51,8 @@ export interface PluginHarness {
   brainProbe(id: string, variant?: string): Promise<ProbeResult>;
   brainCreate(id: string, opts: BrainSessionOptions): Promise<void>;
   brainSend(sessionId: string, turn: BrainTurn): Promise<BrainEvent[]>;
+  /** More input for the turn in progress; resolves with whether the brain took it. */
+  brainSteer(sessionId: string, turn: BrainTurn): Promise<boolean>;
   brainInterrupt(sessionId: string): Promise<void>;
   brainClose(sessionId: string): Promise<void>;
   stop(): Promise<void>;
@@ -64,7 +66,7 @@ export function defaultContext(over: Partial<ToolCallContext> = {}): ToolCallCon
     callId: "call_test",
     tainted: false,
     background: false,
-    workspace: over.workspace ?? mkdtempSync(join(tmpdir(), "ob-ws-")),
+    workspace: over.workspace ?? mkdtempSync(join(tmpdir(), "owl-ws-")),
     machineId: "local",
     ...over,
   };
@@ -73,7 +75,7 @@ export function defaultContext(over: Partial<ToolCallContext> = {}): ToolCallCon
 export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
   const layout = readPluginLayout(resolve(o.dir));
   if (!layout.serverEntry) throw new Error(`plugin at ${o.dir} has no server entry`);
-  const dataDir = o.dataDir ?? mkdtempSync(join(tmpdir(), `ob-plugin-${layout.manifest.id}-`));
+  const dataDir = o.dataDir ?? mkdtempSync(join(tmpdir(), `owl-plugin-${layout.manifest.id}-`));
   const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", join(APP_ROOT, "packages", "plugin-sdk", "src", "runner.ts"), layout.serverEntry], {
     cwd: layout.dir,
     env: { ...process.env, HOME: dataDir, ...o.env },
@@ -201,6 +203,10 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
       await peer.request("brain.send", { sessionId, turn }, { timeoutMs: 300_000 });
       brainEvents.delete(sessionId);
       return events;
+    },
+    brainSteer: async (sessionId, turn) => {
+      const r = await peer.request<{ accepted: boolean }>("brain.steer", { sessionId, turn });
+      return r.accepted;
     },
     brainInterrupt: async (sessionId) => {
       await peer.request("brain.interrupt", { sessionId });

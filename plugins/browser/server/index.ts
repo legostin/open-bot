@@ -1,6 +1,6 @@
 // Builtin browser plugin: Playwright Chromium with a persistent profile, agent tools, live view and user takeover.
 
-import type { PluginContext, PluginModule } from "@openbot/plugin-sdk";
+import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
 import { BrowserManager } from "./manager.ts";
 import { registerTools } from "./tools.ts";
 

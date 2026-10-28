@@ -7,7 +7,7 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function escapeAttr(s: string): string {
+export function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, "&quot;");
 }
 
@@ -34,6 +34,11 @@ function inlineToHtml(text: string): string {
 
   // Inline code first: its content is literal.
   let s = text.replace(/`([^`\n]+)`/g, (_, code: string) => hold(`<code>${escapeHtml(code)}</code>`));
+  // Images ![alt](url): Telegram has no inline images, so a link with a picture sign.
+  s = s.replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)/g, (_, alt: string, url: string) => {
+    const label = `🖼 ${escapeHtml(alt || url)}`;
+    return hold(isPublicHttpUrl(url) ? `<a href="${escapeAttr(url)}">${label}</a>` : label);
+  });
   // Links [label](url): keep URLs away from the emphasis regexes.
   s = s.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (_, label: string, url: string) =>
     isPublicHttpUrl(url) ? hold(`<a href="${escapeAttr(url)}">${emphasis(escapeHtml(label))}</a>`) : hold(`${emphasis(escapeHtml(label))} (${escapeHtml(url)})`),
@@ -53,10 +58,49 @@ function emphasis(s: string): string {
     .replace(/(^|[^\w])_(?=[^\s_])([^_\n]*?[^\s_])_(?![\w])/g, "$1<i>$2</i>");
 }
 
+/** A markdown table row's cells, without the outer pipes. */
+function tableCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
+}
+
+const TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+/** Cell text without markdown marks: tables become monospace blocks, where marks would show as is. */
+function plainCell(cell: string): string {
+  return cell
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/(\*\*|__|~~|`)/g, "")
+    .replace(/(^|[^\w])[*_](\S(?:.*?\S)?)[*_](?!\w)/g, "$1$2");
+}
+
+/** Telegram has no tables: a markdown table becomes an aligned monospace block. */
+function tableBlock(rows: string[][]): string {
+  const cols = Math.max(...rows.map((r) => r.length));
+  const cells = rows.map((r) => Array.from({ length: cols }, (_, i) => plainCell(r[i] ?? "")));
+  const width = Array.from({ length: cols }, (_, i) => Math.max(...cells.map((r) => [...r[i]].length)));
+  const line = (r: string[]) => r.map((c, i) => c + " ".repeat(width[i] - [...c].length)).join("  ").trimEnd();
+  const [head, ...body] = cells;
+  return `<pre>${escapeHtml([line(head), width.map((w) => "─".repeat(w)).join("  "), ...body.map(line)].join("\n"))}</pre>`;
+}
+
 /** Markdown (the subset models usually produce) → Telegram HTML. Unclosed code fences run to the end. */
 export function markdownToHtml(md: string): string {
   const out: string[] = [];
   const lines = md.replace(/\r\n?/g, "\n").split("\n");
+  // Tables first (a header row, a |---| rule, then rows with pipes); fences are left alone.
+  for (let i = 0, inFence = false; i < lines.length; i++) {
+    if (/^\s*```/.test(lines[i])) inFence = !inFence;
+    if (inFence || !lines[i].includes("|") || !TABLE_RULE.test(lines[i + 1] ?? "")) continue;
+    let end = i + 2;
+    while (end < lines.length && lines[end].includes("|") && lines[end].trim()) end++;
+    const rows = [lines[i], ...lines.slice(i + 2, end)].map(tableCells);
+    lines.splice(i, end - i, `${PH}table${PH}${JSON.stringify(rows)}`);
+  }
   let code: string[] | null = null;
   let lang = "";
   for (const line of lines) {
@@ -73,9 +117,18 @@ export function markdownToHtml(md: string): string {
       lang = fence[1];
       continue;
     }
+    if (line.startsWith(`${PH}table${PH}`)) {
+      out.push(tableBlock(JSON.parse(line.slice(PH.length * 2 + 5))));
+      continue;
+    }
     const heading = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
     if (heading) {
       out.push(`<b>${inlineToHtml(heading[1])}</b>`);
+      continue;
+    }
+    const task = /^(\s*)[-*+]\s+\[([ xX])\]\s+(.*)$/.exec(line);
+    if (task) {
+      out.push(`${task[1]}${task[2] === " " ? "☐" : "☑"} ${inlineToHtml(task[3])}`);
       continue;
     }
     const bullet = /^(\s*)[-*+]\s+(.*)$/.exec(line);

@@ -1,6 +1,6 @@
 // In-process event bus. Web clients and plugin subscribers are attached by the server and plugin host.
 
-import type { AgentDraft, BrainLoginState, TeamMember, UiEvent } from "@openbot/shared";
+import type { AgentDraft, BrainLoginState, DeviceNetwork, GroupChat, MachineActivity, RemoteView, TeamMember, UiEvent } from "@owlbot/shared";
 
 export type BusEvents = {
   "message.created": any;
@@ -10,6 +10,7 @@ export type BusEvents = {
   /** A turn started or ended in a conversation. */
   "conversation.activity": { conversationId: string; running: boolean };
   "team.updated": TeamMember;
+  "group.updated": GroupChat;
   "task.updated": any;
   "notification.created": any;
   "notification.feedback": any;
@@ -27,7 +28,16 @@ export type BusEvents = {
   /** A new agent's draft in the chat changed (or became the agent). */
   "agent_draft.updated": AgentDraft;
   "settings.updated": Record<string, unknown>;
+  /** A connected account (Google) came, went or broke. */
+  "connections.updated": { provider: string };
   "machine.updated": any;
+  /** What every machine is doing now (activity.ts). */
+  "machines.activity": MachineActivity[];
+  /** A phone paired, was renamed or revoked: listeners re-read the list. */
+  "device.updated": { id: string };
+  "devices.network": DeviceNetwork;
+  /** Access from anywhere changed state (remote.ts). */
+  "remote.updated": RemoteView;
   "plugin.event": { pluginId: string; channel: string; payload: unknown };
 };
 
@@ -75,13 +85,19 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "message.delta":
     case "conversation.updated":
     case "team.updated":
+    case "group.updated":
     case "task.updated":
     case "notification.created":
     case "plugins.updated":
     case "brains.updated":
     case "agents.updated":
     case "settings.updated":
+    case "connections.updated":
     case "machine.updated":
+    case "machines.activity":
+    case "device.updated":
+    case "devices.network":
+    case "remote.updated":
     case "plugin.event":
     case "secret.request":
     case "agent_draft.updated":

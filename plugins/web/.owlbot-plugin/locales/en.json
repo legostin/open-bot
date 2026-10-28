@@ -1,0 +1,23 @@
+{
+  "name": "Web",
+  "description": "Reading web pages (web_fetch) and web search (web_search): Brave, Tavily, SearXNG or DuckDuckGo",
+  "settings.provider.title": "Search engine",
+  "settings.provider.description": "auto: the first one configured, Brave → Tavily → SearXNG → DuckDuckGo. Brave and Tavily keys are kept in the vault (brave_api_key, tavily_api_key, field value).",
+  "settings.searxngUrl.title": "SearXNG address",
+  "settings.searxngUrl.description": "For example, http://searxng:8080 (the json format must be enabled in the instance settings)",
+  "settings.allowPrivate.title": "Allow local addresses",
+  "settings.allowPrivate.description": "Let web_fetch reach local network addresses (10.x, 192.168.x, 127.x, etc.). Unsafe: enable only if you know why you need it.",
+  "settings.userAgent.title": "User-Agent",
+  "settings.userAgent.description": "User-Agent header for requests (optional)",
+  "settings.braveBaseUrl.title": "Brave API address",
+  "settings.braveBaseUrl.description": "Default: https://api.search.brave.com",
+  "settings.tavilyBaseUrl.title": "Tavily API address",
+  "settings.tavilyBaseUrl.description": "Default: https://api.tavily.com",
+  "settings.duckduckgoUrl.title": "DuckDuckGo HTML address",
+  "settings.duckduckgoUrl.description": "Default: https://html.duckduckgo.com/html/",
+  "setup.brave.title": "Brave Search API key",
+  "setup.brave.hint": "Optional: better web search. Get a free key in the Brave Search API dashboard.",
+  "setup.tavily.title": "Tavily API key",
+  "setup.tavily.hint": "Optional: search tuned for agents. Get a key on app.tavily.com.",
+  "integration.summary": "Web search and reading pages; Brave or Tavily keys are optional, DuckDuckGo works without one"
+}

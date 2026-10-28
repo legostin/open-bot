@@ -1,13 +1,13 @@
 // UI of the browser plugin: the browser's live view (with takeover) for the host's floating live-view window, and a
 // compact renderer for browser_* calls. The backend's "activity" event tells the host when an agent drives the
 // browser, so the window opens on its own.
-// React and @openbot/ui come from the host (import map); this file is bundled by scripts/build-ui-plugins.mjs.
-// Texts come from .openbot-plugin/locales (ui.* keys) through ui.i18n.t.
+// React and @owlbot/ui come from the host (import map); this file is bundled by scripts/build-ui-plugins.mjs.
+// Texts come from .owlbot-plugin/locales (ui.* keys) through ui.i18n.t.
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
-import { Badge, Button, EmptyState, Spinner, definePluginUI } from "@openbot/ui";
-import type { LiveViewActivity, LiveViewProps, OpenBotUI, ToolResultProps } from "@openbot/ui";
+import { Badge, Button, EmptyState, Spinner, definePluginUI } from "@owlbot/ui";
+import type { LiveViewActivity, LiveViewProps, OwlbotUI, ToolResultProps } from "@owlbot/ui";
 
 interface Tab {
   index: number;
@@ -45,8 +45,8 @@ interface Activity {
   attention: boolean;
 }
 
-let host: OpenBotUI;
-let t: OpenBotUI["i18n"]["t"] = (key) => key;
+let host: OwlbotUI;
+let t: OwlbotUI["i18n"]["t"] = (key) => key;
 const send = (payload: Record<string, unknown>) => host.plugin.send(payload);
 
 /** The backend sends `code` + `params` (ui.error.<code>) with an English `message` as a fallback. */

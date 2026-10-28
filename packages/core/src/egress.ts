@@ -5,7 +5,7 @@ import http from "node:http";
 import net from "node:net";
 import { lookup } from "node:dns/promises";
 import { randomBytes } from "node:crypto";
-import { hostMatches } from "@openbot/shared";
+import { hostMatches } from "@owlbot/shared";
 import type { AuditLog } from "./audit.ts";
 
 const PRIVATE_V4: Array<[string, number]> = [
@@ -18,7 +18,7 @@ for (const [a, p] of PRIVATE_V4) privateNets.addSubnet(a, p, "ipv4");
 for (const [a, p] of PRIVATE_V6) privateNets.addSubnet(a, p, "ipv6");
 
 /** dns.lookup replacement that only returns addresses we already checked (no second resolution). */
-function pinnedLookup(addrs: string[]): net.LookupFunction {
+export function pinnedLookup(addrs: string[]): net.LookupFunction {
   return ((_host: string, opts: { all?: boolean }, cb: (...a: any[]) => void) => {
     if (opts?.all) cb(null, addrs.map((address) => ({ address, family: net.isIP(address) })));
     else cb(null, addrs[0], net.isIP(addrs[0]));
@@ -126,7 +126,7 @@ export class EgressProxy {
       const verdict = this.allowed(token, target.hostname);
       if (!verdict.ok) {
         this.logDeny(verdict.owner, target.hostname);
-        res.writeHead(token ? 403 : 407, { "proxy-authenticate": "Basic realm=openbot" }).end(`egress to ${target.hostname} is not allowed`);
+        res.writeHead(token ? 403 : 407, { "proxy-authenticate": "Basic realm=owlbot" }).end(`egress to ${target.hostname} is not allowed`);
         return;
       }
       const headers = { ...req.headers };
@@ -160,6 +160,8 @@ export class EgressProxy {
     });
 
     server.on("connect", (req, clientSocket: net.Socket, head) => {
+      // A client may reset the connection at any moment, a refused one too: never let that error go unheard.
+      clientSocket.on("error", () => {});
       const raw = req.url ?? "";
       const sep = raw.lastIndexOf(":");
       const host = (sep > 0 ? raw.slice(0, sep) : raw).replace(/^\[|\]$/g, "");
@@ -168,10 +170,9 @@ export class EgressProxy {
       const verdict = this.allowed(token, host);
       if (!verdict.ok) {
         this.logDeny(verdict.owner, host);
-        clientSocket.end(`HTTP/1.1 ${token ? "403 Forbidden" : "407 Proxy Authentication Required"}\r\nProxy-Authenticate: Basic realm=openbot\r\n\r\n`);
+        clientSocket.end(`HTTP/1.1 ${token ? "403 Forbidden" : "407 Proxy Authentication Required"}\r\nProxy-Authenticate: Basic realm=owlbot\r\n\r\n`);
         return;
       }
-      clientSocket.on("error", () => {});
       this.resolveTarget(host).then(
         (addrs) => {
           const upstream = net.connect({ host, port, lookup: pinnedLookup(addrs), autoSelectFamily: true }, () => {

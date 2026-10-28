@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Message, TeamMember } from "@openbot/shared";
+import type { Message, TeamMember } from "@owlbot/shared";
 import { openDb } from "../src/db.ts";
 import { EventBus } from "../src/bus.ts";
 import { Store } from "../src/store.ts";
@@ -37,9 +37,11 @@ describe("agent dialogs", () => {
 
   it("keeps the dialog of an install from before per-agent dialogs, with its history read", () => {
     // An older database: schema 3 (before per-agent dialogs), one conversation "main" and no read markers.
-    const file = join(mkdtempSync(join(tmpdir(), "ob-team-")), "openbot.db");
+    const file = join(mkdtempSync(join(tmpdir(), "owl-team-")), "owlbot.db");
     const old = openDb(file);
-    old.exec("drop table agent_drafts; drop index conversations_kind_agent; alter table conversations drop column read_at; update schema_version set v = 3;");
+    old.exec(
+      "drop table devices; drop table device_pairing_codes; drop table agent_drafts; drop index conversations_kind_agent; alter table conversations drop column read_at; alter table conversations drop column members; alter table tasks drop column question; update schema_version set v = 3;",
+    );
     const t0 = "2026-10-01T10:00:00.000Z";
     old.prepare("insert into conversations(id, kind, title, agent_id, created_at, updated_at) values ('main', 'main', 'Main', 'assistant', ?, ?)").run(t0, "2026-10-01T10:00:02.000Z");
     const insert = old.prepare("insert into messages(id, conversation_id, role, parts, status, created_at) values (?, 'main', ?, ?, 'complete', ?)");
@@ -123,5 +125,10 @@ describe("team", () => {
     expect(previewText(msg("assistant", [{ type: "notification", level: "notify", title: "Rain at 5", body: "take an umbrella" }]))).toBe("Rain at 5");
     expect(previewText(msg("assistant", [{ type: "text", text: "# Plan\n\n- `one`\n- two" }]))).toBe("Plan - one - two");
     expect(previewText(msg("user", [{ type: "text", text: "x".repeat(400) }])).length).toBe(160);
+    expect(previewText(msg("assistant", [{ type: "images", items: [{ src: "https://a.b/1.jpg" }, { src: "https://a.b/2.jpg", caption: "Tower" }] }]))).toBe("🖼 Tower");
+    expect(previewText(msg("assistant", [{ type: "images", items: [{ src: "https://a.b/1.jpg" }] }]))).toBe("🖼");
+    expect(previewText(msg("assistant", [{ type: "map", lat: 48.85837, lon: 2.294481, title: "Eiffel Tower" }]))).toBe("📍 Eiffel Tower");
+    expect(previewText(msg("assistant", [{ type: "map", lat: 48.85837, lon: 2.294481 }]))).toBe("📍 48.8584, 2.2945");
+    expect(previewText(msg("assistant", [{ type: "map", lat: 1, lon: 2, title: "Here" }, { type: "text", text: "It stands here." }]))).toBe("It stands here.");
   });
 });

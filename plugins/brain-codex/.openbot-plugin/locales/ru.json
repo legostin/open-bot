@@ -1,9 +1,0 @@
-{
-  "name": "Codex",
-  "description": "Мозг на подписке ChatGPT: запускает Codex CLI (codex exec) с инструментами open-bot.",
-  "settings.command.title": "Команда CLI",
-  "settings.apiKeyRef.title": "Ключ OpenAI (ссылка vault, необязательно)",
-  "settings.apiKeyRef.description": "Если пусто — используется подписка ChatGPT: войдите из чата.",
-  "settings.sandbox.title": "Песочница Codex",
-  "settings.sandbox.description": "В Docker изоляцию обеспечивают пользователи Unix и egress-прокси."
-}
