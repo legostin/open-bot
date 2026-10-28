@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { AlarmClock, Bot, ChevronRight, Plus, Search, Timer, User, Zap } from "lucide-react";
+import { AgentAvatar } from "../components/AgentAvatar";
 import type { Task, TaskStatus } from "@owlbot/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
@@ -125,18 +126,31 @@ export function TasksPage() {
         </Button>
       }
     >
-      <div className="mb-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <Segmented<Kind> value={kind} onChange={setKind} options={(Object.keys(KIND_LABELS) as Kind[]).map((k) => ({ value: k, label: t(KIND_LABELS[k]) }))} />
+        <div className="relative w-full sm:w-52">
+          <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("common.search")} className="h-9 rounded-full border-transparent! bg-surface-2! pl-10 focus:border-accent! focus:bg-surface!" aria-label={t("tasks.searchLabel")} />
+        </div>
       </div>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Segmented<Filter>
-          value={filter}
-          onChange={setFilter}
-          options={(Object.keys(FILTER_LABELS) as Filter[]).map((f) => ({ value: f, label: `${t(FILTER_LABELS[f])} ${counts[f] || ""}` }))}
-        />
-        <div className="relative sm:w-64">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("common.search")} className="pl-9" aria-label={t("tasks.searchLabel")} />
+      <div className="mb-4">
+        {/* Status filters as quiet chips; the ones with nothing in them stay out of the way. */}
+        <div className="flex flex-wrap items-center gap-1" role="tablist">
+          {(Object.keys(FILTER_LABELS) as Filter[])
+            .filter((f) => f === "all" || f === filter || counts[f] > 0)
+            .map((f) => (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={filter === f}
+                onClick={() => setFilter(f)}
+                className={`press inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium ${filter === f ? "bg-fg text-bg" : "text-muted hover:bg-surface-2 hover:text-fg"}`}
+              >
+                {t(FILTER_LABELS[f])}
+                {counts[f] > 0 && <span className={`tabular-nums ${filter === f ? "opacity-60" : "text-muted/70"}`}>{counts[f]}</span>}
+              </button>
+            ))}
         </div>
       </div>
 
@@ -144,16 +158,19 @@ export function TasksPage() {
       {!list && !error && <Loading />}
       {setUp.length > 0 && (
         <section className="mb-5">
-          <h2 className="mb-2 px-1 text-xs font-medium text-muted uppercase">{t("tasks.setUp")}</h2>
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
+          <h2 className="mb-1.5 px-3 text-[12px] font-medium text-muted">{t("tasks.setUp")}</h2>
+          <div className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-card">
             {setUp.map((trigger, i) => (
               <button
                 key={trigger.id}
                 type="button"
                 onClick={() => void askInChat(trigger.agentId, t("tasks.trigger.ask", { name: trigger.name }), navigate)}
-                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-surface-2 ${i ? "border-t border-border" : ""} ${trigger.enabled ? "" : "opacity-60"}`}
+                className={`group relative flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2/60 ${trigger.enabled ? "" : "opacity-60"}`}
               >
-                <AlarmClock className="size-4 shrink-0 text-muted" />
+                {i > 0 && <span className="absolute top-0 right-0 left-[52px] h-px bg-border" aria-hidden />}
+                <span className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text">
+                  <AlarmClock className="size-3.5" />
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{trigger.name}</div>
                   <div className="mt-0.5 truncate text-xs text-muted">{[agentNames.get(trigger.agentId) ?? trigger.agentId, triggerWhen(trigger)].filter(Boolean).join(" · ")}</div>
@@ -172,39 +189,45 @@ export function TasksPage() {
         />
       )}
       {shown.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
+        <div className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-card">
           {shown.map((task, i) => {
             const st = taskStatus(task.status);
             const by = CREATED_BY[task.createdBy] ?? CREATED_BY.user;
+            const agent = agentList?.find((a) => a.id === task.agentId);
+            const running = task.status === "running";
             return (
-              <Link key={task.id} href={`/tasks/${task.id}`} className={`flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2 ${i ? "border-t border-border" : ""}`}>
+              <Link key={task.id} href={`/tasks/${task.id}`} className="group relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-2/60">
+                {i > 0 && <span className="absolute top-0 right-0 left-[60px] h-px bg-border" aria-hidden />}
+                <AgentAvatar avatar={agent?.avatar} id={task.agentId} name={agent?.name ?? task.agentId} size={30} running={running} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-medium">{task.title || task.goal}</span>
-                    <Badge tone={st.tone} dot={task.status === "running"}>
-                      {st.label}
-                    </Badge>
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 truncate text-[14.5px] font-medium">{task.title || task.goal}</span>
                     {task.background && <Badge>{t("tasks.background")}</Badge>}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
-                    <span className="inline-flex items-center gap-1">
-                      <Bot className="size-3.5" />
-                      {agentNames.get(task.agentId) ?? task.agentId}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <by.icon className="size-3.5" />
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted">
+                    <span>{agentNames.get(task.agentId) ?? task.agentId}</span>
+                    <span className="inline-flex items-center gap-1" title={t(by.label)}>
+                      <by.icon className="size-3" />
                       {t(by.label)}
                     </span>
                     {task.resumeAt && task.status === "paused" && (
                       <span className="inline-flex items-center gap-1">
-                        <Timer className="size-3.5" />
+                        <Timer className="size-3" />
                         {t("tasks.resumes", { time: relativeTime(task.resumeAt) })}
                       </span>
                     )}
-                    <span>{relativeTime(task.updatedAt)}</span>
+                    <span className="tabular-nums">{relativeTime(task.updatedAt)}</span>
                   </div>
                 </div>
-                <ChevronRight className="size-4 shrink-0 text-muted" />
+                {running ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-text">
+                    <span className="live-dot size-1.5 rounded-full" />
+                    {st.label}
+                  </span>
+                ) : (
+                  <Badge tone={st.tone}>{st.label}</Badge>
+                )}
+                <ChevronRight className="size-4 shrink-0 text-muted/50 transition-transform group-hover:translate-x-0.5" />
               </Link>
             );
           })}

@@ -8,7 +8,8 @@ import { TopBar } from "../../components/Layout";
 import { EmptyState, Spinner } from "../../components/ui";
 import { t } from "../../i18n";
 import { AgentHeader } from "./AgentHeader";
-import { DetailsToggle } from "./DetailsToggle";
+import { ChatMenu } from "./DetailsToggle";
+import { editAgent } from "../../state/panel";
 import { ChatView } from "./ChatView";
 import { SetupGate } from "../../components/BrainSetupCard";
 
@@ -84,7 +85,7 @@ export function AgentPage({ agentId }: { agentId?: string }) {
     <div className="flex h-full flex-col">
       <TopBar>
         <AgentHeader agentId={id} />
-        <DetailsToggle />
+        <ChatMenu onSettings={agent ? () => editAgent(agent.id) : undefined} />
       </TopBar>
       <div className="min-h-0 flex-1">
         {conversationId ? (

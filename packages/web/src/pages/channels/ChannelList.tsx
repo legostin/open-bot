@@ -3,7 +3,7 @@
 
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Newspaper, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { Feed } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
 import { shortTime } from "../../lib/format";
@@ -14,6 +14,8 @@ import { toast } from "../../state/toast";
 import { errorText } from "../../lib/api";
 import { cx, Spinner } from "../../components/ui";
 import { UnreadBadge } from "../../components/UnreadBadge";
+import { AddRow } from "../chat/TeamList";
+import { ChannelTile } from "./ChannelTile";
 import { t } from "../../i18n";
 
 function ChannelRow({ feed, active, onNavigate }: { feed: Feed; active: boolean; onNavigate?: () => void }) {
@@ -24,25 +26,16 @@ function ChannelRow({ feed, active, onNavigate }: { feed: Feed; active: boolean;
       href={feedPath(feed.id)}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={cx("flex items-center gap-3 rounded-xl px-2.5 py-2 transition", active ? "bg-accent-soft" : "hover:bg-surface-2")}
+      className={cx("press flex items-center gap-3 rounded-2xl px-2.5 py-2", active ? "bg-surface shadow-card" : "hover:bg-surface/55")}
     >
-      <span className="relative shrink-0">
-        <span className={cx("flex size-9 items-center justify-center rounded-xl bg-surface-2 text-muted", !feed.enabled && "opacity-50")}>
-          <Newspaper className="size-[18px]" />
-        </span>
-        {running && (
-          <span className="absolute -right-0.5 -bottom-0.5 flex size-3.5 items-center justify-center rounded-full bg-surface">
-            <span className="size-2 animate-pulse rounded-full bg-accent" />
-          </span>
-        )}
-      </span>
+      <ChannelTile feedId={feed.id} size={38} running={running} paused={!feed.enabled} />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
-          <span className={cx("min-w-0 flex-1 truncate text-sm", feed.unread ? "font-semibold" : "font-medium", active && "text-accent-text")}>{feed.title}</span>
-          {feed.lastPost && <span className="shrink-0 text-[11px] text-muted">{shortTime(feed.lastPost.createdAt)}</span>}
+          <span className={cx("min-w-0 flex-1 truncate text-[14px]", feed.unread ? "font-semibold" : "font-medium")}>{feed.title}</span>
+          {feed.lastPost && <span className={cx("shrink-0 text-[11px] tabular-nums", feed.unread ? "font-medium text-accent-text" : "text-muted")}>{shortTime(feed.lastPost.createdAt)}</span>}
         </span>
         <span className="mt-0.5 flex items-center gap-2">
-          <span className={cx("min-w-0 flex-1 truncate text-xs", feed.unread ? "text-fg" : "text-muted")}>{preview}</span>
+          <span className={cx("min-w-0 flex-1 truncate text-[12.5px]", running && !feed.lastPost ? "font-medium text-accent-text" : feed.unread ? "text-fg" : "text-muted")}>{preview}</span>
           {feed.unread > 0 && <UnreadBadge n={feed.unread} />}
         </span>
       </span>
@@ -66,18 +59,7 @@ export function ChannelList({ activeId, onNavigate }: { activeId?: string; onNav
         </div>
       )}
       {list?.map((f) => <ChannelRow key={f.id} feed={f} active={f.id === activeId} onNavigate={onNavigate} />)}
-      {list && (
-        <button
-          type="button"
-          onClick={create}
-          className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-accent-text transition hover:bg-surface-2"
-        >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-dashed border-accent/60">
-            <Plus className="size-4" />
-          </span>
-          {t("channel.new")}
-        </button>
-      )}
+      {list && <AddRow label={t("channel.new")} icon={<Plus className="size-4" />} onClick={create} />}
       {list?.length === 0 && <p className="px-3 pt-2 text-xs leading-relaxed text-muted">{t("channel.emptyHint")}</p>}
     </>
   );

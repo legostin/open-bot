@@ -3,7 +3,8 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { Newspaper, Pause, Play, RotateCw, Trash2 } from "lucide-react";
+import { Check, Pause, Play, RotateCw, Trash2 } from "lucide-react";
+import { ChannelTile } from "../channels/ChannelTile";
 import type { MessagePart } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
 import { api, errorText } from "../../lib/api";
@@ -30,7 +31,7 @@ export function Choices({ part, messageId }: { part: Extract<MessagePart, { type
     }
   };
   return (
-    <div className="my-2 flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5 pt-0.5">
       {part.options.map((o, i) => (
         <button
           key={i}
@@ -38,11 +39,15 @@ export function Choices({ part, messageId }: { part: Extract<MessagePart, { type
           disabled={done || busy !== undefined}
           onClick={() => void choose(i)}
           className={cx(
-            "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition select-none",
-            part.chosen === i ? "border-accent bg-accent text-accent-fg" : done ? "border-border text-muted opacity-50" : "border-border bg-surface text-fg hover:border-fg/30 hover:bg-surface-2",
+            "press inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-medium select-none",
+            part.chosen === i
+              ? "candy"
+              : done
+                ? "border border-hairline text-muted opacity-45"
+                : "border border-accent/45 bg-surface text-accent-text shadow-[0_1px_2px_rgb(70_45_10/0.06)] hover:-translate-y-px hover:border-accent hover:bg-accent-soft hover:shadow-card",
           )}
         >
-          {busy === i && <Spinner size={14} />}
+          {busy === i ? <Spinner size={14} className="text-current" /> : part.chosen === i ? <Check className="animate-pop size-4" strokeWidth={2.6} /> : null}
           {o}
         </button>
       ))}
@@ -69,42 +74,37 @@ export function FeedCard({ feedId }: { feedId: string }) {
     return () => clearTimeout(id);
   }, [armed]);
   const feed = list?.find((f) => f.id === feedId);
-  if (!list) return <div className="my-2 h-24 max-w-md animate-pulse rounded-2xl bg-surface-2" />;
-  if (!feed) return <div className="my-2 max-w-md rounded-2xl border border-dashed border-border px-3 py-2.5 text-sm text-muted">{t("channel.gone")}</div>;
+  if (!list) return <div className="h-24 w-full max-w-md animate-pulse rounded-2xl bg-surface-2" />;
+  if (!feed) return <div className="max-w-md rounded-2xl border border-dashed border-border px-3.5 py-2.5 text-sm text-muted">{t("channel.gone")}</div>;
 
   const act = (fn: () => Promise<unknown>) => fn().catch((e) => toast(errorText(e), "error"));
   const cadence = cadenceOf(feed);
   const editor = team?.find((a) => a.id === feed.agentId)?.name ?? feed.agentId;
   const state = feed.runningTaskId ? t("channel.gathering") : !feed.enabled ? t("channel.paused") : feed.nextRunAt ? t("channel.next", { time: formatTime(feed.nextRunAt) }) : "";
-  const button = "flex flex-1 items-center justify-center gap-1.5 px-2 py-2.5 text-[13px] font-medium text-fg transition hover:bg-surface-2 disabled:opacity-50";
+  const button = "press flex flex-1 items-center justify-center gap-1.5 px-2 py-2.5 text-[13px] font-medium text-fg hover:bg-surface-2 disabled:opacity-50";
 
   return (
-    <div className="my-2 max-w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-card sm:max-w-md">
-      <Link href={feedPath(feed.id)} className="flex items-start gap-3 p-3 transition hover:bg-surface-2">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
-          <Newspaper className="size-5" />
-        </span>
+    <div className="w-full max-w-md overflow-hidden rounded-[22px] border border-hairline bg-surface shadow-card">
+      <Link href={feedPath(feed.id)} className="group flex items-start gap-3 p-3.5 transition-colors hover:bg-surface-2/60">
+        <ChannelTile feedId={feed.id} size={44} running={!!feed.runningTaskId} paused={!feed.enabled} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">{feed.title}</span>
-          <span className="line-clamp-2 text-[13px] text-muted">{feed.brief}</span>
-          <span className="mt-0.5 block truncate text-xs text-muted">{[editor, state].filter(Boolean).join(" · ")}</span>
+          <span className="block truncate text-[15px] font-semibold">{feed.title}</span>
+          <span className="line-clamp-2 text-[13px] leading-snug text-muted">{feed.brief}</span>
+          <span className="mt-1 block truncate text-xs text-muted/80">{[editor, state].filter(Boolean).join(" · ")}</span>
         </span>
       </Link>
-      <div className="flex flex-wrap gap-1.5 border-t border-border px-3 py-2.5">
+      <div className="flex flex-wrap gap-1.5 px-3.5 pb-3">
         {(Object.keys(CADENCES) as Cadence[]).map((c) => (
           <button
             key={c}
             type="button"
             onClick={() => act(() => updateFeed(feed.id, CADENCES[c]))}
-            className={cx(
-              "h-8 rounded-full border px-3 text-[13px] font-medium transition",
-              cadence === c ? "border-accent bg-accent text-accent-fg" : "border-border text-muted hover:border-fg/30 hover:text-fg",
-            )}
+            className={cx("press h-8 rounded-full px-3 text-[13px] font-medium", cadence === c ? "candy" : "bg-surface-2 text-muted hover:text-fg")}
           >
             {t(CADENCE_LABEL[c])}
           </button>
         ))}
-        {!cadence && <span className="flex h-8 items-center rounded-full border border-accent bg-accent px-3 text-[13px] font-medium text-accent-fg">{feed.times.join(", ")}</span>}
+        {!cadence && <span className="candy flex h-8 items-center rounded-full px-3 text-[13px] font-medium">{feed.times.join(", ")}</span>}
       </div>
       <div className="flex divide-x divide-border border-t border-border">
         <button type="button" className={button} disabled={!!feed.runningTaskId} onClick={() => act(() => runFeed(feed.id))}>

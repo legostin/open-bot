@@ -2,12 +2,10 @@
 // and who is next.
 
 import { useEffect, useState } from "react";
-import { UsersRound } from "lucide-react";
 import type { Conversation } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
 import { agents, ensureAgents, ensureGroups, groups, useSelector } from "../../state/app";
 import { AgentAvatar, AvatarPair, AvatarStack } from "../../components/AgentAvatar";
-import { IconButton } from "../../components/ui";
 import { t } from "../../i18n";
 import { GroupDialog } from "./GroupDialog";
 
@@ -22,30 +20,24 @@ export function GroupHeader({ conv }: { conv: Conversation }) {
   const members = useMembers(conv.members ?? [conv.agentId]);
   const names = members.map((m) => m.name).join(", ");
   return (
-    <div className="flex min-w-0 items-center gap-0.5">
+    <div className="flex min-w-0 items-center">
+      {/* The whole header opens the group's settings: no button of its own for that. */}
       <button
         type="button"
         onClick={() => setEditing(true)}
-        title={t("group.settings")}
-        className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pr-2 pl-1 text-left transition hover:bg-surface-2"
+        title={`${t("group.settings")} · ${t("group.memberCount", { n: members.length })}`}
+        className="press flex min-w-0 items-center gap-2.5 rounded-full py-1 pr-3 pl-1 text-left hover:bg-surface-2"
       >
         {/* Phones keep the room for the name: two members, one behind the other. */}
-        <AvatarPair agents={members} size={32} className="sm:hidden" />
+        <AvatarPair agents={members} size={30} className="sm:hidden" ring="bg-bg ring-bg" />
         <span className="hidden sm:flex">
-          <AvatarStack agents={members} size={28} max={4} />
+          <AvatarStack agents={members} size={26} max={4} ring="bg-bg ring-bg" />
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-[15px] leading-tight font-semibold">{conv.title}</span>
-          <span className="block truncate text-xs leading-tight text-muted" title={t("group.memberCount", { n: members.length })}>
-            {names}
-          </span>
+          <span className="block truncate text-[14.5px] leading-tight font-semibold">{conv.title}</span>
+          <span className="block truncate text-[11.5px] leading-tight text-muted">{names}</span>
         </span>
       </button>
-      <span className="hidden shrink-0 sm:flex">
-        <IconButton label={t("group.settings")} onClick={() => setEditing(true)} className="size-8">
-          <UsersRound className="size-4" />
-        </IconButton>
-      </span>
       <GroupDialog open={editing} onClose={() => setEditing(false)} group={conv} />
     </div>
   );
@@ -60,7 +52,7 @@ export function GroupFloor({ conversationId }: { conversationId: string }) {
   const [now, ...next] = members;
   return (
     <div key={now.id} className="animate-in flex items-center gap-2 pl-0.5 text-xs text-muted" role="status" aria-live="polite">
-      <AgentAvatar avatar={now.avatar} id={now.id} name={now.name} size={18} className="animate-pulse" />
+      <AgentAvatar avatar={now.avatar} id={now.id} name={now.name} size={20} running />
       <span className="min-w-0 truncate">
         <span className="font-medium text-fg">{t("group.speaking", { name: now.name })}</span>
         {next.length > 0 && <span> · {t("group.next", { names: next.map((m) => m.name).join(", ") })}</span>}

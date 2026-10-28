@@ -202,6 +202,8 @@ export default {
   "chat.loadOlder": "Load earlier messages",
   "chat.detailsOn": "Detailed mode: show tools and service messages",
   "chat.detailsOff": "Hide tools and service messages",
+  "chat.menu": "More",
+  "chat.showSteps": "Show steps",
   "chat.empty": "Nothing here yet",
   "chat.emptyHint": "Tell me how I can help: a task, a question, an idea. The assistant will figure it out.",
   "chat.scrollDown": "Scroll to the bottom",
