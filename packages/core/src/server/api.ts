@@ -149,6 +149,39 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   api.get("/api/team", async () => hub.team.list());
   api.get("/api/groups", async () => hub.team.listGroups());
 
+  // ----- channels (feeds.ts): news an agent of the team gathers on a schedule -----
+  api.get("/api/feeds", async () => hub.feeds.list());
+  api.post("/api/feeds", async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    return hub.feeds.create({ title: b.title, brief: b.brief, agentId: b.agentId, times: b.times, weekdays: b.weekdays, enabled: b.enabled });
+  });
+  const feed = (req: FastifyRequest) => {
+    const f = hub.feeds.get((req.params as { id: string }).id);
+    if (!f) throw new HttpError(404, "feed.notFound");
+    return f;
+  };
+  api.get("/api/feeds/:id", async (req) => feed(req));
+  api.patch("/api/feeds/:id", async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    return hub.feeds.update(feed(req).id, { title: b.title, brief: b.brief, agentId: b.agentId, times: b.times, weekdays: b.weekdays, enabled: b.enabled });
+  });
+  api.delete("/api/feeds/:id", async (req) => {
+    hub.feeds.delete(feed(req).id);
+    return { ok: true };
+  });
+  api.get("/api/feeds/:id/posts", async (req) => {
+    const q = req.query as { before?: string; limit?: string };
+    return hub.feeds.posts(feed(req).id, { before: q.before, limit: q.limit ? Number(q.limit) : undefined });
+  });
+  api.post("/api/feeds/:id/read", async (req) => {
+    hub.feeds.markRead(feed(req).id);
+    return { ok: true };
+  });
+  api.post("/api/feeds/:id/run", async (req) => {
+    const task = hub.feeds.run(feed(req).id);
+    return { taskId: task.id };
+  });
+
   // ----- tasks -----
   api.get("/api/tasks", async (req) => {
     const q = req.query as { status?: string; limit?: string };

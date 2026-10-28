@@ -27,6 +27,8 @@ import { SessionRunner } from "./runner.ts";
 import { Team } from "./team.ts";
 import { roadRoute } from "./routing.ts";
 import { UserLocations } from "./user-location.ts";
+import { Feeds } from "./feeds.ts";
+import { registerFeedTools } from "./tools/feed-tools.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
 import { McpClientManager } from "./mcp/client.ts";
@@ -77,6 +79,8 @@ export class Hub {
   notifier: Notifier;
   runner: SessionRunner;
   team: Team;
+  /** The user's channels: news an agent gathers on a schedule (feeds.ts). */
+  feeds: Feeds;
   plugins: PluginHost;
   mcp: McpEndpoint;
   mcpClients: McpClientManager;
@@ -219,6 +223,14 @@ export class Hub {
       isRunning: (id) => this.runner.isRunning(id),
       floor: (id) => this.runner.floor(id),
     });
+    this.feeds = new Feeds({
+      db: this.db,
+      bus: this.bus,
+      settings: this.settings,
+      agents: this.agents,
+      createTask: (task) => this.runner.createTask(task),
+      getTask: (id) => this.store.getTask(id),
+    });
     this.mcpClients = new McpClientManager({ config, registry: this.tools, vault: this.vault, audit: this.audit, egress: this.egress });
     this.plugins = new PluginHost({
       config,
@@ -290,6 +302,14 @@ export class Hub {
     });
     this.machines.registerTools(this.tools);
     registerHubTools(this);
+    registerFeedTools({
+      registry: this.tools,
+      feeds: this.feeds,
+      store: this.store,
+      agents: this.agents,
+      timezone: () => this.settings.get().timezone,
+      attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
+    });
     // A brain signed in from a card the assistant showed: the assistant hears it and carries on.
     this.brainLogins.onSignedIn = (s, label, conversationId) =>
       this.runner.tellAgent(conversationId, `[System] The user signed ${label} (${s.ref}) in from the chat card; it is ready now. Carry on with what it was needed for.`);
@@ -572,6 +592,7 @@ export class Hub {
     await this.mcpClients.sync(this.pluginMcpFiles());
     this.mcpClients.onChange = () => this.bus.emit("plugins.updated", {});
     this.runner.start();
+    this.feeds.start();
     this.setup.start();
     this.notifier.startDigestTimer();
     const sweep = setInterval(() => this.auth.sweep(), 3600_000);
@@ -592,6 +613,7 @@ export class Hub {
   async stop(): Promise<void> {
     for (const t of this.timers) clearInterval(t);
     this.notifier.stop();
+    this.feeds.stop();
     this.setup.stop();
     await this.runner.stop();
     this.machines.closeAll();

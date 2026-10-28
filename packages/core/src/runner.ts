@@ -561,6 +561,8 @@ export class SessionRunner {
     tainted?: boolean;
     /** A thread's sender: its opening message is theirs. */
     from?: string;
+    /** A channel's gathering run (feeds.ts). */
+    feedId?: string;
   }): Task {
     const task = this.d.store.createTask({ ...t, ...(t.tainted ? { tainted: true } : {}) });
     this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete", ...(t.from ? { agentId: t.from } : {}) });
@@ -1096,7 +1098,13 @@ export class SessionRunner {
   // ---------- turns ----------
 
   workspacePath(s: { agentId: string; taskId?: string; conversationId: string }): string {
-    return join(this.d.config.dataDir, "workspaces", s.agentId, s.taskId ?? s.conversationId);
+    return join(this.d.config.dataDir, "workspaces", s.agentId, this.workspaceKey(s));
+  }
+
+  /** A session's folder under its agent's: the task's or the conversation's, a channel's own for every run of it. */
+  private workspaceKey(s: { taskId?: string; conversationId: string }): string {
+    const feedId = s.taskId ? this.d.store.getTask(s.taskId)?.feedId : undefined;
+    return feedId ? `feed-${feedId}` : (s.taskId ?? s.conversationId);
   }
 
   private limitedUntil(ref: string): string | undefined {
@@ -1207,7 +1215,7 @@ export class SessionRunner {
     }
 
     const local = ref.machineId === "local";
-    const workspace = local ? this.workspacePath(row) : `${agent.id}/${task?.id ?? conv.id}`;
+    const workspace = local ? this.workspacePath(row) : `${agent.id}/${this.workspaceKey(row)}`;
     if (local) mkdirSync(workspace, { recursive: true });
     const skills = this.d.skills.forAgent(agent.skills);
     let skillsDir: string | undefined;
@@ -1718,6 +1726,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "brain_login") return `login:${p.ref}`;
   if (p.type === "device_pairing") return "device_pairing";
   if (p.type === "reply_to") return `reply_to:${p.messageId}`;
+  if (p.type === "news") return `news:${JSON.stringify(p.items.map((x) => x.url ?? x.title))}`;
   if (p.type === "integration") return `integration:${p.id}`;
   // Each message to a teammate has its own line, even in the same thread.
   if (p.type === "task") return p.text === undefined ? `task:${p.taskId}` : `task:${p.taskId}|${p.text}`;
