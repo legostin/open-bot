@@ -128,6 +128,7 @@ a Promise of the reply object (rejected with a message string on failure).
 | `dictation.start` | `{}` | `{ ok: true }` (rejects with a reason when the mic or speech recognition is not allowed) |
 | `dictation.stop` | `{}` | `{ text }`: the final words |
 | `openURL` | `{ url }` | `{ ok: true }`: opens in Safari (sign-in pages) |
+| `open` | `{ path }`: the web UI's path of another chat (`/`, `/agent/:id`, `/chat/:id`, `/tasks/:id`) | `{ ok: true }`: the app opens that chat as its own screen (a new agent's card, a task line, a link in a message); rejects when the hub has no such chat |
 | `haptic` | `{ kind: "light" \| "success" \| "warning" }` | `{ ok: true }` |
 | `reauth` | `{}` | none: the app gets a new ticket and reloads the page |
 

@@ -41,6 +41,7 @@ export default {
   // чат в приложении для iOS (/m/*)
   "mobile.noChat": "Чат не выбран",
   "mobile.noChatHint": "Откройте чат в приложении.",
+  "mobile.computerOnly": "Эта страница есть только в веб-интерфейсе на компьютере.",
   "link.openFailed": "Не удалось открыть ссылку: {error}",
 
   // navigation and header
