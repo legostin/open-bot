@@ -151,7 +151,18 @@ export default definePluginUI((host) => {
 
 `definePluginUI` принимает саму функцию активации: она получает `ui` и может вернуть функцию очистки. Каждый вызов `register` и `add` возвращает функцию, которая убирает добавленное.
 
-Слоты: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` заменяет стандартный компонент целиком. Каждый слот обёрнут в error boundary.
+Слоты: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `live.view`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` заменяет стандартный компонент целиком. Каждый слот обёрнут в error boundary.
+
+**Живой просмотр.** Если агент работает в чём-то, за чем пользователю стоит следить (встроенный браузер; приложение на рабочем столе или экран другой машины), добавьте живой просмотр. Хост показывает его в плавающем окне в углу: оно открывается само, пока идёт работа, вскоре после её конца сворачивается в «таблетку» и разворачивается в большое окно поверх приложения, где пользователь может действовать сам (например, взять управление). Плагин даёт только содержимое и сообщает об активности; окно рисует хост и сам решает, когда его показать:
+
+```tsx
+const view = ui.liveView.register({ id: "screen", title: ui.i18n.t("screen.title"), icon: "monitor", component: Screen });
+ui.plugin.on("activity", (a) => view.update({ active: a.busy, agentId: a.agentId, status: a.what, attention: a.needsUser }));
+// Screen получает { mode: "mini" | "expanded", expand, collapse }. Он смонтирован, только пока видно окно или
+// большое окно (начинайте трансляцию при монтировании, останавливайте при размонтировании), и не перемонтируется при смене режима.
+```
+
+`attention` снова открывает окно (даже если пользователь его свернул или закрыл) и подсвечивает его; `userControl` держит его открытым, пока управляет пользователь. Плагин может зарегистрировать несколько живых просмотров и убрать любой через `dispose()`.
 
 Кроме слотов, в `ui` есть `routes.add` (отдельная страница, по желанию — в навигации), `settings.section`, `commands.register` (палитра команд), `toast`, `navigate`, `api` (REST API хаба), `plugin` (`http`, `send` и `on` — связь со своим бэкендом через `ctx.http`, `ctx.ui.onMessage` и `ctx.ui.emit`), `events.on` (события хаба в реальном времени) и `i18n`. Ещё `@owlbot/ui` экспортирует компоненты `Button`, `Card`, `Badge`, `EmptyState`, `Spinner`, `Markdown`, хуки `useTasks` и `useHubEvent`, а также `api` и `locale`.
 

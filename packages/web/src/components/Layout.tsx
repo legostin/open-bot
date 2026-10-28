@@ -14,6 +14,7 @@ import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlo
 import { cx, IconButton } from "./ui";
 import { ApprovalsBadge, ConnectionBadge, VaultBadge } from "./StatusBadges";
 import { CommandPalette } from "./CommandPalette";
+import { LiveViewWindow } from "./LiveViewWindow";
 import { SettingsPanel } from "./SettingsPanel";
 import { MachinesBlock } from "./MachinesBlock";
 import { TeamList } from "../pages/chat/TeamList";
@@ -180,6 +181,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <main className="flex min-w-0 flex-1 flex-col">{children}</main>
         <SettingsPanel />
         <RightPane open={pane && panes.length > 0} onClose={() => setPane(false)} />
+        <LiveViewWindow />
         <CommandPalette />
       </div>
     </ShellContext.Provider>

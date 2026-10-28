@@ -105,6 +105,17 @@ export default {
   "layout.commands": "Commands (Ctrl+K)",
   "layout.sidePanel": "Side panel",
   "layout.closePanel": "Close panel",
+  // live view: the floating window onto an agent's screen
+  "liveView.label": "Live view: {title}",
+  "liveView.expand": "Expand",
+  "liveView.collapse": "Back to the corner",
+  "liveView.minimize": "Minimize",
+  "liveView.close": "Close",
+  "liveView.drag": "Drag to another corner",
+  "liveView.show": "Show {title}",
+  "liveView.needsYou": "Needs you",
+  "liveView.needsYouHint": "The agent needs your help here",
+  "liveView.command": "Show live view: {title}",
 
   // header badges
   "status.connection.open": "online",

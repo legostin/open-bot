@@ -1,8 +1,9 @@
 // The iOS app's chat screen: /m/chat/:conversationId in a WKWebView. Only that conversation (messages, cards,
 // plugin slots, the composer), full height, no sidebar, settings panel or header (the app draws a native one), the
-// composer docked above the keyboard. UI plugins load as on the computer.
+// composer docked above the keyboard. UI plugins load as on the computer; their live views (an agent's browser) float
+// over the chat in the shell.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useStore } from "../lib/store";
 import { chatLinkPath, isMobilePath, mobileConversationId, mobileMode, trackVisualViewport } from "../lib/mobile";
@@ -13,6 +14,7 @@ import { agents, conversations, ensureAgents, ensureGroups, ensureTeam, groups, 
 import { useUiPlugins } from "../plugins/host";
 import { EmptyState } from "../components/ui";
 import { SetupGate } from "../components/BrainSetupCard";
+import { LiveViewWindow } from "../components/LiveViewWindow";
 import { ChatView } from "./chat/ChatView";
 import { useReadMarker } from "./chat/AgentPage";
 import { t } from "../i18n";
@@ -162,9 +164,11 @@ export function MobileApp() {
   useEffect(() => {
     if (!id) signalReady("");
   }, [id]);
+  // The live view sits in the shell (it follows the visual viewport), its corners measured from the shell's bottom.
+  const [shell, setShell] = useState<HTMLDivElement | null>(null);
 
   return (
-    <div className="mobile-shell flex flex-col overflow-hidden bg-bg">
+    <div ref={setShell} data-live-view-frame="" className="mobile-shell flex flex-col overflow-hidden bg-bg">
       {id ? (
         <MobileChat key={id} conversationId={id} />
       ) : (
@@ -172,6 +176,7 @@ export function MobileApp() {
           <EmptyState icon="message-square" title={t("mobile.noChat")} hint={t("mobile.noChatHint")} />
         </div>
       )}
+      {shell && <LiveViewWindow frame={shell} />}
     </div>
   );
 }

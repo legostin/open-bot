@@ -151,7 +151,18 @@ export default definePluginUI((host) => {
 
 `definePluginUI` takes the activate function itself: it receives `ui` and may return a cleanup function. Every `register` and `add` call returns a function that removes the contribution.
 
-Slots: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` replaces a standard component entirely. Every slot is wrapped in an error boundary.
+Slots: `layout.sidebar`, `layout.statusbar`, `sidebar.panel`, `pane.right`, `live.view`, `chat.message`, `chat.toolResult`, `chat.composer`, `chat.composerActions`, `settings.section`, `route`. `ui.slots.override(slot, Component, { priority })` replaces a standard component entirely. Every slot is wrapped in an error boundary.
+
+**Live view.** When an agent works in something the user may want to watch (the builtin browser; a desktop app or another machine's screen), contribute a live view. The host shows it in a floating corner window that opens on its own while the view is busy, turns into a pill shortly after the work stops, and expands into a large overlay where the user can interact (for example, take over). The plugin only provides the content and reports activity; the host draws the window and decides when it shows:
+
+```tsx
+const view = ui.liveView.register({ id: "screen", title: ui.i18n.t("screen.title"), icon: "monitor", component: Screen });
+ui.plugin.on("activity", (a) => view.update({ active: a.busy, agentId: a.agentId, status: a.what, attention: a.needsUser }));
+// Screen gets { mode: "mini" | "expanded", expand, collapse }. It is mounted only while the window or the overlay
+// is visible (start streaming on mount, stop on unmount), and stays mounted when the mode changes.
+```
+
+`attention` reopens the window (even if the user minimized or closed it) and highlights it; `userControl` keeps it open while the user drives. A plugin may register several live views and `dispose()` them at any time.
 
 Besides slots, `ui` offers `routes.add` (a full page, optionally in the navigation), `settings.section`, `commands.register` (the command palette), `toast`, `navigate`, `api` (the hub's REST API), `plugin` (`http`, `send` and `on` to talk to the plugin's own backend through `ctx.http`, `ctx.ui.onMessage` and `ctx.ui.emit`), `events.on` (realtime hub events) and `i18n`. `@owlbot/ui` also exports the components `Button`, `Card`, `Badge`, `EmptyState`, `Spinner` and `Markdown`, the hooks `useTasks` and `useHubEvent`, plus `api` and `locale`.
 
