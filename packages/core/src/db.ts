@@ -76,6 +76,12 @@ const MIGRATIONS: string[] = [
   create index feed_posts_feed on feed_posts(feed_id, created_at);
   alter table tasks add column feed_id text;
   `,
+  // Setup chats ("New channel", "Add agent") and what they became.
+  `
+  alter table conversations add column purpose text;
+  alter table conversations add column entity text;
+  alter table feeds add column chat_id text;
+  `,
 ];
 
 export function openDb(file: string): Db {

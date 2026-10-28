@@ -309,13 +309,21 @@ export interface Message {
   createdAt: ISODate;
 }
 
+/** What a setup chat makes ("New channel", "Add agent"). */
+export type SetupPurpose = "feed" | "agent";
+
 export interface Conversation {
   id: string;
   /**
    * "main": an agent's long-lived dialog with the user (one per agent); "task": a task's thread; "chat": an older ad-hoc chat;
-   * "group": the user with several agents (`members`).
+   * "group": the user with several agents (`members`); "setup": a short chat that makes something (`purpose`) and then
+   * becomes it (`entity`).
    */
-  kind: "main" | "task" | "chat" | "group";
+  kind: "main" | "task" | "chat" | "group" | "setup";
+  /** A setup chat's aim: a channel or a new agent. */
+  purpose?: SetupPurpose;
+  /** What the setup chat became: the channel's or the agent's id. */
+  entity?: string;
   title: string;
   /** The agent who answers; in a group, its lead (`members[0]`). */
   agentId: string;
@@ -422,6 +430,8 @@ export interface Feed {
   enabled: boolean;
   /** The editor is gathering now: its run's task. */
   runningTaskId?: string;
+  /** The setup chat it was made in: its settings are talked over there. */
+  chatId?: string;
   lastRunAt?: ISODate;
   nextRunAt?: ISODate;
   /** Posts the user has not seen yet, and the newest post. */

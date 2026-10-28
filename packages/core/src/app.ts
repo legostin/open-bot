@@ -27,7 +27,8 @@ import { SessionRunner } from "./runner.ts";
 import { Team } from "./team.ts";
 import { roadRoute } from "./routing.ts";
 import { UserLocations } from "./user-location.ts";
-import { Feeds } from "./feeds.ts";
+import { FEED_RUN_TOOLS, Feeds } from "./feeds.ts";
+import { SetupChats } from "./setup-chats.ts";
 import { registerFeedTools } from "./tools/feed-tools.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
@@ -81,6 +82,8 @@ export class Hub {
   team: Team;
   /** The user's channels: news an agent gathers on a schedule (feeds.ts). */
   feeds: Feeds;
+  /** "New channel" and "Add agent" chats (setup-chats.ts). */
+  setupChats: SetupChats;
   plugins: PluginHost;
   mcp: McpEndpoint;
   mcpClients: McpClientManager;
@@ -159,6 +162,7 @@ export class Hub {
       settings: this.settings,
       agents: this.agents,
       workspaceFor: (s) => this.runner.workspacePath(s),
+      jobTools: (s) => (s.taskId && this.store.getTask(s.taskId)?.feedId ? FEED_RUN_TOOLS : []),
       // "%key%" approval summaries resolve against the owner's messages in the hub language.
       localize: (owner, text) =>
         owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),
@@ -223,6 +227,7 @@ export class Hub {
       isRunning: (id) => this.runner.isRunning(id),
       floor: (id) => this.runner.floor(id),
     });
+    this.setupChats = new SetupChats({ store: this.store, bus: this.bus, settings: this.settings });
     this.feeds = new Feeds({
       db: this.db,
       bus: this.bus,
@@ -593,6 +598,7 @@ export class Hub {
     this.mcpClients.onChange = () => this.bus.emit("plugins.updated", {});
     this.runner.start();
     this.feeds.start();
+    this.setupChats.sweep();
     this.setup.start();
     this.notifier.startDigestTimer();
     const sweep = setInterval(() => this.auth.sweep(), 3600_000);

@@ -12,6 +12,7 @@ import { toast } from "../state/toast";
 import { setShowDetails } from "../state/prefs";
 import { agents, conversations, ensureAgents, ensureGroups, ensureTeam, groups, hubIsBack, session, team, useConversationMessages, useSelector } from "../state/app";
 import { useUiPlugins } from "../plugins/host";
+import { entityPath } from "../state/ask";
 import { EmptyState } from "../components/ui";
 import { SetupGate } from "../components/BrainSetupCard";
 import { LiveViewWindow } from "../components/LiveViewWindow";
@@ -153,6 +154,18 @@ function MobileChat({ conversationId }: { conversationId: string }) {
   );
 }
 
+/** A new agent's setup chat that made the agent: the app opens the agent's dialog. */
+function useBecomes(conversationId: string | undefined): void {
+  const s = useStore(session);
+  const target = useSelector(conversations, (list) => {
+    const c = list.find((x) => x.id === conversationId);
+    return c?.kind === "setup" && c.purpose === "agent" ? entityPath(c, s?.defaultAgent) : undefined;
+  });
+  useEffect(() => {
+    if (target && native) openChat(native, target);
+  }, [target]);
+}
+
 export function MobileApp() {
   useUiPlugins();
   useOutsideLinks();
@@ -161,6 +174,7 @@ export function MobileApp() {
   useEffect(() => trackVisualViewport(), []);
   const [location] = useLocation();
   const id = mobileConversationId(location);
+  useBecomes(id ?? undefined);
   useEffect(() => {
     if (!id) signalReady("");
   }, [id]);
