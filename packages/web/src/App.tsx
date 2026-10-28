@@ -17,6 +17,7 @@ import { ChatPage } from "./pages/chat/ChatPage";
 import { AgentPage } from "./pages/chat/AgentPage";
 import { TaskDetailPage } from "./pages/TaskDetail";
 import { ChannelPage } from "./pages/channels/ChannelPage";
+import { entityPath } from "./state/ask";
 import { MobileApp, useMobileReadyOnError } from "./pages/MobileApp";
 import { mobileMode } from "./lib/mobile";
 import { t } from "./i18n";
@@ -83,10 +84,13 @@ function ChatRoute({ id }: { id: string }) {
   const members = useStore(team);
   const conv = convs.find((c) => c.id === id);
   const dialogOf = conv?.kind === "main" ? conv.agentId : members?.find((m) => m.conversationId === id)?.agentId;
+  // A new agent's setup chat that made the agent becomes its dialog.
+  const becameAgent = conv?.kind === "setup" && conv.purpose === "agent" ? entityPath(conv, s?.defaultAgent) : undefined;
   useEffect(() => {
     if (dialogOf) navigate(agentPath(dialogOf, s?.defaultAgent), { replace: true });
-  }, [dialogOf, s?.defaultAgent, navigate]);
-  return dialogOf ? null : <ChatPage conversationId={id} />;
+    else if (becameAgent) navigate(becameAgent, { replace: true });
+  }, [dialogOf, becameAgent, s?.defaultAgent, navigate]);
+  return dialogOf || becameAgent ? null : <ChatPage conversationId={id} />;
 }
 
 function Routes() {

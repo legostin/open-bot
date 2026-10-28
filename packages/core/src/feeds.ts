@@ -56,6 +56,7 @@ interface Row {
   sources: string;
   enabled: number;
   read_at: string | null;
+  chat_id: string | null;
   last_run_at: string | null;
   next_run_at: string | null;
   created_at: string;
@@ -137,8 +138,8 @@ export class Feeds {
     return named.length === 1 ? named[0] : undefined;
   }
 
-  /** A new channel; its first run starts at once, so the editor finds sources and posts what is there now. */
-  create(input: FeedInput, opts: { run?: boolean } = {}): Feed {
+  /** A new channel; its first run starts at once, so the editor finds sources and posts what is there now. `chatId`: the setup chat it came from. */
+  create(input: FeedInput, opts: { run?: boolean; chatId?: string } = {}): Feed {
     const brief = clean(input.brief, 2000);
     if (!brief) throw new LocalizedError("feed.briefRequired", undefined, 400);
     const agentId = this.agent(input.agentId) ?? this.d.settings.get().defaultAgent;
@@ -148,8 +149,8 @@ export class Feeds {
     const id = newId("f_");
     const now = nowIso();
     this.d.db
-      .prepare("insert into feeds(id, title, brief, agent_id, times, weekdays, sources, enabled, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?)")
-      .run(id, title, brief, agentId, JSON.stringify(times), JSON.stringify(weekdays), "[]", input.enabled === false ? 0 : 1, now, now);
+      .prepare("insert into feeds(id, title, brief, agent_id, times, weekdays, sources, enabled, chat_id, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?,?)")
+      .run(id, title, brief, agentId, JSON.stringify(times), JSON.stringify(weekdays), "[]", input.enabled === false ? 0 : 1, opts.chatId ?? null, now, now);
     this.schedule(id);
     if (opts.run !== false && input.enabled !== false) this.run(id);
     else this.changed(id);
@@ -351,6 +352,7 @@ export class Feeds {
       sources: json<string[]>(r.sources, []),
       enabled: !!r.enabled,
       ...(running ? { runningTaskId: running.id } : {}),
+      ...(r.chat_id ? { chatId: r.chat_id } : {}),
       ...(r.last_run_at ? { lastRunAt: r.last_run_at } : {}),
       ...(r.next_run_at && r.enabled ? { nextRunAt: r.next_run_at } : {}),
       unread,

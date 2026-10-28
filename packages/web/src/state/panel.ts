@@ -4,7 +4,8 @@ import { navigate } from "wouter/use-browser-location";
 import { createStore } from "../lib/store";
 import { errorText } from "../lib/api";
 import type { PanelSection } from "../components/nav";
-import { sendMessage, session } from "./app";
+import { session } from "./app";
+import { startSetup } from "./ask";
 import { toast } from "./toast";
 import { t } from "../i18n";
 
@@ -39,12 +40,11 @@ export function clearPanelIntent(): void {
  * "Add agent": no form. The default agent's dialog opens with the request, and the agent asks for a name, writes a
  * description and shows the newcomer as a card where the user picks the look.
  */
+/** "Add agent": a short setup chat with the default agent, which becomes the new agent's dialog. */
 export function addAgent(): void {
-  const s = session.get();
-  if (!s) return;
+  if (!session.get()) return;
   closePanel();
-  navigate("/");
-  sendMessage(s.mainConversationId, t("team.addPrompt")).catch((e) => toast(errorText(e), "error"));
+  startSetup("agent", navigate).catch((e) => toast(errorText(e), "error"));
 }
 
 /** An agent's settings: the Agents section with that agent's editor open. */

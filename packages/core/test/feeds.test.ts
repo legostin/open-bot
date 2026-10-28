@@ -207,6 +207,33 @@ describe("channels (integration)", () => {
     expect(inChat).not.toContain("feed_post");
   });
 
+  it("is made in a setup chat that asks at once and then becomes the channel's settings chat; an agent's too", async () => {
+    const made = await req("POST", "/api/setup-chats", { purpose: "feed" });
+    expect(made.status).toBe(200);
+    const chat = made.json as { id: string; kind: string; purpose: string; title: string };
+    expect(chat).toMatchObject({ kind: "setup", purpose: "feed", title: "New channel" });
+    const msgs = async (id: string) => (await req("GET", `/api/conversations/${id}/messages`)).json as Array<{ role: string; parts: any[] }>;
+    expect((await msgs(chat.id))[0]).toMatchObject({ role: "assistant", parts: [{ type: "text", text: expect.stringMatching(/^What should the channel follow\?/) }] });
+    expect((await req("POST", "/api/setup-chats", { purpose: "nonsense" })).status).toBe(400);
+
+    await req("POST", `/api/conversations/${chat.id}/messages`, { text: `CALL feed_create {"brief":"Steppe hiking trails","times":["08:00"]}` });
+    const became = await until(() => hub.store.getConversation(chat.id)?.entity, "the chat to become the channel");
+    expect(hub.feeds.get(became)).toMatchObject({ title: "Steppe hiking trails", chatId: chat.id });
+    await until(() => !hub.runner.isRunning(chat.id), "the turn to end");
+
+    const agentChat = (await req("POST", "/api/setup-chats", { purpose: "agent" })).json as { id: string };
+    await req("POST", `/api/conversations/${agentChat.id}/messages`, { text: `CALL hub_agent_draft {"name":"Hiker","description":"Plans hikes.","prompt":"You plan hikes.","create":true}` });
+    const agentId = await until(() => hub.store.getConversation(agentChat.id)?.entity, "the chat to become the agent");
+    expect(hub.agents.get(agentId)).toMatchObject({ name: "Hiker" });
+    await until(() => !hub.runner.isRunning(agentChat.id), "the turn to end");
+
+    // One left without making anything goes after a day; the made ones stay.
+    const left = hub.setupChats.start("feed", "en");
+    expect(hub.setupChats.sweep(Date.now() + 25 * 3600_000)).toBe(1);
+    expect(hub.store.getConversation(left.id)).toBeUndefined();
+    expect(hub.store.getConversation(chat.id)).toBeDefined();
+  });
+
   it("is made, renamed, paused and deleted by agents and the user", async () => {
     const made = await call("feed_create", { brief: "Weekly digest of Almaty events", times: ["10:00"], weekdays: [6] });
     expect(made.text).toMatch(/^Channel f_\S+ “Weekly digest of Almaty events” made, edited by .*, gathered at 10:00\. Its first run has started/);

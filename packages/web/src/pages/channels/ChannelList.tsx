@@ -9,7 +9,7 @@ import { useStore } from "../../lib/store";
 import { shortTime } from "../../lib/format";
 import { feedPath } from "../../lib/feeds";
 import { ensureFeeds, feeds } from "../../state/feeds";
-import { askInChat } from "../../state/ask";
+import { startSetup } from "../../state/ask";
 import { toast } from "../../state/toast";
 import { errorText } from "../../lib/api";
 import { cx, Spinner } from "../../components/ui";
@@ -56,7 +56,7 @@ export function ChannelList({ activeId, onNavigate }: { activeId?: string; onNav
   useEffect(() => ensureFeeds(), []);
   const create = () => {
     onNavigate?.();
-    askInChat(undefined, t("channel.newRequest"), navigate).catch((e) => toast(errorText(e), "error"));
+    startSetup("feed", navigate).catch((e) => toast(errorText(e), "error"));
   };
   return (
     <>
