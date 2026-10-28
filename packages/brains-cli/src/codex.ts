@@ -10,7 +10,7 @@ import type { Locale } from "@owlbot/shared/i18n";
 import { capture, childEnv, runLines } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseCodexDeviceLogin, runCliLogin } from "./login.ts";
-import { AppServerUnsupported, CodexAppTurn, parseCodexReset } from "./codex-app.ts";
+import { AppServerUnsupported, CodexAppTurn, listCodexModels, parseCodexReset, type CodexModel } from "./codex-app.ts";
 
 export { parseCodexReset };
 
@@ -129,6 +129,7 @@ class CodexSession implements BrainSessionImpl {
       `mcp_servers.owlbot.tool_timeout_sec=3600`,
       `approval_policy="never"`,
       `sandbox_mode=${tomlString(this.sandbox())}`,
+      ...(this.o.effort ? [`model_reasoning_effort=${tomlString(this.o.effort)}`] : []),
     ];
   }
 
@@ -145,10 +146,21 @@ class CodexSession implements BrainSessionImpl {
     this.interrupted = false;
     const env = childEnv(process.env, { ...this.o.env, ...(await this.p.authEnv?.()) });
     if (!this.execOnly) {
-      const app = new CodexAppTurn({ command: this.p.command?.() ?? "codex", config: this.config(), cwd: this.o.workspace, env, model: this.o.model, sandbox: this.sandbox(), threadId: this.threadId });
+      const start = () =>
+        new CodexAppTurn({ command: this.p.command?.() ?? "codex", config: this.config(), cwd: this.o.workspace, env, model: this.o.model, effort: this.o.effort, sandbox: this.sandbox(), threadId: this.threadId });
+      let app = start();
       this.app = app;
       try {
         for await (const e of app.run(turn)) yield e;
+        // The thread is too full to go on (Codex compacts on its own; this is when that was not enough): a fresh
+        // thread from the hub's recap.
+        if (app.parser.full && turn.recap && this.threadId && !this.interrupted) {
+          this.p.log?.(`codex thread ${this.threadId} is full, starting a fresh one from the recap`);
+          this.threadId = undefined;
+          app = start();
+          this.app = app;
+          for await (const e of app.run({ ...turn, text: `${turn.recap}\n\n---\n${turn.text}` })) yield e;
+        }
       } catch (e) {
         if (!(e instanceof AppServerUnsupported)) throw e;
         this.execOnly = true;
@@ -233,7 +245,42 @@ class CodexSession implements BrainSessionImpl {
   }
 }
 
+/** Efforts Codex takes when it cannot list its models (`model_reasoning_effort`). */
+const CODEX_EFFORTS = ["low", "medium", "high"];
+
+/**
+ * What Codex offers to think with: its own model list (app-server `model/list`) with the default model's efforts, and
+ * the presets on the default model: fast = low effort, balanced = its default effort, deep = extra-high (or high).
+ */
+export function codexThinking(models: CodexModel[] | undefined): Pick<ProbeResult, "models" | "modelNames" | "model" | "efforts" | "presets"> {
+  const def = models?.find((m) => m.isDefault) ?? models?.[0];
+  if (!models || !def) return { efforts: CODEX_EFFORTS, presets: { fast: { effort: "low" }, balanced: { effort: "medium" }, deep: { effort: "high" } } };
+  const efforts = def.efforts.length ? def.efforts : CODEX_EFFORTS;
+  const has = (e: string) => efforts.includes(e);
+  const deep = has("xhigh") ? "xhigh" : has("high") ? "high" : efforts.at(-1)!;
+  return {
+    models: models.map((m) => m.id),
+    modelNames: Object.fromEntries(models.map((m) => [m.id, m.name])),
+    model: def.id,
+    efforts,
+    presets: {
+      fast: { model: def.id, effort: has("low") ? "low" : efforts[0] },
+      balanced: { model: def.id, effort: def.defaultEffort && has(def.defaultEffort) ? def.defaultEffort : has("medium") ? "medium" : efforts[0] },
+      deep: { model: def.id, effort: deep },
+    },
+  };
+}
+
 export function createCodexProvider(p: CodexOptions): BrainProviderImpl {
+  // The model list, asked once per command and version for ten minutes (it starts an app-server).
+  let listed: { key: string; at: number; models: Promise<CodexModel[] | undefined> } | undefined;
+  const modelsOf = (command: string, version: string, env: Record<string, string>) => {
+    const key = `${command}|${version}`;
+    if (listed?.key !== key || Date.now() - listed.at > 10 * 60_000) {
+      listed = { key, at: Date.now(), models: listCodexModels(command, env).catch(() => undefined) };
+    }
+    return listed.models;
+  };
   return {
     id: "codex",
     label: brainsT()("codex.label"),
@@ -244,10 +291,11 @@ export function createCodexProvider(p: CodexOptions): BrainProviderImpl {
       const v = await capture(command, ["--version"], env);
       if (v.code !== 0) return { available: false, authenticated: false, detail: t("codex.notInstalled") };
       const version = v.stdout.trim().split(/\s+/).pop();
-      if (env.OPENAI_API_KEY || env.CODEX_API_KEY) return { available: true, authenticated: true, version, detail: t("codex.apiKey") };
+      if (env.OPENAI_API_KEY || env.CODEX_API_KEY) return { available: true, authenticated: true, version, ...codexThinking(await modelsOf(command, version ?? "", env)), detail: t("codex.apiKey") };
       const s = await capture(command, ["login", "status"], env);
       const ok = s.code === 0 && /logged in/i.test(s.stdout + s.stderr);
-      return { available: true, authenticated: ok, version, detail: ok ? (s.stdout + s.stderr).trim().split("\n")[0] : t("codex.noLogin") };
+      const thinking = codexThinking(ok ? await modelsOf(command, version ?? "", env) : undefined);
+      return { available: true, authenticated: ok, version, ...thinking, detail: ok ? (s.stdout + s.stderr).trim().split("\n")[0] : t("codex.noLogin") };
     },
     async createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl> {
       mkdirSync(opts.workspace, { recursive: true });

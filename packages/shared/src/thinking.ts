@@ -1,0 +1,197 @@
+// How an agent thinks (AgentDef.thinking): a plain-language preset or an exact model and effort per kind of work, and
+// what that comes to on the brain a session runs on. Shared by the hub (sessions), the web UI and the agents' tools.
+
+import type { AgentDef, AgentThinking, ProbeResult, ThinkingChoice, ThinkingPreset, WorkKind } from "./types.ts";
+
+export const THINKING_PRESETS: readonly ThinkingPreset[] = ["fast", "balanced", "deep"];
+export const WORK_KINDS: readonly WorkKind[] = ["chat", "task", "feed", "schedule"];
+
+/** Efforts from least to most, as brains name them: an effort a brain lacks becomes the nearest one it has. */
+export const EFFORT_SCALE = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+
+/** Models and efforts become CLI arguments: plain tokens only (no leading "-"). */
+const TOKEN = /^[A-Za-z0-9][\w.:/@[\]-]{0,99}$/;
+
+export const isThinkingPreset = (v: unknown): v is ThinkingPreset => typeof v === "string" && (THINKING_PRESETS as readonly string[]).includes(v);
+export const isWorkKind = (v: unknown): v is WorkKind => typeof v === "string" && (WORK_KINDS as readonly string[]).includes(v);
+
+/** The kind of work a session does: a task's, or the dialog's (teammates' threads read like a conversation). */
+export function workKind(task?: { feedId?: string; createdBy?: string; kind?: string } | null): WorkKind {
+  if (!task || task.kind === "message") return "chat";
+  if (task.feedId) return "feed";
+  if (task.createdBy === "trigger") return "schedule";
+  return "task";
+}
+
+/** A valid choice from untrusted input (frontmatter, API, tool calls), or undefined when nothing in it is valid. */
+export function parseThinkingChoice(v: unknown): ThinkingChoice | undefined {
+  if (!v || typeof v !== "object") return isThinkingPreset(v) ? { preset: v } : undefined;
+  const o = v as Record<string, unknown>;
+  const out: ThinkingChoice = {};
+  if (isThinkingPreset(o.preset)) out.preset = o.preset;
+  if (typeof o.model === "string" && TOKEN.test(o.model.trim())) out.model = o.model.trim();
+  if (typeof o.effort === "string" && TOKEN.test(o.effort.trim())) out.effort = o.effort.trim().toLowerCase();
+  if (typeof o.brain === "string" && TOKEN.test(o.brain.trim())) out.brain = o.brain.trim();
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** The valid part of an agent's `thinking`, or undefined. */
+export function parseThinking(v: unknown): AgentThinking | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const out: AgentThinking = {};
+  for (const k of WORK_KINDS) {
+    const c = parseThinkingChoice((v as Record<string, unknown>)[k]);
+    if (c) out[k] = c;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** A change to one kind's choice, as the header, the card and the agents' tool make it. */
+export interface ThinkingPatch {
+  preset?: ThinkingPreset;
+  model?: string;
+  effort?: string;
+  brain?: string;
+  /** Drop the kind's own choice: it follows the general one again (for "chat": the brain's defaults). */
+  follow?: boolean;
+}
+
+/**
+ * The choice after a change: a preset replaces an exact model and effort and vice versa, and a new brain drops the
+ * exact ones made for the old brain (its preset stays).
+ */
+export function patchChoice(prev: ThinkingChoice | undefined, patch: ThinkingPatch): ThinkingChoice | undefined {
+  if (patch.follow) return undefined;
+  const p = parseThinkingChoice(patch) ?? {};
+  const next: ThinkingChoice = { ...prev };
+  const exact = p.model !== undefined || p.effort !== undefined;
+  if (p.preset) {
+    next.preset = p.preset;
+    if (!exact) {
+      delete next.model;
+      delete next.effort;
+    }
+  }
+  if (exact) {
+    if (!p.preset) delete next.preset;
+    if (p.model !== undefined) next.model = p.model;
+    if (p.effort !== undefined) next.effort = p.effort;
+  }
+  if (p.brain && !(next.brain && sameBrain(next.brain, p.brain))) {
+    if (!exact) {
+      delete next.model;
+      delete next.effort;
+    }
+    next.brain = p.brain;
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
+/** `prev` with the choice for `kind` replaced (undefined: the kind follows the general one again). */
+export function withChoice(prev: AgentThinking | undefined, kind: WorkKind, choice: ThinkingChoice | undefined): AgentThinking | undefined {
+  const next: AgentThinking = { ...prev };
+  if (choice && Object.keys(choice).length) next[kind] = choice;
+  else delete next[kind];
+  return Object.keys(next).length ? next : undefined;
+}
+
+/** Whether the choice says how deeply to think (rather than only which brain). */
+const hasDepth = (c: ThinkingChoice | undefined): c is ThinkingChoice => !!c && !!(c.preset || c.model || c.effort);
+
+/** The kind's own choice when it has one, else the general one (chat). */
+export function thinkingFor(agent: Pick<AgentDef, "thinking">, kind: WorkKind): ThinkingChoice {
+  const general = agent.thinking?.chat;
+  const own = kind === "chat" ? general : agent.thinking?.[kind];
+  const depth = hasDepth(own) ? own : general;
+  const brain = own?.brain ?? (depth === general ? general?.brain : undefined);
+  return {
+    ...(depth?.preset ? { preset: depth.preset } : {}),
+    ...(depth?.model ? { model: depth.model } : {}),
+    ...(depth?.effort ? { effort: depth.effort } : {}),
+    ...(brain ? { brain } : {}),
+  };
+}
+
+/** Mirrors parseBrainRef: "claude-code" and "claude-code@local" are the same brain. */
+export function sameBrain(a: string, b: string): boolean {
+  const norm = (r: string) => (r.includes("@") ? r : `${r}@local`);
+  return norm(a.trim()) === norm(b.trim());
+}
+
+/** The agent's brains in the order a kind of work tries them: the choice's brain first. */
+export function brainsFor(agent: Pick<AgentDef, "brains" | "thinking">, kind: WorkKind): string[] {
+  const first = thinkingFor(agent, kind).brain;
+  return first ? [first, ...agent.brains.filter((b) => !sameBrain(b, first))] : agent.brains;
+}
+
+/** The effort a brain takes nearest to `effort` (the next lower one first), or undefined when it takes none. */
+export function fitEffort(effort: string | undefined, efforts: readonly string[] | undefined): string | undefined {
+  if (!effort) return undefined;
+  if (!efforts) return effort;
+  if (!efforts.length) return undefined;
+  if (efforts.includes(effort)) return effort;
+  const rank = (e: string) => EFFORT_SCALE.indexOf(e);
+  const want = rank(effort);
+  if (want < 0) return undefined;
+  const known = efforts.filter((e) => rank(e) >= 0).sort((a, b) => rank(a) - rank(b));
+  return known.filter((e) => rank(e) <= want).at(-1) ?? known[0];
+}
+
+export interface ResolvedThinking {
+  model?: string;
+  effort?: string;
+  /** The preset in effect (when the model and effort come from one). */
+  preset?: ThinkingPreset;
+}
+
+/**
+ * The model and effort a session gets on `brainRef`: the choice's exact ones (on the brain it was made for), else its
+ * preset's on this brain, else the agent's old `model`; efforts fit the brain's list.
+ */
+export function resolveThinking(
+  choice: ThinkingChoice,
+  brainRef: string,
+  probe?: Pick<ProbeResult, "presets" | "efforts"> | null,
+  legacyModel?: string,
+): ResolvedThinking {
+  const exact = !choice.brain || sameBrain(choice.brain, brainRef);
+  const p = choice.preset ? probe?.presets?.[choice.preset] : undefined;
+  const model = (exact ? choice.model : undefined) ?? p?.model ?? legacyModel;
+  const effort = fitEffort((exact ? choice.effort : undefined) ?? p?.effort, probe?.efforts);
+  const fromPreset = !!choice.preset && !(exact && (choice.model || choice.effort));
+  return { ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(fromPreset ? { preset: choice.preset } : {}) };
+}
+
+/** A brain the agent can think with, as the pickers offer it (GET /api/agents/:id/thinking). */
+export interface ThinkingBrain {
+  ref: string;
+  label: string;
+  /** Answers now: connected, signed in, not over a limit. */
+  ready: boolean;
+  models: Array<{ id: string; name: string }>;
+  /** The model it uses when none is chosen. */
+  model?: string;
+  efforts: string[];
+  presets: NonNullable<ProbeResult["presets"]>;
+}
+
+/** One kind of work: its own choice (or none: it follows the general one) and what that comes to now. */
+export interface KindThinking {
+  kind: WorkKind;
+  own?: ThinkingChoice;
+  /** The choice in effect (thinkingFor). */
+  choice: ThinkingChoice;
+  /** The brain its next session runs on: the first ready one in its order. */
+  brain?: string;
+  model?: string;
+  effort?: string;
+  preset?: ThinkingPreset;
+}
+
+/** How an agent thinks, for the header picker, the chat card and the phone. */
+export interface ThinkingView {
+  agentId: string;
+  kinds: KindThinking[];
+  /** The agent's brains first (in its order), then the hub's others. */
+  brains: ThinkingBrain[];
+}

@@ -216,7 +216,9 @@ export type MessagePart =
    */
   | { type: "choices"; options: string[]; chosen?: number }
   /** A channel's live card in the chat: its state and buttons (open, gather now, how often, pause, delete). */
-  | { type: "feed"; feedId: string };
+  | { type: "feed"; feedId: string }
+  /** How an agent thinks for each kind of work (AgentDef.thinking): a live card with a preset per kind. */
+  | { type: "thinking"; agentId: string };
 
 /** One card of a `news` part. */
 export interface NewsItem {
@@ -457,7 +459,10 @@ export interface AgentDef {
   description: string;
   /** Ordered brain refs, e.g. ["claude-code@local", "api:anthropic"]. */
   brains: string[];
+  /** An exact model for every brain (from before `thinking`): used when no choice names one. */
   model?: string;
+  /** How the agent thinks for each kind of work: kinds without a choice of their own follow `chat`. */
+  thinking?: AgentThinking;
   /** 0 = only reacts, 1 = suggests (read-only background), 2 = acts within rules. */
   initiative: 0 | 1 | 2;
   /** Tool name globs. ["*"] = all. */
@@ -472,6 +477,29 @@ export interface AgentDef {
   /** Translated name / description shown in the UI ("i18n: { ru: { name: … } }" in the frontmatter). */
   i18n?: Partial<Record<Locale, { name?: string; description?: string }>>;
 }
+
+/** How deeply an agent thinks, in plain words: each brain maps it to one of its models and an effort (ProbeResult.presets). */
+export type ThinkingPreset = "fast" | "balanced" | "deep";
+
+/**
+ * How an agent thinks for a kind of work: a preset, or an exact model and effort (they win over the preset's). `brain`
+ * is the brain the choice was made for: it is tried first, and the exact model and effort apply only on it.
+ */
+export interface ThinkingChoice {
+  preset?: ThinkingPreset;
+  model?: string;
+  effort?: string;
+  brain?: string;
+}
+
+/**
+ * The kinds of work an agent does: "chat" its dialogs and group chats (and messages from teammates), "task" what it
+ * does on the side (delegated, background and user tasks), "feed" a channel's runs, "schedule" runs a trigger started.
+ */
+export type WorkKind = "chat" | "task" | "feed" | "schedule";
+
+/** An agent's choice per kind of work; `chat` is the general one the other kinds follow when they have none. */
+export type AgentThinking = Partial<Record<WorkKind, ThinkingChoice>>;
 
 // ---------- Brains ----------
 
@@ -488,6 +516,12 @@ export interface ProbeResult {
   models?: string[];
   /** The model the brain answers with when the agent names none, for people to see. */
   model?: string;
+  /** Names people read for `models`, by id (e.g. "opus" → "Opus"). */
+  modelNames?: Record<string, string>;
+  /** Reasoning efforts the brain takes, least first (e.g. ["low", "medium", "high"]); absent: it takes none. */
+  efforts?: string[];
+  /** What each preset means on this brain: one of its models and efforts (unset: the brain's default). */
+  presets?: Partial<Record<ThinkingPreset, { model?: string; effort?: string }>>;
   detail?: string;
 }
 
@@ -571,6 +605,8 @@ export interface BrainSessionOptions {
   agent: AgentDef;
   variant?: string;
   model?: string;
+  /** Reasoning effort, one of the brain's ProbeResult.efforts; unset: the brain's default. */
+  effort?: string;
   workspace: string;
   mcp: {
     url: string;
@@ -600,6 +636,11 @@ export type BrainEvent =
 export interface BrainTurn {
   text: string;
   attachments?: string[];
+  /**
+   * What came before in this conversation (a summary and the recent turns), for a session that was to resume but cannot
+   * (its history is gone, or too full to go on): the brain starts afresh with it before `text`. Ignored otherwise.
+   */
+  recap?: string;
 }
 
 // ---------- Notifications ----------

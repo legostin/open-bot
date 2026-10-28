@@ -5,7 +5,7 @@ import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync
 import { join, basename } from "node:path";
 import { stringify as toYaml } from "yaml";
 import type { AgentDef, Locale } from "@owlbot/shared";
-import { normalizeLocale, parseAvatar, parseFrontmatter } from "@owlbot/shared";
+import { normalizeLocale, parseAvatar, parseFrontmatter, parseThinking } from "@owlbot/shared";
 
 export const DEFAULT_BRAINS = ["claude-code@local", "codex@local", "api:anthropic", "api:openai"];
 
@@ -20,6 +20,7 @@ export function agentFromMarkdown(id: string, text: string, source: string): Age
     description: String(data.description ?? ""),
     brains: list(data.brains, DEFAULT_BRAINS),
     model: data.model ? String(data.model) : undefined,
+    thinking: parseThinking(data.thinking),
     initiative: (initiative === 0 || initiative === 2 ? initiative : 1) as 0 | 1 | 2,
     tools: list(data.tools, ["*"]),
     skills: list(data.skills, ["*"]),
@@ -75,6 +76,7 @@ export function agentToMarkdown(a: AgentDef): string {
     ...(parseAvatar(a.avatar) ? { avatar: parseAvatar(a.avatar) } : {}),
     brains: a.brains,
     ...(a.model ? { model: a.model } : {}),
+    ...(parseThinking(a.thinking) ? { thinking: parseThinking(a.thinking) } : {}),
     initiative: a.initiative,
     tools: a.tools,
     skills: a.skills,

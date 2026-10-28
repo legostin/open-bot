@@ -77,6 +77,8 @@ export default {
   "agent.notFound": "No such agent",
   "agent.builtinCannotDelete": "The built-in assistant cannot be deleted",
   "agent.selfEditApproval": "Change its own profile (name, description or instructions)",
+  "agent.thinkingApproval": "Change how it thinks (brain, model, effort)",
+  "thinking.badKind": "Unknown kind of work: chat, task, feed or schedule",
   "agentDraft.notFound": "This draft of a new agent no longer exists",
   "agentDraft.alreadyCreated": "“{name}” has already been created",
   "agentDraft.nameRequired": "The agent needs a name",

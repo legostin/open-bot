@@ -2,7 +2,7 @@
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing, Invite } from "@owlbot/shared";
+import type { AgentDef, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing, Invite, ThinkingView } from "@owlbot/shared";
 import { DEFAULT_LOCALE, catalogLookup, formatBrainRef, localizeValue, normalizeLocale, parseBrainRef } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
@@ -30,6 +30,8 @@ import { UserLocations } from "./user-location.ts";
 import { FEED_RUN_TOOLS, Feeds } from "./feeds.ts";
 import { SetupChats } from "./setup-chats.ts";
 import { registerFeedTools } from "./tools/feed-tools.ts";
+import { registerThinkingTools } from "./tools/thinking-tools.ts";
+import { thinkingView } from "./thinking.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
 import { McpClientManager } from "./mcp/client.ts";
@@ -315,6 +317,13 @@ export class Hub {
       timezone: () => this.settings.get().timezone,
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
     });
+    registerThinkingTools({
+      registry: this.tools,
+      agents: this.agents,
+      view: (a) => this.thinkingView(a),
+      save: (a, actor) => this.saveAgent(a, actor),
+      attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
+    });
     // A brain signed in from a card the assistant showed: the assistant hears it and carries on.
     this.brainLogins.onSignedIn = (s, label, conversationId) =>
       this.runner.tellAgent(conversationId, `[System] The user signed ${label} (${s.ref}) in from the chat card; it is ready now. Carry on with what it was needed for.`);
@@ -485,8 +494,15 @@ export class Hub {
     this.bus.emit("brains.updated", {});
   }
 
+  /** How an agent thinks for each kind of work, on the brains here (thinking.ts). */
+  thinkingView(agent: AgentDef): Promise<ThinkingView> {
+    return thinkingView(this.brains, this.db, agent);
+  }
+
   saveAgent(agent: AgentDef, actor: string): AgentDef {
-    const refs = (a: AgentDef | undefined) => a?.brains.map((b) => formatBrainRef(parseBrainRef(b))).join("\n");
+    // The order its conversations try brains in: the agent's, and the brain each kind of work prefers.
+    const refs = (a: AgentDef | undefined) =>
+      a && [...a.brains, ...Object.values(a.thinking ?? {}).map((c) => c?.brain ?? "")].map((b) => (b ? formatBrainRef(parseBrainRef(b)) : "")).join("\n");
     const before = this.agents.get(agent.id);
     const saved = this.agents.save(agent);
     if (before && refs(before) !== refs(saved)) this.runner.brainsChanged(saved.id);

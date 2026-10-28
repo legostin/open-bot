@@ -76,6 +76,8 @@ export default {
   "agent.notFound": "Нет такого агента",
   "agent.builtinCannotDelete": "Встроенного ассистента нельзя удалить",
   "agent.selfEditApproval": "Изменить свой профиль (имя, описание или инструкции)",
+  "agent.thinkingApproval": "Изменить, как он думает (интеллект, модель, глубина рассуждений)",
+  "thinking.badKind": "Неизвестный вид работы: chat, task, feed или schedule",
   "agentDraft.notFound": "Этого черновика агента больше нет",
   "agentDraft.alreadyCreated": "«{name}» уже создан",
   "agentDraft.nameRequired": "Агенту нужно имя",
