@@ -1,7 +1,7 @@
 {
   "id": "memory",
   "name": "%name%",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "%description%",
   "author": "Owlbot",
   "builtin": true,
@@ -9,7 +9,7 @@
   "ui": "./ui/dist/index.js",
   "contributes": {
     "tools": true,
-    "hooks": ["session.start"],
+    "hooks": ["session.start", "turn.context"],
     "http": true,
     "settings": {
       "type": "object",
@@ -22,6 +22,20 @@
           "minimum": 500,
           "maximum": 20000
         },
+        "recallMaxChars": {
+          "type": "integer",
+          "title": "%settings.recallMaxChars.title%",
+          "description": "%settings.recallMaxChars.description%",
+          "default": 1500,
+          "minimum": 300,
+          "maximum": 8000
+        },
+        "reflect": {
+          "type": "boolean",
+          "title": "%settings.reflect.title%",
+          "description": "%settings.reflect.description%",
+          "default": true
+        },
         "git": {
           "type": "boolean",
           "title": "%settings.git.title%",
@@ -32,7 +46,7 @@
     }
   },
   "permissions": {
-    "core": ["ui.emit"],
+    "core": ["ui.emit", "tasks.create"],
     "ui": ["route"]
   }
 }

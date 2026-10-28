@@ -69,6 +69,33 @@ export class GitRepo {
     }
   }
 
+  /** Versions of one file, newest first: short hash, author time, subject. */
+  async history(path: string, limit = 30): Promise<Array<{ rev: string; at: string; message: string }>> {
+    if (!this.enabled) return [];
+    try {
+      const out = await this.run(["log", `-${limit}`, "--format=%h%x09%aI%x09%s", "--", path]);
+      return out
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => {
+          const [rev, at, ...msg] = l.split("\t");
+          return { rev, at, message: msg.join("\t") };
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  /** A file's text at a version, or undefined. */
+  async show(rev: string, path: string): Promise<string | undefined> {
+    if (!this.enabled || !/^[0-9a-f]{4,40}$/i.test(rev)) return undefined;
+    try {
+      return await this.run(["show", `${rev}:${path}`]);
+    } catch {
+      return undefined;
+    }
+  }
+
   async log(limit = 20): Promise<string[]> {
     if (!this.enabled) return [];
     try {

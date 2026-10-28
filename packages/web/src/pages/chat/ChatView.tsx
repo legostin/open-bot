@@ -21,6 +21,8 @@ import { GroupFloor, GroupHeader } from "./GroupHeader";
 import { ChatMenu } from "./DetailsToggle";
 import { formatDate, formatRelative, t } from "../../i18n";
 import { authorOf, messageShown, MessageView } from "./MessageView";
+import { pickToolRenderer } from "../../plugins/registry";
+import { usePluginRegistry } from "../../plugins/slots";
 import { LatestDraftCards } from "./AgentDraftCard";
 import { Composer } from "./Composer";
 
@@ -182,12 +184,13 @@ export function ChatView({
   // Runs of messages by one author share a face and a name; a new day gets a chip. What was there when the chat opened
   // stands still; what arrives afterwards comes in with motion.
   const details = useStore(showDetails);
+  const { contributions } = usePluginRegistry();
   const opened = useRef<Set<string> | null>(null);
   if (opened.current === null && conv.loaded) opened.current = new Set(conv.messages.map((m) => m.id));
   const rows = useMemo(() => {
     let prev: Message | undefined;
     return conv.messages.map((m) => {
-      if (!messageShown(m, details)) return { m, grouped: false, day: undefined };
+      if (!messageShown(m, details, (tool) => !!pickToolRenderer(contributions, tool)?.inline)) return { m, grouped: false, day: undefined };
       const day = dayOf(m.createdAt);
       const newDay = !prev || dayOf(prev.createdAt) !== day;
       const author = authorOf(m);
@@ -195,7 +198,7 @@ export function ChatView({
       prev = m;
       return { m, grouped, day: newDay ? dayLabel(m.createdAt) : undefined };
     });
-  }, [conv.messages, details]);
+  }, [conv.messages, details, contributions]);
 
   return (
     <div

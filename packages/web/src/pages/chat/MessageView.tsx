@@ -228,8 +228,12 @@ function partShown(p: MessagePart, role: Message["role"], details: boolean): boo
 }
 
 /** Whether the chat shows the message at all: a finished one with nothing for the person (only tool calls, a note for the model) is left out. */
-export function messageShown(message: Message, details: boolean): boolean {
-  return message.status === "streaming" || message.parts.some((p) => p.type !== "reply_to" && partShown(p, message.role, details));
+/** `inline`: tools whose plugin line ("Remembered: …") is for the person, shown without the details mode. */
+export function messageShown(message: Message, details: boolean, inline?: (tool: string) => boolean): boolean {
+  return (
+    message.status === "streaming" ||
+    message.parts.some((p) => (p.type === "tool_call" && !details && !!inline?.(p.name)) || (p.type !== "reply_to" && partShown(p, message.role, details)))
+  );
 }
 
 /** Who wrote it, for runs of messages: the person, an agent (or a teammate writing in a thread), or nobody (system). */
@@ -242,17 +246,21 @@ export function authorOf(message: Message): string | undefined {
 function Parts({ message }: { message: Message }) {
   const { contributions } = usePluginRegistry();
   const details = useStore(showDetails);
-  const items = groupParts(message.parts);
+  // Without the details mode, a plugin's inline lines ("Remembered: …") go under a finished message, after its words.
   const streaming = message.status === "streaming";
+  const grouped = groupParts(message.parts);
+  const inline = (it: (typeof grouped)[number]) => it.kind === "tool" && !!pickToolRenderer(contributions, it.call.name)?.inline;
+  const items = details || streaming ? grouped : [...grouped.filter((it) => !inline(it)), ...grouped.filter(inline)];
   const lastPart = message.parts[message.parts.length - 1];
   return (
     <>
       {items.map((it, idx) => {
-        if (!details && it.kind !== "part") return null;
+        // A plugin's inline line ("Remembered: …") is for the person: shown without the details mode.
+        const plugin = it.kind === "tool" ? pickToolRenderer(contributions, it.call.name) : undefined;
+        if (!details && it.kind !== "part" && !plugin?.inline) return null;
         if (it.kind === "part" && !partShown(it.part, message.role, details)) return null;
         if (it.kind === "tool") {
           const running = streaming && !it.result;
-          const plugin = pickToolRenderer(contributions, it.call.name);
           const core = <ToolCard call={it.call} result={it.result} running={running} />;
           if (!plugin) return <div key={it.key}>{core}</div>;
           const C = plugin.component;
@@ -349,9 +357,10 @@ export const DefaultMessage = memo(function DefaultMessage({
   fresh?: boolean;
 }) {
   const details = useStore(showDetails);
+  const { contributions } = usePluginRegistry();
   const name = agentName ?? agent?.name ?? message.agentId ?? t("message.assistant");
   // A finished message with nothing for the person (only tool calls, or a note for the model) is not shown at all.
-  if (!messageShown(message, details)) return null;
+  if (!messageShown(message, details, (tool) => !!pickToolRenderer(contributions, tool)?.inline)) return null;
   // A teammate writing in a thread is a user-role message with its agent: it reads as that agent's message.
   if (message.role === "user" && !message.agentId) {
     return (

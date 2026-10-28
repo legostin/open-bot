@@ -1,7 +1,7 @@
 // Hook registry: plugins (and core modules) can intercept lifecycle points.
 // Hooks may block or modify; they never turn a policy "ask"/"deny" into "allow" (policy runs after hooks).
 
-export type HookName = "session.start" | "tool.before" | "tool.after" | "message.in" | "notify.before" | "digest.compose";
+export type HookName = "session.start" | "turn.context" | "tool.before" | "tool.after" | "message.in" | "notify.before" | "digest.compose";
 
 interface HookEntry {
   owner: string;
