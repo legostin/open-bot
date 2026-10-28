@@ -209,7 +209,14 @@ export type MessagePart =
   /** The user's message this reply answers, when the dialog moved on since (a task's result for the request that started it). */
   | { type: "reply_to"; messageId: string; text: string }
   /** News the agent shows (show_news): cards from a channel's posts or found by the agent; `feedId` links the channel. */
-  | { type: "news"; title?: string; feedId?: string; items: NewsItem[] };
+  | { type: "news"; title?: string; feedId?: string; items: NewsItem[] }
+  /**
+   * Quick replies under the agent's message (show_choices): a tap sends the option's text as the person's message;
+   * `chosen` is the one they tapped, after which the buttons rest.
+   */
+  | { type: "choices"; options: string[]; chosen?: number }
+  /** A channel's live card in the chat: its state and buttons (open, gather now, how often, pause, delete). */
+  | { type: "feed"; feedId: string };
 
 /** One card of a `news` part. */
 export interface NewsItem {

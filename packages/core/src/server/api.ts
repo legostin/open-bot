@@ -126,6 +126,13 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     if (!text && !attachments.length) throw new HttpError(400, "message.empty");
     return hub.runner.userMessage(id, text, { channel: opts.kind === "device" ? "app" : "web", ...(attachments.length ? { attachments } : {}) });
   });
+  // A quick reply tapped (a `choices` part): it becomes the person's message.
+  api.post("/api/messages/:id/choose", async (req) => {
+    const b = (req.body ?? {}) as { index?: unknown };
+    const sent = await hub.runner.choose((req.params as { id: string }).id, Number(b.index), opts.kind === "device" ? "app" : "web");
+    if (!sent) throw new HttpError(409, "choice.unavailable");
+    return sent;
+  });
   // A file for the next message: raw bytes, saved in the conversation's workspace (attachments/).
   await api.register(async (up) => {
     // Signed in before a 25 MB body is read, not after.

@@ -59,6 +59,7 @@ export default {
   "group.unknownMember": "Нет такого агента: {id}",
   "group.notGroup": "Участники есть только у группового чата",
   "message.empty": "Пустое сообщение",
+  "choice.unavailable": "Этот ответ уже выбран",
   "message.blocked": "Сообщение заблокировано: {reason}",
   "message.interruptedByRestart": "Прервано перезапуском хаба",
   "attachment.tooLarge": "Файл больше {max}",

@@ -1,18 +1,20 @@
 // The Channels tab of the sidebar: each channel with its newest post (or "gathering" while its editor works) and
-// what is unread; "New channel" opens the one-sentence form.
+// what is unread; "New channel" asks for one in the chat with the default agent.
 
-import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { useEffect } from "react";
+import { Link, useLocation } from "wouter";
 import { Newspaper, Plus } from "lucide-react";
 import type { Feed } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
 import { shortTime } from "../../lib/format";
 import { feedPath } from "../../lib/feeds";
 import { ensureFeeds, feeds } from "../../state/feeds";
+import { askInChat } from "../../state/ask";
+import { toast } from "../../state/toast";
+import { errorText } from "../../lib/api";
 import { cx, Spinner } from "../../components/ui";
 import { UnreadBadge } from "../../components/UnreadBadge";
 import { t } from "../../i18n";
-import { ChannelDialog } from "./ChannelDialog";
 
 function ChannelRow({ feed, active, onNavigate }: { feed: Feed; active: boolean; onNavigate?: () => void }) {
   const running = !!feed.runningTaskId;
@@ -50,8 +52,12 @@ function ChannelRow({ feed, active, onNavigate }: { feed: Feed; active: boolean;
 
 export function ChannelList({ activeId, onNavigate }: { activeId?: string; onNavigate?: () => void }) {
   const list = useStore(feeds);
-  const [creating, setCreating] = useState(false);
+  const [, navigate] = useLocation();
   useEffect(() => ensureFeeds(), []);
+  const create = () => {
+    onNavigate?.();
+    askInChat(undefined, t("channel.newRequest"), navigate).catch((e) => toast(errorText(e), "error"));
+  };
   return (
     <>
       {!list && (
@@ -63,7 +69,7 @@ export function ChannelList({ activeId, onNavigate }: { activeId?: string; onNav
       {list && (
         <button
           type="button"
-          onClick={() => setCreating(true)}
+          onClick={create}
           className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-accent-text transition hover:bg-surface-2"
         >
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-dashed border-accent/60">
@@ -73,8 +79,6 @@ export function ChannelList({ activeId, onNavigate }: { activeId?: string; onNav
         </button>
       )}
       {list?.length === 0 && <p className="px-3 pt-2 text-xs leading-relaxed text-muted">{t("channel.emptyHint")}</p>}
-      {/* Making one opens it; the drawer on phones closes with the navigation. */}
-      <ChannelDialog open={creating} onClose={() => setCreating(false)} />
     </>
   );
 }

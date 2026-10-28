@@ -1,7 +1,9 @@
 // A channel: its posts newest first under their day, like a channel in a messenger, with the editor gathering in the
-// background. The header says who edits it and when; "refresh" gathers now, the settings change or pause it.
+// background. The header says who edits it and when; "refresh" gathers now; "settings" opens the editor's chat, where
+// the channel's card has its buttons.
 
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { RotateCw, SlidersHorizontal } from "lucide-react";
 import type { FeedPost } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
@@ -11,12 +13,12 @@ import { cadenceOf, dayKey } from "../../lib/feeds";
 import { mediaSrc } from "../../lib/media";
 import { agents, ensureAgents } from "../../state/app";
 import { ensureFeeds, feedPosts, feeds, loadPosts, markFeedRead, runFeed } from "../../state/feeds";
+import { askInChat } from "../../state/ask";
 import { toast } from "../../state/toast";
 import { Markdown } from "../../components/markdown";
 import { Button, EmptyState, IconButton, Loading, Spinner } from "../../components/ui";
 import { TopBar } from "../../components/Layout";
 import { formatDate, t } from "../../i18n";
-import { ChannelDialog } from "./ChannelDialog";
 
 const CADENCE_LABEL = {
   morning: "channel.cadence.morning",
@@ -59,7 +61,7 @@ export function ChannelPage({ id }: { id: string }) {
   const list = useStore(feeds);
   const all = useStore(feedPosts);
   const team = useStore(agents);
-  const [editing, setEditing] = useState(false);
+  const [, navigate] = useLocation();
   const [more, setMore] = useState(false);
   const feed = list?.find((f) => f.id === id);
   const page = all[id];
@@ -120,7 +122,10 @@ export function ChannelPage({ id }: { id: string }) {
             <IconButton label={running ? t("channel.gathering") : t("channel.refresh")} onClick={() => void refresh()} disabled={running}>
               <RotateCw className={running ? "size-[18px] animate-spin" : "size-[18px]"} />
             </IconButton>
-            <IconButton label={t("channel.settings")} onClick={() => setEditing(true)}>
+            <IconButton
+              label={t("channel.settings")}
+              onClick={() => askInChat(feed.agentId, t("channel.settingsRequest", { title: feed.title }), navigate).catch((e) => toast(errorText(e), "error"))}
+            >
               <SlidersHorizontal className="size-[18px]" />
             </IconButton>
           </>
@@ -166,7 +171,6 @@ export function ChannelPage({ id }: { id: string }) {
           )}
         </div>
       </div>
-      {feed && <ChannelDialog open={editing} onClose={() => setEditing(false)} feed={feed} />}
     </>
   );
 }

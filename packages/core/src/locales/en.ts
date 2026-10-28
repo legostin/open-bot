@@ -60,6 +60,7 @@ export default {
   "group.unknownMember": "No such agent: {id}",
   "group.notGroup": "Only a group chat has members",
   "message.empty": "The message is empty",
+  "choice.unavailable": "This answer was already given",
   "message.blocked": "Message blocked: {reason}",
   "message.interruptedByRestart": "Interrupted by a hub restart",
   "attachment.tooLarge": "The file is larger than {max}",

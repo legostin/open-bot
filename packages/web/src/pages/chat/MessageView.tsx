@@ -25,6 +25,7 @@ import { IntegrationChatCard } from "../../components/IntegrationCard";
 import { ImagesCard } from "./ImagesCard";
 import { MapCard } from "./MapCard";
 import { NewsCard } from "./NewsCard";
+import { Choices, FeedCard } from "./ChatButtons";
 import { TaskLine } from "./TaskLine";
 import { ConnectDeviceCard } from "./ConnectDeviceCard";
 import { t, type MessageKey } from "../../i18n";
@@ -280,6 +281,10 @@ function Parts({ message }: { message: Message }) {
             return <ReplyQuote key={it.key} part={p} />;
           case "news":
             return <NewsCard key={it.key} part={p} />;
+          case "choices":
+            return <Choices key={it.key} part={p} messageId={message.id} />;
+          case "feed":
+            return <FeedCard key={it.key} feedId={p.feedId} />;
           default:
             return null;
         }

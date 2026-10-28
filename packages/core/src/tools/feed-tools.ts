@@ -96,10 +96,11 @@ export function registerFeedTools(d: FeedToolDeps): void {
         required: ["brief"],
       },
     },
-    (i) => {
+    (i, ctx) => {
       try {
         const f = d.feeds.create({ brief: i.brief, title: i.title, agentId: i.agent, times: i.times, weekdays: i.weekdays });
-        return text(`Channel ${f.id} “${f.title}” made, edited by ${name(f.agentId)}, gathered at ${f.times.join(", ")}. Its first run has started; the user sees it in the Channels tab.`);
+        d.attachPart(ctx.conversationId, { type: "feed", feedId: f.id });
+        return text(`Channel ${f.id} “${f.title}” made, edited by ${name(f.agentId)}, gathered at ${f.times.join(", ")}. Its first run has started. The user sees its card with buttons under your reply and the channel in the Channels tab.`);
       } catch (e) {
         return text((e as Error).message, true);
       }
@@ -128,10 +129,28 @@ export function registerFeedTools(d: FeedToolDeps): void {
       if (typeof f === "string") return text(f, true);
       try {
         const n = d.feeds.update(f.id, { title: i.title, brief: i.brief, agentId: i.agent, times: i.times, weekdays: i.weekdays, enabled: i.enabled });
+        // In a conversation with the person (not inside the channel's own run), its card shows the change.
+        if (!ctx.taskId || d.store.getTask(ctx.taskId)?.feedId !== f.id) d.attachPart(ctx.conversationId, { type: "feed", feedId: f.id });
         return text(`Channel “${n.title}” updated.`);
       } catch (e) {
         return text((e as Error).message, true);
       }
+    },
+  );
+
+  reg(
+    {
+      name: "feed_show",
+      description: "Show the person a channel's card in the chat: its state and buttons (open it, gather now, how often, pause, delete). Use it when they want to see or set up a channel.",
+      effect: "read",
+      availability: "interactive",
+      inputSchema: { type: "object", properties: { feed: { type: "string", description: "The channel's id or name" } }, required: ["feed"] },
+    },
+    (i, ctx) => {
+      const f = which(i.feed, ctx);
+      if (typeof f === "string") return text(f, true);
+      d.attachPart(ctx.conversationId, { type: "feed", feedId: f.id });
+      return text(`The person sees the card of “${f.title}” under your reply. ${describe(f)}`);
     },
   );
 

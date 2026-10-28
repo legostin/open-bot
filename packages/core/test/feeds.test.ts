@@ -169,6 +169,27 @@ describe("channels (integration)", () => {
     expect(await call("show_news", { posts: ["p_none"] })).toMatchObject({ isError: true });
   });
 
+  it("is made in the chat: quick replies come back as the person's words, and the channel's card shows under the reply", async () => {
+    const main = (await req("GET", "/api/bootstrap")).json.mainConversationId as string;
+    const replies = async () => ((await req("GET", `/api/conversations/${main}/messages`)).json as Array<{ id: string; role: string; parts: any[] }>);
+    await req("POST", `/api/conversations/${main}/messages`, { text: `CALL show_choices {"options":["Утром","Утром и вечером"," "]}` });
+    const asked = await until(async () => (await replies()).find((m) => m.parts.some((p) => p.type === "choices")), "the buttons");
+    expect(asked.parts.find((p) => p.type === "choices")).toEqual({ type: "choices", options: ["Утром", "Утром и вечером"] });
+    await until(async () => !hub.runner.isRunning(main), "the turn to end");
+
+    const chose = await req("POST", `/api/messages/${asked.id}/choose`, { index: 1 });
+    expect(chose.status).toBe(200);
+    expect(chose.json).toMatchObject({ role: "user", parts: [{ type: "text", text: "Утром и вечером" }] });
+    expect((await replies()).find((m) => m.id === asked.id)!.parts.find((p) => p.type === "choices").chosen).toBe(1);
+    expect((await req("POST", `/api/messages/${asked.id}/choose`, { index: 0 })).status).toBe(409);
+    await until(async () => !hub.runner.isRunning(main), "the reply to end");
+
+    await req("POST", `/api/conversations/${main}/messages`, { text: `CALL feed_create {"brief":"Steppe startups","times":["08:00","19:00"]}` });
+    const card = await until(async () => (await replies()).flatMap((m) => m.parts).find((p) => p.type === "feed"), "the channel's card");
+    expect(hub.feeds.get(card.feedId)).toMatchObject({ title: "Steppe startups", times: ["08:00", "19:00"] });
+    await until(async () => !hub.runner.isRunning(main), "the turn to end");
+  });
+
   it("is made, renamed, paused and deleted by agents and the user", async () => {
     const made = await call("feed_create", { brief: "Weekly digest of Almaty events", times: ["10:00"], weekdays: [6] });
     expect(made.text).toMatch(/^Channel f_\S+ “Weekly digest of Almaty events” made, edited by .*, gathered at 10:00\. Its first run has started/);
