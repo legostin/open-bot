@@ -124,7 +124,7 @@ export function IntegrationCard({ view, conversationId, className }: { view: Int
       {view.connect === "remote" && <RemoteAccessCard />}
       {action === "turnOn" && (
         <div>
-          <Button size="sm" loading={busy} onClick={() => void run(() => api.post(`/api/integrations/${encodeURIComponent(view.id)}/enabled`, { enabled: true }))}>
+          <Button size="sm" loading={busy} onClick={() => void run(() => api.post(`/api/integrations/${encodeURIComponent(view.id)}/enabled`, { enabled: true, ...(conversationId ? { conversationId } : {}) }))}>
             {t("integrations.turnOn")}
           </Button>
         </div>

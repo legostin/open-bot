@@ -40,8 +40,9 @@ export const SetupSecretSchema = z.object({
 });
 export type SetupSecret = z.infer<typeof SetupSecretSchema>;
 
-/** A plugin shown in the integrations library: how it is connected and what it looks like. */
+/** A plugin shown in the catalog (and the integrations library): how it is connected and what it looks like. */
 export const IntegrationSchema = z.object({
+  /** The situation in life it helps with, the catalog's group: everyday, travel, money, work, reading, communication, home. */
   category: z.string().default("other"),
   /** A lucide icon name. */
   icon: z.string().default("puzzle"),
@@ -51,6 +52,8 @@ export const IntegrationSchema = z.object({
   scopes: z.array(z.string()).default([]),
   /** One line under the name in the library ("%key%" for a translation). */
   summary: z.string().optional(),
+  /** Something to ask once it is on, in the person's words ("%key%"): the catalog's "Try" sends it to the assistant. */
+  example: z.string().optional(),
 });
 export type IntegrationInfo = z.infer<typeof IntegrationSchema>;
 
@@ -71,6 +74,8 @@ export const OwlbotManifestSchema = z.object({
       channels: z.array(z.string()).default([]),
       triggers: z.array(z.string()).default([]),
       hooks: z.array(z.string()).default([]),
+      /** Kinds of cards its tools show in the chat (PluginContext.widgets.show; drawn by ui.widgets.add). */
+      widgets: z.array(z.string().regex(/^[a-z][a-z0-9-]{0,40}$/)).default([]),
       http: z.boolean().default(false),
       /** JSON Schema for plugin settings, rendered as a form in the web UI. */
       settings: z.record(z.string(), z.unknown()).optional(),
@@ -81,12 +86,14 @@ export const OwlbotManifestSchema = z.object({
         })
         .optional(),
     })
-    .default({ tools: false, brains: [], channels: [], triggers: [], hooks: [], http: false }),
+    .default({ tools: false, brains: [], channels: [], triggers: [], hooks: [], widgets: [], http: false }),
   permissions: PluginPermissionsSchema,
   /** Shown as a card in the integrations library. */
   integration: IntegrationSchema.optional(),
   /** Built-in plugins start enabled; third-party ones need confirmation. */
   builtin: z.boolean().default(false),
+  /** False: a built-in plugin ships turned off and waits in the catalog until the person turns it on. */
+  defaultEnabled: z.boolean().default(true),
 });
 
 export type OwlbotManifest = z.infer<typeof OwlbotManifestSchema>;

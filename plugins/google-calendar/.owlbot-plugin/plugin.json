@@ -19,11 +19,12 @@
     }
   },
   "integration": {
-    "category": "calendar",
+    "category": "work",
     "icon": "calendar-days",
     "connect": "google",
     "scopes": ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"],
-    "summary": "%integration.summary%"
+    "summary": "%integration.summary%",
+    "example": "%integration.example%"
   },
   "permissions": {
     "network": ["www.googleapis.com"],

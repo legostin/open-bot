@@ -141,7 +141,7 @@ describe("the link's gateways", () => {
     web.csrf = (await web.req("GET", "/api/bootstrap")).json.csrf;
 
     const lib = await web.req("GET", "/api/integrations");
-    expect(lib.json[0]).toMatchObject({ id: "remote-access", connect: "remote", category: "access", status: "off" });
+    expect(lib.json[0]).toMatchObject({ id: "remote-access", connect: "remote", category: "communication", status: "off" });
 
     const on = await web.req("POST", "/api/remote/enable");
     expect(on.status).toBe(200);

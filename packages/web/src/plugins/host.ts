@@ -10,7 +10,7 @@ import { createStore, useStore } from "../lib/store";
 import { hubEvents, sendToHub, session, type UiPluginEntry } from "../state/app";
 import { toast } from "../state/toast";
 import { formatDate, formatNumber, locale, t } from "../i18n";
-import { addCommand, addContribution, addMapApp, addRoute, addSettings, addStatus, normalizePath, removePlugin } from "./registry";
+import { addCommand, addContribution, addMapApp, addRoute, addSettings, addStatus, addWidget, normalizePath, removePlugin } from "./registry";
 import { resolveActivate } from "./activate";
 
 export interface PluginLoadState {
@@ -59,6 +59,7 @@ export function createOwlbotUI(pluginId: string, messages: Catalog = {}): Owlbot
     commands: { register: (c) => addCommand(pluginId, c) },
     settings: { section: (s) => addSettings(pluginId, s) },
     maps: { addApp: (a) => addMapApp(pluginId, a) },
+    widgets: { add: (kind, component) => addWidget(pluginId, kind, component as ComponentType<any>) },
     toast: (text, kind) => toast(text, kind ?? "info"),
     navigate: (path) => navigate(path),
     api,

@@ -1,0 +1,7 @@
+{
+  "name": "@owlbot/plugin-wikipedia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Wikipedia: search and read articles in any language, a summary card in the chat"
+}

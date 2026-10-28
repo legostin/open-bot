@@ -1,0 +1,10 @@
+{
+  "name": "Wikipedia",
+  "description": "Search and read Wikipedia in any language; articles come as a card with a picture and the opening paragraphs.",
+  "integration.summary": "Who, what and why: articles in any language, as a card",
+  "integration.example": "Tell me about the Lisbon earthquake of 1755",
+  "card.label": "Wikipedia: {title}",
+  "card.more": "More",
+  "card.less": "Less",
+  "card.read": "Read on Wikipedia"
+}

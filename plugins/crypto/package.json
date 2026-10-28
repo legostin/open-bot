@@ -1,0 +1,7 @@
+{
+  "name": "@owlbot/plugin-crypto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Crypto prices: CoinGecko prices with 7-day charts in the chat"
+}

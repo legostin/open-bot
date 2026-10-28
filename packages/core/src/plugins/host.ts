@@ -4,7 +4,7 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, cpSync, rmSync, renameSync, statSync, readFileSync } from "node:fs";
 import { join, dirname, basename, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { Catalog, CoreMethod, Locale, OwlbotManifest, PluginLayout, PluginPermissions, ToolDescriptor, ToolSpec } from "@owlbot/shared";
+import type { Catalog, CoreMethod, Locale, MessagePart, OwlbotManifest, PluginLayout, PluginPermissions, ToolCallContext, ToolDescriptor, ToolResult, ToolSpec } from "@owlbot/shared";
 import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, type RpcPeer } from "@owlbot/shared";
 import { json, type Db } from "../db.ts";
 import { hubLocale, localizePluginValue, LocalizedError, tFor } from "../i18n.ts";
@@ -62,7 +62,14 @@ export interface HostDeps {
   onLayoutsChanged: () => void;
   /** Directories of CLIs the hub installed itself; brain hosts find them after the system PATH. */
   cliBinDirs?: () => string[];
+  /** Add a card to the reply the agent is writing (SessionRunner.attachPart): plugins' widgets go there. */
+  attachPart?: (conversationId: string, part: MessagePart) => void;
 }
+
+/** A widget's data as stored in the conversation, at most. */
+export const MAX_WIDGET_BYTES = 64 * 1024;
+/** Widgets one tool call can show. */
+const MAX_WIDGETS_PER_CALL = 4;
 
 interface Running {
   child: ChildProcess;
@@ -129,9 +136,10 @@ export class PluginHost {
           console.error(`[plugins] ${dir} has no install record; ignored (install it through the UI)`);
           return;
         }
+        // Catalog plugins (defaultEnabled: false) ship turned off: the person turns them on when they want them.
         this.d.db
           .prepare("insert into plugins(id, dir, source, enabled, granted, commit_hash, installed_at, settings) values (?,?,?,?,?,?,?,?)")
-          .run(id, dir, source, 1, JSON.stringify(layout.manifest.permissions), null, nowIso(), "{}");
+          .run(id, dir, source, layout.manifest.defaultEnabled ? 1 : 0, JSON.stringify(layout.manifest.permissions), null, nowIso(), "{}");
       } else if (source === "builtin") {
         // Builtin plugins always get their declared permissions (they ship with the hub).
         this.d.db.prepare("update plugins set dir = ?, granted = ? where id = ?").run(dir, JSON.stringify(layout.manifest.permissions), id);
@@ -257,7 +265,7 @@ export class PluginHost {
     child.stderr!.on("data", (chunk: string) => {
       for (const line of chunk.split("\n")) if (line.trim()) this.log(rec, "stderr", line);
     });
-    child.on("exit", (code, signal) => this.onExit(id, code, signal));
+    child.on("exit", (code, signal) => this.onExit(id, code, signal, child));
     child.on("error", (e) => {
       rec.lastError = e.message;
       this.log(rec, "error", `spawn failed: ${e.message}`);
@@ -345,10 +353,11 @@ export class PluginHost {
     this.d.egress.revokeOwner(`plugin:${id}`);
   }
 
-  private onExit(id: string, code: number | null, signal: string | null): void {
+  private onExit(id: string, code: number | null, signal: string | null, child: ChildProcess): void {
     const r = this.running.get(id);
     const rec = this.records.get(id);
-    if (!r || !rec) return;
+    // A process stopped earlier that exits only now (turned off and on again quickly, a restart): not the running one.
+    if (!r || !rec || r.child !== child) return;
     const expected = r.stopping;
     this.cleanup(id);
     if (expected) return;
@@ -396,7 +405,9 @@ export class PluginHost {
       const short = p.spec.name;
       const name = `${prefix}_${short}`;
       const descriptor: ToolDescriptor = { ...p.spec, name, owner: id };
-      this.d.tools.register(descriptor, (input, ctx) => peer.request("tool.invoke", { name: short, input, context: ctx }, { timeoutMs: 15 * 60_000 }));
+      this.d.tools.register(descriptor, async (input, ctx) =>
+        this.showWidgets(rec, ctx, await peer.request<ToolResult>("tool.invoke", { name: short, input, context: ctx }, { timeoutMs: 15 * 60_000 })),
+      );
       return {};
     });
 
@@ -474,6 +485,32 @@ export class PluginHost {
       if (!rec.granted.core.includes(p.method)) deny(`core method ${p.method} not in permissions.core`);
       return this.d.coreCall(id, p.method, p.params);
     });
+  }
+
+  /**
+   * The cards a plugin's tool call showed (ctx.widgets.show, carried in the result's _meta) go into the reply as
+   * `widget` parts; the model reads the result without them. Undeclared kinds and oversized data are dropped.
+   */
+  private showWidgets(rec: PluginRecord, ctx: ToolCallContext, result: ToolResult): ToolResult {
+    const widgets = result?._meta?.widgets;
+    if (!widgets) return result;
+    const { widgets: _, ...meta } = result._meta!;
+    const declared = rec.layout?.manifest.contributes.widgets ?? [];
+    const list = Array.isArray(widgets) ? widgets.slice(0, MAX_WIDGETS_PER_CALL) : [];
+    for (const w of list) {
+      const kind = String(w?.kind ?? "");
+      if (!declared.includes(kind)) {
+        this.log(rec, "warn", `widget "${kind}" is not declared in contributes.widgets; not shown`);
+        continue;
+      }
+      const data = this.d.vault.redactor.value(w.data ?? null);
+      if (Buffer.byteLength(JSON.stringify(data)) > MAX_WIDGET_BYTES) {
+        this.log(rec, "warn", `widget "${kind}" data is over ${MAX_WIDGET_BYTES} bytes; not shown`);
+        continue;
+      }
+      if (ctx?.conversationId) this.d.attachPart?.(ctx.conversationId, { type: "widget", plugin: rec.id, kind, data });
+    }
+    return Object.keys(meta).length ? { ...result, _meta: meta } : { content: result.content, ...(result.isError ? { isError: true } : {}) };
   }
 
   // ---------- HTTP and UI routing ----------

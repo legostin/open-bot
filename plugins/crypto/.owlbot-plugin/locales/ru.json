@@ -1,0 +1,9 @@
+{
+  "name": "Криптовалюты",
+  "description": "Цены криптовалют из открытого API CoinGecko: изменение за сутки и график за неделю.",
+  "integration.summary": "Биткоин, эфир, TON и другие: цена и график за неделю",
+  "integration.example": "Как дела у биткоина и TON на этой неделе?",
+  "card.label": "Цены криптовалют",
+  "card.source": "CoinGecko · {time}",
+  "card.week": "7 дней"
+}

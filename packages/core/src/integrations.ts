@@ -1,13 +1,31 @@
-// The integrations library: plugins whose manifest has an `integration` block, as cards with a live status.
-// `google` ones depend on the hub's Google connection, `setup` ones on their setup card (secrets, channels),
+// The integrations library and the catalog: plugins whose manifest has an `integration` block, as cards with a live
+// status. `google` ones depend on the hub's Google connection, `setup` ones on their setup card (secrets, channels),
 // `none` ones only on being enabled. The core adds its own card first: access from anywhere (`remote`, remote.ts).
+// The catalog groups the same cards by the situation in life they help with.
 
-import type { IntegrationView, Locale } from "@owlbot/shared";
+import type { CatalogView, IntegrationView, Locale } from "@owlbot/shared";
 import type { Hub } from "./app.ts";
 import { localizePluginValue, tFor } from "./i18n.ts";
 
-/** Library order: what people connect first. */
-const CATEGORY_ORDER = ["access", "calendar", "mail", "messaging", "search", "browser", "files", "other"];
+/** The catalog's groups, in order: situations in life. "other" collects what fits none. */
+export const SITUATIONS = ["everyday", "travel", "money", "work", "reading", "communication", "home", "other"] as const;
+export type Situation = (typeof SITUATIONS)[number];
+
+/** Categories of manifests written before the catalog, by the situation they belong to. */
+const LEGACY_CATEGORY: Record<string, Situation> = {
+  access: "communication",
+  calendar: "work",
+  mail: "communication",
+  messaging: "communication",
+  search: "reading",
+  browser: "work",
+  files: "work",
+};
+
+/** The catalog group of a manifest's category. */
+export function situationOf(category: string): Situation {
+  return (SITUATIONS as readonly string[]).includes(category) ? (category as Situation) : (LEGACY_CATEGORY[category] ?? "other");
+}
 
 /** The scopes every enabled Google integration needs: one sign-in covers them all. */
 export function googleScopes(hub: Hub): string[] {
@@ -29,10 +47,11 @@ export async function listIntegrations(hub: Hub, locale: Locale): Promise<Integr
       id: r.id,
       name: localizePluginValue(r.layout, r.layout.manifest.name, locale),
       summary: localizePluginValue(r.layout, integ.summary ?? r.layout.manifest.description, locale),
-      category: integ.category,
+      category: situationOf(integ.category),
       icon: integ.icon,
       connect: integ.connect,
       status: "connected",
+      ...(integ.example ? { example: localizePluginValue(r.layout, integ.example, locale) } : {}),
     };
     if (!r.enabled) view.status = "off";
     else if (integ.connect === "google") {
@@ -53,8 +72,16 @@ export async function listIntegrations(hub: Hub, locale: Locale): Promise<Integr
     }
     views.push(view);
   }
-  const rank = (c: string) => (CATEGORY_ORDER.indexOf(c) < 0 ? CATEGORY_ORDER.length : CATEGORY_ORDER.indexOf(c));
-  return views.sort((a, b) => rank(a.category) - rank(b.category) || a.name.localeCompare(b.name));
+  const rank = (c: string) => SITUATIONS.indexOf(situationOf(c));
+  return views.sort((a, b) => rank(a.category) - rank(b.category) || a.name.localeCompare(b.name, locale));
+}
+
+/** The catalog: every card, grouped by situation in life (empty groups left out), with the groups' titles. */
+export async function listCatalog(hub: Hub, locale: Locale): Promise<CatalogView> {
+  const t = tFor(locale);
+  const views = await listIntegrations(hub, locale);
+  const sections = SITUATIONS.map((id) => ({ id, title: t(`catalog.section.${id}`), items: views.filter((v) => situationOf(v.category) === id) }));
+  return { sections: sections.filter((s) => s.items.length) };
 }
 
 /** The core's card: the hub's Tailscale node and its link. */
@@ -65,7 +92,7 @@ function remoteIntegration(hub: Hub, locale: Locale): IntegrationView {
     id: "remote-access",
     name: t("remote.name"),
     summary: t("remote.summary"),
-    category: "access",
+    category: "communication",
     icon: "globe",
     connect: "remote",
     status: "connected",

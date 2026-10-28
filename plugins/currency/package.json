@@ -1,0 +1,7 @@
+{
+  "name": "@owlbot/plugin-currency",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Currency: exchange rates and conversion, with the rate's recent history"
+}

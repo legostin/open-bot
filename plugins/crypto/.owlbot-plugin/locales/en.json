@@ -1,0 +1,9 @@
+{
+  "name": "Crypto prices",
+  "description": "Cryptocurrency prices from CoinGecko's public API, with 24-hour change and a 7-day chart.",
+  "integration.summary": "Bitcoin, Ether, TON and others: price and the week's chart",
+  "integration.example": "How are Bitcoin and TON doing this week?",
+  "card.label": "Cryptocurrency prices",
+  "card.source": "CoinGecko · {time}",
+  "card.week": "7 days"
+}

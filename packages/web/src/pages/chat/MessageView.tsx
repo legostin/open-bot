@@ -30,6 +30,7 @@ import { ThinkingCard } from "./ThinkingCard";
 import { PageCard } from "./PageCard";
 import { TaskLine } from "./TaskLine";
 import { ConnectDeviceCard } from "./ConnectDeviceCard";
+import { WidgetCard } from "./WidgetCard";
 import { t, type MessageKey } from "../../i18n";
 import { mobileMode } from "../../lib/mobile";
 
@@ -312,6 +313,8 @@ function Parts({ message }: { message: Message }) {
             return <ThinkingCard key={it.key} agentId={p.agentId} />;
           case "page":
             return <PageCard key={it.key} pageId={p.pageId} conversationId={message.conversationId} />;
+          case "widget":
+            return <WidgetCard key={it.key} part={p} message={message} />;
           default:
             return null;
         }

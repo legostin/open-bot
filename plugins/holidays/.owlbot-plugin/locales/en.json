@@ -1,0 +1,12 @@
+{
+  "name": "Holidays & days off",
+  "description": "Public holidays and long weekends of about 120 countries from Nager.Date, as a card in the chat.",
+  "integration.summary": "The next days off and long weekends, for planning trips",
+  "integration.example": "When is the next long weekend?",
+  "card.upcoming": "Upcoming holidays",
+  "card.year": "Holidays in {year}",
+  "card.weekends": "Long weekends in {year}",
+  "card.days": "{n, plural, one {# day} other {# days}}",
+  "card.bridge": "Take {dates} off",
+  "card.label": "{title}: {country}"
+}

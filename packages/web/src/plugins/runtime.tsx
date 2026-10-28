@@ -6,6 +6,7 @@ import type { UiEvent } from "@owlbot/shared";
 import { Badge, Button, Card, EmptyState, Spinner } from "../components/ui";
 import { Markdown } from "../components/markdown";
 import { api } from "../lib/api";
+import { mediaSrc } from "../lib/media";
 import { native } from "../lib/native";
 import { useStore } from "../lib/store";
 import { ensureTasks, hubEvents, tasks } from "../state/app";
@@ -36,6 +37,7 @@ export const uiRuntime: OwlbotUIRuntime = {
   useTasks,
   useHubEvent,
   api,
+  mediaSrc,
   // A getter: the shim (/shared/owlbot-ui.js) reads it when the first plugin is imported, after the hub
   // language has been adopted, while this object is built before that.
   get locale() {
