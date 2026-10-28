@@ -8,6 +8,8 @@ import { LocalizedError, t } from "./i18n.ts";
 export interface BrainHandle {
   ref: string;
   send(turn: BrainTurn, onEvent: (e: BrainEvent) => void): Promise<void>;
+  /** More input for the turn in progress: true when the brain took it (its reply goes on in send()). */
+  steer(turn: BrainTurn): Promise<boolean>;
   interrupt(): Promise<void>;
   close(): Promise<void>;
 }
@@ -180,6 +182,11 @@ export class BrainRegistry {
         } finally {
           routes.delete(sessionId);
         }
+      },
+      async steer(turn) {
+        // Plugins and machines from before steering do not know the method: the input becomes the next turn.
+        const r = await peer.request<{ accepted?: boolean }>("brain.steer", { sessionId, turn }, { timeoutMs: 15_000 }).catch(() => undefined);
+        return !!r?.accepted;
       },
       async interrupt() {
         await peer.request("brain.interrupt", { sessionId }, { timeoutMs: 10_000 }).catch(() => {});

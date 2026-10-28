@@ -212,6 +212,12 @@ export class BrainHost {
     }
   }
 
+  /** More input for the turn in progress; false sends it as the next turn. */
+  async steer(p: { sessionId: string; turn: BrainTurn }): Promise<boolean> {
+    const s = this.sessions.get(p.sessionId)?.session;
+    return !!(s?.steer && (await s.steer(p.turn)));
+  }
+
   async interrupt(p: { sessionId: string }): Promise<void> {
     await this.sessions.get(p.sessionId)?.session.interrupt();
   }

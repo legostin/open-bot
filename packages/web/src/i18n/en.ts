@@ -385,6 +385,7 @@ export default {
   "task.cancelled": "Task cancelled",
   "task.requeued": "Task queued",
   "task.createdAt": "created {time}",
+  "task.question": "Asks",
   "task.goal": "Goal",
   "task.result": "Result",
   "task.expand": "More",

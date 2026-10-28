@@ -1,4 +1,5 @@
-// OpenAI Codex CLI as a brain: `codex exec --json` per turn, `codex exec resume <thread>` between turns.
+// OpenAI Codex CLI as a brain: a `codex app-server` per turn (codex-app.ts), which takes more input while the turn runs;
+// Codex without it gets `codex exec --json` per turn, `codex exec resume <thread>` between turns.
 // Uses the user's ChatGPT subscription (`codex login` stored in HOME/.codex) or OPENAI_API_KEY.
 
 import { mkdirSync, writeFileSync, chmodSync, existsSync, readFileSync } from "node:fs";
@@ -9,6 +10,9 @@ import type { Locale } from "@owlbot/shared/i18n";
 import { capture, childEnv, runLines } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseCodexDeviceLogin, runCliLogin } from "./login.ts";
+import { AppServerUnsupported, CodexAppTurn, parseCodexReset } from "./codex-app.ts";
+
+export { parseCodexReset };
 
 export interface CodexOptions {
   command?: () => string;
@@ -74,16 +78,6 @@ export class CodexStreamParser {
   }
 }
 
-/** "... try again in 2 hours 5 minutes" / "in 37 minutes" → ISO time. */
-export function parseCodexReset(text: string, now = Date.now()): string | undefined {
-  const re = /\bin\s+(?:(\d+)\s*(?:days?|d)\b)?\s*(?:(\d+)\s*(?:hours?|h)\b)?\s*(?:(\d+)\s*(?:minutes?|mins?|m)\b)?/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) && !m[1] && !m[2] && !m[3]) if (m[0].length === 0) re.lastIndex++;
-  if (!m) return undefined;
-  const ms = ((Number(m[1] ?? 0) * 24 + Number(m[2] ?? 0)) * 60 + Number(m[3] ?? 0)) * 60_000;
-  return new Date(now + ms).toISOString();
-}
-
 function tomlString(s: string): string {
   return JSON.stringify(s); // JSON strings are valid TOML basic strings
 }
@@ -91,6 +85,10 @@ function tomlString(s: string): string {
 class CodexSession implements BrainSessionImpl {
   private threadId?: string;
   private proc?: ReturnType<typeof runLines>;
+  /** The app-server turn in progress. */
+  private app?: CodexAppTurn;
+  /** This Codex has no app-server: turns use `codex exec`. */
+  private execOnly = false;
   private interrupted = false;
   private o: BrainSessionOptions;
   private p: CodexOptions;
@@ -117,19 +115,26 @@ class CodexSession implements BrainSessionImpl {
     writeFileSync(agentsFile, `${marker}\n${opts.systemPrompt}\n<!-- /owlbot:system -->\n${userPart}`);
   }
 
-  private args(): string[] {
+  private sandbox(): "read-only" | "workspace-write" | "danger-full-access" {
+    return this.p.sandbox?.() ?? "danger-full-access";
+  }
+
+  /** `-c` overrides: the hub's MCP server, no approvals, the sandbox. */
+  private config(): string[] {
     const [command, ...args] = this.o.mcp.bridgeCommand.length ? this.o.mcp.bridgeCommand : ["owlbot-mcp-bridge"];
-    const sandbox = this.p.sandbox?.() ?? "danger-full-access";
-    const cfg = [
+    return [
       `mcp_servers.owlbot.command=${tomlString(command)}`,
       `mcp_servers.owlbot.args=[${args.map(tomlString).join(",")}]`,
       `mcp_servers.owlbot.env={OWLBOT_URL=${tomlString(this.o.mcp.url)},OWLBOT_TOKEN_FILE=${tomlString(join(this.dir, "token"))}}`,
       `mcp_servers.owlbot.tool_timeout_sec=3600`,
       `approval_policy="never"`,
-      `sandbox_mode=${tomlString(sandbox)}`,
+      `sandbox_mode=${tomlString(this.sandbox())}`,
     ];
+  }
+
+  private args(): string[] {
     const a = ["exec", "--json", "--skip-git-repo-check", "-C", this.o.workspace];
-    for (const c of cfg) a.push("-c", c);
+    for (const c of this.config()) a.push("-c", c);
     if (this.o.model) a.push("-m", this.o.model);
     if (this.threadId) a.push("resume", this.threadId, "-");
     else a.push("-");
@@ -139,6 +144,34 @@ class CodexSession implements BrainSessionImpl {
   async *send(turn: BrainTurn): AsyncGenerator<BrainEvent> {
     this.interrupted = false;
     const env = childEnv(process.env, { ...this.o.env, ...(await this.p.authEnv?.()) });
+    if (!this.execOnly) {
+      const app = new CodexAppTurn({ command: this.p.command?.() ?? "codex", config: this.config(), cwd: this.o.workspace, env, model: this.o.model, sandbox: this.sandbox(), threadId: this.threadId });
+      this.app = app;
+      try {
+        for await (const e of app.run(turn)) yield e;
+      } catch (e) {
+        if (!(e instanceof AppServerUnsupported)) throw e;
+        this.execOnly = true;
+        this.p.log?.(`codex app-server unavailable (${e.message}); turns use codex exec`);
+      } finally {
+        this.app = undefined;
+      }
+      if (!this.execOnly) {
+        if (app.threadId) this.threadId = app.threadId;
+        const f = app.parser;
+        if (!this.interrupted) {
+          const t = brainsT(this.p.locale?.());
+          if (f.limit) yield { type: "limit_hit", resetAt: f.limit.resetAt, detail: `Codex: ${f.limit.detail}` };
+          else if (f.failed || !f.completed) {
+            const stderr = app.stderr();
+            const auth = f.auth || /not logged in|login|401|unauthorized|api key/i.test(`${f.failed ?? ""}\n${stderr}`);
+            yield { type: "error", fatal: !f.completed, message: auth ? t("codex.notSignedIn") : (f.failed ?? stderr.trim().split("\n").slice(-6).join("\n")) || t("codex.failed") };
+          }
+        }
+        yield { type: "done", resumeToken: this.threadId };
+        return;
+      }
+    }
     const parser = new CodexStreamParser();
     const proc = runLines(this.p.command?.() ?? "codex", this.args(), { cwd: this.o.workspace, env, input: turn.text });
     this.proc = proc;
@@ -176,7 +209,16 @@ class CodexSession implements BrainSessionImpl {
     yield { type: "done", resumeToken: this.threadId };
   }
 
+  async steer(turn: BrainTurn): Promise<boolean> {
+    return this.app && !this.interrupted ? this.app.steer(turn) : false;
+  }
+
   interrupt(): void {
+    if (this.app) {
+      this.interrupted = true;
+      void this.app.interrupt();
+      return;
+    }
     if (!this.proc) return;
     this.interrupted = true;
     const c = this.proc.child;

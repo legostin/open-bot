@@ -20,7 +20,9 @@ export interface CoreToolDeps {
   store: Store;
   notifier: Notifier;
   agents: AgentRegistry;
-  createTask: (t: { agentId: string; goal: string; title: string; parentConversationId?: string; parentTaskId?: string; background: boolean; createdBy: "agent" }) => { id: string; title: string };
+  createTask: (t: { agentId: string; goal: string; title: string; parentConversationId?: string; parentTaskId?: string; background: boolean; createdBy: "agent"; brainRef?: string }) => { id: string; title: string };
+  /** The live line between tasks and whoever started them (SessionRunner). */
+  tasks: TaskLine;
   /** Add a card to the reply the agent is writing (SessionRunner.attachPart). */
   attachPart: (conversationId: string, part: MessagePart) => void;
   /** <dataDir>/workspaces: `file:` image sources are relative to it. */
@@ -28,6 +30,20 @@ export interface CoreToolDeps {
   /** Speech to text (transcribe.ts). */
   transcriber?: Transcriber;
 }
+
+/** Who is writing to a task: the agent, its conversation and, inside a task, that task. */
+export type TaskSender = { agentId: string; conversationId: string; taskId?: string };
+
+export interface TaskLine {
+  place(agentId: string, machine: string): { brainRef?: string; machineName: string; note?: string } | { error: string };
+  ask(taskId: string, question: string): Promise<{ ok: boolean; text: string }>;
+  message(taskId: string, text: string, from: TaskSender): Promise<{ ok: boolean; text: string }>;
+  cancel(taskId: string, from: TaskSender): { ok: boolean; text: string };
+  computers(): Array<{ id: string; name: string; online: boolean }>;
+}
+
+/** Tasks under tasks under tasks: deeper delegation is refused. */
+const MAX_TASK_DEPTH = 3;
 
 const MAX_IMAGES = 10;
 const MAX_MARKERS = 50;
@@ -120,37 +136,113 @@ export function registerCoreTools(d: CoreToolDeps): void {
   reg(
     {
       name: "task_delegate",
-      description: "Start a separate task for an agent (yourself or a specialist). It runs in parallel and reports back here when done. Returns the task id.",
+      description:
+        "Start a task for an agent (yourself or a teammate): it works on the side, in parallel, while you stay with the user, and its result comes back here as a message. One task per independent piece of work. Returns the task id.",
       effect: "local-write",
       inputSchema: {
         type: "object",
         properties: {
-          goal: { type: "string", description: "Complete, self-contained instructions" },
-          title: { type: "string" },
-          agent: { type: "string", description: "Agent id (default: same agent). See task_agents." },
+          goal: { type: "string", description: "Complete, self-contained instructions: what to do, what done looks like, what to report" },
+          title: { type: "string", description: "Short title the user sees (≤ 60 chars), in the user's language" },
+          agent: { type: "string", description: "Agent id (default: you). See task_agents." },
+          machine: { type: "string", description: "Computer id or name to run on, when the work needs that computer's files, apps or hardware (default: the agent's usual brain). See task_agents." },
         },
         required: ["goal"],
       },
     },
     (i, ctx) => {
       const agentId = i.agent ? String(i.agent) : ctx.agentId;
-      if (!d.agents.get(agentId)) return text(`No agent ${agentId}`, true);
+      if (!d.agents.get(agentId)) return text(`No agent ${agentId}. See task_agents.`, true);
+      let depth = 0;
+      for (let id = ctx.taskId; id && depth <= MAX_TASK_DEPTH; id = d.store.getTask(id)?.parentTaskId) depth++;
+      if (depth >= MAX_TASK_DEPTH) return text("Tasks are already nested too deep here: do this part yourself.", true);
+      let goal = String(i.goal);
+      let place: { brainRef?: string; machineName: string; note?: string } | undefined;
+      if (i.machine) {
+        const p = d.tasks.place(agentId, String(i.machine));
+        if ("error" in p) return text(p.error, true);
+        place = p;
+        if (p.note) goal = `${goal}\n\n${p.note}`;
+      }
       const t = d.createTask({
         agentId,
-        goal: String(i.goal),
+        goal,
         title: String(i.title ?? String(i.goal).slice(0, 60)),
         parentConversationId: ctx.conversationId,
         parentTaskId: ctx.taskId,
         background: ctx.background,
         createdBy: "agent",
+        ...(place?.brainRef ? { brainRef: place.brainRef } : {}),
       });
-      return text(`Task created: ${t.id} “${t.title}”. The result will arrive here as a message.`);
+      d.attachPart(ctx.conversationId, { type: "task", taskId: t.id });
+      const where = place ? ` on ${place.machineName}${place.brainRef ? "" : " (through the machine tools)"}` : "";
+      return text(`Task created: ${t.id} “${t.title}”${where}. It works on the side; its questions and its result will arrive here as messages.`);
     },
   );
 
   reg(
-    { name: "task_agents", description: "List available agents you can delegate to.", effect: "read", inputSchema: { type: "object", properties: {} } },
-    () => text(d.agents.list().map((a) => `- ${a.id}: ${a.name} — ${a.description}`).join("\n")),
+    {
+      name: "task_agents",
+      description: "List the agents you can delegate to (role, where their brains run) and the computers tasks can run on.",
+      effect: "read",
+      inputSchema: { type: "object", properties: {} },
+    },
+    () => {
+      const computers = d.tasks.computers();
+      const name = (id: string) => computers.find((c) => c.id === id)?.name ?? id;
+      const agents = d.agents.list().map((a) => {
+        const where = [...new Set(a.brains.map((b) => name(b.split("@")[1] ?? "local")))].join(", ");
+        return `- ${a.id}: ${a.name} — ${a.description}${where ? ` (brains on: ${where})` : ""}`;
+      });
+      const pcs = computers.map((c) => `- ${c.id}: ${c.name}${c.id === "local" ? " (the hub's own computer)" : ""}, ${c.online ? "online" : "offline"}`);
+      return text(["Agents:", ...agents, "", "Computers:", ...pcs].join("\n"));
+    },
+  );
+
+  reg(
+    {
+      name: "task_message",
+      description:
+        "Send a task you started a message right away, even mid-work: the answer to its question, a clarification, a change of plan. A finished task continues with it.",
+      effect: "local-write",
+      inputSchema: {
+        type: "object",
+        properties: { taskId: { type: "string" }, text: { type: "string", description: "What the task should know or do" } },
+        required: ["taskId", "text"],
+      },
+    },
+    async (i, ctx) => {
+      const r = await d.tasks.message(String(i.taskId), String(i.text), { agentId: ctx.agentId, conversationId: ctx.conversationId, taskId: ctx.taskId });
+      return text(r.text, !r.ok);
+    },
+  );
+
+  reg(
+    {
+      name: "task_cancel",
+      description: "Stop a task you started (the user changed their mind, or it is no longer needed).",
+      effect: "local-write",
+      inputSchema: { type: "object", properties: { taskId: { type: "string" } }, required: ["taskId"] },
+    },
+    (i, ctx) => {
+      const r = d.tasks.cancel(String(i.taskId), { agentId: ctx.agentId, conversationId: ctx.conversationId, taskId: ctx.taskId });
+      return text(r.text, !r.ok);
+    },
+  );
+
+  reg(
+    {
+      name: "task_ask",
+      description:
+        "Inside a task: ask whoever started it something only they (or the user) can answer. Keep working on what does not depend on it; the answer arrives as a message.",
+      effect: "local-write",
+      inputSchema: { type: "object", properties: { question: { type: "string", description: "One clear question, with the options if there are any" } }, required: ["question"] },
+    },
+    async (i, ctx) => {
+      if (!ctx.taskId) return text("task_ask works inside a task. In your dialog, ask the user directly.", true);
+      const r = await d.tasks.ask(ctx.taskId, String(i.question).slice(0, 2000));
+      return text(r.text, !r.ok);
+    },
   );
 
   reg(

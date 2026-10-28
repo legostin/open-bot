@@ -27,6 +27,12 @@ export interface ToolRegistration extends ToolSpec {
 
 export interface BrainSessionImpl {
   send(turn: BrainTurn): AsyncIterable<BrainEvent>;
+  /**
+   * More input for the turn in progress (the user wrote again, a task asked or answered): the brain takes it at its
+   * next step and its reply goes on in the same send(). False when no turn can take it; the hub then sends it as the
+   * next turn.
+   */
+  steer?(turn: BrainTurn): Promise<boolean> | boolean;
   interrupt(): Promise<void> | void;
   close(): Promise<void> | void;
 }

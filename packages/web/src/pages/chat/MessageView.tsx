@@ -24,6 +24,7 @@ import { BrainSetupCard } from "../../components/BrainSetupCard";
 import { IntegrationChatCard } from "../../components/IntegrationCard";
 import { ImagesCard } from "./ImagesCard";
 import { MapCard } from "./MapCard";
+import { TaskLine } from "./TaskLine";
 import { DevicePairingCard } from "./DevicePairingCard";
 import { t, type MessageKey } from "../../i18n";
 import { mobileMode } from "../../lib/mobile";
@@ -249,6 +250,8 @@ function Parts({ message }: { message: Message }) {
             return <BrainSetupCard key={it.key} conversationId={message.conversationId} />;
           case "device_pairing":
             return <DevicePairingCard key={it.key} />;
+          case "task":
+            return <TaskLine key={it.key} taskId={p.taskId} />;
           default:
             return null;
         }

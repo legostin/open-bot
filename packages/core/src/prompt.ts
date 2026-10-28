@@ -22,7 +22,40 @@ export interface PromptContext {
   setup?: string;
   /** A group chat the agent takes part in: its title and members, the lead first. */
   group?: { title: string; members: Array<{ id: string; name: string }> };
+  /** The agent's own dialog: who can take tasks (and where their brains run) and the computers tasks can run on. */
+  dispatch?: { team: Array<{ id: string; name: string; description: string; where: string[] }>; computers: Array<{ id: string; name: string; online: boolean }> };
 }
+
+/** A dialog's agent is the user's entry point: quick things itself, everything with steps as tasks on the side. */
+function howYouWork(c: PromptContext & { dispatch: NonNullable<PromptContext["dispatch"]> }): string[] {
+  const lines = [
+    "## How you work",
+    "You are the user's entry point. They tell you what they need — often several things at once, and more while you work — and they want results, not to watch you work.",
+    "- Answer right away when it takes a moment: conversation, something you know, one quick lookup.",
+    "- Anything with steps (checking, research, browsing, running commands, writing or changing code or files, long reading) goes to a task with `task_delegate`, one task per independent request: two requests in one message are two tasks. Then say in one short line what you started and end your turn; do not wait for tasks.",
+    "- Choose who does it: yourself, or the teammate whose role fits better. Choose where: the computer whose files, apps or hardware the work needs (`machine`). If the right agent or computer is unclear and the choice matters, ask the user one short question first; otherwise choose, and name your choice in a few words.",
+    "- The user may write again while tasks run. A new request is a new task; a detail or a correction for work in progress goes to that task with `task_message`; \"stop that\" is `task_cancel`. The `[Open tasks you started]` lines before a message show what is still going.",
+    "- A task may ask you something (a `[System]` note). Answer with `task_message` when you know (this dialog, memory); otherwise ask the user in one short message, then pass their answer on.",
+    "- When a task finishes, its result comes to you: tell the user the outcome in a few lines, in your own words.",
+  ];
+  const team = c.dispatch.team.map((a) => `- ${a.id}: ${a.name}${a.id === c.agent.id ? " (you)" : ""} — ${a.description || "no description"}${a.where.length ? ` (brains on: ${a.where.join(", ")})` : ""}`);
+  if (team.length) lines.push("", "Your team (`agent` in task_delegate):", ...team);
+  if (c.dispatch.computers.length > 1) {
+    lines.push(
+      "",
+      "Computers (`machine` in task_delegate; task_agents shows which are online now):",
+      ...c.dispatch.computers.map((m) => `- ${m.id}: ${m.name}${m.id === "local" ? " (the hub's own computer)" : ""}${m.online ? "" : " (offline when this session started)"}`),
+    );
+  }
+  return lines;
+}
+
+/** Inside a task: do the work, ask the starter only what only they know. */
+const IN_A_TASK = [
+  "- You do this task yourself; nobody watches the work, only the result matters. Start a sub-task only for parts that truly run in parallel.",
+  "- If you need something only whoever started the task (or the user) knows, ask with `task_ask` and keep working on the rest; if nothing is left, end your turn: the answer comes as a message and you go on. Do not guess at things that matter.",
+  '- A message "[System] <name>, who started this task, writes: …" comes from your starter: follow it.',
+];
 
 /** Where the agent is when it talks in a group chat, and how the floor passes between members. */
 function groupWhere(c: PromptContext & { group: NonNullable<PromptContext["group"]> }): string {
@@ -66,6 +99,7 @@ export function buildSystemPrompt(c: PromptContext): string {
   if (!c.background) {
     lines.push("- When the user asks you to change your own name, description, look or instructions, do it yourself with `profile_update`; never send them to a settings page.");
   }
+  if (c.task) lines.push(...IN_A_TASK);
   if (!c.machineName) {
     lines.push(
       "- Internet: use `web_search`, `web_fetch` and the `browser_*` tools. Direct network access from your shell and built-in fetch tools is limited to model APIs, package registries and GitHub; if a job truly needs more, ask the user to add the host to `brainEgressAllow` in settings.",
@@ -79,6 +113,7 @@ export function buildSystemPrompt(c: PromptContext): string {
     );
     if (c.agent.initiative < 2) lines.push("- Your initiative level only allows reading and suggesting in background runs: propose actions instead of taking them.");
   }
+  if (c.dispatch && !c.task && !c.group && !c.background) lines.push("", ...howYouWork({ ...c, dispatch: c.dispatch }));
   if (c.setup?.trim()) lines.push("", c.setup.trim());
   if (c.skills.length) {
     lines.push("", "## Skills", c.nativeSkills ? "Skills are installed for you natively; their names:" : "Load a skill's full instructions with `skill_load` when it is relevant:");

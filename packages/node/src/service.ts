@@ -30,6 +30,7 @@ function describe(method: string, p: any): string {
     case "brain.create":
       return `${p?.brainId} session=${p?.opts?.sessionId} workspace=${short(p?.opts?.workspace, 80)}`;
     case "brain.send":
+    case "brain.steer":
       return `session=${p?.sessionId} (${typeof p?.turn?.text === "string" ? p.turn.text.length : 0} chars)`;
     case "brain.interrupt":
     case "brain.close":
@@ -45,6 +46,7 @@ function outcome(method: string, r: any): string {
   if (method === "fs.write") return `${r?.bytes} B`;
   if (method === "fs.list") return `${r?.entries?.length ?? 0} entries`;
   if (method === "brain.probe") return r?.available ? `available${r.authenticated ? "" : ", not signed in"}` : "unavailable";
+  if (method === "brain.steer") return r?.accepted ? "joined the turn" : "no turn to join";
   return "ok";
 }
 
@@ -98,6 +100,10 @@ export class NodeService {
         await this.brains.send(p ?? {}, (event) => peer.notify("brain.event", { sessionId: p.sessionId, event }));
         return {};
       }),
+    );
+    peer.handle(
+      "brain.steer",
+      this.wrap("brain.steer", async (p: any) => ({ accepted: await this.brains.steer(p ?? {}) })),
     );
     peer.handle(
       "brain.interrupt",
