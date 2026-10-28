@@ -1717,7 +1717,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "task") return p.text === undefined ? `task:${p.taskId}` : `task:${p.taskId}|${p.text}`;
   // Pictures and maps carry no id: the same content shown twice in one reply is one card.
   if (p.type === "images") return `images:${JSON.stringify(p.items)}`;
-  if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers])}`;
+  if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers, p.route?.mode, p.route?.stops])}`;
   return undefined;
 }
 

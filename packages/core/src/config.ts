@@ -25,6 +25,8 @@ export interface Config {
   tailnetBin: string;
   /** The node's name in the tailnet, the link's first label (OWLBOT_TAILNET_HOSTNAME, default "owlbot"). */
   tailnetHostname: string;
+  /** The OSRM servers show_map asks for routes along roads (routing.ts): OWLBOT_ROUTER_URL, else OpenStreetMap Germany's. */
+  routerUrl: string;
   /** URL of the isolated security console. */
   consoleUrl: string;
   /** URL that local child processes (plugins, brains) use to reach the hub. */
@@ -92,6 +94,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     tailnetBin:
       env.OWLBOT_TAILNET_BIN ?? join(appRoot, "packages", "tailnet", "bin", `${process.platform}-${process.arch}`, process.platform === "win32" ? "owlbot-tailnet.exe" : "owlbot-tailnet"),
     tailnetHostname: env.OWLBOT_TAILNET_HOSTNAME?.trim() || "owlbot",
+    routerUrl: (env.OWLBOT_ROUTER_URL ?? "https://routing.openstreetmap.de").replace(/\/$/, ""),
     internalUrl: `http://127.0.0.1:${port}`,
     google: {
       clientId: env.OWLBOT_GOOGLE_CLIENT_ID ?? BUILTIN_GOOGLE_CLIENT.clientId,

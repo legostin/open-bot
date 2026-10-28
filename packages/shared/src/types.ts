@@ -199,8 +199,8 @@ export type MessagePart =
   | { type: "integration"; id: string }
   /** Pictures the agent shows (show_images): one item is a single image, two or more a carousel. */
   | { type: "images"; items: ImageItem[] }
-  /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers. */
-  | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[] }
+  /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers and the route. */
+  | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[]; route?: MapRoute }
   /**
    * A task the agent started (task_delegate): one line with its live status that opens the task. A message to a
    * teammate (team_message) carries what the agent wrote (`text`) and, once it came, the teammate's answer (`reply`).
@@ -223,6 +223,47 @@ export interface MapMarker {
   lat: number;
   lon: number;
   label?: string;
+  /** A line under the label: an address, opening hours, why it is there. */
+  note?: string;
+  /** What the place is: the marker's symbol (default "pin"; a route's stops without one are numbered). */
+  icon?: MapIcon;
+}
+
+/** Marker symbols (show_map; MAP_ICONS lists them). "user" is where the user is; "start" and "finish" end a route. */
+export type MapIcon =
+  | "pin"
+  | "food"
+  | "cafe"
+  | "bar"
+  | "hotel"
+  | "sight"
+  | "museum"
+  | "park"
+  | "shop"
+  | "transport"
+  | "parking"
+  | "fuel"
+  | "hospital"
+  | "home"
+  | "work"
+  | "photo"
+  | "star"
+  | "start"
+  | "finish"
+  | "user";
+
+export type RouteMode = "walk" | "drive" | "bike" | "transit";
+
+/** A route over a map's markers. */
+export interface MapRoute {
+  mode: RouteMode;
+  /** The markers it goes through, in order, by index (at least two). */
+  stops: number[];
+  /** The line, [lat, lon] pairs: along roads and paths when the hub found it, otherwise straight between the stops. */
+  path: Array<[number, number]>;
+  /** Length in metres and time in seconds, for a route along roads. */
+  distanceM?: number;
+  durationS?: number;
 }
 
 export interface Message {

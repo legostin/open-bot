@@ -405,22 +405,95 @@
 .owl-map .leaflet-control-attribution a {
   color: var(--muted);
 }
-.owl-map .owl-pin {
+/* Places: a round badge in the symbol's colour (--marker) with a white glyph or the stop's number; the list under the
+   map uses the small one. "user" is a blue dot with a soft pulse. */
+.owl-map .owl-marker-wrap {
   background: none;
   border: 0;
 }
-.owl-map .owl-pin-dot {
-  display: block;
-  width: 22px;
-  height: 22px;
+.owl-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   border-radius: 9999px;
-  background: var(--accent);
-  border: 4px solid var(--surface);
-  box-shadow: var(--shadow);
+  background: var(--marker, #1f2937);
+  color: #fff;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
   transition: transform 0.15s ease-out;
 }
-.owl-map .owl-pin:hover .owl-pin-dot {
-  transform: scale(1.12);
+.owl-marker-sm {
+  width: 22px;
+  height: 22px;
+  border-width: 1.5px;
+}
+.owl-marker-sm svg {
+  width: 12px;
+  height: 12px;
+}
+.owl-marker-n {
+  font: 700 13px/1 var(--font-sans);
+}
+.owl-marker-sm .owl-marker-n {
+  font-size: 11px;
+}
+.owl-map .owl-marker-wrap:hover .owl-marker,
+.owl-map .owl-marker.is-selected {
+  transform: scale(1.18);
+}
+.owl-marker-user {
+  position: relative;
+  background: #2563eb;
+  border-width: 3px;
+}
+.owl-map .owl-marker-user {
+  width: 20px;
+  height: 20px;
+  margin: 5px;
+}
+.owl-map .owl-marker-user::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 9999px;
+  background: rgb(37 99 235 / 0.25);
+  animation: owl-pulse 2s ease-out infinite;
+}
+@keyframes owl-pulse {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+/* Routes: a light casing under a blue line, dashed for transit (drawn straight between the stops). */
+.owl-map path.owl-route {
+  stroke: #2563eb;
+  stroke-opacity: 0.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.owl-map path.owl-route-transit {
+  stroke-dasharray: 2 10;
+}
+.owl-map path.owl-route-casing {
+  stroke: #fff;
+  stroke-opacity: 0.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (prefers-color-scheme: dark) {
+  .owl-map path.owl-route {
+    stroke: #60a5fa;
+  }
+  .owl-map path.owl-route-casing {
+    stroke: #0b0b0c;
+  }
 }
 .owl-map .owl-map-label {
   background: var(--surface);

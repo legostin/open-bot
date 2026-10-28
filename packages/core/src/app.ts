@@ -25,6 +25,7 @@ import { ChannelRegistry } from "./channels.ts";
 import { Notifier } from "./notifier.ts";
 import { SessionRunner } from "./runner.ts";
 import { Team } from "./team.ts";
+import { roadRoute } from "./routing.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
 import { McpClientManager } from "./mcp/client.ts";
@@ -279,6 +280,7 @@ export class Hub {
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
       workspacesRoot: join(config.dataDir, "workspaces"),
       transcriber: this.transcriber,
+      route: (mode, stops) => roadRoute(config.routerUrl, mode, stops),
     });
     this.machines.registerTools(this.tools);
     registerHubTools(this);

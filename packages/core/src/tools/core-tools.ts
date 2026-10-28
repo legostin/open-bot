@@ -2,7 +2,8 @@
 
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { ImageItem, MapMarker, MessagePart, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import type { ImageItem, MapIcon, MapMarker, MapRoute, MessagePart, RouteMode, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import { MAP_ICONS } from "@owlbot/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { SkillIndex } from "../skills.ts";
 import type { VaultService } from "../vault/service.ts";
@@ -12,6 +13,7 @@ import type { AgentRegistry } from "../agents.ts";
 import { imageTypeOf, MAX_IMAGE_BYTES, parseImageUrl } from "../media.ts";
 import { mimeOf } from "../attachments.ts";
 import type { Transcriber } from "../transcribe.ts";
+import type { RoadRoute } from "../routing.ts";
 
 export interface CoreToolDeps {
   registry: ToolRegistry;
@@ -29,6 +31,8 @@ export interface CoreToolDeps {
   workspacesRoot: string;
   /** Speech to text (transcribe.ts). */
   transcriber?: Transcriber;
+  /** A route along roads or paths for show_map (routing.ts). */
+  route?: (mode: Exclude<RouteMode, "transit">, stops: Array<[number, number]>) => Promise<RoadRoute | { error: string }>;
 }
 
 /** Who is writing to a task: the agent, its conversation and, inside a task, that task; tainted when it had read outside content. */
@@ -419,41 +423,49 @@ export function registerCoreTools(d: CoreToolDeps): void {
     {
       name: "show_map",
       description:
-        "Show the user an interactive OpenStreetMap map right in the chat, centred on a point, with optional labelled markers; when your reply " +
-        "also goes to Telegram, the map goes with it as a location pin. Use it for places, addresses, stops on a route, meeting points, \"where is…\" questions. " +
-        "Coordinates are WGS84 decimal degrees. Without zoom the map fits all markers; zoom 3 is a continent, 10 a city, 15 streets, 18 buildings.",
+        "Show the user an interactive OpenStreetMap map right in the chat: places with symbols and short notes, and a route through them " +
+        "(walking, driving and cycling routes follow real roads and paths, with length and time). The user can zoom, open it full screen, " +
+        "tap a place in the list under the map, and open the place or the route in Apple Maps, Google Maps, Yandex Maps or 2GIS. When your reply " +
+        "also goes to Telegram, the map goes with it as a location pin. Use it for places, addresses, \"where is…\" questions, things to see or eat " +
+        "nearby, meeting points, directions and plans for a day. Coordinates are WGS84 decimal degrees. Without zoom the map fits everything; zoom 3 is " +
+        "a continent, 10 a city, 15 streets, 18 buildings.",
       effect: "read",
       inputSchema: {
         type: "object",
         properties: {
-          lat: { type: "number", minimum: -90, maximum: 90, description: "Latitude of the centre" },
+          lat: { type: "number", minimum: -90, maximum: 90, description: "Latitude of the centre (default: the middle of the markers)" },
           lon: { type: "number", minimum: -180, maximum: 180, description: "Longitude of the centre" },
           zoom: { type: "integer", minimum: 1, maximum: 19 },
-          title: { type: "string", description: "Shown above the map, e.g. the place name (≤ 120 chars)" },
+          title: { type: "string", description: "Shown under the map, e.g. the place name or what the route is (≤ 120 chars)" },
           markers: {
             type: "array",
             maxItems: MAX_MARKERS,
-            description: "Points to pin; without markers the centre gets one",
+            description: "Places to show; without markers the centre gets one",
             items: {
               type: "object",
-              properties: { lat: { type: "number" }, lon: { type: "number" }, label: { type: "string", description: "≤ 120 chars" } },
+              properties: {
+                lat: { type: "number" },
+                lon: { type: "number" },
+                label: { type: "string", description: "The place's name (≤ 120 chars)" },
+                note: { type: "string", description: "One line under the name: address, hours, why it is worth it (≤ 200 chars)" },
+                icon: { type: "string", enum: [...MAP_ICONS], description: "What the place is; \"user\" marks where the user is" },
+              },
               required: ["lat", "lon"],
             },
           },
+          route: {
+            type: "object",
+            description: "A route through the markers",
+            properties: {
+              mode: { type: "string", enum: ["walk", "drive", "bike", "transit"], description: "transit draws straight lines; the user opens it in a maps app for times" },
+              stops: { type: "array", items: { type: "integer", minimum: 0 }, description: "Marker indexes in route order (default: all markers in order)" },
+            },
+            required: ["mode"],
+          },
         },
-        required: ["lat", "lon"],
       },
     },
-    (i, ctx) => {
-      const lat = coord(i.lat, "lat", -90, 90);
-      const lon = coord(i.lon, "lon", -180, 180);
-      if (typeof lat === "string" || typeof lon === "string") return text([lat, lon].filter((x) => typeof x === "string").join("; "), true);
-      let zoom: number | undefined;
-      if (i.zoom !== undefined && i.zoom !== null) {
-        const z = coord(i.zoom, "zoom", 1, 19);
-        if (typeof z === "string") return text(z, true);
-        zoom = Math.round(z);
-      }
+    async (i, ctx) => {
       const rawMarkers: unknown[] = Array.isArray(i.markers) ? i.markers : [];
       if (rawMarkers.length > MAX_MARKERS) return text(`At most ${MAX_MARKERS} markers.`, true);
       const markers: MapMarker[] = [];
@@ -462,9 +474,47 @@ export function registerCoreTools(d: CoreToolDeps): void {
         const mlat = coord(m.lat, `markers[${n}].lat`, -90, 90);
         const mlon = coord(m.lon, `markers[${n}].lon`, -180, 180);
         if (typeof mlat === "string" || typeof mlon === "string") return text([mlat, mlon].filter((x) => typeof x === "string").join("; "), true);
+        if (m.icon !== undefined && !MAP_ICONS.includes(m.icon as MapIcon)) return text(`markers[${n}].icon must be one of: ${MAP_ICONS.join(", ")}`, true);
         const label = clip(m.label, 120);
-        markers.push({ lat: mlat, lon: mlon, ...(label ? { label } : {}) });
+        const note = clip(m.note, 200);
+        markers.push({ lat: mlat, lon: mlon, ...(label ? { label } : {}), ...(note ? { note } : {}), ...(m.icon ? { icon: m.icon as MapIcon } : {}) });
       }
+      // The centre: given, or the middle of the markers.
+      const given = i.lat !== undefined && i.lat !== null;
+      if (!given && !markers.length) return text("Give lat and lon, or markers.", true);
+      const middle = (vs: number[]) => Math.round(((Math.min(...vs) + Math.max(...vs)) / 2) * 1e6) / 1e6;
+      const lat = given ? coord(i.lat, "lat", -90, 90) : middle(markers.map((m) => m.lat));
+      const lon = given ? coord(i.lon, "lon", -180, 180) : middle(markers.map((m) => m.lon));
+      if (typeof lat === "string" || typeof lon === "string") return text([lat, lon].filter((x) => typeof x === "string").join("; "), true);
+      let zoom: number | undefined;
+      if (i.zoom !== undefined && i.zoom !== null) {
+        const z = coord(i.zoom, "zoom", 1, 19);
+        if (typeof z === "string") return text(z, true);
+        zoom = Math.round(z);
+      }
+
+      let route: MapRoute | undefined;
+      let routeNote = "";
+      if (i.route && typeof i.route === "object") {
+        const r = i.route as Record<string, unknown>;
+        const mode = r.mode as RouteMode;
+        if (!["walk", "drive", "bike", "transit"].includes(mode)) return text("route.mode must be walk, drive, bike or transit.", true);
+        const stops = Array.isArray(r.stops) ? r.stops.map(Number) : markers.map((_, n) => n);
+        if (stops.some((n) => !Number.isInteger(n) || n < 0 || n >= markers.length)) return text(`route.stops are marker indexes from 0 to ${markers.length - 1}.`, true);
+        if (stops.length < 2) return text("A route needs at least two markers to go through.", true);
+        const points = stops.map((n) => [markers[n].lat, markers[n].lon] as [number, number]);
+        route = { mode, stops, path: points };
+        if (mode === "transit") routeNote = " The transit route is drawn straight between the stops; the user can open it in a maps app for times.";
+        else {
+          const found = d.route ? await d.route(mode, points) : { error: "routing is off" };
+          if ("error" in found) routeNote = ` No road route (${found.error}): the line is straight between the stops.`;
+          else {
+            route = { ...route, path: found.path, distanceM: found.distanceM, durationS: found.durationS };
+            routeNote = ` Route: ${(found.distanceM / 1000).toFixed(1)} km, about ${Math.max(1, Math.round(found.durationS / 60))} min.`;
+          }
+        }
+      }
+
       const title = clip(i.title, 120);
       d.attachPart(ctx.conversationId, {
         type: "map",
@@ -473,8 +523,9 @@ export function registerCoreTools(d: CoreToolDeps): void {
         ...(zoom !== undefined ? { zoom } : {}),
         ...(title ? { title } : {}),
         ...(markers.length ? { markers } : {}),
+        ...(route ? { route } : {}),
       });
-      return text(`The user now sees the map${title ? ` “${title}”` : ""} in the chat (and a location pin in Telegram, if your reply goes there).`);
+      return text(`The user now sees the map${title ? ` “${title}”` : ""} in the chat (and a location pin in Telegram, if your reply goes there).${routeNote}`);
     },
   );
 
