@@ -55,6 +55,7 @@ export function BrainPicker({ agent }: { agent: AgentDef }) {
   // In the button: the brain and the preset (or the exact model) in a word.
   const short = chat?.preset ? t(`thinking.preset.${chat.preset}`) : isExact ? (modelName(view, chat?.brain, own?.model) ?? (own?.effort ? effortName(own.effort) : undefined)) : undefined;
   const rows = list.slice().sort((a, b) => Number(brainReady(b)) - Number(brainReady(a)));
+  const TriggerIcon = ready && chat?.preset && !isExact ? PRESET_ICONS[chat.preset] : Brain;
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -93,17 +94,14 @@ export function BrainPicker({ agent }: { agent: AgentDef }) {
         aria-expanded={open}
         title={`${t("thinking.label", { agent: agent.name })}: ${active ? [active.label, chat?.preset ? t(`thinking.preset.${chat.preset}`) : undefined, how].filter(Boolean).join(" · ") : t("brainPicker.none")}`}
         className={cx(
-          "flex max-w-[15rem] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition",
-          ready ? "border-border bg-surface-2/70 text-fg hover:bg-surface-2" : "border-warning/40 bg-warning-soft/60 text-warning",
+          "press flex max-w-[12rem] items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition",
+          ready ? "text-muted hover:bg-surface-2 hover:text-fg" : "border border-warning/40 bg-warning-soft/60 text-warning",
         )}
       >
-        <Brain className="size-3.5 shrink-0" />
-        {/* A narrow bar (TopBar's container) keeps the icon; the title says how it thinks. */}
-        <span className="hidden truncate @lg/top:inline">
-          {active?.label ?? t("brainPicker.none")}
-          {short && <span className="text-muted"> · {short}</span>}
-        </span>
-        <ChevronDown className={cx("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
+        <TriggerIcon className="size-3.5 shrink-0" />
+        {/* Quiet: the preset in a word (the brain only when none answers); a narrow bar keeps the icon. */}
+        <span className="hidden truncate @lg/top:inline">{ready ? (short ?? active?.label) : (active?.label ?? t("brainPicker.none"))}</span>
+        <ChevronDown className={cx("size-3 shrink-0 opacity-60 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
         <div role="menu" className="animate-in absolute top-full left-0 z-30 mt-1.5 max-h-[min(80vh,40rem)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-card">

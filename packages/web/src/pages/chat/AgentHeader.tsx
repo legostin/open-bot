@@ -1,11 +1,12 @@
 // The header of a dialog: who you are talking to, small. Its face (alive while it works) and name open its settings;
-// "working…" shows under the name only while it is so. The brain picker shows only when the agent has no brain that
-// answers (then it is what is needed); otherwise brains are in the agent's settings.
+// "working…" shows under the name only while it is so. Beside the name, quietly, how it thinks (a preset such as
+// "Fast"), which opens the choice of preset, exact model and effort, and brain; it turns into a warning when no brain
+// of the agent answers.
 
 import { useEffect } from "react";
 import { useStore } from "../../lib/store";
 import { agents, ensureAgents, team } from "../../state/app";
-import { activeBrain, brains, ensureBrains } from "../../state/brains";
+import { brains, ensureBrains } from "../../state/brains";
 import { editAgent } from "../../state/panel";
 import { AgentAvatar } from "../../components/AgentAvatar";
 import { cx } from "../../components/ui";
@@ -24,7 +25,6 @@ export function AgentHeader({ agentId, settings = true }: { agentId?: string; se
   const running = !!members?.find((m) => m.agentId === agentId)?.running;
   const name = agent?.name ?? agentId ?? t("message.assistant");
   const canEdit = !!agent && settings;
-  const noBrain = !!agent && !!brainList && !activeBrain(agent.brains, brainList);
   return (
     <div className="flex min-w-0 items-center gap-1.5">
       <button
@@ -42,7 +42,7 @@ export function AgentHeader({ agentId, settings = true }: { agentId?: string; se
           </span>
         </span>
       </button>
-      {agent && settings && noBrain && <BrainPicker agent={agent} />}
+      {agent && settings && brainList && <BrainPicker agent={agent} />}
     </div>
   );
 }
