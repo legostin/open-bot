@@ -92,6 +92,12 @@ export function TaskDetailPage({ id }: { id: string }) {
           {current.resumeAt && current.status === "paused" ? ` · ${t("tasks.resumes", { time: relativeTime(current.resumeAt) })}` : ""}
         </span>
       </div>
+      {current.question && (
+        <div className="mt-3 text-sm">
+          <div className="mb-1 text-[11px] font-semibold tracking-wide text-warning uppercase">{t("task.question")}</div>
+          {current.question}
+        </div>
+      )}
       <div className={expanded ? "mt-3" : "mt-3 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"}>
         <div className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">{t("task.goal")}</div>
         <Markdown text={current.goal} className="text-sm" />

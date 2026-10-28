@@ -200,7 +200,9 @@ export type MessagePart =
   /** Pictures the agent shows (show_images): one item is a single image, two or more a carousel. */
   | { type: "images"; items: ImageItem[] }
   /** An OpenStreetMap map the agent shows (show_map), centred on lat/lon; without zoom it fits the markers. */
-  | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[] };
+  | { type: "map"; lat: number; lon: number; zoom?: number; title?: string; markers?: MapMarker[] }
+  /** A task the agent started (task_delegate): one line with its live status that opens the task. */
+  | { type: "task"; taskId: string };
 
 /** What a sent file is: a voice note and a photo are told apart from an audio file or a document by the channel. */
 export type AttachmentKind = "photo" | "voice" | "audio" | "video" | "file";
@@ -308,6 +310,8 @@ export interface Task {
   result?: string;
   error?: string;
   resumeAt?: ISODate;
+  /** A question the task asked whoever started it (task_ask), until it gets an answer. */
+  question?: string;
   createdAt: ISODate;
   updatedAt: ISODate;
 }

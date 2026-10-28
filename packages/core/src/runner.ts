@@ -3,7 +3,7 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, ToolResult } from "@owlbot/shared";
+import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ToolResult } from "@owlbot/shared";
 import { formatBrainRef, newId, nowIso, parseBrainRef, truncate } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import type { Store, SessionRow } from "./store.ts";
@@ -31,6 +31,7 @@ import { TurnClock } from "./clock.ts";
 import { attachmentNote, forSession, isSpeech, SPEECH_NOT_SET_UP, type AttachmentPart, type SessionFile } from "./attachments.ts";
 import { MAX_AUTO_TRANSCRIBE_SEC, type Transcriber } from "./transcribe.ts";
 import { firstSpeakers, groupTurn, groupTurnText, handOff, MAX_HANDOFFS, USER_LABEL } from "./group-chat.ts";
+import { hubName } from "./pairing.ts";
 
 export interface RunnerDeps {
   config: Config;
@@ -51,6 +52,8 @@ export interface RunnerDeps {
   /** Claude Code-format plugin dirs to pass to Claude Code sessions. */
   claudePluginDirs: () => string[];
   machineName: (machineId: string) => string | undefined;
+  /** The paired computers (task_delegate's `machine`). */
+  machines?: () => Machine[];
   /** Turns in progress by machine, for the machines block (set by the hub). */
   activity?: MachineActivityFeed;
   secrets: SecretIntake;
@@ -96,9 +99,24 @@ export interface TurnResult {
   error?: string;
   limited?: { resetAt?: string };
   awaitingApproval: boolean;
-  /** The assistant message the turn wrote. */
+  /** The assistant message the turn wrote (its last one, when messages joined the turn). */
   messageId?: string;
+  /** Channels whose messages joined the turn: they get the reply too. */
+  channels?: string[];
 }
+
+/** A turn streaming in a conversation: more input can join it. */
+interface ActiveTurn {
+  sessionId: string;
+  handle: BrainHandle;
+  row: SessionRow;
+  /** Close the reply so far and go on in a new message (after the message that just joined). */
+  split(): void;
+  channels: Set<string>;
+}
+
+/** Tasks still going: what the starter's turns list as open. */
+const OPEN_TASK: TaskStatus[] = ["queued", "running", "waiting_approval", "waiting_input", "paused", "interrupted"];
 
 /** Harness built-in tools whose results come from the outside world. */
 const NATIVE_SOURCE_TOOLS = /^(WebFetch|WebSearch|web_search|fetch)$/i;
@@ -112,7 +130,7 @@ export class SessionRunner {
   d: RunnerDeps;
   private live = new Map<string, Live>();
   private queues = new Map<string, Promise<unknown>>();
-  private activeTurns = new Map<string, { sessionId: string; handle: BrainHandle }>();
+  private activeTurns = new Map<string, ActiveTurn>();
   private runningTasks = new Set<string>();
   private brainLoad = new Map<string, number>();
   /** When each live session last got the current time (clock.ts). */
@@ -211,11 +229,39 @@ export class SessionRunner {
       return msg;
     }
     const quote = [text, ...attachments.map((a) => `📎 ${a.name}`)].filter(Boolean).join("\n");
+    const reply = { replyChannel: opts.channel, ...(fromWeb ? { quote } : {}) };
+    const task = conv.taskId ? this.d.store.getTask(conv.taskId) : undefined;
+    // A turn is running here: the message joins it and the brain takes it at its next step (voice notes become words
+    // first). A brain that cannot take it, or a turn that ended meanwhile, gets it as the next turn.
+    if (this.activeTurns.has(conversationId)) {
+      void (async () => {
+        const files = attachments.length ? await this.transcribeParts(msg.id, attachments) : {};
+        if (await this.steerInto(conversationId, prompt, { ...reply, ...files })) return;
+        if (task) await this.wakeTask(task, prompt, { ...reply, ...files });
+        else void this.enqueue(conversationId, () => this.runTurn(conv, prompt, { ...reply, ...files }));
+      })();
+      return msg;
+    }
+    // Written on a task's page: the task carries on with it (its status, result and report follow).
+    if (task) {
+      void (async () => this.wakeTask(task, prompt, { ...reply, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}) }))();
+      return msg;
+    }
     // Voice notes become words first, in the queue: the turn waits for them, later messages wait for the turn.
-    void this.enqueue(conversationId, async () =>
-      this.runTurn(conv, prompt, { replyChannel: opts.channel, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}), ...(fromWeb ? { quote } : {}) }),
-    );
+    void this.enqueue(conversationId, async () => this.runTurn(conv, prompt, { ...reply, ...(attachments.length ? await this.transcribeParts(msg.id, attachments) : {}) }));
     return msg;
+  }
+
+  /** More input for the turn running in the conversation: true when its brain took it (the reply goes on there). */
+  private async steerInto(conversationId: string, text: string, opts: Pick<TurnOpts, "replyChannel" | "attachments" | "speech"> = {}): Promise<boolean> {
+    const a = this.activeTurns.get(conversationId);
+    if (!a) return false;
+    if (!(await a.handle.steer(this.turnInput(a.row, text, opts)))) return false;
+    if (this.activeTurns.get(conversationId) === a) {
+      a.split();
+      if (opts.replyChannel && opts.replyChannel !== WEB_CHANNEL) a.channels.add(opts.replyChannel);
+    }
+    return true;
   }
 
   /** Voice notes and audio files in a user message become words: stored on the parts (the chat shows them), and why not when they cannot. */
@@ -437,6 +483,8 @@ export class SessionRunner {
     background: boolean;
     createdBy: Task["createdBy"];
     triggerId?: string;
+    /** The brain (and so the computer) the task runs on, instead of the agent's own order. */
+    brainRef?: string;
   }): Task {
     const task = this.d.store.createTask({ ...t });
     this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete" });
@@ -526,13 +574,17 @@ export class SessionRunner {
     if (fresh.background) this.countUsage(agent.id, "background_run");
     this.d.store.updateTask(fresh.id, { status: "running", resumeAt: undefined });
 
-    const resumed = fresh.status === "paused" || this.d.store.listMessages(conv.id, { limit: 3 }).some((m) => m.role === "assistant");
+    const history = this.d.store.listMessages(conv.id, { limit: 50 });
+    const resumed = fresh.status === "paused" || history.some((m) => m.role === "assistant");
+    // What reached the task before it started (its starter's clarifications, the user's words on its page).
+    const notes = resumed ? [] : history.slice(1).flatMap((m) => m.parts.flatMap((p) => (p.type === "text" && p.text.trim() ? [p.text.trim()] : [])));
     const prompt = resumed
       ? "Continue working on the task from where you stopped."
       : [
           `Task: ${fresh.title}`,
           "",
           fresh.goal,
+          ...(notes.length ? ["", "Messages that came after the task was created:", ...notes] : []),
           "",
           fresh.background
             ? "When you are done, call notify (once) with a short summary of the outcome."
@@ -540,11 +592,15 @@ export class SessionRunner {
         ].join("\n");
 
     const r = await this.runTurn(conv, prompt, { task: fresh });
-    const cur = this.d.store.getTask(fresh.id);
-    if (!cur || cur.status === "cancelled") return;
+    await this.afterTaskTurn(fresh.id, r);
+  }
 
+  /** Where a task stands after a turn: waiting (a limit, an approval, the answer to its question), failed, or done and reported. */
+  private async afterTaskTurn(taskId: string, r: TurnResult): Promise<void> {
+    const cur = this.d.store.getTask(taskId);
+    if (!cur || cur.status === "cancelled") return;
     if (r.limited) {
-      this.d.store.updateTask(fresh.id, {
+      this.d.store.updateTask(cur.id, {
         status: "paused",
         resumeAt: r.limited.resetAt ?? new Date(Date.now() + 30 * 60_000).toISOString(),
         error: t("task.limitLater"),
@@ -552,29 +608,192 @@ export class SessionRunner {
       return;
     }
     if (r.error && !r.text) {
-      this.d.store.updateTask(fresh.id, { status: "failed", error: r.error });
-      if (!fresh.background || fresh.createdBy !== "trigger") {
-        await this.d.notifier.notify({ level: "notify", title: t("notify.taskFailed", { title: fresh.title }), body: r.error, agentId: agent.id, taskId: fresh.id });
+      this.d.store.updateTask(cur.id, { status: "failed", error: r.error });
+      if (!cur.background || cur.createdBy !== "trigger") {
+        await this.d.notifier.notify({ level: "notify", title: t("notify.taskFailed", { title: cur.title }), body: r.error, agentId: cur.agentId, taskId: cur.id });
       }
       return;
     }
     if (r.awaitingApproval) {
-      this.d.store.updateTask(fresh.id, { status: "waiting_approval", result: r.text });
+      this.d.store.updateTask(cur.id, { status: "waiting_approval", result: r.text });
       return;
     }
-    this.d.store.updateTask(fresh.id, { status: "done", result: r.text, error: undefined });
-    await this.reportTaskDone(this.d.store.getTask(fresh.id)!);
+    if (cur.question) {
+      this.d.store.updateTask(cur.id, { status: "waiting_input", result: r.text || cur.result, error: undefined });
+      return;
+    }
+    this.d.store.updateTask(cur.id, { status: "done", result: r.text, error: undefined });
+    await this.reportTaskDone(this.d.store.getTask(cur.id)!);
+  }
+
+  /**
+   * Something for a task (its starter's answer or clarification, the user's words on its page): it joins the running
+   * turn, waits for the first turn of a task that has not started, or gives the task another turn.
+   */
+  async wakeTask(task: Task, text: string, opts: Pick<TurnOpts, "replyChannel" | "quote" | "attachments" | "speech"> = {}): Promise<"steered" | "queued" | "started" | "cancelled"> {
+    const cur = this.d.store.getTask(task.id) ?? task;
+    if (cur.status === "cancelled") return "cancelled";
+    if (await this.steerInto(cur.conversationId, text, opts)) return "steered";
+    if (cur.status === "queued") return "queued";
+    const conv = this.d.store.getConversation(cur.conversationId);
+    if (!conv) return "cancelled";
+    void this.enqueue(conv.id, async () => {
+      const now = this.d.store.getTask(cur.id);
+      if (!now || now.status === "cancelled") return;
+      this.d.store.updateTask(now.id, { status: "running", resumeAt: undefined, error: undefined });
+      const r = await this.runTurn(conv, text, { ...opts, task: now });
+      await this.afterTaskTurn(now.id, r);
+    });
+    return "started";
+  }
+
+  /** Who hears from a task: the dialog or task that started it, or, for one the user started, its agent's dialog. */
+  private starterOf(task: Task): Conversation | undefined {
+    return task.parentConversationId ? this.d.store.getConversation(task.parentConversationId) : this.d.store.agentConversation(task.agentId);
+  }
+
+  /** A task's question or result for whoever started it: joins their turn if one is running, else starts one. */
+  private async tellStarter(task: Task, note: string): Promise<void> {
+    const parent = this.starterOf(task);
+    if (!parent) return;
+    this.d.store.addMessage({ conversationId: parent.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: task.id });
+    const parentTask = parent.taskId ? this.d.store.getTask(parent.taskId) : undefined;
+    if (parentTask) {
+      await this.wakeTask(parentTask, note);
+      return;
+    }
+    if (parent.kind !== "group" && (await this.steerInto(parent.id, note))) return;
+    void this.enqueue(parent.id, () => this.runTurn(parent, note, {}));
+  }
+
+  /** task_ask: the question goes to whoever started the task; the task waits for the answer once its turn ends. */
+  async askStarter(taskId: string, question: string): Promise<{ ok: boolean; text: string }> {
+    const task = this.d.store.getTask(taskId);
+    if (!task) return { ok: false, text: "This task no longer exists." };
+    const parent = this.starterOf(task);
+    if (!parent) return { ok: false, text: "Nobody to ask: the conversation that started this task is gone. Decide yourself, or say what you need in your result." };
+    this.d.store.updateTask(task.id, { question });
+    const agent = this.d.agents.get(task.agentId);
+    const who = agent ? agentName(agent, hubLocale()) : task.agentId;
+    await this.tellStarter(
+      task,
+      [
+        `[System] Task ${task.id} “${task.title}” (${who}${this.taskWhere(task)}) asks you: ${question}`,
+        `If you know the answer (from this conversation or memory), reply with task_message (taskId "${task.id}"). If only the user can answer, ask them in one short message and pass their answer on with task_message.`,
+      ].join("\n"),
+    );
+    const starter = parent.taskId ? "the task that started yours" : parent.agentId === task.agentId && !task.parentConversationId ? "you, in your dialog with the user" : "the agent that started this task";
+    return {
+      ok: true,
+      text: `Asked ${starter}. Go on with anything that does not depend on the answer; if nothing is left, end your turn: the answer arrives as a message and you continue then.`,
+    };
+  }
+
+  /** task_message / task_cancel are for whoever started the task (a dialog, a parent task) and for the task's own agent. */
+  private mayDirect(task: Task, from: { agentId: string; conversationId: string; taskId?: string }): boolean {
+    return task.parentConversationId === from.conversationId || (!!from.taskId && task.parentTaskId === from.taskId) || task.agentId === from.agentId;
+  }
+
+  /** task_message: an answer, a clarification or a change of plan for a task, delivered right away. */
+  async messageTask(taskId: string, text: string, from: { agentId: string; conversationId: string; taskId?: string }): Promise<{ ok: boolean; text: string }> {
+    const task = this.d.store.getTask(taskId);
+    if (!task) return { ok: false, text: `No task ${taskId}.` };
+    if (!this.mayDirect(task, from)) return { ok: false, text: "You can message only the tasks you started." };
+    if (task.status === "cancelled") return { ok: false, text: "That task was cancelled. Start a new one with task_delegate if the work is still needed." };
+    const sender = this.d.agents.get(from.agentId);
+    const note = `[System] ${sender ? agentName(sender, hubLocale()) : from.agentId}, who started this task, writes: ${text}`;
+    this.d.store.addMessage({ conversationId: task.conversationId, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: task.id });
+    if (task.question) this.d.store.updateTask(task.id, { question: undefined });
+    const how = await this.wakeTask(task, note);
+    const said = {
+      steered: "Delivered: the task is working and takes it at its next step.",
+      queued: "Delivered: the task reads it when it starts.",
+      started: "Delivered: the task continues with it.",
+      cancelled: "The task was cancelled meanwhile.",
+    }[how];
+    return { ok: how !== "cancelled", text: `${said} Its result will come here as a message.` };
+  }
+
+  /** task_cancel from whoever may direct the task. */
+  cancelTaskFrom(taskId: string, from: { agentId: string; conversationId: string; taskId?: string }): { ok: boolean; text: string } {
+    const task = this.d.store.getTask(taskId);
+    if (!task) return { ok: false, text: `No task ${taskId}.` };
+    if (!this.mayDirect(task, from)) return { ok: false, text: "You can cancel only the tasks you started." };
+    if (["done", "failed", "cancelled"].includes(task.status)) return { ok: true, text: `Task ${task.id} is already ${task.status}.` };
+    this.cancelTask(task.id);
+    return { ok: true, text: `Task ${task.id} “${task.title}” cancelled.` };
+  }
+
+  /** The computers a task can run on: the hub's own first, then the paired ones. */
+  computers(): Array<{ id: string; name: string; online: boolean }> {
+    return [{ id: "local", name: hubName(), online: true }, ...(this.d.machines?.() ?? []).map((m) => ({ id: m.id, name: m.name, online: m.status === "online" }))];
+  }
+
+  /**
+   * task_delegate's `machine`: the agent's brain on that computer (its own entry, or the same kind of brain there), or
+   * the agent's usual brain working there through the machine tools when the computer has none.
+   */
+  placeTask(agentId: string, machine: string): { brainRef?: string; machineName: string; note?: string } | { error: string } {
+    const agent = this.d.agents.get(agentId);
+    if (!agent) return { error: `No agent ${agentId}.` };
+    const list = this.computers();
+    const key = machine.trim().toLowerCase();
+    const m = list.find((x) => x.id.toLowerCase() === key || x.name.toLowerCase() === key) ?? list.find((x) => x.name.toLowerCase().includes(key));
+    if (!m) return { error: `No computer "${machine}". Computers: ${list.map((x) => `${x.name} (${x.id}${x.online ? "" : ", offline"})`).join(", ")}.` };
+    if (!m.online) return { error: `"${m.name}" is offline right now. Ask the user whether to wait or use another computer.` };
+    const refs = agent.brains.map(parseBrainRef);
+    const own = refs.find((r) => r.machineId === m.id);
+    if (own) return { brainRef: formatBrainRef(own), machineName: m.name };
+    for (const r of refs) {
+      const there = formatBrainRef({ brainId: r.brainId, variant: r.variant, machineId: m.id });
+      if (this.d.brains.has(there)) return { brainRef: there, machineName: m.name };
+    }
+    return { machineName: m.name, ...(m.id === "local" ? {} : { note: `Work on the computer "${m.name}" (machine id ${m.id}) through the machine_* tools.` }) };
+  }
+
+  /** The team and the computers, for a dialog's prompt. */
+  private dispatchContext(): NonNullable<Parameters<typeof buildSystemPrompt>[0]["dispatch"]> {
+    const computers = this.computers();
+    const name = (id: string) => computers.find((c) => c.id === id)?.name ?? this.d.machineName(id) ?? id;
+    const team = this.d.agents.list().map((a) => ({
+      id: a.id,
+      name: agentName(a, hubLocale()),
+      description: a.description,
+      where: [...new Set(a.brains.map((b) => name(parseBrainRef(b).machineId)))],
+    }));
+    return { team, computers };
+  }
+
+  /** ", on <computer>" for a task placed on another computer. */
+  private taskWhere(task: Task): string {
+    const id = task.brainRef ? parseBrainRef(task.brainRef).machineId : "local";
+    return id === "local" ? "" : `, on ${this.d.machineName(id) ?? id}`;
+  }
+
+  /** The `[Open tasks you started]` lines for a dialog's turns. */
+  private openTasks(conversationId: string): string {
+    const open = this.d.store.listTasks({ status: OPEN_TASK, limit: 200 }).filter((t) => t.parentConversationId === conversationId);
+    if (!open.length) return "";
+    const state: Partial<Record<TaskStatus, string>> = {
+      queued: "waiting to start",
+      running: "working",
+      waiting_approval: "waiting for the user's approval",
+      waiting_input: "waiting for your answer",
+      paused: "paused until its brain's limit resets",
+      interrupted: "interrupted",
+    };
+    const lines = open.slice(0, 12).map((t) => {
+      const a = this.d.agents.get(t.agentId);
+      const asked = t.question ? `; asked you: ${truncate(t.question, 300)}` : "";
+      return `- ${t.id} “${t.title}” — ${a ? agentName(a, hubLocale()) : t.agentId}${this.taskWhere(t)}: ${state[t.status] ?? t.status}${asked}`;
+    });
+    return `[Open tasks you started]\n${lines.join("\n")}`;
   }
 
   private async reportTaskDone(task: Task): Promise<void> {
     const result = truncate(task.result ?? "", 6000);
     if (task.createdBy === "agent" && task.parentConversationId) {
-      const parent = this.d.store.getConversation(task.parentConversationId);
-      if (parent) {
-        const note = `[System] Delegated task ${task.id} “${task.title}” is finished.\nResult:\n${result}`;
-        this.d.store.addMessage({ conversationId: parent.id, role: "system", parts: [{ type: "text", text: note }], status: "complete", taskId: task.id });
-        void this.enqueue(parent.id, () => this.runTurn(parent, note, {}));
-      }
+      await this.tellStarter(task, `[System] Task ${task.id} “${task.title}” is finished.\nResult:\n${result}`);
       return;
     }
     if (task.createdBy === "user") {
@@ -596,11 +815,7 @@ export class SessionRunner {
       this.d.store.updateTask(task.id, { status: "running" });
       void this.enqueue(conv.id, async () => {
         const r = await this.runTurn(conv, note, { task });
-        if (!r.awaitingApproval) {
-          this.d.store.updateTask(task.id, { status: r.error && !r.text ? "failed" : "done", result: r.text, error: r.error });
-          const t = this.d.store.getTask(task.id)!;
-          if (t.status === "done") await this.reportTaskDone(t);
-        } else this.d.store.updateTask(task.id, { status: "waiting_approval" });
+        await this.afterTaskTurn(task.id, r);
       });
     } else {
       // In a group chat, the member whose action it was carries on.
@@ -662,8 +877,8 @@ export class SessionRunner {
     this.d.settings.setKey(BRAINS_CHANGED_KEY, { ...at, [agentId]: nowIso() });
   }
 
-  private async candidates(agent: AgentDef, preferred?: string): Promise<{ usable: string[]; earliestReset?: string; reasons: string[]; hard: number; setupOnly: boolean }> {
-    const ordered = preferred ? [preferred, ...agent.brains.filter((b) => formatBrainRef(parseBrainRef(b)) !== formatBrainRef(parseBrainRef(preferred)))] : agent.brains;
+  private async candidates(agent: AgentDef, preferred?: string, only?: string[]): Promise<{ usable: string[]; earliestReset?: string; reasons: string[]; hard: number; setupOnly: boolean }> {
+    const ordered = only ?? (preferred ? [preferred, ...agent.brains.filter((b) => formatBrainRef(parseBrainRef(b)) !== formatBrainRef(parseBrainRef(preferred)))] : agent.brains);
     const usable: string[] = [];
     const reasons: string[] = [];
     let hard = 0;
@@ -759,6 +974,7 @@ export class SessionRunner {
       machineName: local ? undefined : this.d.machineName(ref.machineId),
       setup: background || task ? undefined : await this.d.setup?.promptBlock(agent.id),
       group: conv.kind === "group" ? { title: conv.title, members: this.groupMembers(conv) } : undefined,
+      dispatch: conv.kind === "main" && !task && !background ? this.dispatchContext() : undefined,
     });
 
     const env: Record<string, string> = {};
@@ -838,19 +1054,36 @@ export class SessionRunner {
    * Where a finished reply goes besides the web UI: back to the channel the message came from; or, in the default
    * agent's dialog, to every channel, so the user follows the main agent on the phone too (setting channelMirror).
    */
-  private async deliver(conv: Conversation, text: string, opts: TurnOpts, messageId?: string): Promise<void> {
+  /** Returns true when the reply went to every channel (the mirror). */
+  private async deliver(conv: Conversation, text: string, opts: TurnOpts, messageId?: string): Promise<boolean> {
     const ch = opts.replyChannel;
     const toChannel = !!ch && ch !== WEB_CHANNEL;
     // Typed in the web UI, or a turn nobody typed (a task finished, a system note): only the default agent's dialog is mirrored.
     const s = this.d.settings.get();
     const mirror = conv.kind === "main" && conv.agentId === s.defaultAgent && s.channelMirror !== false && this.d.channels.list().length > 0;
-    if (toChannel ? !this.d.channels.has(ch) : !mirror) return;
+    if (toChannel ? !this.d.channels.has(ch) : !mirror) return false;
     const media = await this.replyMedia(messageId);
-    if (!text && !media.length) return;
+    if (!text && !media.length) return !toChannel;
     const path = conv.kind === "main" ? `agent/${encodeURIComponent(conv.agentId)}` : conv.taskId ? `tasks/${encodeURIComponent(conv.taskId)}` : `chat/${encodeURIComponent(conv.id)}`;
     const reply: OutboundMessage = { kind: "reply", text, conversationId: conv.id, link: `${this.d.config.publicUrl}/${path}`, ...(media.length ? { media } : {}) };
     if (toChannel) await this.d.channels.send(ch, reply);
     else await this.d.channels.broadcast(opts.quote ? { ...reply, quote: opts.quote } : reply);
+    return !toChannel;
+  }
+
+  /** What the brain gets for a turn (or as input joining one): the text with its files' note and the current time. */
+  private turnInput(row: SessionRow, text: string, opts: Pick<TurnOpts, "attachments" | "speech">): BrainTurn {
+    let paths: string[] = [];
+    if (opts.attachments?.length) {
+      const local = parseBrainRef(row.brainRef).machineId === "local";
+      const seen = local ? forSession(opts.attachments, join(this.d.config.dataDir, "workspaces"), this.workspacePath(row)) : opts.attachments.map((part): SessionFile => ({ part }));
+      const files = seen.map((f) => (opts.speech?.[f.part.path] ? { ...f, speech: opts.speech[f.part.path] } : f));
+      text = [text, attachmentNote(files, { remote: !local })].filter(Boolean).join("\n\n");
+      paths = files.flatMap((f) => (f.path ? [f.path] : []));
+    }
+    const now = this.clock.line(row.id, this.d.settings.get().timezone);
+    if (now) text = `${now}\n${text}`;
+    return { text, ...(paths.length ? { attachments: paths } : {}) };
   }
 
   /** The reply's images and maps for the channels: web images by address, workspace files inline (10 MB each, 40 MB in all). */
@@ -889,8 +1122,10 @@ export class SessionRunner {
     let lastError = "";
     let earliestReset: string | undefined;
 
+    // A task placed on a computer runs on the brain there or not at all.
+    const pinned = task?.brainRef ? [task.brainRef] : undefined;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons, hard, setupOnly } = await this.candidates(agent, stay);
+      const { usable, earliestReset: reset, reasons, hard, setupOnly } = await this.candidates(agent, stay, pinned);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
       // No brain of the agent is set up yet: the setup card instead of an error, and the message waits for a brain.
@@ -941,21 +1176,15 @@ export class SessionRunner {
         text = `[System] This conversation continues on a different brain. Recent history:\n${this.handoffSummary(conv.id)}\n\n---\n${prompt}`;
         handoff = false;
       }
-
-      let paths: string[] = [];
-      if (opts.attachments?.length) {
-        const local = parseBrainRef(row!.brainRef).machineId === "local";
-        const seen = local ? forSession(opts.attachments, join(this.d.config.dataDir, "workspaces"), this.workspacePath(row!)) : opts.attachments.map((part): SessionFile => ({ part }));
-        const files = seen.map((f) => (opts.speech?.[f.part.path] ? { ...f, speech: opts.speech[f.part.path] } : f));
-        text = [text, attachmentNote(files, { remote: !local })].filter(Boolean).join("\n\n");
-        paths = files.flatMap((f) => (f.path ? [f.path] : []));
+      // The dialog's agent sees the tasks it started that are still going, whatever this turn is about.
+      if (conv.kind === "main" && !task) {
+        const open = this.openTasks(conv.id);
+        if (open) text = `${open}\n\n${text}`;
       }
-      const now = this.clock.line(row!.id, this.d.settings.get().timezone);
-      if (now) text = `${now}\n${text}`;
 
       this.brainLoad.set(key, (this.brainLoad.get(key) ?? 0) + 1);
       try {
-        const r = await this.streamTurn(conv, row!, live!, agent, { text, ...(paths.length ? { attachments: paths } : {}) }, task, opts.replyChannel);
+        const r = await this.streamTurn(conv, row!, live!, agent, this.turnInput(row!, text, opts), task, opts.replyChannel);
         if (r.retry) {
           lastError = r.error ?? lastError;
           if (r.limited) earliestReset = r.limited.resetAt ?? earliestReset;
@@ -963,7 +1192,11 @@ export class SessionRunner {
           continue;
         }
         // Group chats live in the web UI only.
-        if (conv.kind !== "group") await this.deliver(conv, r.answer ?? r.text, opts, r.messageId);
+        if (conv.kind !== "group") {
+          const broadcast = await this.deliver(conv, r.answer ?? r.text, opts, r.messageId);
+          // Messages from other channels joined the turn: those channels get the reply too (unless all of them did).
+          if (!broadcast) for (const ch of r.channels ?? []) if (ch !== opts.replyChannel) await this.deliver(conv, r.answer ?? r.text, { replyChannel: ch }, r.messageId);
+        }
         return r;
       } finally {
         this.brainLoad.set(key, Math.max(0, (this.brainLoad.get(key) ?? 1) - 1));
@@ -981,11 +1214,12 @@ export class SessionRunner {
     task: Task | undefined,
     replyChannel?: string,
   ): Promise<TurnResult & { retry?: boolean }> {
-    const msg = this.d.store.addMessage({ conversationId: conv.id, role: "assistant", parts: [], status: "streaming", agentId: agent.id, taskId: task?.id, brainRef: live.brainRef, channel: replyChannel });
+    const newMessage = () => this.d.store.addMessage({ conversationId: conv.id, role: "assistant", parts: [], status: "streaming", agentId: agent.id, taskId: task?.id, brainRef: live.brainRef, channel: replyChannel });
+    let msg = newMessage();
+    const turnKey = msg.id;
     this.streamingMessage.set(conv.id, msg.id);
-    this.activeTurns.set(conv.id, { sessionId: row.id, handle: live.handle });
     const activity = this.d.activity;
-    activity?.start(msg.id, {
+    activity?.start(turnKey, {
       brainRef: live.brainRef,
       agentId: agent.id,
       conversationId: conv.id,
@@ -1013,6 +1247,21 @@ export class SessionRunner {
       parts = mergeAttached(parts, current());
       this.d.store.updateMessage(msg.id, { parts }, force);
     };
+    const channels = new Set<string>();
+    this.activeTurns.set(conv.id, {
+      sessionId: row.id,
+      handle: live.handle,
+      row,
+      channels,
+      split: () => {
+        parts = mergeAttached(parts, current());
+        this.d.store.updateMessage(msg.id, { parts, status: "complete" });
+        msg = newMessage();
+        this.streamingMessage.set(conv.id, msg.id);
+        parts = [];
+        lastFlush = 0;
+      },
+    });
 
     const onEvent = (e: BrainEvent) => {
       switch (e.type) {
@@ -1024,7 +1273,7 @@ export class SessionRunner {
           if (last && last.type === "text") parts[parts.length - 1] = { type: "text", text: last.text + delta };
           else parts.push({ type: "text", text: delta });
           this.d.bus.emit("message.delta", { id: msg.id, conversationId: conv.id, delta });
-          activity?.step(msg.id, "writing");
+          activity?.step(turnKey, "writing");
           flush();
           break;
         }
@@ -1035,7 +1284,7 @@ export class SessionRunner {
             this.d.store.updateSession(row.id, { tainted: true });
             row.tainted = true;
           }
-          activity?.step(msg.id, stepOfTool(e.name));
+          activity?.step(turnKey, stepOfTool(e.name));
           flush(true);
           break;
         }
@@ -1043,7 +1292,7 @@ export class SessionRunner {
           const out = this.d.redactor.text(e.output);
           if (/awaiting_approval/.test(out)) awaitingApproval = true;
           parts.push({ type: "tool_result", id: e.id, output: truncate(out, 4000), isError: e.isError });
-          activity?.step(msg.id, "thinking");
+          activity?.step(turnKey, "thinking");
           flush(true);
           break;
         }
@@ -1072,7 +1321,7 @@ export class SessionRunner {
     } finally {
       this.activeTurns.delete(conv.id);
       this.streamingMessage.delete(conv.id);
-      activity?.end(msg.id);
+      activity?.end(turnKey);
     }
 
     if (resumeToken) this.d.store.updateSession(row.id, { resumeToken });
@@ -1097,7 +1346,7 @@ export class SessionRunner {
     if (error) parts.push({ type: "error", message: error });
     parts = mergeAttached(parts, current());
     this.d.store.updateMessage(msg.id, { parts, status: error && !produced ? "error" : "complete" });
-    return { text: fullText.trim(), answer: finalAnswer(parts), error, limited, awaitingApproval, messageId: msg.id };
+    return { text: fullText.trim(), answer: finalAnswer(parts), error, limited, awaitingApproval, messageId: msg.id, ...(channels.size ? { channels: [...channels] } : {}) };
   }
 }
 
@@ -1116,6 +1365,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "brain_login") return `login:${p.ref}`;
   if (p.type === "device_pairing") return "device_pairing";
   if (p.type === "integration") return `integration:${p.id}`;
+  if (p.type === "task") return `task:${p.taskId}`;
   // Pictures and maps carry no id: the same content shown twice in one reply is one card.
   if (p.type === "images") return `images:${JSON.stringify(p.items)}`;
   if (p.type === "map") return `map:${JSON.stringify([p.lat, p.lon, p.zoom, p.title, p.markers])}`;

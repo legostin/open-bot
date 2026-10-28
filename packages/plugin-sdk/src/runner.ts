@@ -248,6 +248,12 @@ peer.handle("brain.send", async (p: { sessionId: string; turn: BrainTurn }) => {
   return {};
 });
 
+// More input for the turn in progress; `accepted: false` sends it as the next turn (also brains without steer()).
+peer.handle("brain.steer", async (p: { sessionId: string; turn: BrainTurn }) => {
+  const s = brainSessions.get(p.sessionId);
+  return { accepted: !!(s?.steer && (await s.steer(p.turn))) };
+});
+
 peer.handle("brain.interrupt", async (p: { sessionId: string }) => {
   await brainSessions.get(p.sessionId)?.interrupt();
   return {};

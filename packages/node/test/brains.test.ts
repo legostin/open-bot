@@ -79,6 +79,8 @@ describe("BrainHost", () => {
 
   it("refuses unknown sessions and disabled brains", async () => {
     await expect(host.send({ sessionId: "nope", turn: { text: "x" } }, () => {})).rejects.toThrow(/Unknown brain session/);
+    // Nothing to join: the hub sends the input as the next turn.
+    expect(await host.steer({ sessionId: "nope", turn: { text: "x" } })).toBe(false);
     await expect(host.create({ brainId: "codex", opts: { sessionId: "s2", workspace: "a/b" } as any })).rejects.toThrow(/disabled/);
   });
 });

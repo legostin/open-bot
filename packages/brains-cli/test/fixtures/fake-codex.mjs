@@ -1,6 +1,8 @@
 // Fake `codex` CLI for tests: `--version`, `login status`, and `login --device-auth`, which prints the sign-in page and
 // a one-time code the way Codex 0.164 does (colours included), then "signs in" (writes HOME/.codex/auth.json) and
 // exits 0. The mode comes from FAKE_CODEX_LOGIN or the file HOME/.fake-codex-login: "ok" (default), "fail" or "hang".
+// `app-server` speaks the v2 JSON-RPC the brain uses (turn/start, turn/steer, turn/interrupt); FAKE_CODEX_NO_APP=1
+// makes it an old Codex without one. `exec --json` answers "exec:<input>".
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -41,7 +43,122 @@ if (args[0] === "login" && args.includes("--device-auth")) {
       console.log("Successfully logged in");
       process.exit(0);
     }, Number(process.env.FAKE_CODEX_DELAY_MS ?? 400));
+} else if (args[0] === "app-server") {
+  if (process.env.FAKE_CODEX_NO_APP === "1") {
+    console.error("error: unrecognized subcommand 'app-server'");
+    process.exit(2);
+  }
+  appServer();
+} else if (args[0] === "exec") {
+  let input = "";
+  process.stdin.on("data", (c) => (input += c));
+  process.stdin.on("end", () => {
+    const resume = args.includes("resume") ? args[args.indexOf("resume") + 1] : undefined;
+    const send = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+    send({ type: "thread.started", thread_id: resume ?? "th-exec" });
+    send({ type: "item.completed", item: { id: "i1", type: "agent_message", text: `exec:${input}` } });
+    send({ type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } });
+    process.exit(0);
+  });
 } else {
   console.error(`fake codex: unsupported arguments ${args.join(" ")}`);
   process.exit(2);
+}
+
+function appServer() {
+  const send = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+  const note = (method, params) => send({ method, params });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let threadId;
+  let model = "default";
+  let turn; // { id, steered: string[], wake?, interrupted }
+  let turns = 0;
+  const textOf = (input) => (input ?? []).filter((i) => i.type === "text").map((i) => i.text).join("");
+  const agent = (id, text) => {
+    note("item/started", { item: { type: "agentMessage", id, text: "" }, threadId, turnId: turn.id });
+    note("item/agentMessage/delta", { threadId, turnId: turn.id, itemId: id, delta: text });
+    note("item/completed", { item: { type: "agentMessage", id, text }, threadId, turnId: turn.id });
+  };
+  const complete = (status, error = null) => {
+    note("thread/tokenUsage/updated", { threadId, turnId: turn.id, tokenUsage: { last: { inputTokens: 7, outputTokens: 2 }, total: {} } });
+    note("turn/completed", { threadId, turn: { id: turn.id, items: [], status, error } });
+    turn = undefined;
+  };
+  async function runTurn(text) {
+    note("turn/started", { threadId, turn: { id: turn.id, status: "inProgress" } });
+    note("item/started", { item: { type: "userMessage", id: "u", content: [{ type: "text", text }] }, threadId, turnId: turn.id });
+    if (text.includes("LIMIT")) {
+      const error = { message: "You've hit your usage limit. Try again in 2 hours.", codexErrorInfo: "usageLimitExceeded" };
+      note("error", { error, willRetry: false, threadId, turnId: turn.id });
+      return complete("failed", error);
+    }
+    if (text.endsWith("SLOW")) {
+      note("item/started", { item: { type: "commandExecution", id: "c1", command: "sleep 1" }, threadId, turnId: turn.id });
+      await new Promise((r) => {
+        turn.wake = r;
+        setTimeout(r, Number(process.env.FAKE_SLOW_MS ?? 400));
+      });
+      if (turn.interrupted) return complete("interrupted");
+      note("item/completed", { item: { type: "commandExecution", id: "c1", command: "sleep 1", aggregatedOutput: "slept", exitCode: 0 }, threadId, turnId: turn.id });
+      const also = turn.steered.splice(0);
+      for (const a of also) note("item/started", { item: { type: "userMessage", id: "u2", content: [{ type: "text", text: a }] }, threadId, turnId: turn.id });
+      agent("a1", `slow done${also.map((a) => ` also:${a}`).join("")}`);
+      return complete("completed");
+    }
+    agent("a1", `echo:${text}`);
+    note("item/started", { item: { type: "mcpToolCall", id: "m1", server: "owlbot", tool: "notify", arguments: { title: "x" }, status: "inProgress" }, threadId, turnId: turn.id });
+    note("item/completed", { item: { type: "mcpToolCall", id: "m1", server: "owlbot", tool: "notify", status: "completed", result: { content: [{ type: "text", text: "ok" }] } }, threadId, turnId: turn.id });
+    agent("a2", `thread=${threadId} model=${model}`);
+    complete("completed");
+  }
+  let buf = "";
+  process.stdin.on("data", (c) => {
+    buf += c;
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (line) handle(JSON.parse(line));
+    }
+  });
+  process.stdin.on("end", () => process.exit(0));
+  function handle(m) {
+    const ok = (result) => send({ id: m.id, result });
+    const fail = (message) => send({ id: m.id, error: { code: -32600, message } });
+    const p = m.params ?? {};
+    switch (m.method) {
+      case "initialize":
+        return ok({ userAgent: "fake/9.9.9" });
+      case "initialized":
+        return;
+      case "thread/start":
+        threadId = `th-${process.pid}`;
+        model = p.model ?? "default";
+        note("thread/started", { thread: { id: threadId } });
+        return ok({ thread: { id: threadId }, model });
+      case "thread/resume":
+        if (p.threadId === "missing") return fail("thread not found");
+        threadId = p.threadId;
+        model = p.model ?? "default";
+        return ok({ thread: { id: threadId }, model });
+      case "turn/start": {
+        turn = { id: `turn-${++turns}`, steered: [], interrupted: false };
+        ok({ turn: { id: turn.id, status: "inProgress", items: [] } });
+        void sleep(20).then(() => runTurn(textOf(p.input)));
+        return;
+      }
+      case "turn/steer":
+        if (!turn || turn.id !== p.expectedTurnId) return fail("no active turn to steer");
+        turn.steered.push(textOf(p.input));
+        return ok({ turnId: turn.id });
+      case "turn/interrupt":
+        if (turn) {
+          turn.interrupted = true;
+          turn.wake?.();
+        }
+        return ok({});
+      default:
+        return fail(`unknown method ${m.method}`);
+    }
+  }
 }

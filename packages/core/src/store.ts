@@ -61,6 +61,7 @@ const taskFrom = (r: any): Task => ({
   result: r.result ?? undefined,
   error: r.error ?? undefined,
   resumeAt: r.resume_at ?? undefined,
+  question: r.question ?? undefined,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -255,8 +256,8 @@ export class Store {
     return this.db.prepare("select * from tasks order by created_at desc limit ?").all(limit).map(taskFrom);
   }
 
-  updateTask(id: string, patch: Partial<Pick<Task, "status" | "brainRef" | "result" | "error" | "resumeAt" | "title">>): Task | undefined {
-    const cols: Record<string, string> = { status: "status", brainRef: "brain_ref", result: "result", error: "error", resumeAt: "resume_at", title: "title" };
+  updateTask(id: string, patch: Partial<Pick<Task, "status" | "brainRef" | "result" | "error" | "resumeAt" | "title" | "question">>): Task | undefined {
+    const cols: Record<string, string> = { status: "status", brainRef: "brain_ref", result: "result", error: "error", resumeAt: "resume_at", title: "title", question: "question" };
     for (const [k, col] of Object.entries(cols)) {
       if (k in patch) this.db.prepare(`update tasks set ${col} = ? where id = ?`).run((patch as any)[k] ?? null, id);
     }

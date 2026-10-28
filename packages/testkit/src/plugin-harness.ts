@@ -51,6 +51,8 @@ export interface PluginHarness {
   brainProbe(id: string, variant?: string): Promise<ProbeResult>;
   brainCreate(id: string, opts: BrainSessionOptions): Promise<void>;
   brainSend(sessionId: string, turn: BrainTurn): Promise<BrainEvent[]>;
+  /** More input for the turn in progress; resolves with whether the brain took it. */
+  brainSteer(sessionId: string, turn: BrainTurn): Promise<boolean>;
   brainInterrupt(sessionId: string): Promise<void>;
   brainClose(sessionId: string): Promise<void>;
   stop(): Promise<void>;
@@ -201,6 +203,10 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
       await peer.request("brain.send", { sessionId, turn }, { timeoutMs: 300_000 });
       brainEvents.delete(sessionId);
       return events;
+    },
+    brainSteer: async (sessionId, turn) => {
+      const r = await peer.request<{ accepted: boolean }>("brain.steer", { sessionId, turn });
+      return r.accepted;
     },
     brainInterrupt: async (sessionId) => {
       await peer.request("brain.interrupt", { sessionId });

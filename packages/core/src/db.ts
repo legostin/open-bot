@@ -56,6 +56,8 @@ const MIGRATIONS: string[] = [
   `,
   // Group chats: the agents taking part (JSON array, the lead first; agent_id holds the lead too).
   `alter table conversations add column members text;`,
+  // A task's open question to whoever started it (task_ask).
+  `alter table tasks add column question text;`,
 ];
 
 export function openDb(file: string): Db {

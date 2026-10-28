@@ -1,4 +1,5 @@
-// One brain session: the agent loop over the hub's MCP tools, history persistence and resume.
+// One brain session: the agent loop over the hub's MCP tools, history persistence and resume. Input that arrives
+// while a turn runs (steer) goes to the model with its next request: after the tool results, or as a new message.
 
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
@@ -95,6 +96,8 @@ export class ApiBrainSession implements BrainSessionImpl {
   private abort?: AbortController;
   private running = false;
   private closed = false;
+  /** Input for the turn in progress, not yet shown to the model. */
+  private inbox: BrainTurn[] = [];
   /** Messages in the previous model request (cache read point). */
   private lastSent = 0;
 
@@ -128,14 +131,29 @@ export class ApiBrainSession implements BrainSessionImpl {
     this.abort = ac;
     try {
       yield* this.runTurn(turn, ac.signal);
+      // Arrived as the model gave its last answer: the turn goes on with it.
+      while (this.inbox.length && !ac.signal.aborted) yield* this.runTurn(this.takeInbox(), ac.signal);
     } catch (e: any) {
       yield { type: "error", message: this.t("error.internal", { detail: String(e?.message ?? e) }), fatal: true };
     } finally {
       this.running = false;
       this.abort = undefined;
+      this.inbox = [];
       this.persist();
     }
     yield { type: "done", resumeToken: this.sessionId };
+  }
+
+  steer(turn: BrainTurn): boolean {
+    if (!this.running || this.closed || this.abort?.signal.aborted) return false;
+    this.inbox.push(turn);
+    return true;
+  }
+
+  /** Everything steered in since the model's last request, as one turn. */
+  private takeInbox(): BrainTurn {
+    const turns = this.inbox.splice(0);
+    return { text: turns.map((t) => t.text).join("\n\n"), attachments: turns.flatMap((t) => t.attachments ?? []) };
   }
 
   interrupt(): void {
@@ -335,6 +353,11 @@ export class ApiBrainSession implements BrainSessionImpl {
       const calls = result.parts.filter((p): p is ToolCallPart => p.type === "tool_call");
       if (!calls.length) {
         if (result.stop === "pause") continue;
+        if (this.inbox.length && result.stop !== "max_tokens") {
+          this.history.push({ role: "user", parts: this.userParts(this.takeInbox()) });
+          this.persist();
+          continue;
+        }
         if (result.stop === "max_tokens") {
           const note = `\n\n${this.t("note.maxTokens")}`;
           yield { type: "text", delta: note };
@@ -355,7 +378,7 @@ export class ApiBrainSession implements BrainSessionImpl {
         results.push(r);
         yield { type: "tool_result", id: c.id, output: truncate(contentText(r.content), EVENT_OUTPUT_MAX), ...(r.isError ? { isError: true } : {}) };
       }
-      this.history.push({ role: "user", parts: results });
+      this.history.push({ role: "user", parts: this.inbox.length ? [...results, ...this.userParts(this.takeInbox())] : results });
       this.persist();
       if (signal.aborted) return;
     }

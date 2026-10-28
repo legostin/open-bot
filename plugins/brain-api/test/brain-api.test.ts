@@ -297,6 +297,34 @@ describe("brain-api plugin", () => {
     expect(msgs[1].content[0].text).toBe(partial);
   });
 
+  it("takes input that arrives mid-turn with its next request: after the tool results, or as a new message", async () => {
+    llm.script([
+      { text: "Проверю.", toolCalls: [{ name: "echo", input: { text: "ping" } }], chunkDelayMs: 60 },
+      { text: "Готово, и про второе тоже.", chunkDelayMs: 60 },
+      { text: "И третье." },
+    ]);
+    await h.brainCreate("api", opts("s-steer"));
+    const pending = h.brainSend("s-steer", { text: "Скажи ping" });
+    for (let i = 0; i < 50 && llm.requests.length === 0; i++) await sleep(20);
+    expect(await h.brainSteer("s-steer", { text: "и ещё второе" })).toBe(true);
+    // The second answer is streaming: this one comes after it, as a new message.
+    for (let i = 0; i < 100 && llm.requests.length < 2; i++) await sleep(20);
+    expect(await h.brainSteer("s-steer", { text: "и третье" })).toBe(true);
+    const events = await pending;
+    expect(text(events)).toBe("Проверю.Готово, и про второе тоже.И третье.");
+    expect(events.filter((e) => e.type === "done")).toHaveLength(1);
+
+    expect(llm.requests).toHaveLength(3);
+    const second = llm.requests[1].body.messages;
+    expect(second.at(-1).content.map((b: any) => b.type)).toEqual(["tool_result", "text"]);
+    expect(second.at(-1).content[1].text).toBe("и ещё второе");
+    const third = llm.requests[2].body.messages;
+    expect(third.map((m: any) => m.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
+    expect(third.at(-1).content[0].text).toBe("и третье");
+    // Over: nothing to join.
+    expect(await h.brainSteer("s-steer", { text: "поздно" })).toBe(false);
+  });
+
   it("routes model calls through the session's egress proxy from opts.env", async () => {
     const seen: Array<{ url?: string; auth?: string }> = [];
     const proxy = http.createServer((req, res) => {
