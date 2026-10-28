@@ -19,6 +19,7 @@ import { hubName } from "../pairing.ts";
 import { registerApi } from "./api.ts";
 import { clientIp, HttpError } from "./http.ts";
 import { registerSpa } from "./spa.ts";
+import { registerPages } from "./pages.ts";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -179,6 +180,8 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls, opts: { remote?: 
   });
 
   // ---------- the chat page: the web UI's build, its own routes under /m/ ----------
+  // Pages agents make, opened from the chat: their links are their capability.
+  await registerPages(app, hub);
   registerSpa(app, cfg.webDist, (rel) => rel === "m" || rel.startsWith("m/"));
 
   return app;
