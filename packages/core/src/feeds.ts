@@ -210,11 +210,14 @@ export class Feeds {
 
   // ---------- posts ----------
 
+  /** Newest first; `before` is a post's id, for the ones older than it (posts are stored in the order they came). */
   posts(id: string, opts: { before?: string; limit?: number } = {}): FeedPost[] {
     const limit = Math.max(1, Math.min(opts.limit ?? 30, 200));
     const rows = opts.before
-      ? this.d.db.prepare("select * from feed_posts where feed_id = ? and created_at < ? order by created_at desc, rowid desc limit ?").all(id, opts.before, limit)
-      : this.d.db.prepare("select * from feed_posts where feed_id = ? order by created_at desc, rowid desc limit ?").all(id, limit);
+      ? this.d.db
+          .prepare("select * from feed_posts where feed_id = ? and rowid < (select rowid from feed_posts where id = ?) order by rowid desc limit ?")
+          .all(id, opts.before, limit)
+      : this.d.db.prepare("select * from feed_posts where feed_id = ? order by rowid desc limit ?").all(id, limit);
     return rows.map(postFrom);
   }
 
@@ -289,7 +292,9 @@ export class Feeds {
     lines.push(
       "",
       `Gather what is new ${since ? `since the last run (${since})` : "from about the last day"} and worth their attention by their words. ` +
-        `Publish each item with feed_post: a short title, one to three sentences in ${lang} on what matters, the link and the source's name. ` +
+        "For each item you keep, read the item itself (web_fetch its page), not only the feed's line, and publish it with feed_post: " +
+        `a short title; in ${lang}, the gist itself so they need not open the link (the key facts, numbers and names, what changed and why it matters: two to five sentences or a few bullets, never a teaser); ` +
+        "the link and the source's name; and its picture (the page's Picture from web_fetch, or the feed's), which every post should have when the item has one. " +
         "A few strong items beat many weak ones; when nothing new is worth it, post nothing. Files you keep in this folder (scripts, notes, what you have seen) stay for the next runs. " +
         "Finish with one line on what you did.",
     );
@@ -330,7 +335,7 @@ export class Feeds {
     const unread = (
       this.d.db.prepare(`select count(*) as n from feed_posts where feed_id = ?${r.read_at ? " and created_at > ?" : ""}`).get(...(r.read_at ? [r.id, r.read_at] : [r.id])) as { n: number }
     ).n;
-    const last = this.d.db.prepare("select title, created_at from feed_posts where feed_id = ? order by created_at desc, rowid desc limit 1").get(r.id) as
+    const last = this.d.db.prepare("select title, created_at from feed_posts where feed_id = ? order by rowid desc limit 1").get(r.id) as
       | { title: string; created_at: string }
       | undefined;
     const running = this.running(r.id);

@@ -8,6 +8,8 @@ export type TextFormat = "markdown" | "text";
 export interface Extracted {
   title: string;
   content: string;
+  /** The page's own picture for sharing (og:image, twitter:image), absolute; what a post about the page shows. */
+  image?: string;
 }
 
 const ELEMENT = 1;
@@ -330,6 +332,17 @@ export function extractHtml(html: string, pageUrl: string, format: TextFormat = 
     collapse(doc.querySelector("title")?.text ?? "").trim() ||
     collapse(doc.querySelector('meta[property="og:title"]')?.getAttribute("content") ?? "").trim() ||
     collapse(doc.querySelector("h1")?.text ?? "").trim();
+  const shared =
+    doc.querySelector('meta[property="og:image"]')?.getAttribute("content") ??
+    doc.querySelector('meta[property="og:image:url"]')?.getAttribute("content") ??
+    doc.querySelector('meta[name="twitter:image"]')?.getAttribute("content");
+  let image: string | undefined;
+  try {
+    const u = shared?.trim() ? new URL(shared.trim(), pageUrl) : undefined;
+    if (u && (u.protocol === "https:" || u.protocol === "http:")) image = u.href;
+  } catch {
+    /* no usable picture */
+  }
   let base = pageUrl;
   const baseHref = doc.querySelector("base[href]")?.getAttribute("href");
   if (baseHref) {
@@ -354,5 +367,5 @@ export function extractHtml(html: string, pageUrl: string, format: TextFormat = 
     // Pathological markup (e.g. extreme nesting): fall back to collapsed text.
     content = collapse(body.text).trim();
   }
-  return { title, content };
+  return { title, content, ...(image ? { image } : {}) };
 }

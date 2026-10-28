@@ -27,12 +27,17 @@ const CADENCE_LABEL = {
   weekly: "channel.cadence.weekly",
 } as const;
 
-/** One news item: the title (the link), a few lines, the source and the time; its picture on the side. */
+/** One news item: its picture, the title (the link), the gist, the source and the time. */
 export function PostCard({ post }: { post: FeedPost }) {
   const img = post.image ? mediaSrc(post.image) : undefined;
   return (
-    <article className="flex gap-3 py-3">
-      <div className="min-w-0 flex-1">
+    <article className="py-4">
+      {img && (
+        <a href={post.url ?? post.image} target="_blank" rel="noopener noreferrer" className="mb-3 block">
+          <img src={img} alt="" loading="lazy" className="aspect-[16/9] w-full rounded-xl border border-border bg-surface-2 object-cover" />
+        </a>
+      )}
+      <div className="min-w-0">
         <h3 className="text-[15px] leading-snug font-semibold">
           {post.url ? (
             <a href={post.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
@@ -48,11 +53,6 @@ export function PostCard({ post }: { post: FeedPost }) {
           {formatTime(post.createdAt)}
         </div>
       </div>
-      {img && (
-        <a href={post.url ?? post.image} target="_blank" rel="noopener noreferrer" className="shrink-0">
-          <img src={img} alt="" loading="lazy" className="size-[72px] rounded-xl border border-border object-cover" />
-        </a>
-      )}
     </article>
   );
 }

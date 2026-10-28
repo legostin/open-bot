@@ -13,7 +13,7 @@ const DIR = join(import.meta.dirname, "..");
 const DDG_HTML = readFileSync(join(import.meta.dirname, "fixtures", "duckduckgo.html"), "utf8");
 
 const ARTICLE = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Growing Tomatoes &amp; Peppers</title>
+<html lang="en"><head><meta charset="utf-8"><title>Growing Tomatoes &amp; Peppers</title><meta property="og:image" content="/img/tomato.jpg">
 <style>body { color: red }</style><script>window.tracking = "<p>not content</p>";</script></head>
 <body>
   <header class="site-header"><a href="/">Garden Blog</a><nav><a href="/about">About</a><a href="/shop">Shop</a></nav></header>
@@ -141,7 +141,7 @@ describe("web_fetch", () => {
   it("extracts readable markdown from HTML", async () => {
     const t = await h.invokeText("fetch", { url: `${base}/article` });
     expect(t).toContain("Title: Growing Tomatoes & Peppers");
-    expect(t).toContain(`URL: ${base}/article`);
+    expect(t).toContain(`URL: ${base}/article\nPicture: ${base}/img/tomato.jpg`);
     expect(t).toContain("# Growing tomatoes");
     expect(t).toContain("Tomatoes need **full sun**, warm soil and steady watering; see the [soil guide](" + base + "/guides/soil?x=1) for details.");
     expect(t).toContain("## Varieties");

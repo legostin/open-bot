@@ -177,7 +177,7 @@ export function registerFeedTools(d: FeedToolDeps): void {
     {
       name: "feed_post",
       description:
-        "Publish one news item in a channel: a short title, one to three sentences on what matters (markdown), the link and the source's name, optionally a picture. " +
+        "Publish one news item in a channel: a short title, the gist itself (the key facts and numbers, what changed and why it matters, so the person need not open the link; markdown, a few bullets are fine; never a teaser), the link, the source's name and the item's picture. " +
         "The hub refuses what the channel already has. In a channel's run, without `feed` it is that channel.",
       effect: "local-write",
       inputSchema: {
@@ -185,10 +185,10 @@ export function registerFeedTools(d: FeedToolDeps): void {
         properties: {
           feed: { type: "string" },
           title: { type: "string", description: "≤ 200 chars" },
-          text: { type: "string", description: "≤ 2000 chars" },
+          text: { type: "string", description: "The gist, ≤ 2000 chars" },
           url: { type: "string", description: "The item's own page" },
           source: { type: "string", description: "Where it comes from: the site's or the feed's name" },
-          image: { type: "string", description: "An http(s) picture for it, when the item has a good one" },
+          image: { type: "string", description: "The item's own picture, http(s): the page's Picture from web_fetch (og:image) or the feed's. Add it whenever there is one." },
         },
         required: ["title", "text"],
       },
