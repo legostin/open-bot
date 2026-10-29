@@ -22,18 +22,29 @@ export interface BrainRow {
 export const brains = createStore<BrainRow[] | null>(null);
 
 let pending: Promise<BrainRow[]> | null = null;
+/** Asked again while a request was on its way (a brain connected meanwhile): one more once it is back. */
+let stale = false;
 let wired = false;
 
 /** fresh: probe every brain again instead of using the hub's cached results. */
 export function refreshBrains(fresh = false): Promise<BrainRow[]> {
-  if (pending && !fresh) return pending;
-  const p = api.get<BrainRow[]>(`/api/brains${fresh ? "?probe=1" : ""}`).then((list) => {
-    brains.set(list);
-    return list;
-  });
-  pending = p.finally(() => {
-    if (pending === p) pending = null;
-  });
+  if (pending && !fresh) {
+    stale = true;
+    return pending;
+  }
+  stale = false;
+  const p: Promise<BrainRow[]> = api
+    .get<BrainRow[]>(`/api/brains${fresh ? "?probe=1" : ""}`)
+    .then((list) => {
+      brains.set(list);
+      return list;
+    })
+    .finally(() => {
+      if (pending !== p) return;
+      pending = null;
+      if (stale) void refreshBrains().catch(() => {});
+    });
+  pending = p;
   return p;
 }
 
