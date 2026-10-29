@@ -10,7 +10,7 @@ import type { ToolResult } from "@owlbot/shared";
 import type { PluginContext } from "@owlbot/plugin-sdk";
 import { createChromiumInstaller, INSTALL_WAIT_MS, isMissingExecutableError, type ChromiumInstaller } from "./install.ts";
 import { pageCall } from "./page-script.ts";
-import { ACTION_LABEL_RE, LINK_ACTION_LABEL_RE } from "./safety.ts";
+import { PAGE_RULES, type FocusInfo } from "./safety.ts";
 import {
   cut,
   decideHeadless,
@@ -34,7 +34,9 @@ const WATCH_TTL_MS = 30_000;
 const FRAME_INTERVAL_MS = 100;
 
 export interface Classified {
+  /** Activating it is an action with consequences: only browser_submit (approved by the user) does it. */
   submit: boolean;
+  /** Why: "label" (buy, send, delete…), "form" (submits a form), "link" (a link that acts), "confirm" (the site confirms it). */
   reason: string;
   search: boolean;
   inForm: boolean;
@@ -517,7 +519,7 @@ export class BrowserManager {
   // ---------- page script helpers ----------
 
   async evalIn<T = any>(frame: Frame, op: string, args: Record<string, unknown> = {}, timeoutMs = 5000): Promise<T> {
-    const full = { action: ACTION_LABEL_RE.source, linkAction: LINK_ACTION_LABEL_RE.source, seq: this.refSeq, ...args };
+    const full = { rules: PAGE_RULES, seq: this.refSeq, ...args };
     const r = (await withTimeout(frame.evaluate(pageCall(op, full)), timeoutMs, "the page is not responding")) as any;
     if (r && typeof r === "object" && typeof r.seq === "number" && r.seq > this.refSeq) this.refSeq = r.seq;
     return r as T;
@@ -544,19 +546,23 @@ export class BrowserManager {
   }
 
   /**
-   * The focused element (assigns it a ref), or null when nothing is focused. When focus is inside an iframe we
-   * can not inspect, the answer is conservative: treat it as an editable field.
+   * The focused element (assigns it a ref), or null when nothing is focused. When focus can not be inspected (inside
+   * an iframe we can not reach, or the page does not answer), the answer is conservative: an editable field in a
+   * form, so Enter there needs the user's approval.
    */
-  async focusInfo(page: Page): Promise<any | null> {
-    const main = await this.evalIn<any>(page.mainFrame(), "focus", {}, 3000).catch(() => null);
-    if (!main || main.none) return null;
+  async focusInfo(page: Page): Promise<FocusInfo | null> {
+    const field: FocusInfo = { tag: "iframe", name: "", editable: true, inForm: true, search: false, submit: false };
+    const main = await this.evalIn<any>(page.mainFrame(), "focus", {}, 3000).catch(() => undefined);
+    // The page did not answer: whatever has focus, Enter or Space could activate it.
+    if (!main) return { ...field, tag: "unknown", submit: true };
+    if (main.none) return null;
     if (!main.frame) return main;
     for (const frame of page.frames().slice(1)) {
       if (frame.isDetached()) continue;
       const r = await this.evalIn<any>(frame, "focus", {}, 3000).catch(() => null);
       if (r && !r.frame && !r.none) return r;
     }
-    return { tag: "iframe", name: "", editable: true, inForm: false, search: false, submit: false };
+    return field;
   }
 
   // ---------- live view and takeover (driven by the UI) ----------

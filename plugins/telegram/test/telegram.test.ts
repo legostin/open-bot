@@ -439,22 +439,34 @@ describe("telegram plugin", () => {
 });
 
 describe("telegram plugin without a token", () => {
-  it("reports the missing token and keeps retrying", async () => {
-    const h = await startPlugin({ dir, settings: { apiBaseUrl: "http://127.0.0.1:9", tokenRetrySec: 0.1 } });
+  it("reports the missing token, waits for it without polling the vault and connects once it is stored", async () => {
+    const tg = await startMockTelegram(TOKEN);
+    const h = await startPlugin({ dir, settings: { apiBaseUrl: tg.url, pollTimeoutSec: 1, tokenRetrySec: 0.05 } });
     try {
       const st = await until(async () => {
         const s = (await h.http({ path: "/status" })).body as any;
         return s.state === "no-token" ? s : undefined;
       });
       expect(st.connected).toBe(false);
-      expect(st.detail).toMatch(/^No bot token \(vault:\/\/telegram_bot_token\): /);
+      // The hub's "no such item" (the harness answers like it): the setup card asks for the token, no raw error.
+      expect(st.detail).toBe("No bot token");
       const ch = await h.peer.request<any>("channel.status", { channelId: "telegram" });
       expect(ch.connected).toBe(false);
-      // It keeps asking the vault.
-      await new Promise((r) => setTimeout(r, 350));
+      // A retry every 50 ms would have asked the hub a dozen times by now (each one a vault.denied in the audit log).
+      await new Promise((r) => setTimeout(r, 600));
+      expect(h.vaultGets.filter((id) => id === "telegram_bot_token").length).toBeLessThanOrEqual(2);
+      expect(h.subscriptions.has("vault.updated")).toBe(true);
       expect(h.logs.join("\n")).not.toContain("uncaught");
+      // Storing the token (chat or security console) wakes it at once.
+      h.setVault("telegram_bot_token", { value: TOKEN });
+      const live = await until(async () => {
+        const s = (await h.http({ path: "/status" })).body as any;
+        return s.state === "polling" ? s : undefined;
+      }, 5000);
+      expect(live.deepLink).toMatch(/^https:\/\/t\.me\/owlbot_test_bot\?start=\d{6}$/);
     } finally {
       await h.stop();
+      await tg.close();
     }
   });
 });

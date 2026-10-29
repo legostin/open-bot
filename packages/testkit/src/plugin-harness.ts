@@ -37,6 +37,13 @@ export interface PluginHarness {
   subscriptions: Set<string>;
   logs: string[];
   coreCalls: Array<{ method: string; params: any }>;
+  /** Ids of every vault.get that reached the "hub", in order. */
+  vaultGets: string[];
+  /**
+   * Store (or with no fields, remove) a vault item, and tell the plugin like the hub does: a "vault.updated" event
+   * when it subscribed to it.
+   */
+  setVault(id: string, fields?: Record<string, string>): void;
   invoke(name: string, input?: unknown, ctx?: Partial<ToolCallContext>): Promise<ToolResult>;
   /** Text of a tool result (all text parts joined). */
   invokeText(name: string, input?: unknown, ctx?: Partial<ToolCallContext>): Promise<string>;
@@ -118,10 +125,17 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
     p.names.forEach((n) => subscriptions.add(n));
     return {};
   });
+  const vault: Record<string, Record<string, string>> = o.vault ?? {};
+  const vaultGets: string[] = [];
   peer.handle("vault.get", (p: { ref: string }) => {
     const id = p.ref.replace(/^vault:\/\//, "");
-    const item = o.vault?.[id];
-    if (!item) throw new Error(`No vault item vault://${id}`);
+    vaultGets.push(id);
+    const item = vault[id];
+    if (!item) {
+      // The hub's error: English message, key and hub-language text in the RPC error data.
+      const text = `No vault item vault://${id}`;
+      throw Object.assign(new Error(text), { rpcData: { key: "vault.notFound", params: { id }, text } });
+    }
     return item;
   });
   peer.handle("storage.get", (p: { key: string }) => kv.get(p.key) ?? null);
@@ -178,6 +192,12 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
     subscriptions,
     logs,
     coreCalls,
+    vaultGets,
+    setVault(id, fields) {
+      if (fields) vault[id] = fields;
+      else delete vault[id];
+      if (subscriptions.has("vault.updated")) peer.notify("event", { name: "vault.updated", payload: { ids: [id] } });
+    },
     invoke: (name, input = {}, ctx) => peer.request<ToolResult>("tool.invoke", { name, input, context: defaultContext(ctx) }, { timeoutMs: 120_000 }),
     async invokeText(name, input, ctx) {
       const r = await h.invoke(name, input, ctx);

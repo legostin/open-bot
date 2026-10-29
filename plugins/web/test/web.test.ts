@@ -337,6 +337,13 @@ describe("web_search", () => {
       expect(req.method).toBe("POST");
       expect(new URLSearchParams(req.body).get("q")).toBe("Owlbot test query");
       expect(seen.some((s) => s.url.startsWith("/res/v1/web/search") && !s.headers["x-subscription-token"])).toBe(false);
+      // Every search looks for both keys; the hub (and its audit log) hears about each missing one only once.
+      for (let i = 0; i < 3; i++) expect(await h.invokeText("search", { query: `again ${i}`, count: 1 })).toContain("(provider: duckduckgo)");
+      expect(h.vaultGets.filter((id) => id === "tavily_api_key")).toHaveLength(1);
+      expect(h.vaultGets.filter((id) => id === "brave_api_key").length).toBeLessThanOrEqual(2);
+      // A key stored later is used on the next search.
+      h.setVault("brave_api_key", { value: "brave-test-key" });
+      expect(await h.invokeText("search", { query: "now with brave" })).toContain("(provider: brave)");
     } finally {
       await h.stop();
     }

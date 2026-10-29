@@ -53,13 +53,17 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
-/** Fill "{field}" placeholders from an object; nested via dots. */
+/**
+ * Fill "{field}" placeholders from an object; nested via dots. "{field|host}" shows only the host of a URL field
+ * (the site an approval card is about), or the value itself when it is not a URL.
+ */
 export function renderTemplate(tpl: string, input: unknown): string {
-  return tpl.replace(/\{([a-zA-Z0-9_.]+)\}/g, (_, path: string) => {
+  return tpl.replace(/\{([a-zA-Z0-9_.]+)(?:\|(host))?\}/g, (_, path: string, filter?: string) => {
     let v: any = input;
     for (const k of path.split(".")) v = v?.[k];
     if (v === undefined || v === null) return "";
-    const s = typeof v === "string" ? v : JSON.stringify(v);
+    let s = typeof v === "string" ? v : JSON.stringify(v);
+    if (filter === "host") s = hostOf(s) || s;
     return s.length > 200 ? s.slice(0, 197) + "…" : s;
   });
 }

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect, type AddressInfo, type Socket } from "node:net";
 import type { ToolResult } from "@owlbot/shared";
-import { catalogLookup, localizeValue, readPluginLayout } from "@owlbot/shared";
+import { catalogLookup, localizeValue, readPluginLayout, renderTemplate } from "@owlbot/shared";
 import { startPlugin, type PluginHarness } from "@owlbot/testkit";
 import { chromium } from "playwright";
 
@@ -59,6 +59,32 @@ const PAGES: Record<string, string> = {
   "/captcha": page("Проверка", `<p>Подтвердите действие</p><div class="g-recaptcha" style="width:304px;height:78px;border:1px solid #ccc"></div>`),
   "/frame": page("Фрейм", `<p>Встроенная форма:</p><iframe src="/inner" style="width:600px;height:200px"></iframe>`),
   "/inner": page("Внутри", `<form method="post" action="/order"><input name="name" aria-label="Имя во фрейме"><button>Заказать</button></form>`),
+  // Controls with consequences hide behind ARIA names, icons, identifiers and JS; ordinary ones must stay one click.
+  "/actions": page(
+    "Действия",
+    `<h1>Действия</h1>
+     <button aria-label="Карточка товара">Buy now</button>
+     <span role="button" tabindex="0" data-testid="placeYourOrderButton">→</span>
+     <button onclick="return confirm('Sure?')">Archive</button>
+     <a href="/items/5/delete" title="Корзина">🗑</a>
+     <a href="/posts/1" data-method="delete">Destroy</a>
+     <a href="/unsubscribe?u=1">Отписаться</a>
+     <a href="/blog/how-to-delete-your-account">How to delete your account in five easy steps</a>
+     <button>Оформить заказ</button>
+     <button>Подписаться</button>
+     <button>Перевести 500 ₽</button>
+     <button>Забронировать</button>
+     <form class="checkout-form" action="/pay"><input aria-label="Карта"><button type="button" onclick="this.form.submit()">Continue</button></form>
+     <form action="/profile"><input aria-label="Ник"><button type="button">Continue editing</button></form>
+     <button onclick="document.title = 'В корзине'">Add to cart</button>
+     <button>Remove filter</button>
+     <button>Мои заказы</button>
+     <button>Sign in</button>
+     <button role="tab">Delete account</button>
+     <input type="checkbox" id="news"><label for="news">Subscribe to the newsletter</label>
+     <div contenteditable="true" aria-label="Send a message" style="min-height:20px;border:1px solid #ccc"></div>
+     <input aria-label="Отправить сообщение">`,
+  ),
   "/counter": page(
     "Счётчик",
     `<style>body{margin:0}</style>
@@ -196,11 +222,14 @@ describe("browser plugin (headless Chromium)", () => {
     });
     expect([...h.tools.values()].every((t) => t.source === true)).toBe(true);
     // The approval summary is a catalog reference: the hub resolves it in the hub language, then fills {field}s.
+    // The card names the site and the control as the page shows it, not only the agent's own description.
     const summary = h.tools.get("submit")!.approvalSummary!;
     expect(summary).toBe("%approval.submit%");
     const { messages } = readPluginLayout(PLUGIN_DIR);
-    expect(localizeValue(summary, catalogLookup(messages, "en"))).toBe("Browser: {description} ({url})");
-    expect(localizeValue(summary, catalogLookup(messages, "ru"))).toBe("Браузер: {description} ({url})");
+    const input = { ref: "e7", label: "Pay $34.00", url: "https://shop.example/checkout?step=3", description: "Pay for 2 items, $34.00" };
+    expect(renderTemplate(localizeValue(summary, catalogLookup(messages, "en")), input)).toBe("Browser, shop.example, “Pay $34.00”: Pay for 2 items, $34.00");
+    expect(renderTemplate(localizeValue(summary, catalogLookup(messages, "ru")), input)).toBe("Браузер, shop.example, «Pay $34.00»: Pay for 2 items, $34.00");
+    expect(h.tools.get("submit")!.inputSchema.required).toEqual(["ref", "label", "url", "description"]);
   });
 
   it("opens a page and lists interactive elements with refs", async () => {
@@ -244,9 +273,11 @@ describe("browser plugin (headless Chromium)", () => {
 
   it("refuses submit-like clicks and Enter in forms, pointing to browser_submit", async () => {
     const snap = await ok("snapshot");
-    const buy = await call("click", { ref: refOf(snap, /button "Купить"/) });
+    const buyRef = refOf(snap, /button "Купить"/);
+    const buy = await call("click", { ref: buyRef });
     expect(buy.isError).toBe(true);
-    expect(text(buy)).toContain("browser_submit");
+    // The refusal hands the model the exact call, label and url included.
+    expect(text(buy)).toContain(`Call browser_submit with ref "${buyRef}", label "Купить", url "${base}/"`);
     const del = await call("click", { ref: refOf(snap, /link "Удалить аккаунт"/) });
     expect(del.isError).toBe(true);
     const enter = await call("press_key", { key: "Enter", ref: refOf(snap, /textbox "Имя"/) });
@@ -260,6 +291,71 @@ describe("browser plugin (headless Chromium)", () => {
     const search = await ok("press_key", { key: "Enter" });
     expect(search).toContain("Поиск —");
     expect(await ok("get_text")).toContain("Результаты для: чайник");
+  });
+
+  it("treats a line break at the end of browser_type like Enter", async () => {
+    await ok("open", { url: base + "/" });
+    const snap = await ok("snapshot");
+    const name = refOf(snap, /textbox "Имя"/);
+    const typed = await ok("type", { ref: name, text: "Привет\n" });
+    expect(typed).toContain('Typed into [' + name + '] "Имя": "Привет".');
+    expect(typed).toContain("nothing was submitted");
+    expect(typed).toContain(`Call browser_submit with ref "${name}", label "Имя"`);
+    // The same in a field outside any form.
+    expect(await ok("type", { ref: refOf(snap, /textbox "Заметка"/), text: "строка\r\n  " })).toContain("nothing was submitted");
+    expect(posted).toHaveLength(0);
+    const after = await ok("snapshot");
+    expect(after).toMatch(/textbox "Имя" value="Привет"/);
+    expect(after).toMatch(/textbox "Заметка" value="строка"/);
+    // A search box searches: Enter there is just navigation.
+    const search = await ok("type", { ref: refOf(snap, /textbox\[search\] "Поиск"/), text: "самовар\n" });
+    expect(search).toContain("Pressed Enter.");
+    expect(await ok("get_text")).toContain("Результаты для: самовар");
+  });
+
+  it("classifies consequential controls by name, text, identifiers, links and forms", async () => {
+    await ok("open", { url: base + "/actions" });
+    const snap = await ok("snapshot");
+    const needs = (re: RegExp) => {
+      const line = snap.split("\n").find((l) => /^\[e\d+\]/.test(l) && re.test(l));
+      if (!line) throw new Error(`no element matching ${re} in:\n${snap}`);
+      return line.includes("(needs browser_submit)");
+    };
+    // An ARIA name that hides "Buy now", an icon with a test id, a JS confirm, links that act.
+    expect(needs(/button "Карточка товара"/)).toBe(true);
+    expect(needs(/button "→"/)).toBe(true);
+    expect(needs(/button "Archive"/)).toBe(true);
+    expect(needs(/link "🗑"/)).toBe(true);
+    expect(needs(/link "Destroy"/)).toBe(true);
+    expect(needs(/link "Отписаться"/)).toBe(true);
+    expect(needs(/button "Оформить заказ"/)).toBe(true);
+    expect(needs(/button "Подписаться"/)).toBe(true);
+    expect(needs(/button "Перевести 500 ₽"/)).toBe(true);
+    expect(needs(/button "Забронировать"/)).toBe(true);
+    // "Continue" in a payment form commits it even as a plain JS button; elsewhere it is just a button.
+    expect(needs(/button "Continue"(?! editing)/)).toBe(true);
+    expect(needs(/button "Continue editing"/)).toBe(false);
+    // Ordinary browsing stays one click: articles, carts, filters, tabs, sign-in, checkboxes, fields.
+    expect(needs(/link "How to delete your account/)).toBe(false);
+    expect(needs(/button "Add to cart"/)).toBe(false);
+    expect(needs(/button "Remove filter"/)).toBe(false);
+    expect(needs(/button "Мои заказы"/)).toBe(false);
+    expect(needs(/button "Sign in"/)).toBe(false);
+    expect(needs(/tab "Delete account"/)).toBe(false);
+    expect(needs(/checkbox "Subscribe to the newsletter"/)).toBe(false);
+    expect(needs(/textbox "Send a message"/)).toBe(false);
+    expect(needs(/textbox "Отправить сообщение"/)).toBe(false);
+
+    for (const re of [/button "→"/, /link "🗑"/, /button "Archive"/, /button "Continue"(?! editing)/]) {
+      const r = await call("click", { ref: refOf(snap, re) });
+      expect(r.isError, text(r)).toBe(true);
+      expect(text(r)).toContain("Nothing was clicked");
+    }
+    expect(posted).toHaveLength(0);
+    expect(await ok("click", { ref: refOf(snap, /checkbox "Subscribe to the newsletter"/) })).toContain("Clicked");
+    expect(await ok("snapshot")).toMatch(/checkbox "Subscribe to the newsletter" \[x\]/);
+    expect(await ok("click", { ref: refOf(snap, /button "Add to cart"/) })).toContain("В корзине —");
+    expect(await ok("click", { ref: refOf(snap, /textbox "Send a message"/) })).toContain("Clicked");
   });
 
   it("works inside iframes with the same safety rules", async () => {
@@ -278,10 +374,19 @@ describe("browser plugin (headless Chromium)", () => {
     await ok("open", { url: base + "/" });
     const snap = await ok("snapshot");
     await ok("type", { ref: refOf(snap, /textbox "Имя"/), text: "Пётр" });
-    const wrong = await call("submit", { ref: refOf(snap, /button "Купить"/), url: "https://shop.example/", description: "Купить" });
+    const buy = refOf(snap, /button "Купить"/);
+    const wrong = await call("submit", { ref: buy, label: "Купить", url: "https://shop.example/", description: "Купить" });
     expect(wrong.isError).toBe(true);
     expect(text(wrong)).toContain("The page has changed");
-    const r = await ok("submit", { ref: refOf(snap, /button "Купить"/), url: base + "/", description: "Оформить заказ в тестовом магазине" });
+    // The user approved a control by its name: another name on the card means nothing is clicked.
+    const renamed = await call("submit", { ref: buy, label: "Купить за 1 ₽", url: base + "/", description: "Купить" });
+    expect(renamed.isError).toBe(true);
+    expect(text(renamed)).toContain('Not done: [' + buy + '] is now button "Купить", but the user approved "Купить за 1 ₽"');
+    const noLabel = await call("submit", { ref: buy, url: base + "/", description: "Купить" });
+    expect(noLabel.isError).toBe(true);
+    expect(text(noLabel)).toContain("Parameter label is required");
+    expect(posted).toHaveLength(0);
+    const r = await ok("submit", { ref: buy, label: "купить", url: base + "/", description: "Оформить заказ в тестовом магазине" });
     expect(r).toContain("Done: Оформить заказ в тестовом магазине");
     expect(r).toContain("Заказ —");
     expect(posted.at(-1)).toMatchObject({ path: "/order" });
@@ -293,7 +398,7 @@ describe("browser plugin (headless Chromium)", () => {
     const snap = await ok("snapshot");
     const ref = refOf(snap, /button "Удалить запись"/);
     expect((await call("click", { ref })).isError).toBe(true);
-    const r = await ok("submit", { ref, url: base + "/confirm", description: "Удалить запись" });
+    const r = await ok("submit", { ref, label: "Удалить запись", url: base + "/confirm", description: "Удалить запись" });
     expect(r).toContain("Удалено —");
   });
 
@@ -313,7 +418,7 @@ describe("browser plugin (headless Chromium)", () => {
     expect(after).toMatch(/textbox "Код" value="••••••"/);
     await ok("get_text");
     await ok("screenshot");
-    const r = await ok("submit", { ref: refOf(after, /button "Войти"/), url: base + "/login", description: "Войти на тестовый сайт" });
+    const r = await ok("submit", { ref: refOf(after, /button "Войти"/), label: "Войти", url: base + "/login", description: "Войти на тестовый сайт" });
     expect(r).toContain("Кабинет —");
     const login = posted.find((p) => p.path === "/login")!;
     expect(login.body.get("password")).toBe(SECRET);

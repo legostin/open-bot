@@ -46,6 +46,11 @@ const MAX_FAILS_PER_CHAT = 5;
 const MAX_FAILS_TOTAL = 20;
 /** An album arrives as one update per picture: wait this long after the last one, then pass them on together. */
 const ALBUM_WAIT_MS = 1500;
+/**
+ * Longest wait between token checks. Without a token the bot waits for the vault or its settings to change (the
+ * hub's events wake it at once) and looks again only this often; a token that fails backs off up to this.
+ */
+const TOKEN_WAIT_MAX_MS = 3600_000;
 
 /** Bot commands handled here; their descriptions (cmd.<name>) go to the Telegram command menu. */
 const COMMANDS = ["tasks", "stop", "help"] as const;
@@ -109,6 +114,10 @@ export class TelegramBot {
   private stopped = false;
   private ctrl = new AbortController();
   private wake?: () => void;
+  /** The last token check found no token at all (not stored, vault closed): wait for a change instead of retrying. */
+  private tokenMissing = false;
+  /** Token checks that failed in a row for other reasons (no access, rejected by Telegram): the retry backs off. */
+  private tokenFailures = 0;
   private loopDone?: Promise<void>;
   private typing?: { timer: NodeJS.Timeout; until: number };
   private foreignReplied = new Set<number>();
@@ -161,15 +170,29 @@ export class TelegramBot {
 
   /** Vault unlocked: retry right away instead of waiting for the next token check. */
   onVaultState(p: { state?: string } | undefined): void {
-    if (p?.state === "unlocked" && !this.api) this.wake?.();
+    if (p?.state === "unlocked" && !this.api) this.retryToken();
   }
 
-  /** The user typed a token into the chat: if it is ours, connect now (a replaced token needs a reconnect). */
+  /** Our token was stored, replaced or scoped anew (chat or security console): connect now (a replaced one reconnects). */
   onVaultUpdated(p: { ids?: string[] } | undefined): void {
     const ours = this.settings.botTokenRef.replace(/^vault:\/\//, "");
     if (!p?.ids?.includes(ours)) return;
     if (this.api) this.reconnect();
-    else this.wake?.();
+    else this.retryToken();
+  }
+
+  private retryToken(): void {
+    this.tokenFailures = 0;
+    this.wake?.();
+  }
+
+  /** How long to wait before the next token check. */
+  private tokenDelayMs(): number {
+    if (this.tokenMissing) return TOKEN_WAIT_MAX_MS;
+    const base = this.settings.tokenRetrySec * 1000;
+    const ms = Math.min(TOKEN_WAIT_MAX_MS, base * 2 ** Math.min(this.tokenFailures, 12));
+    this.tokenFailures++;
+    return Math.max(base, ms);
   }
 
   /** Hub language changed: new command menu and status text. */
@@ -191,6 +214,7 @@ export class TelegramBot {
   private reconnect(): void {
     this.api = undefined;
     this.botUser = undefined;
+    this.tokenFailures = 0;
     this.setState("starting");
     const old = this.ctrl;
     this.ctrl = new AbortController();
@@ -218,7 +242,8 @@ export class TelegramBot {
       const signal = this.ctrl.signal;
       try {
         if (!this.api && !(await this.connect(signal))) {
-          if (!this.stopped && !signal.aborted) await this.sleep(this.settings.tokenRetrySec * 1000);
+          // No token: the vault's and the settings' events wake the loop, so it does not keep asking the vault.
+          if (!this.stopped && !signal.aborted) await this.sleep(this.tokenDelayMs());
           continue;
         }
         const timeout = this.settings.pollTimeoutSec;
@@ -244,8 +269,9 @@ export class TelegramBot {
         if (signal.aborted) continue; // settings changed: reconnect
         if (e instanceof TelegramError && e.unauthorized) {
           this.api = undefined;
+          this.tokenMissing = false;
           this.setState("unauthorized", { key: "status.tokenRejected" });
-          await this.sleep(this.settings.tokenRetrySec * 1000);
+          await this.sleep(this.tokenDelayMs());
           continue;
         }
         if (e instanceof TelegramError && e.code === 409 && /webhook/i.test(e.message)) {
@@ -262,16 +288,21 @@ export class TelegramBot {
 
   private async connect(signal: AbortSignal): Promise<boolean> {
     let token: string | undefined;
+    this.tokenMissing = false;
     try {
       const fields = await this.ctx.vault.get(this.settings.botTokenRef, { reason: "Telegram bot" });
       token = (fields.value ?? fields.token ?? fields.password ?? "").trim();
     } catch (e: any) {
       // Not stored yet (or the vault is not open): the setup card asks for it, no need for the raw error.
-      if (["vault.notFound", "vault.sealed", "vault.uninitialized"].includes(e?.data?.key)) this.setState("no-token", { key: "status.noToken" });
-      else this.setState("no-token", { key: "status.tokenMissing", params: { ref: this.settings.botTokenRef, error: e?.data?.text ?? e?.message ?? String(e) } });
+      // Storing it (or opening the vault) sends an event that wakes the loop, so there is nothing to poll.
+      if (["vault.notFound", "vault.sealed", "vault.uninitialized"].includes(e?.data?.key)) {
+        this.tokenMissing = true;
+        this.setState("no-token", { key: "status.noToken" });
+      } else this.setState("no-token", { key: "status.tokenMissing", params: { ref: this.settings.botTokenRef, error: e?.data?.text ?? e?.message ?? String(e) } });
       return false;
     }
     if (!token) {
+      this.tokenMissing = true;
       this.setState("no-token", { key: "status.tokenEmpty", params: { ref: this.settings.botTokenRef } });
       return false;
     }
@@ -288,6 +319,7 @@ export class TelegramBot {
     // Update ids are per bot: a new token starts from its own offset.
     this.offset = Number(await this.ctx.storage.get<number>(this.offsetKey())) || 0;
     this.api = api;
+    this.tokenFailures = 0;
     // The token works: connected now. Waiting for the first getUpdates kept the card on "Connecting…"
     // (and hid the pairing button) for a whole empty long poll.
     this.setState("polling");

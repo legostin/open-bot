@@ -603,7 +603,10 @@ function BrowserCall({ call, result }: ToolResultProps) {
   const name = call.name.replace(/^.*?browser_/, "");
   const input = (call.input ?? {}) as Record<string, unknown>;
   const url = (typeof input.url === "string" && input.url) || pageUrl(result?.output);
-  const detail = name === "submit" && typeof input.description === "string" ? input.description : name === "press_key" && typeof input.key === "string" ? input.key : "";
+  const description = typeof input.description === "string" ? input.description : "";
+  // An approved action names the control the page showed, then what the agent said it does.
+  const submitDetail = typeof input.label === "string" && input.label ? t("ui.call.submitDetail", { label: cut(input.label, 40), description }) : description;
+  const detail = name === "submit" ? submitDetail : name === "press_key" && typeof input.key === "string" ? input.key : "";
   return (
     <div style={C.box}>
       <button type="button" style={C.head} onClick={() => setOpen(!open)} title={open ? t("ui.call.hide") : t("ui.call.show")}>

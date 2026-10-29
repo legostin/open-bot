@@ -167,4 +167,42 @@ describe("secrets in the chat", () => {
   it("refuses a card for a plugin that cannot read the item", async () => {
     await say('CALL hub_secret_request {"vault":"svc_key","title":"x","plugin":"fakebrain"}', /tool said: .*not allowed to read/);
   });
+
+  it("announces every vault change to plugins, the security console's too", async () => {
+    const seen: string[][] = [];
+    const off = hub.bus.on("vault.updated", (p) => seen.push(p.ids));
+    try {
+      // The chat stores once and the event comes once (from the vault itself).
+      await say(`another: fk_yyyyyyyyyy0123456789`, /fake heard/);
+      expect(seen).toEqual([["fake_token"]]);
+      // The security console writes through the same vault (console-app.ts): storing, scoping and removing.
+      hub.vault.upsert({ id: "console_key", type: "secret", name: "Console key", fields: { value: "c0ns0le-value-1" } });
+      hub.vault.updateScope("console_key", { plugins: ["fakesetup"] });
+      hub.vault.remove("console_key");
+      hub.vault.remove("console_key");
+      expect(seen).toEqual([["fake_token"], ["console_key"], ["console_key"], ["console_key"]]);
+    } finally {
+      off();
+    }
+  });
+
+  it("logs a missing item once per plugin and hour, a refused existing one every time", () => {
+    const denied = (target: string) => hub.audit.list({ action: "vault.denied", limit: 1000 }).filter((e) => e.target === target);
+    const ask = (ref: string, plugin: string) => {
+      try {
+        hub.vault.access(ref, { actor: `plugin:${plugin}`, pluginId: plugin });
+      } catch {
+        /* denied */
+      }
+    };
+    for (let i = 0; i < 20; i++) ask("vault://telegram_bot_token", "telegram");
+    expect(denied("telegram_bot_token")).toEqual([expect.objectContaining({ actor: "plugin:telegram", data: { reason: "not_found" } })]);
+    ask("vault://telegram_bot_token", "web");
+    expect(denied("telegram_bot_token")).toHaveLength(2);
+    // svc_key exists, and fakebrain is outside its scope: a real refusal, never folded.
+    hub.vault.updateScope("svc_key", { plugins: ["fakesetup"] });
+    for (let i = 0; i < 3; i++) ask("vault://svc_key", "fakebrain");
+    expect(denied("svc_key")).toHaveLength(3);
+    expect(denied("svc_key")[0].data).toMatchObject({ reason: expect.stringContaining("plugin fakebrain is outside the item's scope") });
+  });
 });

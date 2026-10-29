@@ -30,7 +30,10 @@ export interface ToolSpec {
   effect: ToolEffect;
   /** Results come from outside (web, email, external MCP): reading them taints the session. */
   source?: boolean;
-  /** Template for approval cards, e.g. "Send an email to {to}: {subject}" or a "%key%" from the plugin's locales. */
+  /**
+   * Template for approval cards, e.g. "Send an email to {to}: {subject}" or a "%key%" from the plugin's locales.
+   * "{url|host}" shows only the host of a URL field.
+   */
   approvalSummary?: string;
   /**
    * A local-write whose change outlives the session (memory, an agent's profile): after outside content the user

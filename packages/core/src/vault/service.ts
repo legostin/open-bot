@@ -33,14 +33,44 @@ const DEK_LABEL = "openbot-vault-dek";
 
 const DEFAULT_SCOPE: VaultScope = { domains: [], plugins: [], agents: [], tools: [], mode: "auto", revealToModel: false };
 
+/** How long lookups of the same missing item by the same actor are counted instead of logged one by one. */
+export const NOT_FOUND_QUIET_MS = 3600_000;
+
+/**
+ * One vault lookup for the audit log. `repeats`: lookups of the same missing item by the same actor since the
+ * previous entry, which were counted instead of logged (at most one not_found entry per actor and item per window).
+ */
+export interface VaultAccessEntry {
+  actor: string;
+  itemId: string;
+  allowed: boolean;
+  reason?: string;
+  repeats?: number;
+}
+
+export interface VaultHooks {
+  onState?: (s: VaultState) => void;
+  onAccess?: (e: VaultAccessEntry) => void;
+  /** Items were stored, changed or removed (from the console, the chat or the hub itself). */
+  onChange?: (ids: string[]) => void;
+  /** Quiet window for repeated not_found lookups (default NOT_FOUND_QUIET_MS). */
+  notFoundQuietMs?: number;
+  now?: () => number;
+}
+
 export class VaultService {
   db: Db;
   private key: Uint8Array | undefined;
   redactor = new Redactor();
   private onState: (s: VaultState) => void;
-  private onAccess: (entry: { actor: string; itemId: string; allowed: boolean; reason?: string }) => void;
+  private onAccess: (entry: VaultAccessEntry) => void;
+  private onChange: (ids: string[]) => void;
+  private notFoundQuietMs: number;
+  private now: () => number;
+  /** Missing items asked for, by actor + item: when the last not_found was logged and how many were counted since. */
+  private notFound = new Map<string, { at: number; repeats: number }>();
 
-  constructor(file: string, hooks: { onState?: (s: VaultState) => void; onAccess?: (e: { actor: string; itemId: string; allowed: boolean; reason?: string }) => void } = {}) {
+  constructor(file: string, hooks: VaultHooks = {}) {
     this.db = openDb(file);
     this.db.exec(`
       create table if not exists vault_meta(key text primary key, value text not null);
@@ -48,6 +78,36 @@ export class VaultService {
     `);
     this.onState = hooks.onState ?? (() => {});
     this.onAccess = hooks.onAccess ?? (() => {});
+    this.onChange = hooks.onChange ?? (() => {});
+    this.notFoundQuietMs = hooks.notFoundQuietMs ?? NOT_FOUND_QUIET_MS;
+    this.now = hooks.now ?? Date.now;
+  }
+
+  private changed(id: string): void {
+    // An item that exists again (or is gone again) starts a fresh not_found count.
+    for (const k of this.notFound.keys()) if (k.endsWith(`\u0000${id}`)) this.notFound.delete(k);
+    this.onChange([id]);
+  }
+
+  /**
+   * A lookup of an item that does not exist. Plugins waiting for a token look it up again and again; the audit gets
+   * the first one, then one per window per actor and item, with the count of the lookups in between. Denials of items
+   * that exist are never folded (access() reports those directly).
+   */
+  private reportNotFound(actor: string, itemId: string): void {
+    const key = `${actor}\u0000${itemId}`;
+    const now = this.now();
+    const seen = this.notFound.get(key);
+    if (seen && now - seen.at < this.notFoundQuietMs) {
+      seen.repeats++;
+      return;
+    }
+    if (this.notFound.size >= 1000) {
+      for (const [k, v] of this.notFound) if (now - v.at >= this.notFoundQuietMs) this.notFound.delete(k);
+      if (this.notFound.size >= 1000) this.notFound.clear();
+    }
+    this.notFound.set(key, { at: now, repeats: 0 });
+    this.onAccess({ actor, itemId, allowed: false, reason: "not_found", ...(seen?.repeats ? { repeats: seen.repeats } : {}) });
   }
 
   private meta(key: string): string | undefined {
@@ -169,6 +229,7 @@ export class VaultService {
         .run(id, input.type, input.name, JSON.stringify(scope), JSON.stringify(hints), secret, now, now);
     }
     this.refreshRedactor();
+    this.changed(id);
     return this.getMeta(id)!;
   }
 
@@ -177,12 +238,14 @@ export class VaultService {
     if (!m) throw new VaultError("not_found", "vault.notFound", { id });
     this.db.prepare("update vault_items set scope = ?, updated_at = ? where id = ?").run(JSON.stringify({ ...m.scope, ...scope }), nowIso(), id);
     this.refreshRedactor();
+    this.changed(id);
     return this.getMeta(id)!;
   }
 
   remove(id: string): void {
-    this.db.prepare("delete from vault_items where id = ?").run(id);
+    const gone = this.db.prepare("delete from vault_items where id = ?").run(id).changes > 0;
     this.refreshRedactor();
+    if (gone) this.changed(id);
   }
 
   /**
@@ -193,7 +256,7 @@ export class VaultService {
     const id = refToId(ref);
     const meta = this.getMeta(id);
     if (!meta) {
-      this.onAccess({ actor: req.actor, itemId: id, allowed: false, reason: "not_found" });
+      this.reportNotFound(req.actor, id);
       throw new VaultError("not_found", "vault.notFound", { id });
     }
     const deny = (key: string, params: Params): never => {

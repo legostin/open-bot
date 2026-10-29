@@ -12,8 +12,17 @@ declare const location: any;
 export function pageScript(op: string, a: any): any {
   const norm = (s: any) => String(s ?? "").replace(/\s+/g, " ").trim();
   const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
-  const ACTION = new RegExp(a.action || "$^", "iu");
-  const LINK_ACTION = new RegExp(a.linkAction || "$^", "iu");
+  // Rules from safety.ts (PAGE_RULES): what counts as an action with consequences.
+  const rules = a.rules || {};
+  const ACTION = new RegExp(rules.action || "$^", "iu");
+  const LINK_ACTION = new RegExp(rules.link || "$^", "iu");
+  const LINK_PATH = new RegExp(rules.linkPath || "$^", "i");
+  const HINT = new RegExp(rules.hint || "$^", "i");
+  const CHECKOUT_FORM = new RegExp(rules.checkoutForm || "$^", "iu");
+  const PROCEED = new RegExp(rules.proceed || "$^", "iu");
+  const LINK_WORDS = Number(rules.linkWords) || 6;
+  /** Roles that only focus, tick or choose: clicking them is never the action itself (the form's submit is). */
+  const FIELD_ROLES = ["checkbox", "radio", "option", "tab", "combobox", "textbox", "searchbox", "slider", "spinbutton", "menuitemcheckbox", "menuitemradio", "listbox", "treeitem"];
   const TEXT_INPUTS = ["", "text", "email", "password", "search", "tel", "url", "number", "date", "datetime-local", "month", "week", "time"];
   const INTERACTIVE =
     'a[href], button, input:not([type="hidden" i]), textarea, select, summary, [contenteditable=""], [contenteditable="true"], ' +
@@ -134,6 +143,66 @@ export function pageScript(op: string, a: any): any {
     const href = el.getAttribute("href") || "";
     return !!href && !href.startsWith("#") && !/^javascript:/i.test(href);
   }
+  /** Identifiers as words: "placeYourOrder1" → "place Your Order", "btn-delete" → "btn delete". */
+  function words(s: any) {
+    return String(s ?? "")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/[_\-.:\/\\\d]+/g, " ");
+  }
+  /** Fields and choices: typing into them, ticking or choosing is not the action itself. */
+  function fieldLike(el: any) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "select" || tag === "textarea" || tag === "option") return true;
+    if (tag === "input") {
+      const t = String(el.getAttribute("type") || "text").toLowerCase();
+      return !["submit", "button", "image", "reset"].includes(t);
+    }
+    if (el.isContentEditable) return true;
+    return FIELD_ROLES.includes(norm(el.getAttribute("role")).split(" ")[0]);
+  }
+  /** Everything the control says about itself: name, its own text (not a container's), value, title, alt. */
+  function actionText(ctrl: any, label: string) {
+    const parts = [label];
+    const nested = ctrl.querySelector && ctrl.querySelector("a[href], button, input, select, textarea");
+    if (!nested) parts.push(norm(ctrl.innerText));
+    for (const at of ["aria-label", "title", "value", "alt", "aria-description"]) parts.push(norm(ctrl.getAttribute(at)));
+    return parts.filter(Boolean).join(" | ");
+  }
+  /** id, name, test ids and formaction as words, for icon-only controls like <button id="placeYourOrder">. */
+  function hintText(ctrl: any) {
+    const out: string[] = [];
+    for (const at of ["id", "name", "data-testid", "data-test-id", "data-test", "data-qa", "data-cy", "data-action", "formaction"]) {
+      const v = ctrl.getAttribute(at);
+      if (v) out.push(words(v));
+    }
+    return out.join(" | ");
+  }
+  /** The site asks for confirmation itself (Rails data-confirm, onclick="return confirm(...)"): the click matters. */
+  function asksConfirm(ctrl: any) {
+    if (ctrl.hasAttribute("data-confirm") || ctrl.hasAttribute("data-turbo-confirm")) return true;
+    return /\bconfirm\s*\(/.test(String(ctrl.getAttribute("onclick") || ""));
+  }
+  /** A link that acts when opened: /items/5/delete, ?action=unsubscribe, or a non-GET request (data-method). */
+  function linkActs(ctrl: any) {
+    const method = String(ctrl.getAttribute("data-method") || ctrl.getAttribute("data-turbo-method") || "").toLowerCase();
+    if (method && method !== "get") return true;
+    try {
+      const u = new URL(ctrl.getAttribute("href"), location.href);
+      for (const seg of u.pathname.split("/")) {
+        let s = seg;
+        try {
+          s = decodeURIComponent(seg);
+        } catch {
+          /* keep raw */
+        }
+        if (LINK_PATH.test(s)) return true;
+      }
+      for (const [k, v] of u.searchParams) if (/^(?:action|do|op|cmd|method|_method)$/i.test(k) && LINK_PATH.test(v)) return true;
+    } catch {
+      /* not a URL */
+    }
+    return false;
+  }
   /** Is activating this element an action with consequences (form submit, buy, send, delete...)? */
   function classify(el: any) {
     // Clicking a <label> activates its control (which may be a submit button).
@@ -146,17 +215,26 @@ export function pageScript(op: string, a: any): any {
     const search = isSearch(ctrl, form);
     let submit = false;
     let reason = "";
-    if (realLink(ctrl)) {
-      if (LINK_ACTION.test(label)) {
-        submit = true;
-        reason = "label";
-      }
-    } else if (ACTION.test(label)) {
+    const mark = (why: string) => {
       submit = true;
-      reason = "label";
+      reason = why;
+    };
+    if (fieldLike(target) && ctrl === target) {
+      // Typing, ticking and choosing: the form's own submit (or Enter) is the action, and that one is checked.
+    } else if (realLink(ctrl)) {
+      if (LINK_ACTION.test(label) && label.split(" ").length <= LINK_WORDS) mark("label");
+      else if (linkActs(ctrl)) mark("link");
+      else if (asksConfirm(ctrl)) mark("confirm");
+    } else if (ACTION.test(actionText(ctrl, label)) || HINT.test(hintText(ctrl))) {
+      mark("label");
+    } else if (asksConfirm(ctrl)) {
+      mark("confirm");
     } else if (form && !search && ((tag === "button" && (type === "" || type === "submit")) || (tag === "input" && (type === "submit" || type === "image")))) {
-      submit = true;
-      reason = "form";
+      mark("form");
+    } else if (form && !search && type !== "reset" && (tag === "button" || norm(ctrl.getAttribute("role")) === "button") && PROCEED.test(label)) {
+      // A JS wizard's "Continue" in a checkout or payment form.
+      const formHint = [form.id, form.getAttribute("name"), form.getAttribute("class"), form.getAttribute("action"), form.getAttribute("aria-label")].map(words).join(" ");
+      if (CHECKOUT_FORM.test(formHint)) mark("form");
     }
     return {
       submit,

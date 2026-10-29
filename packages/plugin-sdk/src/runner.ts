@@ -64,6 +64,54 @@ const translate = (locale: Locale): Translate => {
 let httpHandler: ((req: PluginHttpRequest) => Promise<PluginHttpResponse> | PluginHttpResponse) | undefined;
 let mod: PluginModule | undefined;
 
+/** Hub events this process hears: one subscription per name, however many handlers (the hub sends each event once). */
+const subscribed = new Set<string>();
+function subscribe(name: string): Promise<void> {
+  if (subscribed.has(name)) return Promise.resolve();
+  subscribed.add(name);
+  return peer.request("events.subscribe", { names: [name] }).then(
+    () => undefined,
+    () => void subscribed.delete(name),
+  );
+}
+
+// ---------- vault: an item that does not exist is remembered until the vault changes ----------
+// Plugins ask for their keys whenever they need them (a Telegram bot waiting for its token, a brain probed for its API
+// key): without this every such ask reaches the hub and its audit log. The answer "no such item" is kept until the hub
+// says the vault changed, and at most an hour in case an event was missed.
+
+const VAULT_EVENTS = ["vault.updated", "vault.state"] as const;
+const VAULT_MISSING_TTL_MS = 3600_000;
+const vaultMissing = new Map<string, { error: unknown; at: number }>();
+let vaultWatched = false;
+
+const vaultIdOf = (ref: unknown) => String(ref ?? "").replace(/^vault:\/\//, "");
+
+function forgetMissing(name: string, payload: any): void {
+  if (name === "vault.updated" && Array.isArray(payload?.ids)) for (const id of payload.ids) vaultMissing.delete(vaultIdOf(id));
+  else vaultMissing.clear();
+}
+
+async function vaultGet(ref: string, opts: Record<string, unknown> | undefined): Promise<Record<string, string>> {
+  const id = vaultIdOf(ref);
+  const missing = vaultMissing.get(id);
+  if (missing && Date.now() - missing.at < VAULT_MISSING_TTL_MS) throw missing.error;
+  vaultMissing.delete(id);
+  try {
+    return await peer.request<Record<string, string>>("vault.get", { ref, ...opts });
+  } catch (e: any) {
+    if (e?.data?.key !== "vault.notFound") throw e;
+    if (!vaultWatched) {
+      // Start hearing about changes, then ask once more: the item may have been stored in between.
+      vaultWatched = true;
+      await Promise.all(VAULT_EVENTS.map(subscribe));
+      return vaultGet(ref, opts);
+    }
+    vaultMissing.set(id, { error: e, at: Date.now() });
+    throw e;
+  }
+}
+
 peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pluginDir: string; hubUrl: string; appRoot: string; settings: any; locale?: string; messages?: Catalog }) => {
   hubLocale = isLocale(p.locale) ? p.locale : DEFAULT_LOCALE;
   messages = p.messages ?? {};
@@ -110,7 +158,7 @@ peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pl
         const list = eventHandlers.get(name) ?? [];
         list.push(cb);
         eventHandlers.set(name, list);
-        void peer.request("events.subscribe", { names: [name] });
+        void subscribe(name);
       },
     },
     hooks: {
@@ -141,7 +189,7 @@ peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pl
       },
     },
     vault: {
-      get: (ref, opts) => peer.request("vault.get", { ref, ...opts }),
+      get: (ref, opts) => vaultGet(ref, opts),
     },
     storage: {
       get: (key) => peer.request("storage.get", { key }),
@@ -184,6 +232,8 @@ peer.onNotification("locale.changed", (p: { locale: Locale }) => {
 });
 
 peer.onNotification("event", (p: { name: string; payload: unknown }) => {
+  // First the runner's own memory of missing items, so a handler that asks the vault again gets a fresh answer.
+  if ((VAULT_EVENTS as readonly string[]).includes(p.name)) forgetMissing(p.name, p.payload);
   for (const cb of eventHandlers.get(p.name) ?? []) {
     try {
       cb(p.payload);

@@ -6,7 +6,7 @@
   "settings.apiBaseUrl.title": "Bot API address",
   "settings.apiBaseUrl.description": "Usually https://api.telegram.org; change it only for your own Bot API server",
   "settings.pollTimeoutSec.title": "Long polling timeout, s",
-  "settings.tokenRetrySec.title": "Retry interval while there is no token, s",
+  "settings.tokenRetrySec.title": "First retry after a token error, s (then less often)",
   "cmd.tasks": "tasks in progress and recent ones",
   "cmd.stop": "stop the assistant's current work",
   "cmd.help": "help",

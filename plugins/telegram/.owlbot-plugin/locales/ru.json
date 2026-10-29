@@ -6,7 +6,7 @@
   "settings.apiBaseUrl.title": "Адрес Bot API",
   "settings.apiBaseUrl.description": "Обычно https://api.telegram.org; меняйте только для собственного сервера Bot API",
   "settings.pollTimeoutSec.title": "Таймаут long polling, с",
-  "settings.tokenRetrySec.title": "Повтор при отсутствии токена, с",
+  "settings.tokenRetrySec.title": "Первый повтор после ошибки токена, с (дальше реже)",
   "cmd.tasks": "задачи в работе и недавние",
   "cmd.stop": "остановить текущую работу ассистента",
   "cmd.help": "справка",
