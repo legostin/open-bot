@@ -152,10 +152,14 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     });
   });
   api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
-  // "Deny" on an approval card: saying no never runs anything, so the chat may do it. Saying yes takes the person's
-  // own proof: Face ID on the phone, Touch ID in the desktop app, the security console in a browser.
-  api.post("/api/approvals/:id/deny", async (req) => {
-    const a = hub.approvals.resolve((req.params as { id: string }).id, "deny", { via: opts.kind === "device" ? "device" : "web" });
+  // The buttons on an approval card in the chat: allow (once, or always: a rule from the card), or deny.
+  api.post("/api/approvals/:id", async (req) => {
+    const b = (req.body ?? {}) as { decision?: unknown; remember?: unknown };
+    if (b.decision !== "approve" && b.decision !== "deny") throw new HttpError(400, "decision: approve | deny");
+    const a = hub.approvals.resolve((req.params as { id: string }).id, b.decision, {
+      via: opts.kind === "device" ? "device" : "web",
+      remember: b.decision === "approve" && b.remember === true,
+    });
     return { id: a.id, status: a.status };
   });
 

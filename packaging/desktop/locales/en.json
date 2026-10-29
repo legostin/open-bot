@@ -47,9 +47,5 @@
   "app.error.failed": "Owlbot keeps stopping. Show the log to see why, or try again.",
   "app.error.portBusy": "Port {port} is taken by another program, so Owlbot cannot start. Close that program and try again.",
   "app.error.noRuntime": "Owlbot's files are damaged. Install Owlbot again.",
-  "app.error.retry": "Try again",
-  "approval.unreachable": "The hub did not answer",
-  "approval.noAnswer": "Nobody confirmed in time",
-  "approval.authFailed": "Touch ID did not work (error {code})",
-  "approval.unsupported": "Confirming here works on macOS only"
+  "app.error.retry": "Try again"
 }

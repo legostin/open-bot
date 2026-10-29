@@ -44,9 +44,8 @@ async function main(): Promise<void> {
       };
       process.on("SIGINT", () => void shutdown("SIGINT"));
       process.on("SIGTERM", () => void shutdown("SIGTERM"));
-      // Run by the desktop app: its stdin carries `stop`, sign-in tickets and its approval key; closing it stops the hub.
-      if (process.env.OWLBOT_DESKTOP === "1")
-        readDesktopCommands(process.stdin, { stop: () => void shutdown("stop"), ticket: (t) => hub.desktopTickets.add(t), approver: (k) => hub.desktopApprover.set(k) });
+      // Run by the desktop app: its stdin carries `stop` and sign-in tickets; closing it stops the hub.
+      if (process.env.OWLBOT_DESKTOP === "1") readDesktopCommands(process.stdin, { stop: () => void shutdown("stop"), ticket: (t) => hub.desktopTickets.add(t) });
       process.on("unhandledRejection", (e) => console.error("[owlbot] unhandled rejection:", e));
       await hub.start();
       return;

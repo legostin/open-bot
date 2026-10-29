@@ -165,7 +165,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <ShellContext.Provider value={{ openDrawer: () => setDrawer(true), pane, togglePane: () => setPane((v) => !v) }}>
-      <div className="flex h-dvh overflow-hidden bg-canvas">
+      {/* The shell never scrolls as a whole: it holds what escapes its panels (relative) and cannot be scrolled (clip). */}
+      <div className="relative flex h-dvh overflow-clip bg-canvas">
         <aside className="hidden w-[272px] shrink-0 flex-col md:flex">
           <Brand />
           <Sidebar />

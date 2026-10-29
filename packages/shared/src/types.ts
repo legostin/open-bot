@@ -121,7 +121,7 @@ export interface ApprovalAsk {
   host?: string;
 }
 
-export type ApprovalVia = "console" | "telegram" | "device" | "desktop" | "web" | "rule" | "timeout";
+export type ApprovalVia = "console" | "telegram" | "device" | "web" | "rule" | "timeout";
 
 export interface Approval {
   id: string;

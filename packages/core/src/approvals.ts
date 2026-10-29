@@ -32,13 +32,6 @@ const fromRow = (r: any): Approval => ({
 
 export type Decision = "approve" | "deny";
 
-/** What an approval asks, in a language (`tr`): the command or path from its `ask`, else its summary. */
-export function approvalText(a: Pick<Approval, "ask" | "summary">, tr: (key: string, params?: Record<string, string | number>) => string): string {
-  const ask = a.ask;
-  if (!ask || ask.kind === "tool") return a.summary;
-  if (ask.kind === "command") return ask.host ? tr("native.commandNetwork", { command: ask.detail, host: ask.host }) : tr("native.command", { command: ask.detail });
-  return tr(ask.kind === "read" ? "native.read" : "native.write", { path: ask.detail });
-}
 
 export interface ResolveOptions {
   via: ApprovalVia;

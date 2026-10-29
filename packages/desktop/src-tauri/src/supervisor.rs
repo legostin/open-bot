@@ -32,8 +32,6 @@ pub struct Spec {
   /// The hub's ports (web UI, console, egress proxy), checked before each start.
   pub ports: Vec<u16>,
   pub restart_delay: Duration,
-  /// Lines the child gets on its stdin as soon as it starts, after every restart too (the hub's approval key).
-  pub hello: Vec<String>,
 }
 
 const LOG_LIMIT: u64 = 5 * 1024 * 1024;
@@ -263,13 +261,7 @@ fn spawn(spec: &Spec) -> io::Result<Proc> {
     use std::os::windows::io::AsRawHandle;
     job.assign_process(child.as_raw_handle() as isize).map_err(io::Error::other)?;
   }
-  let mut stdin = child.stdin.take();
-  if let Some(pipe) = stdin.as_mut() {
-    for line in &spec.hello {
-      let _ = pipe.write_all(format!("{line}\n").as_bytes());
-    }
-    let _ = pipe.flush();
-  }
+  let stdin = child.stdin.take();
   Ok(Proc {
     child,
     stdin,
@@ -309,7 +301,7 @@ mod tests {
   }
 
   fn script(js: &str, log: PathBuf) -> Spec {
-    Spec { program: "node".into(), args: vec!["-e".into(), js.into()], env: vec![], log, ports: vec![], restart_delay: Duration::from_millis(50), hello: vec![] }
+    Spec { program: "node".into(), args: vec!["-e".into(), js.into()], env: vec![], log, ports: vec![], restart_delay: Duration::from_millis(50) }
   }
 
   fn recorder() -> (Supervisor, Arc<Mutex<Vec<Status>>>) {
@@ -335,14 +327,14 @@ mod tests {
   fn passes_lines_and_stops_through_stdin() {
     let log = tmp("echo").join("x.log");
     let (sup, seen) = recorder();
-    sup.start(Spec { hello: vec!["approver k1".into()], ..script(ECHO, log.clone()) });
+    sup.start(script(ECHO, log.clone()));
     wait_for(&seen, Status::Running);
     assert!(sup.send_line("ticket abc"));
     let t0 = Instant::now();
     sup.stop();
     assert!(t0.elapsed() < Duration::from_secs(10), "stop took {:?}", t0.elapsed());
     let text = fs::read_to_string(&log).unwrap();
-    assert!(text.contains("got approver k1") && text.contains("got ticket abc") && text.contains("got stop"), "{text}");
+    assert!(text.contains("got ticket abc") && text.contains("got stop"), "{text}");
     assert_eq!(seen.lock().unwrap().last(), Some(&Status::Stopped));
     assert!(!sup.send_line("late"));
   }

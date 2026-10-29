@@ -1,4 +1,4 @@
-//! Two windows: "main" shows the hub's own web UI (no app commands, only links of the app's scheme: deeplink.rs), "setup" the app's own screens (ui/). Links that
+//! Two windows: "main" shows the hub's own web UI (no app commands), "setup" the app's own screens (ui/). Links that
 //! leave the hub's origin open in the system browser; closing the hub window keeps the app in the tray.
 
 use tauri::webview::NewWindowResponse;
@@ -39,12 +39,7 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
   let flavor = app.state::<AppState>().paths.flavor.clone();
   let scheme = flavor.scheme();
   // The hub's settings page offers "Quit" and "Reset Owlbot…" when it runs in this window (deeplink.rs).
-  // `approvals`: this app answers the window's approval cards with Touch ID (approve.rs), on macOS.
-  let hello = format!(
-    "window.owlbotDesktop = Object.freeze({{ scheme: {scheme:?}, test: {}, approvals: {} }});",
-    flavor.test,
-    cfg!(target_os = "macos")
-  );
+  let hello = format!("window.owlbotDesktop = Object.freeze({{ scheme: {scheme:?}, test: {} }});", flavor.test);
   WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
     .title(&app.package_info().name)
     .initialization_script(hello)

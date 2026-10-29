@@ -47,9 +47,5 @@
   "app.error.failed": "Owlbot снова и снова останавливается. Откройте журнал, чтобы узнать причину, или попробуйте ещё раз.",
   "app.error.portBusy": "Порт {port} занят другой программой, поэтому Owlbot не может запуститься. Закройте эту программу и попробуйте ещё раз.",
   "app.error.noRuntime": "Файлы Owlbot повреждены. Установите Owlbot заново.",
-  "app.error.retry": "Попробовать ещё раз",
-  "approval.unreachable": "Хаб не ответил",
-  "approval.noAnswer": "Подтверждения не было",
-  "approval.authFailed": "Touch ID не сработал (ошибка {code})",
-  "approval.unsupported": "Подтверждать здесь можно только на macOS"
+  "app.error.retry": "Попробовать ещё раз"
 }

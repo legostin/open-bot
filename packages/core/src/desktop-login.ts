@@ -1,7 +1,7 @@
 // The desktop app signs its own window in: it hands the hub one-time tickets over the hub's stdin, a pipe only the
 // app that started the hub holds (OWLBOT_DESKTOP=1). The window then posts its ticket to POST /api/auth/desktop.
 
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
 import type { Readable } from "node:stream";
 
@@ -34,38 +34,15 @@ export class DesktopTickets {
 }
 
 /**
- * The app's own key for answering approval cards (server/main-app.ts, /api/desktop/approvals): the app asks the
- * person with Touch ID, showing what the card asks as the hub tells it, then answers with this key. The page in its
- * window never sees the key, so nothing running there (a plugin's code) can answer for the person.
+ * The app's lines on stdin: `stop` (Windows has no SIGTERM for a windowless child) and `ticket <t>`. The app closing
+ * the pipe (it quit or crashed) stops the hub too, so the hub never outlives it.
  */
-export class DesktopApprover {
-  private key?: Buffer;
-
-  set(key: string): void {
-    if (/^[\w-]{32,128}$/.test(key)) this.key = createHash("sha256").update(key).digest();
-  }
-
-  get enabled(): boolean {
-    return !!this.key;
-  }
-
-  check(key: string | undefined): boolean {
-    if (!this.key || !key) return false;
-    return timingSafeEqual(this.key, createHash("sha256").update(key).digest());
-  }
-}
-
-/**
- * The app's lines on stdin: `stop` (Windows has no SIGTERM for a windowless child), `ticket <t>` and `approver <key>`.
- * The app closing the pipe (it quit or crashed) stops the hub too, so the hub never outlives it.
- */
-export function readDesktopCommands(input: Readable, on: { stop: () => void; ticket: (t: string) => void; approver?: (key: string) => void }): void {
+export function readDesktopCommands(input: Readable, on: { stop: () => void; ticket: (t: string) => void }): void {
   const lines = createInterface({ input });
   lines.on("line", (line) => {
     const [cmd, arg] = line.trim().split(/\s+/, 2);
     if (cmd === "stop") on.stop();
     else if (cmd === "ticket" && arg) on.ticket(arg);
-    else if (cmd === "approver" && arg) on.approver?.(arg);
   });
   lines.on("close", () => on.stop());
 }

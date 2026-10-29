@@ -162,10 +162,9 @@ describe("native_permission (integration)", () => {
     expect(await cmd).toMatchObject({ behavior: "deny", message: expect.stringContaining("declined") });
   });
 
-  it("says on the card what it asks, and the desktop app answers it with its own key after Touch ID", async () => {
-    const key = "k".repeat(43);
-    hub.desktopApprover.set(key);
+  it("says on the card what it asks, and the card's buttons answer it", async () => {
     const base = `http://127.0.0.1:${hub.config.port}`;
+    const { token, session } = hub.auth.createSession("main");
     const created = new Promise<Approval>((resolve) => {
       const off = hub.bus.on("approval.created", (a: Approval) => {
         off?.();
@@ -177,21 +176,16 @@ describe("native_permission (integration)", () => {
     expect(a.ask).toEqual({ kind: "command", detail: "npm ci", reason: "Install the project's packages" });
     expect(hub.approvals.get(a.id)?.ask).toEqual(a.ask);
 
-    // Without the key (a page, another program) the hub does not answer.
-    expect((await fetch(`${base}/api/desktop/approvals/${a.id}`)).status).toBe(403);
-    expect((await fetch(`${base}/api/desktop/approvals/${a.id}`, { headers: { "x-owlbot-approver": "x".repeat(43) } })).status).toBe(403);
-    // The app reads what to show in the Touch ID prompt, in its language, then answers.
-    const card = await (await fetch(`${base}/api/desktop/approvals/${a.id}`, { headers: { "x-owlbot-approver": key, "accept-language": "ru" } })).json();
-    expect(card).toMatchObject({ id: a.id, status: "pending" });
-    expect(card.reason).toContain("npm ci");
-    expect(card.reason).toMatch(/^подтвердить/);
-    const post = await fetch(`${base}/api/desktop/approvals/${a.id}`, {
-      method: "POST",
-      headers: { "x-owlbot-approver": key, "content-type": "application/json" },
-      body: JSON.stringify({ decision: "approve" }),
-    });
-    expect(await post.json()).toEqual({ id: a.id, status: "approved" });
-    expect(hub.approvals.get(a.id)?.resolvedVia).toBe("desktop");
+    const press = (body: unknown, cookie = `owlbot_session=${token}`) =>
+      fetch(`${base}/api/approvals/${a.id}`, {
+        method: "POST",
+        headers: { cookie, origin: base, "x-csrf": session.csrf, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    expect((await press({ decision: "approve" }, "")).status).toBe(401);
+    expect((await press({ decision: "maybe" })).status).toBe(400);
+    expect(await (await press({ decision: "approve" })).json()).toEqual({ id: a.id, status: "approved" });
+    expect(hub.approvals.get(a.id)?.resolvedVia).toBe("web");
     expect((await run).behavior).toBe("allow");
   });
 

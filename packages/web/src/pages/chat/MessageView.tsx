@@ -1,16 +1,13 @@
 // Rendering of one message and its parts. Plugins can override whole messages (chat.message) or tool cards
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
-import { memo, useEffect, useState } from "react";
-import { Bell, Check, CircleAlert, CornerUpLeft, FilePen, FileText, Mic, ShieldAlert, SquareTerminal, X } from "lucide-react";
+import { memo, useState } from "react";
+import { Bell, CircleAlert, CornerUpLeft, FilePen, FileText, Mic, ShieldAlert, SquareTerminal } from "lucide-react";
 import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
 import { fileSize, formatDuration, formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
-import { native, nativeErrorText, type NativeBridge } from "../../lib/native";
-import { session } from "../../state/app";
 import { api, errorText } from "../../lib/api";
-import { approvalLink, desktopApp, DESKTOP_EVENT, type DesktopApprovalEvent } from "../../lib/desktop";
 import { showDetails } from "../../state/prefs";
 import { Markdown } from "../../components/markdown";
 import { Badge, Button, cx } from "../../components/ui";
@@ -45,55 +42,6 @@ const APPROVAL: Record<ApprovalStatus, { label: MessageKey; tone: "warning" | "s
   failed: { label: "approvalStatus.failed", tone: "danger" },
 };
 
-type Answer = "approve" | "deny";
-
-/**
- * Inside the iOS app: answer the approval on the phone. The app loads it from the hub, asks for Face ID and signs
- * the answer; backing out of Face ID ({ cancelled }) just puts the buttons back. The card's status follows once the
- * hub has the answer.
- */
-function NativeApprovalActions({ approvalId, bridge }: { approvalId: string; bridge: NativeBridge }) {
-  const [busy, setBusy] = useState<Answer | null>(null);
-  const [sent, setSent] = useState<Answer | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const answer = async (kind: Answer) => {
-    setBusy(kind);
-    setError(null);
-    try {
-      const r = kind === "approve" ? await bridge.approve(approvalId) : await bridge.deny(approvalId);
-      if (r.ok) setSent(kind);
-    } catch (e) {
-      setError(t("message.approval.failed", { error: nativeErrorText(e) }));
-    } finally {
-      setBusy(null);
-    }
-  };
-  if (sent)
-    return (
-      <div className={cx("mt-2 flex items-center gap-1.5 text-[13px] font-medium", sent === "approve" ? "text-success" : "text-danger")} role="status">
-        {sent === "approve" ? <Check className="size-4" /> : <X className="size-4" />}
-        {sent === "approve" ? t("message.approval.approvedHere") : t("message.approval.deniedHere")}
-      </div>
-    );
-  return (
-    <div className="mt-3 flex flex-col gap-1.5">
-      <div className="flex gap-2">
-        <Button variant="primary" className="flex-1" loading={busy === "approve"} disabled={busy !== null} onClick={() => void answer("approve")}>
-          {t("message.approval.approve")}
-        </Button>
-        <Button variant="secondary" className="flex-1" loading={busy === "deny"} disabled={busy !== null} onClick={() => void answer("deny")}>
-          {t("message.approval.deny")}
-        </Button>
-      </div>
-      {error && (
-        <div className="text-xs break-words text-danger" role="alert">
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** The card's words for what the agent asks: a plain headline in the viewer's language and the detail as is. */
 function approvalWords(part: Extract<MessagePart, { type: "approval" }>): { headline: string; detail?: string; reason?: string; Icon: typeof ShieldAlert } {
   const ask = part.ask;
@@ -114,44 +62,15 @@ function approvalWords(part: Extract<MessagePart, { type: "approval" }>): { head
   }
 }
 
-/**
- * Answering in the desktop app or a browser. "Deny" goes straight to the hub: saying no runs nothing. "Allow" takes
- * the person's own proof: the desktop app asks for Touch ID (showing what the card asks, as the hub tells it) and
- * answers itself; a browser opens the security console's card in a small window.
- */
+/** The card's buttons, as in any agent: allow once, allow always (a rule from the card), or deny. */
 function ApprovalActions({ approvalId }: { approvalId: string }) {
-  const s = useStore(session);
-  const app = desktopApp();
   const [busy, setBusy] = useState<"approve" | "always" | "deny" | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!app?.approvals) return;
-    const on = (e: Event) => {
-      const d = (e as CustomEvent<DesktopApprovalEvent>).detail;
-      if (d?.type !== "approval" || d.id !== approvalId) return;
-      if (d.outcome !== "done") setBusy(null);
-      if (d.outcome === "failed") setError(t("message.approval.failed", { error: d.error ?? "" }));
-    };
-    window.addEventListener(DESKTOP_EVENT, on);
-    return () => window.removeEventListener(DESKTOP_EVENT, on);
-  }, [app?.approvals, approvalId]);
-
-  const allow = (always: boolean) => {
-    setError(null);
-    if (app?.approvals) {
-      setBusy(always ? "always" : "approve");
-      location.href = approvalLink(app, approvalId, "approve", always);
-      return;
-    }
-    const url = `${s?.consoleUrl ?? ""}/#/approvals/${encodeURIComponent(approvalId)}`;
-    if (!window.open(url, `approval-${approvalId}`, "popup,width=460,height=620")) window.open(url, "_blank", "noopener");
-  };
-  const deny = async () => {
-    setBusy("deny");
+  const answer = async (kind: "approve" | "always" | "deny") => {
+    setBusy(kind);
     setError(null);
     try {
-      await api.post(`/api/approvals/${encodeURIComponent(approvalId)}/deny`);
+      await api.post(`/api/approvals/${encodeURIComponent(approvalId)}`, { decision: kind === "deny" ? "deny" : "approve", remember: kind === "always" });
     } catch (e) {
       setError(t("message.approval.failed", { error: errorText(e) }));
       setBusy(null);
@@ -160,23 +79,21 @@ function ApprovalActions({ approvalId }: { approvalId: string }) {
   return (
     <div className="mt-3 flex flex-col gap-1.5">
       <div className="flex gap-2">
-        <Button variant="primary" className="flex-1" loading={busy === "approve"} disabled={busy !== null} onClick={() => allow(false)}>
+        <Button variant="primary" className="flex-1" loading={busy === "approve"} disabled={busy !== null} onClick={() => void answer("approve")}>
           {t("message.approval.approve")}
         </Button>
-        <Button variant="secondary" className="flex-1" loading={busy === "deny"} disabled={busy !== null} onClick={() => void deny()}>
+        <Button variant="secondary" className="flex-1" loading={busy === "deny"} disabled={busy !== null} onClick={() => void answer("deny")}>
           {t("message.approval.deny")}
         </Button>
       </div>
-      {app?.approvals && (
-        <button
-          type="button"
-          className="self-center px-2 py-1 text-xs font-medium text-muted hover:text-fg disabled:opacity-50"
-          disabled={busy !== null}
-          onClick={() => allow(true)}
-        >
-          {busy === "always" ? t("message.approval.waiting") : t("message.approval.always")}
-        </button>
-      )}
+      <button
+        type="button"
+        className="self-center px-2 py-1 text-xs font-medium text-muted hover:text-fg disabled:opacity-50"
+        disabled={busy !== null}
+        onClick={() => void answer("always")}
+      >
+        {t("message.approval.always")}
+      </button>
       {error && (
         <div className="text-xs break-words text-danger" role="alert">
           {error}
@@ -214,8 +131,7 @@ function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" 
           <span className={open ? "block" : "line-clamp-3"}>{detail}</span>
         </button>
       )}
-      {/* On the phone the answer is given here with Face ID; in the desktop app with Touch ID. */}
-      {pending && (native ? <NativeApprovalActions approvalId={part.approvalId} bridge={native} /> : <ApprovalActions approvalId={part.approvalId} />)}
+      {pending && <ApprovalActions approvalId={part.approvalId} />}
     </div>
   );
 }

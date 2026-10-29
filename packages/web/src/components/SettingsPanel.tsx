@@ -204,7 +204,7 @@ export function SettingsPanel() {
       <div className="animate-fade fixed inset-0 z-30 hidden bg-[rgb(20_14_6/0.22)] backdrop-blur-[2px] md:block xl:hidden" onClick={closePanel} aria-hidden />
       <aside
         aria-label={t("nav.settings")}
-        className="animate-slide fixed inset-0 z-40 flex flex-col overflow-hidden bg-bg md:inset-y-2 md:right-2 md:left-auto md:w-[540px] md:max-w-[calc(100vw-5rem)] md:rounded-[22px] md:shadow-pop xl:static xl:z-auto xl:my-2 xl:mr-2 xl:max-w-none xl:shrink-0 xl:shadow-sheet 2xl:w-[600px]"
+        className="animate-slide fixed inset-0 z-40 flex flex-col overflow-hidden bg-bg md:inset-y-2 md:right-2 md:left-auto md:w-[540px] md:max-w-[calc(100vw-5rem)] md:rounded-[22px] md:shadow-pop xl:relative xl:z-auto xl:my-2 xl:mr-2 xl:max-w-none xl:shrink-0 xl:shadow-sheet 2xl:w-[600px]"
         onClick={onClick}
       >
         <div className="glass flex h-12 shrink-0 items-center gap-1 px-2">

@@ -24,12 +24,6 @@ dunce = "1"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-# Touch ID for approval cards (approve.rs): the same objc2 crates Tauri already builds on.
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-block2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSError"] }
-
 [target.'cfg(windows)'.dependencies]
 win32job = "2"
 winreg = "0.56"

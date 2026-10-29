@@ -17,8 +17,6 @@ import { registerJoinPage } from "./join-page.ts";
 import { registerApi } from "./api.ts";
 import { registerSpa } from "./spa.ts";
 import { registerPages } from "./pages.ts";
-import { approvalText } from "../approvals.ts";
-import { agentName } from "../agents.ts";
 
 const COOKIE = "owlbot_session";
 
@@ -130,35 +128,6 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
       hub.audit.append("user", "auth.desktop");
       setCookie(reply, token);
       return { ok: true };
-    });
-  }
-
-  if (!remote) {
-    // The desktop app answers approval cards itself, with Touch ID (desktop-login.ts): only on this computer, only with
-    // the key it gave the hub over its stdin. The card in its window just asks it to.
-    const approver = (req: FastifyRequest) => {
-      const ip = clientIp(req);
-      if (!/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(ip) || !hub.desktopApprover.check(req.headers["x-owlbot-approver"] as string | undefined)) {
-        throw new HttpError(403, "auth.required");
-      }
-      const id = (req.params as { id: string }).id;
-      const a = hub.approvals.get(id);
-      if (!a) throw new HttpError(404, "approval.notFound");
-      return a;
-    };
-    app.get("/api/desktop/approvals/:id", async (req) => {
-      const a = approver(req);
-      const tr = tFor(requestLocale(req));
-      const agent = hub.agents.get(a.agentId);
-      const who = agent ? agentName(agent, requestLocale(req)) : a.agentId;
-      return { id: a.id, status: a.status, reason: tr("approval.desktopReason", { agent: who, what: approvalText(a, tr) }) };
-    });
-    app.post("/api/desktop/approvals/:id", async (req) => {
-      const a = approver(req);
-      const b = (req.body ?? {}) as { decision?: string; remember?: boolean };
-      if (b.decision !== "approve" && b.decision !== "deny") throw new HttpError(400, "decision: approve | deny");
-      const done = hub.approvals.resolve(a.id, b.decision, { via: "desktop", remember: b.decision === "approve" && b.remember === true });
-      return { id: done.id, status: done.status };
     });
   }
 
