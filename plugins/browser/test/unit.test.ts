@@ -9,7 +9,20 @@ import {
   sanitizeFilename,
   totpCode,
 } from "../server/util.ts";
-import { ACTION_LABEL_RE, LINK_ACTION_LABEL_RE, activationKey, keyNeedsSubmit } from "../server/safety.ts";
+import {
+  ACTION_HINT_RE,
+  ACTION_LABEL_RE,
+  CHECKOUT_FORM_RE,
+  LINK_ACTION_LABEL_RE,
+  LINK_ACTION_PATH_RE,
+  PAGE_RULES,
+  PROCEED_LABEL_RE,
+  activationKey,
+  keyNeedsSubmit,
+  sameLabel,
+  splitTrailingNewline,
+  submitCall,
+} from "../server/safety.ts";
 import { keyEventParams } from "../server/manager.ts";
 
 describe("settings", () => {
@@ -86,12 +99,66 @@ describe("totp", () => {
 
 describe("safety", () => {
   it("flags action labels in English and Russian", () => {
-    for (const s of ["Buy now", "Place order", "Send", "Delete", "Купить", "Купи", "Оплатить", "Оформить заказ", "Отправить", "Подтвердить", "Удалить", "Опубликовать"]) {
-      expect(ACTION_LABEL_RE.test(s), s).toBe(true);
-    }
-    for (const s of ["Купон", "Search", "Next", "Далее", "Найти", "Orders", "Resend code", "PayPal", "Facebook"]) expect(ACTION_LABEL_RE.test(s), s).toBe(false);
+    const actions = [
+      ...["Buy now", "Purchase", "Pay $34.00", "Proceed to checkout", "Check out", "Order", "Place your order", "Send", "Submit application", "Confirm"],
+      ...["Delete", "Remove", "Erase all data", "Publish", "Post", "Tweet", "Transfer funds", "Withdraw", "Top up", "Sell", "Place bid", "Donate"],
+      ...["Subscribe", "Unsubscribe", "Book now", "Reserve a table", "Approve", "Vote", "Deactivate", "Sign", "Sign the petition", "Apply now"],
+      ...["Close account", "Empty trash", "Discard draft", "Remove from list"],
+      ...["Купить", "Купи", "Купите", "Покупка", "Оплатить", "Перейти к оплате", "Заказать", "Оформить заказ", "Оформите", "Отправить", "Подтвердить"],
+      ...["Удалить", "Удалите", "Удаление", "Стереть", "Опубликовать", "Разместить объявление", "Перевести 500 ₽", "Пожертвовать", "Подписаться"],
+      ...["Подписать договор", "Отписаться", "Забронировать", "Списать", "Продать", "Вывести средства", "Пополнить", "Записаться на приём"],
+      ...["Подать заявку", "Оставить заявку", "Проголосовать", "Сделать ставку", "Отменить бронь", "Закрыть счёт", "Деактивировать", "Очистить корзину"],
+    ];
+    for (const s of actions) expect(ACTION_LABEL_RE.test(s), s).toBe(true);
+    const ordinary = [
+      ...["Купон", "Search", "Next", "Далее", "Найти", "Orders", "Resend code", "PayPal", "Facebook", "Sign in", "Sign up", "Sign out", "Add to cart"],
+      ...["Remove filter", "Remove all filters", "Remove from cart", "Posted 3 hours ago", "Postcode", "Notebook", "Payments", "Мои заказы", "Заказы"],
+      ...["Удалённая работа", "Продажи", "Корзина", "Войти", "Показать ещё"],
+    ];
+    for (const s of ordinary) expect(ACTION_LABEL_RE.test(s), s).toBe(false);
     expect(LINK_ACTION_LABEL_RE.test("Удалить аккаунт")).toBe(true);
+    expect(LINK_ACTION_LABEL_RE.test("Отписаться от рассылки")).toBe(true);
+    expect(LINK_ACTION_LABEL_RE.test("Destroy")).toBe(true);
     expect(LINK_ACTION_LABEL_RE.test("Мои заказы")).toBe(false);
+  });
+
+  it("reads identifiers, acting links and checkout forms", () => {
+    // The page script splits identifiers into words first: placeYourOrder1 → "place Your Order".
+    for (const s of ["place Your Order", "buy Now Button", "checkout Btn", "btn delete", "submit Order", "pay button", "tweet Button", "send button"]) {
+      expect(ACTION_HINT_RE.test(s), s).toBe(true);
+    }
+    for (const s of ["post card menu", "submit btn", "paypal button", "payment method", "like post", "resend code", "sort order"]) expect(ACTION_HINT_RE.test(s), s).toBe(false);
+    for (const s of ["delete", "unsubscribe", "opt-out", "Destroy"]) expect(LINK_ACTION_PATH_RE.test(s), s).toBe(true);
+    for (const s of ["how-to-delete-your-account", "deleted", "items"]) expect(LINK_ACTION_PATH_RE.test(s), s).toBe(false);
+    for (const s of ["checkout form", "payment", "order details", "оформление заказа", "оплата"]) expect(CHECKOUT_FORM_RE.test(s), s).toBe(true);
+    for (const s of ["profile", "search", "settings"]) expect(CHECKOUT_FORM_RE.test(s), s).toBe(false);
+    for (const s of ["Continue", "Next →", "→ Proceed", "Далее", "Продолжить", "OK", "Ок"]) expect(PROCEED_LABEL_RE.test(s), s).toBe(true);
+    for (const s of ["Back", "Не далее", "Окно", "Nextcloud"]) expect(PROCEED_LABEL_RE.test(s), s).toBe(false);
+    // Everything the page needs crosses into it as plain sources.
+    expect(new RegExp(PAGE_RULES.action, "iu").test("Оплатить")).toBe(true);
+    expect(JSON.parse(JSON.stringify(PAGE_RULES))).toEqual(PAGE_RULES);
+  });
+
+  it("treats a trailing line break as Enter", () => {
+    expect(splitTrailingNewline("Привет\n")).toEqual({ text: "Привет", enter: true });
+    expect(splitTrailingNewline("a\r\n  ")).toEqual({ text: "a", enter: true });
+    expect(splitTrailingNewline("line 1\nline 2")).toEqual({ text: "line 1\nline 2", enter: false });
+    expect(splitTrailingNewline("a\nb\n\n")).toEqual({ text: "a\nb", enter: true });
+    expect(splitTrailingNewline("plain")).toEqual({ text: "plain", enter: false });
+  });
+
+  it("checks the approved label against the element", () => {
+    expect(sameLabel("Pay $34.00", "Pay $34.00")).toBe(true);
+    expect(sameLabel(" pay  $34.00 ", "Pay $34.00")).toBe(true);
+    expect(sameLabel("«Купить»", "Купить")).toBe(true);
+    expect(sameLabel("Pay $34.00", "Pay $340.00")).toBe(false);
+    expect(sameLabel("Pay…", "Pay $500")).toBe(false);
+    expect(sameLabel("", "Delete")).toBe(false);
+    const long = "Confirm the transfer of 500 RUB to the account ending in 1234 at Example Bank today";
+    const shown = long.slice(0, 79) + "…";
+    expect(sameLabel(shown, shown)).toBe(true);
+    expect(sameLabel(shown, long)).toBe(true);
+    expect(submitCall("e5", "Pay", "https://shop.example/")).toContain('Call browser_submit with ref "e5", label "Pay", url "https://shop.example/"');
   });
 
   it("requires browser_submit for Enter in fields and forms", () => {
