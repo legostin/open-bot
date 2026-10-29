@@ -214,8 +214,21 @@ describe("pages (integration)", () => {
     expect(hub.pages.get(page.id)?.version).toBe(2);
   });
 
+  it("keeps the page's card in the agent's reply once the reply is complete", async () => {
+    await until(() => hub.brains.has("fake@local"), "fake brains to register");
+    const main = (await req("GET", "/api/bootstrap")).json.mainConversationId as string;
+    const args = { title: "Card in the reply", code: "export default function P() { return <main>Hi</main>; }" };
+    await req("POST", `/api/conversations/${main}/messages`, { text: `CALL page_create ${JSON.stringify(args)}` });
+    const reply = await until(async () => {
+      const msgs = (await req("GET", `/api/conversations/${main}/messages`)).json as Array<{ role: string; status: string; parts: any[] }>;
+      return msgs.find((m) => m.role === "assistant" && m.status === "complete" && m.parts.some((p) => p.type === "tool_call" && p.name === "page_create"));
+    }, "the complete reply");
+    const page = hub.pages.list().find((p) => p.title === "Card in the reply")!;
+    expect(reply.parts).toContainEqual({ type: "page", pageId: page.id });
+  });
+
   it("fetches only from the allowed APIs, and shows a page's card again", async () => {
-    const page = hub.pages.list()[0];
+    const page = hub.pages.list().find((p) => p.title === "A walk in Almaty")!;
     const r = await open(`${page.url}fetch?url=${encodeURIComponent("https://example.com/secret?x=1")}`);
     expect(r.status).toBe(403);
     expect(r.headers.get("access-control-allow-origin")).toBe("*");

@@ -1795,6 +1795,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "news") return `news:${JSON.stringify(p.items.map((x) => x.url ?? x.title))}`;
   if (p.type === "choices") return `choices:${JSON.stringify(p.options)}`;
   if (p.type === "feed") return `feed:${p.feedId}`;
+  if (p.type === "page") return `page:${p.pageId}`;
   if (p.type === "thinking") return `thinking:${p.agentId}`;
   if (p.type === "integration") return `integration:${p.id}`;
   // Each message to a teammate has its own line, even in the same thread.
