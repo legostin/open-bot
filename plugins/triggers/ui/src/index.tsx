@@ -28,6 +28,9 @@ interface Trigger {
   weekdays?: number[];
   nextRunAt: string | null;
   webhookUrl: string | null;
+  /** When it runs, in the reader's language. */
+  whenText: string;
+  lastErrorText: string | null;
   state: {
     lastRunAt?: string;
     lastStatus?: "ok" | "error" | "skipped";
@@ -83,25 +86,6 @@ function errorText(code: string | undefined, params: ErrorParams | undefined, fa
     if (text !== key) return text;
   }
   return fallback ?? "";
-}
-
-/** When a trigger fires, in the interface language. */
-function describeSchedule(t: Trigger): string {
-  switch (t.kind) {
-    case "schedule":
-      return tr("ui.schedule.cron", { cron: t.cron ?? "" });
-    case "once":
-      return tr("ui.schedule.once", { at: t.at ?? "" });
-    case "watch":
-      return tr("ui.schedule.watch", { n: t.intervalMinutes ?? 60, target: `${t.url}${t.selector ? ` [${t.selector}]` : ""}${t.jsonPath ? ` {${t.jsonPath}}` : ""}` });
-    case "event":
-      return tr("ui.schedule.webhook");
-    case "heartbeat": {
-      const wd = t.weekdays ?? [];
-      const days = wd.length === 5 && [1, 2, 3, 4, 5].every((d) => wd.includes(d)) ? tr("ui.schedule.weekdays") : wd.map(weekdayName).join(",");
-      return tr("ui.schedule.heartbeat", { days, times: (t.times ?? []).join(", ") });
-    }
-  }
 }
 
 const s = {
@@ -417,7 +401,7 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OwlbotUI; t: Trigge
     void navigator.clipboard?.writeText(text).then(() => ui.toast(tr("ui.card.copied"), "success"));
   };
 
-  const lastError = t.state.lastError ? errorText(t.state.lastErrorCode, t.state.lastErrorParams, t.state.lastError) : "";
+  const lastError = t.lastErrorText ?? "";
 
   return (
     <Card
@@ -436,7 +420,7 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OwlbotUI; t: Trigge
       }
     >
       <div style={{ display: "grid", gap: 4 }}>
-        <span style={s.muted}>{[describeSchedule(t), t.machineName && tr("ui.card.machine", { machine: t.machineName })].filter(Boolean).join(" · ")}</span>
+        <span style={s.muted}>{[t.whenText, t.machineName && tr("ui.card.machine", { machine: t.machineName })].filter(Boolean).join(" · ")}</span>
         <span>
           {tr("ui.card.next")} <b>{t.kind === "event" ? tr("ui.card.onEvent") : fmt(t.nextRunAt, tz)}</b> · {tr("ui.card.last")} {fmt(t.state.lastRunAt, tz)}
           {t.kind === "watch" && t.state.lastCheckedAt && (

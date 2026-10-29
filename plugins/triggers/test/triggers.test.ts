@@ -232,6 +232,9 @@ describe("triggers plugin", () => {
     const t = created.body as any;
     expect(t.createdBy).toBe("user");
     expect(t.scheduleText).toBe("Sun,Sat at 21:00");
+    // People read when it runs in their language.
+    expect(t.whenText).toBe("weekends at 21:00");
+    expect(((await h.http({ path: `/triggers/${t.id}`, locale: "ru" })).body as any).whenText).toBe("по выходным в 21:00");
     const next = new Date(t.nextRunAt);
     expect([next.getUTCHours(), next.getUTCMinutes()]).toEqual([12, 0]); // 21:00 JST
     expect([0, 6]).toContain(new Date(next.getTime() + 9 * 3600_000).getUTCDay());
