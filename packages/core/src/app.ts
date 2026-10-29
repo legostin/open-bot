@@ -33,6 +33,7 @@ import { registerFeedTools } from "./tools/feed-tools.ts";
 import { registerThinkingTools } from "./tools/thinking-tools.ts";
 import { thinkingView } from "./thinking.ts";
 import { registerPageTools } from "./tools/page-tools.ts";
+import { registerGroupTools } from "./tools/group-tools.ts";
 import { Pages } from "./pages.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
@@ -335,6 +336,7 @@ export class Hub {
       save: (a, actor) => this.saveAgent(a, actor),
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
     });
+    registerGroupTools({ registry: this.tools, store: this.store, agents: this.agents });
     registerPageTools({
       registry: this.tools,
       pages: this.pages,

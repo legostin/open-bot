@@ -19,7 +19,8 @@ Self-hosted personal agent platform. Spec: `docs/superpowers/specs/2026-10-26-op
 - Secrets never go into settings, env files or prompts: store them in the vault and pass `vault://<id>` references.
 
 ## Interface (law)
-- No modal dialogs or forms. Things are made and set up in the chat with an agent: it asks, the person answers or taps buttons inside its messages (quick replies: `choices` parts; live cards with their actions). A "New …" or "Settings" entry point opens the right agent's chat with a short request in the person's words.
+- Chat first. Everything can be made and set up in the chat with an agent: it asks, the person answers or taps buttons inside its messages (quick replies: `choices` parts; live cards with their actions), and agents have the tools for it. A "New …" or "Settings" entry point opens the right agent's chat with a short request in the person's words.
+- A form or dialog may exist as a second way to the same thing (the person's choice), never as the only way: whatever a form does, the chat can do too.
 - Full minimalism: show only what is needed now; details appear when they are wanted.
 - Applies to the web UI, the desktop app and the iOS app alike.
 
