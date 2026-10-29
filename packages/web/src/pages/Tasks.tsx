@@ -36,6 +36,8 @@ interface TriggerSummary {
   kind: string;
   name: string;
   agentId: string;
+  /** The computer its runs happen on, when one is set. */
+  machineName?: string;
   enabled: boolean;
   times?: string[];
   nextRunAt?: string | null;
@@ -173,7 +175,7 @@ export function TasksPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{trigger.name}</div>
-                  <div className="mt-0.5 truncate text-xs text-muted">{[agentNames.get(trigger.agentId) ?? trigger.agentId, triggerWhen(trigger)].filter(Boolean).join(" · ")}</div>
+                  <div className="mt-0.5 truncate text-xs text-muted">{[agentNames.get(trigger.agentId) ?? trigger.agentId, trigger.machineName, triggerWhen(trigger)].filter(Boolean).join(" · ")}</div>
                 </div>
                 <ChevronRight className="size-4 shrink-0 text-muted" />
               </button>

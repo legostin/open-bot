@@ -112,7 +112,7 @@ export const CORE_METHODS = [
   "agents.list",
   "ui.emit", // push a plugin event to web clients
   "vault.check", // check if a vault ref exists / is unlocked (metadata only)
-  "machines.list",
+  "machines.list", // the computers tasks run on (the hub's own first, id "local"); tasks.create's `machine` takes one
   "notifications.feedback", // apply a signed feedback button press (useful / less / off)
   "files.deliver", // write a file (in base64 chunks) into a session workspace's downloads/ folder
   "connections.token", // an access token of the hub's connection the plugin's integration uses (e.g. Google)

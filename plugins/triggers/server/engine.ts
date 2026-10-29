@@ -305,16 +305,29 @@ export class TriggerEngine {
       run.detail = "The previous run has not finished yet";
       run.code = "previousRunning";
     } else {
-      try {
-        const goal = renderPrompt(t, { reason, now, tz: this.tz, ...extra });
-        const task = await this.ctx.core.call<{ id?: string }>("tasks.create", { agentId: t.agentId, goal, title: t.name, background: true, triggerId: t.id });
-        rt.count++;
-        run.taskId = task?.id;
-        t.state.lastTaskId = task?.id;
-        t.state.lastRunAt = run.at;
-      } catch (e: any) {
-        run.status = "error";
-        run.detail = e?.message ?? String(e);
+      const away = await this.machineAway(t);
+      if (away) {
+        Object.assign(run, { status: "error", ...away });
+        if (reason !== "manual") await this.tellMachineAway(t, away);
+      } else {
+        try {
+          const goal = renderPrompt(t, { reason, now, tz: this.tz, ...extra });
+          const task = await this.ctx.core.call<{ id?: string }>("tasks.create", {
+            agentId: t.agentId,
+            goal,
+            title: t.name,
+            background: true,
+            triggerId: t.id,
+            ...(t.machine ? { machine: t.machine } : {}),
+          });
+          rt.count++;
+          run.taskId = task?.id;
+          t.state.lastTaskId = task?.id;
+          t.state.lastRunAt = run.at;
+        } catch (e: any) {
+          run.status = "error";
+          run.detail = e?.message ?? String(e);
+        }
       }
     }
     t.state.runsToday = rt;
@@ -325,6 +338,33 @@ export class TriggerEngine {
     this.emit(t.id);
     if (run.status !== "started") this.ctx.log.info(`trigger ${t.id} ${run.status}: ${run.detail}`);
     return run;
+  }
+
+  /** Why the trigger's computer cannot take a run now (no longer paired, or offline); undefined when it can or none is set. */
+  private async machineAway(t: Trigger): Promise<{ detail: string; code: string; params: ErrorParams } | undefined> {
+    if (!t.machine) return undefined;
+    const list = await this.computers();
+    if (!list.length) return undefined; // the hub did not say: tasks.create decides
+    const m = list.find((x) => x.id === t.machine);
+    const name = m?.name ?? t.machineName ?? t.machine;
+    if (m && m.name !== t.machineName) t.machineName = m.name;
+    if (!m) return { detail: `The computer "${name}" is no longer paired with the hub`, code: "machineGone", params: { machine: name } };
+    if (m.status !== "online") return { detail: `The computer "${name}" is offline`, code: "machineOffline", params: { machine: name } };
+    return undefined;
+  }
+
+  /** A run its computer could not take: the user hears of it, or it would just not happen. */
+  private async tellMachineAway(t: Trigger, away: { code: string; params: ErrorParams }): Promise<void> {
+    try {
+      await this.ctx.core.call("notify", {
+        level: "notify",
+        title: this.ctx.i18n.t("notify.notRun", { name: t.name }),
+        body: this.ctx.i18n.t(`error.${away.code}`, away.params),
+        agentId: t.agentId,
+      });
+    } catch (e: any) {
+      this.ctx.log.warn(`notify failed: ${e?.message ?? e}`);
+    }
   }
 
   /** Poll a watch; fire only when the extracted value changed (the first poll stores a baseline). */
@@ -408,6 +448,36 @@ export class TriggerEngine {
     }
   }
 
+  /** The computers runs can happen on, the hub's own first; empty when the hub does not say. */
+  async computers(): Promise<Array<{ id: string; name: string; status: string }>> {
+    try {
+      const list = await this.ctx.core.call<Array<{ id: string; name: string; status: string }>>("machines.list");
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** `machine` from a tool or the UI: the computer by id or name (an offline one is fine); null or "" clears it. */
+  private async setMachine(t: Trigger, value: unknown): Promise<void> {
+    if (value === undefined) return;
+    if (value === null || (typeof value === "string" && !value.trim())) {
+      delete t.machine;
+      delete t.machineName;
+      return;
+    }
+    if (typeof value !== "string") throw new ValidationError("notString", "Field machine must be a string", { field: "machine" });
+    const key = value.trim().toLowerCase();
+    const list = await this.computers();
+    const m = list.find((x) => x.id.toLowerCase() === key || x.name.toLowerCase() === key) ?? list.find((x) => x.name.toLowerCase().includes(key));
+    if (!m) {
+      const available = list.map((x) => `${x.name} (${x.id}${x.status === "online" ? "" : ", offline"})`).join(", ");
+      throw new ValidationError("unknownMachine", `No computer "${value}". Computers: ${available}`, { machine: value, available });
+    }
+    t.machine = m.id;
+    t.machineName = m.name;
+  }
+
   private async assertAgent(id: string): Promise<void> {
     const agents = await this.agents();
     if (agents.length && !agents.some((a) => a.id === id)) {
@@ -420,6 +490,7 @@ export class TriggerEngine {
     const now = new Date(this.now());
     const t = buildTrigger(input, { now, tz: this.tz, defaultAgent: o.defaultAgent ?? this.defaultAgent, createdBy: o.createdBy });
     await this.assertAgent(t.agentId);
+    await this.setMachine(t, input.machine);
     t.state.nextRunAt = computeNextRun(t, this.tz, now)?.toISOString();
     this.triggers.set(t.id, t);
     await this.save(t);
@@ -435,6 +506,7 @@ export class TriggerEngine {
       const now = new Date(this.now());
       const next = applyUpdate(cur, patch, { now, tz: this.tz });
       if (next.agentId !== cur.agentId) await this.assertAgent(next.agentId);
+      await this.setMachine(next, patch.machine);
       next.state.nextRunAt = computeNextRun(next, this.tz, now)?.toISOString();
       this.triggers.set(id, next);
       await this.save(next);

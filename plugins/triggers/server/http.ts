@@ -24,7 +24,8 @@ export async function handleHttp(e: TriggerEngine, req: PluginHttpRequest): Prom
   const path = req.path.replace(/\/+$/, "") || "/";
   try {
     if (path === "/triggers") {
-      if (method === "GET") return ok({ triggers: e.list().map((t) => view(e, t)), timezone: e.tz, publicUrl: e.publicUrl, agents: await e.agents() });
+      if (method === "GET")
+        return ok({ triggers: e.list().map((t) => view(e, t)), timezone: e.tz, publicUrl: e.publicUrl, agents: await e.agents(), computers: await e.computers() });
       if (method === "POST") return ok(view(e, await e.create(body(req), { createdBy: "user" })), 201);
       return ok({ error: "method not allowed" }, 405);
     }

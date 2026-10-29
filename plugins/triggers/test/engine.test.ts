@@ -28,11 +28,16 @@ function fakeCtx(kv = new Map<string, unknown>(), tz = "Europe/Moscow") {
         if (method === "tasks.create") return { id: `task_${++n}` };
         if (method === "tasks.list") return [];
         if (method === "agents.list") return [{ id: "assistant", name: "A" }];
+        if (method === "machines.list")
+          return [
+            { id: "local", name: "MacBook-Pro-legostin", status: "online" },
+            { id: "m_studio", name: "Studio", status: "offline" },
+          ];
         return {};
       },
     },
   } as unknown as PluginContext;
-  return { ctx, kv, calls, created: () => calls.filter((c) => c.method === "tasks.create") };
+  return { ctx, kv, calls, created: () => calls.filter((c) => c.method === "tasks.create"), notified: () => calls.filter((c) => c.method === "notify") };
 }
 
 const base = (over: Partial<Trigger>): Trigger => ({
@@ -167,5 +172,48 @@ describe("trigger engine", () => {
     expect(runs[0]).toMatchObject({ status: "skipped", detail: expect.stringContaining("not finished"), code: "previousRunning" });
     expect(f.created()).toHaveLength(0);
     e.stop();
+  });
+  it("runs on the computer the trigger names, and says so when that computer cannot take a run", async () => {
+    const now = Date.now();
+    const f = fakeCtx(new Map<string, unknown>([["initialized", true]]));
+    const e = new TriggerEngine(f.ctx);
+    await e.start();
+
+    // By name, any case and part of it; stored as the computer's id.
+    const t = await e.create({ kind: "schedule", name: "Measure", prompt: "Measure the battery", cron: "0 9 * * *", machine: "macbook" }, { createdBy: "agent:assistant" });
+    expect(t).toMatchObject({ machine: "local", machineName: "MacBook-Pro-legostin" });
+    await e.runNow(t.id);
+    expect(f.created()[0].params).toMatchObject({ machine: "local", triggerId: t.id });
+    expect(f.created()[0].params.goal).toContain("- Computer: MacBook-Pro-legostin");
+
+    await expect(e.create({ kind: "schedule", name: "X", prompt: "x", cron: "0 9 * * *", machine: "atlantis" }, { createdBy: "user" })).rejects.toMatchObject({
+      code: "unknownMachine",
+      message: expect.stringContaining("MacBook-Pro-legostin (local), Studio (m_studio, offline)"),
+    });
+
+    // An offline computer can be chosen; its runs do not start, and a scheduled one tells the user.
+    await e.update(t.id, { machine: "m_studio" });
+    expect(await e.runNow(t.id)).toMatchObject({ status: "error", code: "machineOffline", params: { machine: "Studio" } });
+    expect(f.notified()).toHaveLength(0); // asked for now: whoever asked hears it in the answer
+    e.stop();
+
+    const kv = new Map(f.kv);
+    const missed = { ...(kv.get(`trigger:${t.id}`) as Trigger) };
+    kv.set(`trigger:${t.id}`, { ...missed, state: { ...missed.state, nextRunAt: new Date(now - 3600_000).toISOString() } });
+    const f2 = fakeCtx(kv);
+    const e2 = new TriggerEngine(f2.ctx);
+    await e2.start();
+    await e2.boot();
+    expect(f2.created()).toHaveLength(0);
+    expect(f2.notified()[0].params).toMatchObject({ level: "notify", title: "notify.notRun", body: "error.machineOffline" });
+    expect(e2.get(t.id)!.state).toMatchObject({ lastStatus: "error", lastErrorCode: "machineOffline" });
+
+    // Cleared: the agent's usual brain again.
+    const cleared = await e2.update(t.id, { machine: "" });
+    expect(cleared.machine).toBeUndefined();
+    expect(cleared.machineName).toBeUndefined();
+    await e2.runNow(t.id);
+    expect(f2.created()[0].params.machine).toBeUndefined();
+    e2.stop();
   });
 });

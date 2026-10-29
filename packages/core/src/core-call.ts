@@ -62,9 +62,18 @@ export function createCoreCall(hub: Hub) {
       case "tasks.create": {
         const agentId = p.agentId ?? hub.settings.get().defaultAgent;
         if (!hub.agents.get(agentId)) throw new Error(`unknown agent ${agentId}`);
+        let goal = String(p.goal ?? "");
+        // machine: the computer the task runs on (id or name, see machines.list), like task_delegate's.
+        let brainRef: string | undefined;
+        if (typeof p.machine === "string" && p.machine.trim()) {
+          const place = hub.runner.placeTask(agentId, p.machine);
+          if ("error" in place) throw new Error(place.error);
+          brainRef = place.brainRef;
+          if (place.note) goal = `${goal}\n\n${place.note}`;
+        }
         const t = hub.runner.createTask({
           agentId,
-          goal: String(p.goal ?? ""),
+          goal,
           title: String(p.title ?? String(p.goal ?? "").slice(0, 60)),
           background: p.background !== false,
           // quiet: a plugin's own background work (memory's nightly reflection) reports like a trigger's run, only
@@ -72,6 +81,7 @@ export function createCoreCall(hub: Hub) {
           createdBy: p.triggerId || p.quiet === true ? "trigger" : "user",
           triggerId: p.triggerId,
           parentConversationId: p.parentConversationId,
+          ...(brainRef ? { brainRef } : {}),
         });
         return t;
       }
@@ -111,7 +121,8 @@ export function createCoreCall(hub: Hub) {
         return { exists: !!m, state: hub.vault.state(), type: m?.type, hints: m?.hints };
       }
       case "machines.list":
-        return hub.machines.list().map((m) => ({ id: m.id, name: m.name, status: m.status }));
+        // The computers tasks run on: the hub's own first (id "local"), then the paired ones.
+        return hub.runner.computers().map((c) => ({ id: c.id, name: c.name, status: c.online ? "online" : "offline" }));
       case "notifications.feedback": {
         const n = hub.notifier.feedback(String(p.id), p.value, String(p.token ?? ""));
         return { id: n.id, feedback: n.feedback };

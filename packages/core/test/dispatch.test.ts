@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentDef, Message, Task } from "@owlbot/shared";
 import { Hub, loadConfig } from "../src/index.ts";
+import { createCoreCall } from "../src/core-call.ts";
 import { buildSystemPrompt } from "../src/prompt.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
@@ -192,6 +193,16 @@ describe("agents as entry points (integration)", () => {
     expect(here.brainRef).toBe("fake@local");
     // The reply that started it carries its line.
     expect((await messages(c)).some((m) => m.parts.some((p) => p.type === "task" && p.taskId === here.id))).toBe(true);
+  });
+
+  it("lets a plugin place a task on a computer (a trigger's runs)", async () => {
+    const core = createCoreCall(hub);
+    const computers = (await core("triggers", "machines.list", {})) as Array<{ id: string; status: string }>;
+    expect(computers[0]).toMatchObject({ id: "local", status: "online" });
+    const t = (await core("triggers", "tasks.create", { agentId: "assistant", goal: "measure", title: "Measure", triggerId: "t_m", machine: "local" })) as Task;
+    expect(t).toMatchObject({ brainRef: "fake@local", createdBy: "trigger", triggerId: "t_m" });
+    await expect(core("triggers", "tasks.create", { agentId: "assistant", goal: "x", machine: "atlantis" })).rejects.toThrow(/No computer "atlantis"/);
+    await until(async () => ["done", "failed"].includes((await task(t.id)).status), "the placed task to finish");
   });
 
   it("tells the dialog's agent how to route work, and a task how to ask back", () => {

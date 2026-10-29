@@ -13,6 +13,8 @@ interface Trigger {
   name: string;
   prompt: string;
   agentId: string;
+  machine?: string;
+  machineName?: string;
   enabled: boolean;
   maxRunsPerDay: number;
   cron?: string;
@@ -54,6 +56,8 @@ interface ListResponse {
   triggers: Trigger[];
   timezone: string;
   agents: Array<{ id: string; name: string }>;
+  /** The computers runs can happen on, the hub's own first. */
+  computers?: Array<{ id: string; name: string; status: string }>;
 }
 
 // Set in definePluginUI; the page reloads when the language changes.
@@ -145,17 +149,19 @@ interface FormProps {
   ui: OwlbotUI;
   initial: Trigger | null;
   agents: ListResponse["agents"];
+  computers: NonNullable<ListResponse["computers"]>;
   tz: string;
   onDone: () => void;
 }
 
-function TriggerForm({ ui, initial, agents, tz, onDone }: FormProps) {
+function TriggerForm({ ui, initial, agents, computers, tz, onDone }: FormProps) {
   const editing = !!initial;
   const [kind, setKind] = useState<Kind>(initial?.kind ?? "schedule");
   const [name, setName] = useState(initial?.name ?? "");
   const [prompt, setPrompt] = useState(initial?.prompt ?? "");
   const [agent, setAgent] = useState(initial?.agentId ?? agents[0]?.id ?? "assistant");
-  const [cron, setCron] = useState(initial?.cron ?? "0 9 * * 1-5");
+  const [machine, setMachine] = useState(initial?.machine ?? "");
+  const [cron,setCron] = useState(initial?.cron ?? "0 9 * * 1-5");
   const [at, setAt] = useState(toLocalInput(initial?.at, tz));
   const [url, setUrl] = useState(initial?.url ?? "");
   const [mode, setMode] = useState<"page" | "selector" | "json">(initial?.jsonPath ? "json" : initial?.selector ? "selector" : "page");
@@ -171,6 +177,7 @@ function TriggerForm({ ui, initial, agents, tz, onDone }: FormProps) {
   const submit = async () => {
     const body: Record<string, unknown> = { name, prompt, agent, maxRunsPerDay: Number(maxRuns) };
     if (!editing) body.kind = kind;
+    if (machine !== (initial?.machine ?? "")) body.machine = machine;
     if (kind === "schedule") body.cron = cron;
     // Resend the time only when it changed: a fired one-off keeps its past time on rename.
     if (kind === "once" && (!editing || at !== toLocalInput(initial?.at, tz))) body.at = at;
@@ -200,6 +207,9 @@ function TriggerForm({ ui, initial, agents, tz, onDone }: FormProps) {
       setBusy(false);
     }
   };
+
+  // A computer no longer paired stays in the list under its last name, so the form does not drop it silently.
+  const machineOptions = !machine || computers.some((c) => c.id === machine) ? computers : [...computers, { id: machine, name: initial?.machineName ?? machine, status: "" }];
 
   const field = (label: string, input: any, hint?: string) => (
     <label style={s.field}>
@@ -238,6 +248,20 @@ function TriggerForm({ ui, initial, agents, tz, onDone }: FormProps) {
           ))}
         </select>,
       )}
+      {/* Only when there is a choice: a hub alone has one computer, or the trigger already has one set. */}
+      {(computers.length > 1 || machine) &&
+        field(
+          tr("ui.form.machine"),
+          <select style={s.input} value={machine} onChange={(e: any) => setMachine(e.target.value)}>
+            <option value="">{tr("ui.form.machineAny")}</option>
+            {machineOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>,
+          tr("ui.form.machineHint"),
+        )}
 
       {kind === "schedule" &&
         field(tr("ui.form.cron"), <input style={{ ...s.input, ...s.mono }} value={cron} onChange={(e: any) => setCron(e.target.value)} />, tr("ui.form.cronHint", { tz }))}
@@ -412,7 +436,7 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OwlbotUI; t: Trigge
       }
     >
       <div style={{ display: "grid", gap: 4 }}>
-        <span style={s.muted}>{describeSchedule(t)}</span>
+        <span style={s.muted}>{[describeSchedule(t), t.machineName && tr("ui.card.machine", { machine: t.machineName })].filter(Boolean).join(" · ")}</span>
         <span>
           {tr("ui.card.next")} <b>{t.kind === "event" ? tr("ui.card.onEvent") : fmt(t.nextRunAt, tz)}</b> · {tr("ui.card.last")} {fmt(t.state.lastRunAt, tz)}
           {t.kind === "watch" && t.state.lastCheckedAt && (
@@ -553,6 +577,7 @@ function TriggersPage({ ui }: { ui: OwlbotUI }) {
           ui={ui}
           initial={editing === "new" ? null : editing}
           agents={data.agents}
+          computers={data.computers ?? []}
           tz={tz}
           onDone={() => {
             setEditing(null);

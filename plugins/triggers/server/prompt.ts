@@ -64,6 +64,7 @@ export function renderPrompt(t: Trigger, c: FireContext): string {
     `- Fired at: ${when}, timezone ${c.tz}`,
     `- Reason: ${REASONS[c.reason]}`,
   ];
+  if (t.machineName) lines.push(`- Computer: ${t.machineName} (the trigger runs on it)`);
   if (c.missedAt) lines.push(`- Missed run was planned for ${formatLocal(c.missedAt, c.tz)}; this is a single catch-up run.`);
 
   if (t.kind === "watch") {

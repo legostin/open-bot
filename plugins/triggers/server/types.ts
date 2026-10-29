@@ -38,6 +38,9 @@ export interface Trigger {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+  /** The computer the runs happen on (a machines.list id, "local" for the hub's own) and its name; unset: the agent's usual brain. */
+  machine?: string;
+  machineName?: string;
   /** schedule: 5-field cron in the user's timezone. */
   cron?: string;
   /** once: ISO datetime. */
@@ -76,6 +79,8 @@ export interface TriggerInput {
   agentId?: string;
   enabled?: boolean;
   maxRunsPerDay?: number;
+  /** A computer's id or name; null or "" clears it. */
+  machine?: string | null;
   cron?: string;
   at?: string;
   url?: string;

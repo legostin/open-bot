@@ -18,6 +18,11 @@ const FIELDS: Record<string, JsonSchema> = {
       "Instructions for the agent when the trigger fires, written as a task: what to check or do and when the user should be notified. Placeholders {{time}}, {{date}}, {{name}} are filled in. Event context (changed value, webhook payload) is appended automatically.",
   },
   agent: { type: "string", description: "Id of the agent that runs (default: you)." },
+  machine: {
+    type: "string",
+    description:
+      "Computer id or name every run happens on, when the work needs that computer's files, apps or hardware (default: wherever the agent's brain runs). See task_agents for the computers. An empty string clears it.",
+  },
   cron: { type: "string", description: "schedule: 5-field cron 'minute hour day month weekday' in the user's local timezone, e.g. '0 9 * * 1-5' = weekdays at 09:00." },
   at: { type: "string", description: "once: ISO datetime. Without an offset it is the user's local time, e.g. '2026-10-27T09:00'. Must be in the future." },
   url: { type: "string", description: "watch: http(s) URL to poll." },
@@ -36,6 +41,7 @@ function summary(e: TriggerEngine, t: Trigger) {
     name: t.name,
     enabled: t.enabled,
     agent: t.agentId,
+    machine: t.machineName ?? null,
     when: describeSchedule(t),
     nextRun: t.state.nextRunAt ? formatLocal(t.state.nextRunAt, e.tz) : null,
     lastRun: t.state.lastRunAt ? formatLocal(t.state.lastRunAt, e.tz) : null,
@@ -48,7 +54,8 @@ function summary(e: TriggerEngine, t: Trigger) {
 }
 
 function describeCreated(e: TriggerEngine, t: Trigger, verb: string): string {
-  const lines = [`${verb} trigger ${t.id} "${t.name}" (${t.kind}: ${describeSchedule(t)}; timezone ${e.tz}; agent ${t.agentId}; ${t.enabled ? "enabled" : "disabled"}).`];
+  const on = t.machineName ? `; runs on the computer ${t.machineName}` : "";
+  const lines = [`${verb} trigger ${t.id} "${t.name}" (${t.kind}: ${describeSchedule(t)}; timezone ${e.tz}; agent ${t.agentId}${on}; ${t.enabled ? "enabled" : "disabled"}).`];
   if (t.state.nextRunAt) lines.push(`Next run: ${formatLocal(t.state.nextRunAt, e.tz)}.`);
   if (t.kind === "watch") lines.push("The first check stores a baseline; the agent runs only when the extracted value changes.");
   if (t.kind === "event") {
@@ -64,7 +71,7 @@ function describeCreated(e: TriggerEngine, t: Trigger, verb: string): string {
 
 const pick = (input: any): TriggerInput => {
   const out: Record<string, unknown> = {};
-  for (const k of ["kind", "name", "prompt", "agent", "enabled", "maxRunsPerDay", "cron", "at", "url", "selector", "jsonPath", "intervalMinutes", "times", "weekdays"]) {
+  for (const k of ["kind", "name", "prompt", "agent", "machine", "enabled", "maxRunsPerDay", "cron", "at", "url", "selector", "jsonPath", "intervalMinutes", "times", "weekdays"]) {
     if (input?.[k] !== undefined) out[k] = input[k];
   }
   return out as TriggerInput;
@@ -87,7 +94,8 @@ export function registerTools(ctx: PluginContext, e: TriggerEngine): void {
       "schedule (recurring, cron in the user's timezone), once (a one-time reminder at `at`), " +
       "watch (poll `url` every intervalMinutes and run only when the page/JSON value changes), " +
       "event (a webhook URL with a secret; the POST body is passed to the agent), " +
-      "heartbeat (a proactive review at fixed local times on chosen weekdays). Returns the trigger id.",
+      "heartbeat (a proactive review at fixed local times on chosen weekdays). " +
+      "When the runs need a particular computer (its files, apps, hardware), set `machine`: every run happens there. Returns the trigger id.",
     effect: "local-write",
     inputSchema: {
       type: "object",
@@ -116,7 +124,7 @@ export function registerTools(ctx: PluginContext, e: TriggerEngine): void {
 
   ctx.tools.register({
     name: "update",
-    description: "Change a trigger: name, prompt, agent, enabled, maxRunsPerDay and the kind-specific fields (cron, at, url, selector, jsonPath, intervalMinutes, times, weekdays). The kind cannot change.",
+    description: "Change a trigger: name, prompt, agent, machine, enabled, maxRunsPerDay and the kind-specific fields (cron, at, url, selector, jsonPath, intervalMinutes, times, weekdays). The kind cannot change.",
     effect: "local-write",
     inputSchema: {
       type: "object",
