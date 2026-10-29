@@ -105,7 +105,7 @@ export type EventName =
   | "approval.resolved"
   | "conversation.updated"
   | "vault.state"
-  /** `{ ids }`: vault items the user just stored from the chat (e.g. the token this plugin waits for). */
+  /** `{ ids }`: vault items just stored, changed or removed (chat, security console…), e.g. the token this plugin waits for. */
   | "vault.updated";
 
 export interface PluginHttpRequest {
@@ -183,6 +183,8 @@ export interface PluginContext {
      * Fields of a vault item. Only items allowed by permissions.vault and the item's scope.
      * Hub errors (here and in core calls) are English in `message`; `data.text` has the same error in the
      * hub language for showing to people, and `data.key` / `data.params` identify it.
+     * An item that does not exist ("vault.notFound") is remembered: asking again gives the same error without a trip to
+     * the hub until the vault changes ("vault.updated", "vault.state"), so a plugin may simply ask when it needs the item.
      */
     get(ref: string, opts?: { domain?: string; reason?: string }): Promise<Record<string, string>>;
   };

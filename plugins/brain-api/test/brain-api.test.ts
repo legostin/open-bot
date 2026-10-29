@@ -387,6 +387,34 @@ describe("brain-api plugin", () => {
     }
   });
 
+  it("asks the hub for a missing key once, until the vault changes", async () => {
+    // The hub probes brains every minute and the Brains page asks for fresh probes: each ask used to reach the vault
+    // and its audit log as another vault.denied.
+    const bare = await startPlugin({ dir: PLUGIN_DIR, settings, vault: {} });
+    const asked = () => bare.vaultGets.filter((id) => id === "openrouter_api_key").length;
+    try {
+      for (let i = 0; i < 5; i++) expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ authenticated: false });
+      // The first answer, then once more after subscribing to vault changes (the key may have come in between).
+      expect(asked()).toBe(2);
+      expect(bare.subscriptions.has("vault.updated") && bare.subscriptions.has("vault.state")).toBe(true);
+      // Another missing item is a lookup of its own.
+      expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ authenticated: false });
+      expect(bare.vaultGets.filter((id) => id === "anthropic_api_key").length).toBe(1);
+      // A key stored from the chat or the security console counts at once.
+      bare.setVault("openrouter_api_key", { value: "sk-or-v1-test" });
+      expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ authenticated: true });
+      expect(asked()).toBe(3);
+      // Found keys are not remembered: removing it is seen on the next probe, and so is the vault opening again.
+      bare.setVault("openrouter_api_key");
+      expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ authenticated: false });
+      bare.emit("vault.state", { state: "unlocked" });
+      expect(await bare.brainProbe("api", "openrouter")).toMatchObject({ authenticated: false });
+      expect(asked()).toBe(5);
+    } finally {
+      await bare.stop();
+    }
+  });
+
   it("persists history and resumes it in a new plugin process", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "owl-api-data-"));
     const h1 = await startPlugin({ dir: PLUGIN_DIR, settings, vault: VAULT, dataDir });

@@ -137,7 +137,11 @@ export class Hub {
     configureHubLocale(() => normalizeLocale(this.settings.get().language) ?? DEFAULT_LOCALE);
     this.vault = new VaultService(join(config.dataDir, "vault.db"), {
       onState: (state) => this.bus.emit("vault.state", { state }),
-      onAccess: (e) => this.audit.append(e.actor, e.allowed ? "vault.access" : "vault.denied", e.itemId, e.reason ? { reason: e.reason } : undefined),
+      onAccess: (e) =>
+        this.audit.append(e.actor, e.allowed ? "vault.access" : "vault.denied", e.itemId, e.reason ? { reason: e.reason, ...(e.repeats ? { repeats: e.repeats } : {}) } : undefined),
+      // Every change, wherever it comes from (security console, chat, Google sign-in): plugins waiting for a key
+      // (the Telegram token, an API key) react to this instead of asking the vault again and again.
+      onChange: (ids) => this.bus.emit("vault.updated", { ids }),
     });
     this.audit = new AuditLog(this.db, this.vault.redactor);
     this.egress.audit = this.audit;

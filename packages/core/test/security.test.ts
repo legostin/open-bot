@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Rule, ToolDescriptor } from "@owlbot/shared";
 import { decide, extractTargets, suggestRule, type PolicyInput } from "../src/policy/engine.ts";
 import { Redactor } from "../src/vault/redact.ts";
-import { VaultService, VaultError } from "../src/vault/service.ts";
+import { NOT_FOUND_QUIET_MS, VaultService, VaultError, type VaultAccessEntry } from "../src/vault/service.ts";
 import { AuditLog } from "../src/audit.ts";
 import { openDb } from "../src/db.ts";
 import { sudoSpawn } from "../src/plugins/host.ts";
@@ -130,6 +130,48 @@ describe("vault", () => {
     v.seal();
     v.unlock("new passphrase 2");
     expect(v.read("site").fields.username).toBe("me");
+    v.db.close();
+  });
+
+  it("folds repeated lookups of a missing item, never denials of an item that exists", () => {
+    let now = 1_000_000;
+    const log: VaultAccessEntry[] = [];
+    const changes: string[][] = [];
+    const v = new VaultService(join(dir, "quiet.db"), { onAccess: (e) => log.push(e), onChange: (ids) => changes.push(ids), now: () => now });
+    v.init("correct horse battery");
+    const ask = (id: string, plugin: string) => expect(() => v.access(`vault://${id}`, { actor: `plugin:${plugin}`, pluginId: plugin })).toThrow(VaultError);
+    const notFound = { actor: "plugin:telegram", itemId: "telegram_bot_token", allowed: false, reason: "not_found" };
+
+    for (let i = 0; i < 5; i++) ask("telegram_bot_token", "telegram");
+    expect(log).toEqual([notFound]);
+    // Another actor, another item: entries of their own.
+    ask("telegram_bot_token", "web");
+    ask("brave_api_key", "web");
+    expect(log).toHaveLength(3);
+    // An hour later: one entry again, counting the lookups folded since the last one.
+    now += NOT_FOUND_QUIET_MS - 1;
+    ask("telegram_bot_token", "telegram");
+    expect(log).toHaveLength(3);
+    now += 1;
+    ask("telegram_bot_token", "telegram");
+    expect(log.at(-1)).toEqual({ ...notFound, repeats: 5 });
+
+    // An item that exists but is outside the asker's scope: every refusal is logged.
+    v.upsert({ id: "api", type: "secret", name: "API", fields: { value: "secret-value-1" }, scope: { plugins: ["web"] } });
+    for (let i = 0; i < 4; i++) ask("api", "telegram");
+    expect(log.filter((e) => e.itemId === "api")).toHaveLength(4);
+    expect(log.filter((e) => e.itemId === "api").every((e) => !e.allowed && /outside the item's scope/.test(e.reason ?? ""))).toBe(true);
+
+    // The token stored and removed again: the next miss is news, logged at once.
+    v.upsert({ id: "telegram_bot_token", type: "secret", name: "Bot", fields: { value: "123:abc" } });
+    v.remove("telegram_bot_token");
+    ask("telegram_bot_token", "telegram");
+    expect(log.at(-1)).toEqual(notFound);
+
+    // Every change is announced (removing what is not there is not a change).
+    v.updateScope("api", { plugins: ["web", "telegram"] });
+    v.remove("nothing_here");
+    expect(changes).toEqual([["api"], ["telegram_bot_token"], ["telegram_bot_token"], ["api"]]);
     v.db.close();
   });
 });

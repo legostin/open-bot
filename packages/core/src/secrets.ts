@@ -164,7 +164,7 @@ export class SecretIntake {
       const ref = `vault://${input.vaultId}`;
       if (rec.settings[input.setting] !== ref) this.d.plugins().setSettings(input.pluginId, { ...rec.settings, [input.setting]: ref });
     }
-    this.d.bus.emit("vault.updated", { ids: [input.vaultId] });
+    // The vault itself announces the change ("vault.updated", see app.ts), as for every other way an item is stored.
     return { vaultId: input.vaultId, title: input.title, pluginId: input.pluginId };
   }
 
