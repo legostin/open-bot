@@ -429,7 +429,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             readOnly={listening}
-            placeholder={listening ? t("composer.listening") : isGroup ? t("composer.groupPlaceholder") : mobileMode ? t("composer.placeholderShort") : t("composer.placeholder")}
+            placeholder={listening ? t("composer.listening") : isGroup ? t(mobileMode ? "composer.groupPlaceholderShort" : "composer.groupPlaceholder") : mobileMode ? t("composer.placeholderShort") : t("composer.placeholder")}
             aria-label={t("composer.message")}
             className="max-h-[40vh] min-h-9 flex-1 resize-none overflow-hidden bg-transparent py-2 text-[15px] leading-relaxed outline-none focus-visible:outline-none placeholder:text-muted/80"
           />

@@ -238,6 +238,7 @@ export default {
   "composer.nothingToStop": "Нечего останавливать",
   "composer.hint": "Enter — отправить, Shift+Enter — новая строка",
   "composer.groupPlaceholder": "Сообщение группе…  @ — упомянуть",
+  "composer.groupPlaceholderShort": "Сообщение группе",
   "composer.mentions": "Участники",
   "composer.everyone": "Все",
   "composer.everyoneHint": "ответят по очереди",
