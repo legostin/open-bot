@@ -62,9 +62,9 @@ export function registerPageTools(d: PageToolDeps): void {
     {
       name: "page_create",
       description:
-        "Make a page: a beautiful interactive web page the user opens from its card in the chat (full screen, on the phone too). Use it when an " +
-        "answer deserves more than a message: a walk or trip with its places, a guide, a comparison, a plan, a report, a dashboard. The card shows " +
-        `in your reply. ${GUIDE}`,
+        "Make a page: a beautiful interactive web page the user opens from its card in the chat (full screen, on the phone too). Use it whenever " +
+        "it is more convenient to show it all as a page than as a message: a walk or trip with its places, a guide, a comparison, a plan, a table, " +
+        `a report, a dashboard. The card shows in your reply. ${GUIDE}`,
       effect: "local-write",
       inputSchema: {
         type: "object",
