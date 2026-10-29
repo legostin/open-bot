@@ -1,6 +1,7 @@
 // Builtin plugin "brain-api": the "api" brain — our own agent loop over LLM APIs.
-// Variants (brain refs "api:<variant>"): anthropic (Messages API), openai, openrouter, custom (any
-// OpenAI-compatible endpoint: Ollama, LM Studio, vLLM). Tools come from the hub's MCP endpoint.
+// Variants (brain refs "api:<variant>"): anthropic (Messages API), openai, openrouter, the OpenAI-compatible providers
+// (settings.ts PROVIDERS: Kimi, DeepSeek, GLM, Qwen, Gemini, Grok, Mistral, Groq) and custom (any OpenAI-compatible
+// endpoint: Ollama, LM Studio, vLLM). Tools come from the hub's MCP endpoint.
 
 import { existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -9,7 +10,7 @@ import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
 import { isSafeSessionId, loadSession, type HistoryMessage } from "./history.ts";
 import { request, trimSlash } from "./http.ts";
 import { ApiBrainSession, readKey } from "./session.ts";
-import { ANTHROPIC_MODEL_NAMES, ANTHROPIC_MODELS, VARIANTS, resolveSettings, type ApiSettings } from "./settings.ts";
+import { ANTHROPIC_MODEL_NAMES, VARIANTS, extraModelsFor, resolveSettings, type ApiSettings } from "./settings.ts";
 
 const SESSION_TTL_MS = 30 * 24 * 3600_000;
 
@@ -76,7 +77,8 @@ const plugin: PluginModule = {
         };
       }
       const def = v.defaultModel(s);
-      let models = v.protocol === "anthropic" ? [...new Set([...ANTHROPIC_MODELS, def])] : [def];
+      // Every model it offers (the hub picks one per request), the default and the user's additions too.
+      let models = [...new Set([...v.models, def, ...extraModelsFor(v.id, s)])];
       // How it thinks: the models' names, the efforts the provider takes and what each preset means here.
       const thinking = {
         ...(v.protocol === "anthropic" ? { modelNames: ANTHROPIC_MODEL_NAMES } : {}),
@@ -118,7 +120,7 @@ const plugin: PluginModule = {
       return new ApiBrainSession({ ctx, opts, variant: v, settings: () => settings, history, prefixHash });
     }
 
-    ctx.brains.register({ id: "api", label: "API", variants: ["anthropic", "openai", "openrouter", "custom"], probe, createSession });
+    ctx.brains.register({ id: "api", label: "API", variants: Object.keys(VARIANTS), probe, createSession });
   },
 };
 

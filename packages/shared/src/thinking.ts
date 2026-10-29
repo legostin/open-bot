@@ -2,6 +2,7 @@
 // what that comes to on the brain a session runs on. Shared by the hub (sessions), the web UI and the agents' tools.
 
 import type { AgentDef, AgentThinking, ProbeResult, ThinkingChoice, ThinkingPreset, WorkKind } from "./types.ts";
+import { MODEL_SKILLS, type ModelSkill } from "./models.ts";
 
 export const THINKING_PRESETS: readonly ThinkingPreset[] = ["auto", "fast", "balanced", "deep"];
 export const WORK_KINDS: readonly WorkKind[] = ["chat", "task", "feed", "schedule"];
@@ -32,6 +33,7 @@ export function parseThinkingChoice(v: unknown): ThinkingChoice | undefined {
   if (typeof o.model === "string" && TOKEN.test(o.model.trim())) out.model = o.model.trim();
   if (typeof o.effort === "string" && TOKEN.test(o.effort.trim())) out.effort = o.effort.trim().toLowerCase();
   if (typeof o.brain === "string" && TOKEN.test(o.brain.trim())) out.brain = o.brain.trim();
+  if (typeof o.skill === "string" && (MODEL_SKILLS as readonly string[]).includes(o.skill)) out.skill = o.skill as ModelSkill;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -128,7 +130,21 @@ export function taskThinking(agent: Pick<AgentDef, "thinking" | "model">, kind: 
   if (!chosen) return base;
   const depth = chosen.preset ? { preset: chosen.preset } : { ...(base.preset ? { preset: base.preset } : {}), ...(base.model ? { model: base.model } : {}), ...(base.effort ? { effort: base.effort } : {}) };
   const brain = chosen.brain ?? base.brain;
-  return { ...depth, ...(brain ? { brain } : {}) };
+  return { ...depth, ...(brain ? { brain } : {}), ...(chosen.skill ? { skill: chosen.skill } : {}) };
+}
+
+/**
+ * An agent's brains with "api:*" (any brain id with ":*") as every variant of that brain the hub has: each provider
+ * of the API brain, so a provider set up later is in without changing the agent. Listed order; each brain once.
+ */
+export function expandBrains(refs: readonly string[], listed: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const ref of refs) {
+    const wild = /^([\w-]+):\*(@[\w-]+)?$/.exec(ref);
+    const add = wild ? listed.filter((l) => l.startsWith(`${wild[1]}:`) && (wild[2] ? l.endsWith(wild[2]) : l.endsWith("@local") || !l.includes("@"))) : [ref];
+    for (const r of add) if (!out.some((o) => sameBrain(o, r))) out.push(r);
+  }
+  return out;
 }
 
 /** How soon a brain answers, for "auto" (lower first): the API at once, a CLI after starting a process; here before elsewhere. */

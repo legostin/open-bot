@@ -242,6 +242,12 @@ function userLine(text: string): string {
   return `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text }] } })}\n`;
 }
 
+let controls = 0;
+/** A control request on stream-json stdin (the CLI answers with a control_response line, which the parser skips). */
+function controlLine(request: Record<string, unknown>): string {
+  return `${JSON.stringify({ type: "control_request", request_id: `owl-${++controls}`, request })}\n`;
+}
+
 /** After a result, how long the CLI may stay silent with input it has not taken before stdin is closed anyway. */
 const PENDING_INPUT_GRACE_MS = 30_000;
 /** A dialog's process waits this long for its next turn before it closes (BrainSessionOptions.keepWarm). */
@@ -305,6 +311,8 @@ class ClaudeCodeSession implements BrainSessionImpl {
   /** A turn is in progress (send() has not finished). */
   private turning = false;
   private idle?: NodeJS.Timeout;
+  /** The model and effort the running process thinks with. */
+  private runs: { model?: string; effort?: string } = {};
   private o: BrainSessionOptions;
   private p: ClaudeCodeOptions;
   private dir: string;
@@ -386,6 +394,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
     });
     const proc = runLines(this.p.command?.() ?? "claude", this.args(caps), { cwd: this.o.workspace, env, keepInput: true });
     this.child = proc;
+    this.runs = { model: this.o.model, effort: this.o.effort && caps.efforts?.includes(this.o.effort) ? this.o.effort : undefined };
     this.reader = new LineReader(proc.lines);
     this.closing = false;
     void proc.exited.then(() => {
@@ -403,6 +412,23 @@ class ClaudeCodeSession implements BrainSessionImpl {
     if (this.turning || this.alive()) return;
     await this.start(caps);
     this.rest();
+  }
+
+  /**
+   * A waiting process thinks with the model and effort it started with: when the session's changed since, it switches
+   * (control requests on stdin, as the Agent SDK's setModel does), without starting over.
+   */
+  private switchTo(caps: ClaudeCaps): void {
+    const proc = this.child;
+    if (!proc) return;
+    if (this.o.model && this.o.model !== this.runs.model) {
+      proc.write(controlLine({ subtype: "set_model", model: this.o.model }));
+      this.runs.model = this.o.model;
+    }
+    if (this.o.effort && this.o.effort !== this.runs.effort && caps.efforts?.includes(this.o.effort)) {
+      proc.write(controlLine({ subtype: "apply_flag_settings", settings: { effortLevel: this.o.effort } }));
+      this.runs.effort = this.o.effort;
+    }
   }
 
   /** Between turns: the process waits for the next one, then closes. */
@@ -432,6 +458,9 @@ class ClaudeCodeSession implements BrainSessionImpl {
     this.interrupted = false;
     this.inputs = [turn.text];
     this.turning = true;
+    // The hub chose how this turn thinks: from here on the session thinks so (a waiting process switches below).
+    if (turn.model) this.o = { ...this.o, model: turn.model };
+    if (turn.effort) this.o = { ...this.o, effort: turn.effort };
     clearTimeout(this.idle);
     this.pool.take(this);
     let kept = false;
@@ -443,6 +472,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
         // A dialog's process may be waiting already (warm, or the turn before); else it starts now.
         const proc = this.alive() ? this.child! : await this.start(caps);
         const reader = this.reader!;
+        this.switchTo(caps);
         for (const text of this.inputs) proc.write(userLine(text));
         // The turn is over once a result comes and the CLI has taken every message. A dialog's process then waits for
         // the next turn; otherwise stdin closes and it exits. A message it has not taken yet gets its own answer right

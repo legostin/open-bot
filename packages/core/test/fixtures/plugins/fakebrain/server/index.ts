@@ -15,6 +15,8 @@ import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 const selves = new Map<string, string>();
 const slow = new Map<string, () => void>();
 const steered = new Map<string, string[]>();
+/** The model and effort of each turn, by session. */
+const used = new Map<string, string[]>();
 /** Sessions the hub got ready ahead of a turn (warm). */
 const warmed = new Set<string>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -60,6 +62,10 @@ export default {
             : { available: true, authenticated: true },
         createSession: async (o: BrainSessionOptions) => ({
           async *send(raw): AsyncGenerator<BrainEvent> {
+            // The hub may choose the model and effort per turn: the session thinks so from here on.
+            if (raw.model) o = { ...o, model: raw.model };
+            if (raw.effort) o = { ...o, effort: raw.effort };
+            used.set(o.sessionId, [...(used.get(o.sessionId) ?? []), `${o.model ?? "default"}/${o.effort ?? "default"}`]);
             // The hub's "[Now: …]" line comes first; the scripts below read the rest.
             const clock = /^\[Now: [^\]]*\]\n/.exec(raw.text)?.[0].trim();
             let rest = clock ? raw.text.slice(clock.length + 1) : raw.text;
@@ -89,6 +95,12 @@ export default {
               return;
             }
             // Whether the hub got this session ready ahead of the turn, and whether it keeps it warm.
+            // How each turn of this session thought, oldest first.
+            if (lastLine(turn.text) === "MODELS?") {
+              yield { type: "text", delta: `${id} used: ${(used.get(o.sessionId) ?? []).join(", ")}` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
             if (lastLine(turn.text.replace(/\n+When you are done[^\n]*\s*$/, "")) === "WARM?") {
               yield { type: "text", delta: `${id} warm: ${warmed.has(o.sessionId) ? "yes" : "no"} keep: ${!!o.keepWarm} desk: ${!!o.frontDesk}` };
               yield { type: "done", resumeToken: `${id}-resume` };

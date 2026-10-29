@@ -4,6 +4,7 @@
 import type { AgentDef, ProbeResult, WorkKind } from "@owlbot/shared";
 import {
   brainsFor,
+  expandBrains,
   formatBrainRef,
   parseBrainRef,
   patchChoice,
@@ -34,7 +35,7 @@ export async function thinkingView(brains: BrainRegistry, db: Db, agent: AgentDe
     const k = norm(r);
     if (!refs.includes(k)) refs.push(k);
   };
-  for (const k of WORK_KINDS) for (const r of brainsFor(agent, k)) add(r);
+  for (const k of WORK_KINDS) for (const r of expandBrains(brainsFor(agent, k), listed.map((b) => b.ref))) add(r);
   for (const b of listed) add(b.ref);
   const limited = limitedBrains(db);
   const probes = new Map<string, ProbeResult | undefined>();
@@ -57,7 +58,7 @@ export async function thinkingView(brains: BrainRegistry, db: Db, agent: AgentDe
   const ready = new Set(options.filter((o) => o.ready).map((o) => o.ref));
   const kinds = WORK_KINDS.map((kind) => {
     const choice = thinkingFor(agent, kind);
-    const order = brainsFor(agent, kind).map(norm);
+    const order = expandBrains(brainsFor(agent, kind), listed.map((b) => b.ref)).map(norm);
     const brain = order.find((r) => ready.has(r)) ?? order[0];
     const own = agent.thinking?.[kind];
     return { kind, ...(own ? { own } : {}), choice, ...(brain ? { brain } : {}), ...(brain ? resolveThinking(choice, brain, probes.get(brain), agent.model) : {}) };

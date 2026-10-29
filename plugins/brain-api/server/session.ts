@@ -129,6 +129,9 @@ export class ApiBrainSession implements BrainSessionImpl {
   }
 
   async *send(turn: BrainTurn): AsyncGenerator<BrainEvent> {
+    // The hub chose how this turn thinks: from here on the session thinks so.
+    if (turn.model) this.opts = { ...this.opts, model: turn.model };
+    if (turn.effort) this.opts = { ...this.opts, effort: turn.effort };
     if (this.closed) {
       yield { type: "error", message: this.t("error.sessionClosed"), fatal: true };
       yield { type: "done", resumeToken: this.sessionId };

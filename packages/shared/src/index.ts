@@ -7,4 +7,5 @@ export * from "./avatar.ts";
 export * from "./group.ts";
 export * from "./map.ts";
 export * from "./thinking.ts";
+export * from "./models.ts";
 export * from "./pages.ts";

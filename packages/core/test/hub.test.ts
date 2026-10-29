@@ -485,8 +485,8 @@ describe("hub (integration)", () => {
     const chat = (await web.req("POST", "/api/conversations", { title: "pick a brain", agentId: "picker" })).id;
     await web.req("POST", `/api/conversations/${chat}/messages`, { text: "first" });
     expect((await lastReply(chat, /heard: first/)).brainRef).toBe("fake@local");
-    // The brain picker in the chat header puts the chosen brain first.
-    await web.req("PUT", "/api/agents/picker", { brains: ["fake2@local", "fake@local"] });
+    // The brain picker in the chat header makes the chosen brain the dialog's: the router keeps to it.
+    await web.req("PUT", "/api/agents/picker/thinking/chat", { brain: "fake2@local" });
     await web.req("POST", `/api/conversations/${chat}/messages`, { text: "second" });
     expect(await lastReply(chat, /heard: second/)).toMatchObject({ brainRef: "fake2@local", parts: [expect.objectContaining({ text: "fake2 heard: second" })] });
     await web.req("DELETE", "/api/agents/picker");

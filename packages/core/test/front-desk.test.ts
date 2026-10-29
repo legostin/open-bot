@@ -80,9 +80,12 @@ describe("front desk (integration)", () => {
     expect(done.result).toBe("fake warm: no keep: false desk: false");
   });
 
-  it("thinks fast in a dialog with no choice of its own, and gives each task the brain and depth the agent chose", async () => {
+  it("picks the model per message in a dialog with no choice of its own, and gives each task the brain and depth the agent chose", async () => {
     hub.agents.save({ id: "desk", name: "Desk", description: "Front desk", brains: ["fake@local", "fake2:a@local"], tools: ["*"], skills: ["*"], prompt: "Hi.", initiative: 1 } as any);
-    expect(await ask("desk", "THINKING?")).toBe("fake thinks: model=quick effort=low");
+    // The front desk: the strong model at low effort, answering at once; a word in passing: the light one.
+    expect(await ask("desk", "THINKING?")).toBe("fake thinks: model=smart effort=low");
+    await ask("desk", "Спасибо!");
+    expect(await ask("desk", "MODELS?")).toBe("fake used: smart/low, quick/low, smart/low");
     const c = hub.store.agentConversation("desk").id;
     const delegated = async (input: Record<string, unknown>) => {
       const before = hub.store.listTasks({ limit: 500 }).length;

@@ -2,6 +2,7 @@
 // This file is the contract: change it deliberately.
 
 import type { Locale } from "./i18n.ts";
+import type { ModelProfile, ModelSkill } from "./models.ts";
 import type { AgentAvatar } from "./avatar.ts";
 
 export type ISODate = string;
@@ -555,6 +556,8 @@ export interface ThinkingChoice {
   model?: string;
   effort?: string;
   brain?: string;
+  /** What the work is mostly about, for choosing a model good at it (a task's, from task_delegate). */
+  skill?: ModelSkill;
 }
 
 /**
@@ -587,6 +590,11 @@ export interface ProbeResult {
   efforts?: string[];
   /** What each preset means on this brain: one of its models and efforts (unset: the brain's default). */
   presets?: Partial<Record<ThinkingPreset, { model?: string; effort?: string }>>;
+  /**
+   * What each of its models is like (models.ts): how capable, quick and costly, and what it is good at. The hub picks
+   * a model per request from these (core/src/model-router.ts); a model without one gets the known family's profile.
+   */
+  catalog?: ModelProfile[];
   detail?: string;
 }
 
@@ -724,6 +732,12 @@ export interface BrainTurn {
    * (its history is gone, or too full to go on): the brain starts afresh with it before `text`. Ignored otherwise.
    */
   recap?: string;
+  /**
+   * How this turn thinks, when the hub chose for it (core/src/model-router.ts): one of the brain's models and efforts.
+   * The session thinks this way from here on; a brain that can switches without starting over.
+   */
+  model?: string;
+  effort?: string;
 }
 
 // ---------- Notifications ----------

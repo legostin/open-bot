@@ -357,7 +357,7 @@ describe("brain-api plugin", () => {
 
   it("probes variants by vault key presence", async () => {
     expect(await h.brainProbe("api", "anthropic")).toMatchObject({ available: true, authenticated: true, models: expect.arrayContaining(["claude-sonnet-5-5", "claude-opus-5-5"]) });
-    expect(await h.brainProbe("api", "openai")).toMatchObject({ available: true, authenticated: true, models: ["gpt-5"] });
+    expect(await h.brainProbe("api", "openai")).toMatchObject({ available: true, authenticated: true, models: ["gpt-5-nano", "gpt-5-mini", "gpt-5"] });
 
     const bare = await startPlugin({ dir: PLUGIN_DIR, settings, vault: {} });
     try {
@@ -374,7 +374,19 @@ describe("brain-api plugin", () => {
       });
       bare.setSettings({ ...settings, customModel: "gpt-mock" });
       expect(await bare.brainProbe("api", "custom")).toMatchObject({ available: true, authenticated: true, model: "gpt-mock", detail: `${llm.url}/v1` });
-      expect(await bare.brainProbe("api", "nope")).toMatchObject({ available: false, authenticated: false, detail: 'Unknown variant "nope". Available: anthropic, openai, openrouter, custom' });
+      expect(await bare.brainProbe("api", "nope")).toMatchObject({
+        available: false,
+        authenticated: false,
+        detail: 'Unknown variant "nope". Available: anthropic, openai, openrouter, custom, moonshot, deepseek, zhipu, qwen, gemini, xai, mistral, groq',
+      });
+      // Every provider offers its models for the hub to choose from, and waits for its own key.
+      expect(await bare.brainProbe("api", "deepseek")).toMatchObject({ available: true, authenticated: false, models: ["deepseek-chat", "deepseek-reasoner"], detail: expect.stringContaining("deepseek_api_key") });
+      expect(await bare.brainProbe("api", "moonshot")).toMatchObject({ models: expect.arrayContaining(["kimi-k2-thinking"]) });
+      expect(await bare.brainProbe("api", "zhipu")).toMatchObject({ models: expect.arrayContaining(["glm-4.6"]) });
+      // More models from the settings, ids with their own ":" too.
+      bare.setSettings({ ...settings, extraModels: "deepseek: deepseek-v4, deepseek-v4-reasoner\ncustom: qwen3:8b" });
+      expect((await bare.brainProbe("api", "deepseek")).models).toEqual(["deepseek-chat", "deepseek-reasoner", "deepseek-v4", "deepseek-v4-reasoner"]);
+      bare.setSettings(settings);
       // Probe details are shown on the Brains page in the hub language.
       bare.setLocale("ru");
       expect(await bare.brainProbe("api", "anthropic")).toMatchObject({ authenticated: false, detail: "Нет ключа API: вставьте его в чат (он сохранится как anthropic_api_key)" });

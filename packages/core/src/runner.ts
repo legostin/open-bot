@@ -3,8 +3,8 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ToolResult, WorkKind } from "@owlbot/shared";
-import { brainsFor, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, taskThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
+import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ThinkingChoice, ToolResult, WorkKind } from "@owlbot/shared";
+import { brainsFor, expandBrains, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, sameBrain, taskThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
 import { confinement } from "./native-permissions.ts";
 import { NATIVE_PERMISSION_TOOL } from "./tools/native-permission.ts";
 import type { Config } from "./config.ts";
@@ -22,6 +22,7 @@ import type { Redactor } from "./vault/redact.ts";
 import type { ToolGateway } from "./tools/gateway.ts";
 import type { ApprovalService } from "./approvals.ts";
 import { detailOfTool, stepOfTool, type MachineActivityFeed } from "./activity.ts";
+import { needOf, route, skillOfGoal, type Route } from "./model-router.ts";
 import type { EgressProxy } from "./egress.ts";
 import { DEFAULT_BRAIN_EGRESS } from "./settings.ts";
 import { buildSystemPrompt } from "./prompt.ts";
@@ -1268,13 +1269,24 @@ export class SessionRunner {
   }
 
   /** `fresh`: the session replaces one that cannot be resumed (another brain, no token): its first turn needs the recap. */
-  private async openSession(conv: Conversation, agent: AgentDef, brainRef: string, task: Task | undefined, prior?: SessionRow): Promise<{ row: SessionRow; handle: BrainHandle; fresh: boolean }> {
+  private async openSession(
+    conv: Conversation,
+    agent: AgentDef,
+    brainRef: string,
+    task: Task | undefined,
+    prior?: SessionRow,
+    pick?: Pick<Route, "model" | "effort">,
+  ): Promise<{ row: SessionRow; handle: BrainHandle; fresh: boolean }> {
     const background = task?.background ?? false;
     const ref = parseBrainRef(brainRef);
-    // How it thinks: the choice for this kind of work, as a model and an effort of this brain.
+    // How it thinks: what the router chose for this request, else the choice for this kind of work as a model and an
+    // effort of this brain.
     const kind = workKind(task);
+    const choice = task ? taskThinking(agent, kind, task.thinking) : thinkingFor(agent, kind);
     const probe = await this.d.brains.probe(formatBrainRef(ref)).catch(() => undefined);
-    const thinking = resolveThinking(task ? taskThinking(agent, kind, task.thinking) : thinkingFor(agent, kind), formatBrainRef(ref), probe, agent.model);
+    const thinking = pick
+      ? { ...(pick.model ? { model: pick.model } : {}), ...(pick.effort ? { effort: pick.effort } : {}), ...(choice.preset ? { preset: choice.preset } : {}) }
+      : resolveThinking(choice, formatBrainRef(ref), probe, agent.model);
     const sameBrain = prior && formatBrainRef(parseBrainRef(prior.brainRef)) === formatBrainRef(ref);
     let row: SessionRow;
     let token: string;
@@ -1388,6 +1400,25 @@ export class SessionRunner {
   }
 
   /**
+   * The brains in the order a request should take them, each with the model and effort that fit it (model-router.ts),
+   * or none when the choice is the person's exact model and effort. What it needs comes from the choice's preset
+   * ("auto": the kind of work and, in a dialog, the message); what it is about from the task (or its goal's words).
+   * Work on code needs a brain with its own hands. A brain the choice names comes first.
+   */
+  private async routeFor(agent: AgentDef, kind: WorkKind, choice: ThinkingChoice, text: string, task: Task | undefined): Promise<Route[]> {
+    // The person's exact model and effort, or an agent from before `thinking` with its one model: as they chose.
+    if (choice.model || choice.effort || (!choice.preset && agent.model)) return [];
+    const need = needOf(choice.preset, kind, task ? task.goal : text);
+    const skill = choice.skill ?? (task && kind === "task" ? skillOfGoal(task.goal) : undefined);
+    const refs = expandBrains(brainsFor(agent, kind, choice), this.d.brains.list().map((b) => b.ref));
+    const brains = await Promise.all(refs.map(async (ref) => ({ ref, probe: this.d.brains.has(ref) ? await this.d.brains.probe(ref, 10 * 60_000).catch(() => undefined) : undefined })));
+    const routes = route(brains, { need, ...(skill ? { skill } : {}), hands: !!task && skill === "code" });
+    if (!choice.brain) return routes;
+    const named = (r: Route) => (choice.brain!.includes("@") ? sameBrain(r.ref, choice.brain!) : parseBrainRef(r.ref).brainId === choice.brain || r.ref.split("@")[0] === choice.brain);
+    return [...routes.filter(named), ...routes.filter((r) => !named(r))];
+  }
+
+  /**
    * The person opened a dialog or is typing in it: the session its next turn would use is opened and its brain gets
    * ready (a CLI starts and waits), so the reply does not wait for that. Nothing happens while a turn runs there, for
    * group chats and tasks, or when no brain of the agent can take a turn now. Never fails.
@@ -1401,7 +1432,10 @@ export class SessionRunner {
       const prior = this.d.store.activeSession(conv.id, agent.id);
       const changedAt = this.d.settings.getKey<Record<string, string>>(BRAINS_CHANGED_KEY, {})[agent.id];
       const stay = prior && !(changedAt && changedAt > prior.createdAt) ? prior.brainRef : undefined;
-      const { usable } = await this.candidates({ ...agent, brains: brainsFor(agent, "chat") }, stay);
+      // The brain the person's next message would most likely take: the front desk's.
+      const routes = await this.routeFor(agent, "chat", thinkingFor(agent, "chat"), "", undefined);
+      const order = routes.length ? routes.map((r) => r.ref) : expandBrains(brainsFor(agent, "chat"), this.d.brains.list().map((b) => b.ref));
+      const { usable } = await this.candidates({ ...agent, brains: order }, stay);
       const ref = usable[0];
       if (!ref) return false;
       const key = formatBrainRef(parseBrainRef(ref));
@@ -1411,7 +1445,7 @@ export class SessionRunner {
           if (live.brainRef === key) await this.closeLive(prior.id);
           else void this.closeLive(prior.id);
         }
-        const opened = await this.openSession(conv, agent, ref, undefined, prior);
+        const opened = await this.openSession(conv, agent, ref, undefined, prior, routes.find((r) => sameBrain(r.ref, ref)));
         if (opened.fresh) this.freshAhead.add(opened.row.id);
         live = this.live.get(opened.row.id)!;
       }
@@ -1592,9 +1626,14 @@ export class SessionRunner {
 
     // A task placed on a computer runs on the brain there or not at all.
     const pinned = task?.brainRef ? [task.brainRef] : undefined;
+    // Under the hood: the brains in the order this request should take them, each with its model and effort
+    // (model-router.ts). An exact model and effort the person chose take the agent's own order instead.
+    const choice = task ? taskThinking(agent, kind, task.thinking) : thinkingFor(agent, kind);
+    const routes = await this.routeFor(agent, kind, choice, prompt, task);
+    const order = routes.length ? routes.map((r) => r.ref) : expandBrains(brainsFor(agent, kind, choice), this.d.brains.list().map((b) => b.ref));
     let waits = 0;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates({ ...agent, brains: brainsFor(agent, kind, task ? taskThinking(agent, kind, task.thinking) : undefined) }, stay, pinned, !!task);
+      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates({ ...agent, brains: order }, stay, pinned, !!task);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
       // The agent's brains are busy with other turns (a teammate wrote while it works): the turn waits in line.
@@ -1639,7 +1678,7 @@ export class SessionRunner {
             if (live.brainRef === key) await this.closeLive(curPrior.id);
             else void this.closeLive(curPrior.id);
           }
-          const opened = await this.openSession(conv, agent, ref, task, curPrior);
+          const opened = await this.openSession(conv, agent, ref, task, curPrior, routes.find((r) => sameBrain(r.ref, ref)));
           row = opened.row;
           live = this.live.get(row.id)!;
           fresh = opened.fresh;
@@ -1674,7 +1713,10 @@ export class SessionRunner {
 
       this.brainLoad.set(key, (this.brainLoad.get(key) ?? 0) + 1);
       try {
-        const r = await this.streamTurn(conv, row!, live!, agent, { ...this.turnInput(row!, text, opts), ...backup }, task, opts.replyChannel, opts.replyTo);
+        // How this turn thinks: the route's model and effort on the brain that takes it (it switches if it can).
+        const pick = routes.find((r) => sameBrain(r.ref, key));
+        const thinks = { ...(pick?.model ? { model: pick.model } : {}), ...(pick?.effort ? { effort: pick.effort } : {}) };
+        const r = await this.streamTurn(conv, row!, live!, agent, { ...this.turnInput(row!, text, opts), ...backup, ...thinks }, task, opts.replyChannel, opts.replyTo);
         if (r.retry) {
           lastError = r.error ?? lastError;
           if (r.limited) earliestReset = r.limited.resetAt ?? earliestReset;

@@ -6,7 +6,7 @@ i18n:
     name: Ассистент
     description: Главный персональный ассистент — дружелюбный, проактивный, доводит дела до конца.
 avatar: { color: teal, shape: circle }
-brains: [claude-code@local, codex@local, "api:anthropic", "api:openai"]
+brains: [claude-code@local, codex@local, "api:*"]
 initiative: 1
 tools: ["*"]
 skills: ["*"]

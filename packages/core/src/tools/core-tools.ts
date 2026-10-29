@@ -2,7 +2,7 @@
 
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { ImageItem, MapIcon, MapMarker, MapRoute, MessagePart, RouteMode, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import type { ImageItem, MapIcon, MapMarker, MapRoute, MessagePart, ModelSkill, RouteMode, ToolDescriptor, ToolResult } from "@owlbot/shared";
 import { brainsFor, isThinkingPreset, MAP_ICONS, sameBrain } from "@owlbot/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { SkillIndex } from "../skills.ts";
@@ -109,6 +109,9 @@ function workspaceImage(path: string, workspace: string, root: string): string |
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 
+/** What a task is about (task_delegate `about`) as the model skill the hub looks for. */
+const ABOUT: Record<string, ModelSkill | undefined> = { code: "code", analysis: "reasoning", research: "reasoning", writing: "writing" };
+
 export function registerCoreTools(d: CoreToolDeps): void {
   const reg = (spec: Omit<ToolDescriptor, "owner">, fn: (input: any, ctx: any) => Promise<ToolResult> | ToolResult) =>
     d.registry.register({ ...spec, owner: "core" }, async (input, ctx) => fn(input ?? {}, ctx));
@@ -163,8 +166,9 @@ export function registerCoreTools(d: CoreToolDeps): void {
           title: { type: "string", description: "Short title the user sees (≤ 60 chars), in the user's language" },
           agent: { type: "string", description: "Agent id (default: you). See task_agents." },
           machine: { type: "string", description: "Computer id or name to run on, when the work needs that computer's files, apps or hardware (default: the agent's usual brain). See task_agents." },
-          brain: { type: "string", description: "The brain that fits the job best, one of the agent's (\"Brains here\" in your instructions): e.g. codex for code, claude-code for analysis and research. Default: the agent's usual one." },
-          depth: { type: "string", enum: ["fast", "balanced", "deep"], description: "How hard to think: fast for simple errands, balanced for everyday work, deep for hard problems (code, analysis, careful writing). Default: the agent's choice for tasks." },
+          depth: { type: "string", enum: ["fast", "balanced", "deep"], description: "How hard to think: fast for simple errands (a cheap quick model), balanced for everyday work, deep for hard problems (the most capable model, thinking long). The hub picks the brain and model for it." },
+          about: { type: "string", enum: ["code", "analysis", "writing", "research", "errand"], description: "What the work is mostly about, so the hub picks a model good at it (code goes to a coding model)." },
+          brain: { type: "string", description: "Only to insist on one brain (\"Brains here\" in your instructions); normally leave it to the hub." },
         },
         required: ["goal"],
       },
@@ -183,7 +187,8 @@ export function registerCoreTools(d: CoreToolDeps): void {
       const lead = brain ? brainsFor(target, "task", { brain })[0] : undefined;
       if (brain && !target.brains.some((b) => sameBrain(b, lead!))) return text(`${agentId} has no brain ${brain}. Its brains: ${target.brains.join(", ")}.`, true);
       const depth = isThinkingPreset(i.depth) && i.depth !== "auto" ? i.depth : undefined;
-      const thinking = { ...(depth ? { preset: depth } : {}), ...(brain ? { brain } : {}) };
+      const skill = ABOUT[String(i.about ?? "")];
+      const thinking = { ...(depth ? { preset: depth } : {}), ...(brain ? { brain } : {}), ...(skill ? { skill } : {}) };
       if (depthOf(ctx.taskId) >= MAX_TASK_DEPTH) return text("Tasks are already nested too deep here: do this part yourself.", true);
       let goal = String(i.goal);
       let place: { brainRef?: string; machineName: string; note?: string } | undefined;
@@ -202,13 +207,13 @@ export function registerCoreTools(d: CoreToolDeps): void {
         background: ctx.background,
         createdBy: "agent",
         ...(place?.brainRef ? { brainRef: place.brainRef } : {}),
-        ...(depth || brain ? { thinking } : {}),
+        ...(depth || brain || skill ? { thinking } : {}),
         // Instructions from a session that read outside content may carry it: the task starts marked too.
         ...(ctx.tainted ? { tainted: true } : {}),
       });
       d.attachPart(ctx.conversationId, { type: "task", taskId: t.id });
       const where = place ? ` on ${place.machineName}${place.brainRef ? "" : " (through the machine tools)"}` : "";
-      const how = [brain, depth].filter(Boolean).join(", ");
+      const how = [brain, depth, i.about].filter(Boolean).join(", ");
       return text(`Task created: ${t.id} “${t.title}”${where}${how ? ` (${how})` : ""}. It works on the side; its questions and its result will arrive here as messages.`);
     },
   );

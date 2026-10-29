@@ -7,7 +7,7 @@ import { stringify as toYaml } from "yaml";
 import type { AgentDef, Locale } from "@owlbot/shared";
 import { normalizeLocale, parseAvatar, parseFrontmatter, parseThinking } from "@owlbot/shared";
 
-export const DEFAULT_BRAINS = ["claude-code@local", "codex@local", "api:anthropic", "api:openai"];
+export const DEFAULT_BRAINS = ["claude-code@local", "codex@local", "api:*"];
 
 export function agentFromMarkdown(id: string, text: string, source: string): AgentDef {
   const { data, body } = parseFrontmatter(text);

@@ -24,6 +24,8 @@ export interface ApiSettings {
   customHistoryTokenBudget: number;
   /** Cap for one tool result text sent to the model (characters). */
   maxToolResultChars: number;
+  /** More models to offer, beyond each provider's list: lines of "provider: model, model". */
+  extraModels: string;
 }
 
 export const DEFAULT_SETTINGS: ApiSettings = {
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: ApiSettings = {
   historyTokenBudget: 150_000,
   customHistoryTokenBudget: 24_000,
   maxToolResultChars: 200_000,
+  extraModels: "",
 };
 
 export function resolveSettings(raw: Record<string, unknown> | undefined): ApiSettings {
@@ -62,7 +65,7 @@ export function resolveSettings(raw: Record<string, unknown> | undefined): ApiSe
       (out as any)[key] = v === true || v === "true";
     } else if (typeof v === "string") {
       // Empty strings fall back to defaults, except where "" is meaningful.
-      if (v.trim() || key === "customKeyRef" || key === "anthropicEffort") (out as any)[key] = v.trim();
+      if (v.trim() || key === "customKeyRef" || key === "anthropicEffort" || key === "extraModels") (out as any)[key] = v.trim();
     }
   }
   return out;
@@ -86,10 +89,28 @@ export interface VariantInfo {
   efforts: string[];
   /** What the presets mean here: a model (unset: the variant's default) and an effort. */
   presets: (s: ApiSettings) => NonNullable<ProbeResult["presets"]>;
+  /** The models it offers, for the hub to choose from per request (the default model and extraModels join them). */
+  models: string[];
 }
 
 const OPENAI_EFFORTS = ["low", "medium", "high"];
 const OPENAI_PRESETS = { fast: { effort: "low" }, balanced: { effort: "medium" }, deep: { effort: "high" } };
+
+/**
+ * OpenAI-compatible providers, one line each: a new one is a new line here (and its key and host in plugin.json).
+ * Models are the provider's main ones as of late 2026, cheapest first; the hub picks among them per request by what
+ * they are like (shared/models.ts), and `extraModels` adds newer ones without a release.
+ */
+export const PROVIDERS: ReadonlyArray<{ id: string; label: string; baseUrl: string; key: string; models: string[]; vision?: boolean }> = [
+  { id: "moonshot", label: "Kimi (Moonshot)", baseUrl: "https://api.moonshot.ai/v1", key: "moonshot_api_key", models: ["kimi-k2-turbo-preview", "kimi-k2-0905-preview", "kimi-k2-thinking"] },
+  { id: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", key: "deepseek_api_key", models: ["deepseek-chat", "deepseek-reasoner"] },
+  { id: "zhipu", label: "GLM (Z.ai)", baseUrl: "https://api.z.ai/api/paas/v4", key: "zhipu_api_key", models: ["glm-4.5-flash", "glm-4.5-air", "glm-4.6"] },
+  { id: "qwen", label: "Qwen (Alibaba)", baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", key: "qwen_api_key", models: ["qwen-flash", "qwen-plus", "qwen3-coder-plus", "qwen3-max"] },
+  { id: "gemini", label: "Gemini (Google)", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", key: "gemini_api_key", models: ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"], vision: true },
+  { id: "xai", label: "Grok (xAI)", baseUrl: "https://api.x.ai/v1", key: "xai_api_key", models: ["grok-code-fast-1", "grok-4-fast-reasoning", "grok-4"], vision: true },
+  { id: "mistral", label: "Mistral", baseUrl: "https://api.mistral.ai/v1", key: "mistral_api_key", models: ["mistral-small-latest", "codestral-latest", "mistral-medium-latest", "mistral-large-latest"] },
+  { id: "groq", label: "Groq", baseUrl: "https://api.groq.com/openai/v1", key: "groq_api_key", models: ["openai/gpt-oss-20b", "llama-3.3-70b-versatile", "openai/gpt-oss-120b", "moonshotai/kimi-k2-instruct-0905"] },
+];
 
 export const VARIANTS: Record<string, VariantInfo> = {
   anthropic: {
@@ -105,6 +126,7 @@ export const VARIANTS: Record<string, VariantInfo> = {
     efforts: ["low", "medium", "high", "xhigh", "max"],
     // Fast: Sonnet with little thinking; balanced: the default model at medium effort; deep: Opus at extra-high effort.
     presets: (s) => ({ fast: { model: "claude-sonnet-5-5", effort: "low" }, balanced: { model: s.anthropicModel, effort: "medium" }, deep: { model: "claude-opus-5-5", effort: "xhigh" } }),
+    models: ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"],
   },
   openai: {
     id: "openai",
@@ -118,6 +140,7 @@ export const VARIANTS: Record<string, VariantInfo> = {
     historyBudget: (s) => s.historyTokenBudget,
     efforts: OPENAI_EFFORTS,
     presets: () => OPENAI_PRESETS,
+    models: ["gpt-5-nano", "gpt-5-mini", "gpt-5"],
   },
   openrouter: {
     id: "openrouter",
@@ -131,6 +154,8 @@ export const VARIANTS: Record<string, VariantInfo> = {
     historyBudget: (s) => s.historyTokenBudget,
     efforts: OPENAI_EFFORTS,
     presets: () => OPENAI_PRESETS,
+    // One key for every provider: the main models of each, so the hub can choose across them.
+    models: ["openrouter/auto", "deepseek/deepseek-chat", "moonshotai/kimi-k2-0905", "z-ai/glm-4.6", "qwen/qwen3-max", "google/gemini-2.5-flash", "x-ai/grok-4-fast", "openai/gpt-5-mini"],
   },
   custom: {
     id: "custom",
@@ -144,8 +169,41 @@ export const VARIANTS: Record<string, VariantInfo> = {
     historyBudget: (s) => s.customHistoryTokenBudget,
     efforts: [],
     presets: () => ({}),
+    models: [],
   },
+  ...Object.fromEntries(
+    PROVIDERS.map((p): [string, VariantInfo] => [
+      p.id,
+      {
+        id: p.id,
+        label: p.label,
+        protocol: "openai",
+        baseUrl: () => p.baseUrl,
+        defaultModel: () => p.models[Math.min(1, p.models.length - 1)],
+        keyRef: () => p.key,
+        keyRequired: true,
+        vision: () => !!p.vision,
+        historyBudget: (s) => s.historyTokenBudget,
+        // Their reasoning parameters differ from OpenAI's: here depth is the choice of model.
+        efforts: [],
+        presets: () => ({ fast: { model: p.models[0] }, balanced: { model: p.models[Math.min(1, p.models.length - 1)] }, deep: { model: p.models[p.models.length - 1] } }),
+        models: p.models,
+      },
+    ]),
+  ),
 };
+
+/** `extraModels` for one provider: "deepseek: deepseek-v4, deepseek-v4-reasoner" lines. */
+export function extraModelsFor(variant: string, s: ApiSettings): string[] {
+  const out: string[] = [];
+  for (const line of s.extraModels.split(/\n|;/)) {
+    // Only the first ":" splits: model ids may have their own ("llama3.1:8b").
+    const at = line.indexOf(":");
+    if (at < 0 || line.slice(0, at).trim().toLowerCase() !== variant) continue;
+    for (const m of line.slice(at + 1).split(",")) if (m.trim()) out.push(m.trim());
+  }
+  return out;
+}
 
 export const CLAUDE_ALIASES: Record<string, string> = {
   opus: "claude-opus-5-5",

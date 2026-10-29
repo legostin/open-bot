@@ -11,6 +11,14 @@
         {"vault": "anthropic_api_key", "title": "%setup.anthropic.title%", "hint": "%setup.anthropic.hint%", "link": "https://console.anthropic.com/settings/keys", "pattern": "^sk-ant-api\\d{2}-[A-Za-z0-9_-]{20,}$"},
         {"vault": "openai_api_key", "title": "%setup.openai.title%", "hint": "%setup.openai.hint%", "link": "https://platform.openai.com/api-keys", "pattern": "^sk-(?!ant-|or-)[A-Za-z0-9_-]{20,}$"},
         {"vault": "openrouter_api_key", "title": "%setup.openrouter.title%", "hint": "%setup.openrouter.hint%", "link": "https://openrouter.ai/settings/keys", "pattern": "^sk-or-v1-[A-Za-z0-9]{20,}$"},
+        {"vault": "moonshot_api_key", "title": "%setup.moonshot.title%", "hint": "%setup.moonshot.hint%", "link": "https://platform.moonshot.ai/console/api-keys"},
+        {"vault": "deepseek_api_key", "title": "%setup.deepseek.title%", "hint": "%setup.deepseek.hint%", "link": "https://platform.deepseek.com/api_keys"},
+        {"vault": "zhipu_api_key", "title": "%setup.zhipu.title%", "hint": "%setup.zhipu.hint%", "link": "https://z.ai/manage-apikey/apikey-list"},
+        {"vault": "qwen_api_key", "title": "%setup.qwen.title%", "hint": "%setup.qwen.hint%", "link": "https://modelstudio.console.alibabacloud.com/?tab=playground#/api-key"},
+        {"vault": "gemini_api_key", "title": "%setup.gemini.title%", "hint": "%setup.gemini.hint%", "link": "https://aistudio.google.com/apikey", "pattern": "^AIza[0-9A-Za-z_-]{30,}$"},
+        {"vault": "xai_api_key", "title": "%setup.xai.title%", "hint": "%setup.xai.hint%", "link": "https://console.x.ai", "pattern": "^xai-[A-Za-z0-9]{20,}$"},
+        {"vault": "mistral_api_key", "title": "%setup.mistral.title%", "hint": "%setup.mistral.hint%", "link": "https://console.mistral.ai/api-keys"},
+        {"vault": "groq_api_key", "title": "%setup.groq.title%", "hint": "%setup.groq.hint%", "link": "https://console.groq.com/keys", "pattern": "^gsk_[A-Za-z0-9]{20,}$"},
         {"vault": "custom_llm_api_key", "setting": "customKeyRef", "title": "%setup.custom.title%", "hint": "%setup.custom.hint%"}
       ]
     },
@@ -22,7 +30,7 @@
           "type": "string",
           "title": "%settings.defaultVariant.title%",
           "description": "%settings.defaultVariant.description%",
-          "enum": ["anthropic", "openai", "openrouter", "custom"],
+          "enum": ["anthropic", "openai", "openrouter", "moonshot", "deepseek", "zhipu", "qwen", "gemini", "xai", "mistral", "groq", "custom"],
           "default": "anthropic"
         },
         "anthropicModel": {
@@ -73,12 +81,13 @@
         },
         "historyTokenBudget": { "type": "integer", "title": "%settings.historyTokenBudget.title%", "minimum": 4000, "default": 150000 },
         "customHistoryTokenBudget": { "type": "integer", "title": "%settings.customHistoryTokenBudget.title%", "minimum": 2000, "default": 24000 },
-        "maxToolResultChars": { "type": "integer", "title": "%settings.maxToolResultChars.title%", "minimum": 1000, "default": 200000 }
+        "maxToolResultChars": { "type": "integer", "title": "%settings.maxToolResultChars.title%", "minimum": 1000, "default": 200000 },
+        "extraModels": { "type": "string", "title": "%settings.extraModels.title%", "description": "%settings.extraModels.description%", "default": "" }
       }
     }
   },
   "permissions": {
-    "network": ["api.anthropic.com", "api.openai.com", "openrouter.ai"],
-    "vault": ["anthropic_api_key", "openai_api_key", "openrouter_api_key", "custom_llm_api_key"]
+    "network": ["api.anthropic.com", "api.openai.com", "openrouter.ai", "api.moonshot.ai", "api.deepseek.com", "api.z.ai", "dashscope-intl.aliyuncs.com", "generativelanguage.googleapis.com", "api.x.ai", "api.mistral.ai", "api.groq.com"],
+    "vault": ["anthropic_api_key", "openai_api_key", "openrouter_api_key", "moonshot_api_key", "deepseek_api_key", "zhipu_api_key", "qwen_api_key", "gemini_api_key", "xai_api_key", "mistral_api_key", "groq_api_key", "custom_llm_api_key"]
   }
 }

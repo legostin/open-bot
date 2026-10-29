@@ -199,6 +199,22 @@ describe("a dialog's warm process (keepWarm)", () => {
     await s.close();
   });
 
+  it("thinks each turn with the model and effort the hub chose, switching in the same process", async () => {
+    const provider = createClaudeCodeProvider({ command: () => fake, stateDir });
+    const file = argsFile();
+    const s = await provider.createSession(opts({ keepWarm: true, model: "sonnet", effort: "low", env: { FAKE_ARGS_FILE: file } }));
+    expect(text(await collect(s.send({ text: "hi" })))).toBe("echo:hiresume=none model=sonnet effort=low");
+    expect(text(await collect(s.send({ text: "thanks", model: "haiku" })))).toBe("echo:thanksresume=none model=haiku effort=low");
+    expect(text(await collect(s.send({ text: "think", model: "opus", effort: "xhigh" })))).toBe("echo:thinkresume=none model=opus effort=xhigh");
+    // An effort the CLI does not take is not sent; the model stays as it was when none is given.
+    expect(text(await collect(s.send({ text: "again", effort: "ultra" })))).toBe("echo:againresume=none model=opus effort=xhigh");
+    expect(runs(file)).toBe(1);
+    await s.close();
+    // A new process starts with what the session thinks now.
+    const t = await provider.createSession(opts({ model: "sonnet" }));
+    expect(text(await collect(t.send({ text: "x", model: "haiku", effort: "high" })))).toBe("echo:xresume=none model=haiku effort=high");
+  });
+
   it("closes a process that waited too long, and the next turn resumes in a new one", async () => {
     const provider = createClaudeCodeProvider({ command: () => fake, stateDir, idleMs: 150 });
     const file = argsFile();

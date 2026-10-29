@@ -156,6 +156,9 @@ class CodexSession implements BrainSessionImpl {
   }
 
   async *send(turn: BrainTurn): AsyncGenerator<BrainEvent> {
+    // The hub chose how this turn thinks: from here on the session thinks so (each turn starts its own app-server).
+    if (turn.model) this.o = { ...this.o, model: turn.model };
+    if (turn.effort) this.o = { ...this.o, effort: turn.effort };
     this.interrupted = false;
     const env = childEnv(process.env, { ...this.o.env, ...(await this.p.authEnv?.()) });
     if (!this.execOnly) {

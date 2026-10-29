@@ -49,6 +49,29 @@ like a warm one.
 - `task_delegate` refuses a call without a goal, and takes `task`/`instructions` as the goal: Claude Code loads MCP
   schemas lazily and its first call may guess the names.
 
+### 2a. Routing under the hood (added 2026-10-29: "a smart, extensible choice across providers")
+
+- Every request is routed (`core/src/model-router.ts`): it has a need (light: a word in passing or a simple errand;
+  quick: the dialog's front desk; standard: everyday work; deep: hard problems) and may have a skill (code,
+  reasoning, writing). The router scores every model of every brain the agent may use and orders the brains, each
+  with its best model and the effort that fits (light/quick: low, standard: medium, deep: xhigh or the nearest).
+- Brains describe their models (`ProbeResult.catalog`, `shared/models.ts`): tier 1–5, speed, cost, what they are
+  good at, strongest first. Known families of every provider are in a table (Claude, GPT, Gemini, Kimi, DeepSeek, GLM,
+  Qwen, Grok, Mistral, Llama…); a brain's own catalog wins; a model nobody describes takes the role its brain gives it
+  in its presets. The router reads profiles only: a new provider counts as soon as its brain lists its models.
+- Needs: a dialog message is light when it is a word in passing ("thanks", "ok", an emoji), else quick; a task's need
+  is the `depth` its starter gave (fast → light, balanced → standard, deep → deep), its skill the `about`
+  (code, analysis, writing, research, errand) or its goal's words; channel runs are light, other work standard. A
+  preset the person chose for a kind is its need; an exact model and effort skip the router.
+- Code tasks need hands: brains without a shell of their own (API) are left out for them.
+- Models switch per turn without starting over: Claude Code takes `set_model` and `apply_flag_settings
+  {effortLevel}` control requests on stdin (checked live: Sonnet → Haiku → Opus, low → high in one process); Codex
+  and the API brain take the turn's model and effort (`BrainTurn.model`, `effort`).
+- Providers: the API brain's OpenAI-compatible providers are one table (`plugins/brain-api/server/settings.ts`
+  PROVIDERS): Kimi (Moonshot), DeepSeek, GLM (Z.ai), Qwen, Gemini, Grok (xAI), Mistral, Groq, besides Anthropic,
+  OpenAI and OpenRouter. Each has its key in the vault (a setup card), its host, and its main models; `extraModels`
+  adds newer ones. Agents list `api:*` for every provider that is set up.
+
 ### 3. The right brain for each task
 
 - `task_delegate` takes `depth` (`fast` | `balanced` | `deep`) and `brain` (a brain id the agent has: `claude-code`,

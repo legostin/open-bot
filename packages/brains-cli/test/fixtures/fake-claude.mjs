@@ -70,6 +70,8 @@ if (!login) {
     process.exit(1);
   }
   const sid = resume ?? "sess-1";
+  let model = args.includes("--model") ? args[args.indexOf("--model") + 1] : "default";
+  let effort = args.includes("--effort") ? args[args.indexOf("--effort") + 1] : undefined;
   const queue = [];
   let ended = false;
   let wake;
@@ -87,7 +89,15 @@ if (!login) {
       const line = buf.slice(0, i).trim();
       buf = buf.slice(i + 1);
       if (!line) continue;
-      queue.push(JSON.parse(line));
+      const msg = JSON.parse(line);
+      // Control requests change how it thinks at once, as Claude Code does (set_model, apply_flag_settings).
+      if (msg.type === "control_request") {
+        if (msg.request?.subtype === "set_model") model = msg.request.model;
+        if (msg.request?.subtype === "apply_flag_settings" && msg.request.settings?.effortLevel) effort = msg.request.settings.effortLevel;
+        out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id } });
+        continue;
+      }
+      queue.push(msg);
       wake?.();
     }
   });
@@ -131,9 +141,7 @@ if (!login) {
     out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: `echo:${input}` } }, parent_tool_use_id: null, api_message_id: `m1-${turns}`, session_id: sid });
     out({ type: "assistant", message: { id: `m1-${turns}`, content: [{ type: "text", text: `echo:${input}` }, { type: "tool_use", id: "tu1", name: "mcp__owlbot__notify", input: { level: "silent", title: "x" } }] }, parent_tool_use_id: null, session_id: sid });
     out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: [{ type: "text", text: "ok" }] }] }, parent_tool_use_id: null, session_id: sid });
-    const model = args.includes("--model") ? args[args.indexOf("--model") + 1] : "default";
-    const effort = args.includes("--effort") ? ` effort=${args[args.indexOf("--effort") + 1]}` : "";
-    out({ type: "assistant", message: { id: `m2-${turns}`, content: [{ type: "text", text: `resume=${resume ?? "none"} model=${model}${effort}` }] }, parent_tool_use_id: null, session_id: sid });
+    out({ type: "assistant", message: { id: `m2-${turns}`, content: [{ type: "text", text: `resume=${resume ?? "none"} model=${model}${effort ? ` effort=${effort}` : ""}` }] }, parent_tool_use_id: null, session_id: sid });
     out({ type: "assistant", message: { id: `m3-${turns}`, content: [{ type: "text", text: "subagent text" }] }, parent_tool_use_id: "tu9", session_id: sid });
     out({ session_id: sid, type: "result", subtype: "success", is_error: false, result: "done", total_cost_usd: 0.01, usage: { input_tokens: 10, cache_read_input_tokens: 5, output_tokens: 3 } });
   }
