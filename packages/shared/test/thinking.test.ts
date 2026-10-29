@@ -25,9 +25,9 @@ describe("thinking per kind of work", () => {
     // "codex" stands for the agent's own Codex.
     expect(brainsFor(a, "feed")).toEqual(["codex@local", "claude-code@local"]);
     expect(brainsFor(a, "chat")).toEqual(["claude-code@local", "codex@local"]);
-    // No choice at all: dialogs think "auto", other work balanced; an agent-wide model from before keeps its way.
+    // No choice at all: every kind thinks "auto" (the hub decides per request); an agent-wide model from before keeps its way.
     expect(thinkingFor({ brains: [] }, "chat")).toEqual({ preset: "auto" });
-    expect(thinkingFor({ brains: [] }, "task")).toEqual({ preset: "balanced" });
+    expect(thinkingFor({ brains: [] }, "task")).toEqual({ preset: "auto" });
     expect(thinkingFor({ brains: [], model: "old" }, "chat")).toEqual({});
   });
 

@@ -542,8 +542,8 @@ export interface AgentDef {
 
 /**
  * How deeply an agent thinks, in plain words: each brain maps it to one of its models and an effort (ProbeResult.presets).
- * "auto": the hub decides. A dialog thinks fast on the quickest brain that can take the turn; other work thinks
- * balanced, unless whoever started a task chose for it (Task.thinking).
+ * "auto": the hub decides per request (core/src/model-router.ts): a dialog's front desk answers at once, a word in
+ * passing or a channel run takes a light model, a task what its starter chose (Task.thinking) or everyday depth.
  */
 export type ThinkingPreset = "auto" | "fast" | "balanced" | "deep";
 

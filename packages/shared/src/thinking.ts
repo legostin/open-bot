@@ -105,14 +105,14 @@ const hasDepth = (c: ThinkingChoice | undefined): c is ThinkingChoice => !!c && 
 
 /**
  * The kind's own choice when it has one, else the general one (chat). An agent with neither a choice nor an agent-wide
- * model (from before `thinking`) thinks "auto". Work other than dialogs that follows an "auto" dialog thinks balanced.
+ * model (from before `thinking`) thinks "auto": the hub decides per request for every kind (core/src/model-router.ts).
  */
 export function thinkingFor(agent: Pick<AgentDef, "thinking" | "model">, kind: WorkKind): ThinkingChoice {
   const general = agent.thinking?.chat ?? (agent.model ? undefined : { preset: "auto" as const });
   const own = kind === "chat" ? general : agent.thinking?.[kind];
   const depth = hasDepth(own) ? own : general;
   const brain = own?.brain ?? (depth === general ? general?.brain : undefined);
-  const preset = depth?.preset === "auto" && kind !== "chat" && depth !== own ? "balanced" : depth?.preset;
+  const preset = depth?.preset;
   return {
     ...(preset ? { preset } : {}),
     ...(depth?.model ? { model: depth.model } : {}),
