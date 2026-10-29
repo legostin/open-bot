@@ -108,6 +108,21 @@ export interface Rule {
 
 export type ApprovalStatus = "pending" | "approved" | "denied" | "expired" | "executed" | "failed";
 
+/**
+ * What an approval asks, for the card to say it plainly in the viewer's language: a command, a file to read or
+ * change, or another tool (then the card shows `Approval.summary`). `detail` is the command or the path as is;
+ * `reason` is the agent's own words for why, when it gave some.
+ */
+export interface ApprovalAsk {
+  kind: "command" | "read" | "write" | "tool";
+  detail: string;
+  reason?: string;
+  /** A command that reaches the network: the host. */
+  host?: string;
+}
+
+export type ApprovalVia = "console" | "telegram" | "device" | "desktop" | "web" | "rule" | "timeout";
+
 export interface Approval {
   id: string;
   sessionId: string;
@@ -117,13 +132,14 @@ export interface Approval {
   tool: string;
   input: unknown;
   summary: string;
+  ask?: ApprovalAsk;
   effect: ToolEffect;
   tainted: boolean;
   status: ApprovalStatus;
   result?: ToolResult;
   createdAt: ISODate;
   resolvedAt?: ISODate;
-  resolvedVia?: "console" | "telegram" | "device" | "rule" | "timeout";
+  resolvedVia?: ApprovalVia;
 }
 
 // ---------- Secrets entered in the chat ----------
@@ -193,7 +209,7 @@ export type MessagePart =
   | { type: "text"; text: string }
   | { type: "tool_call"; id: string; name: string; input: unknown }
   | { type: "tool_result"; id: string; output: string; isError?: boolean }
-  | { type: "approval"; approvalId: string; summary: string; status: ApprovalStatus }
+  | { type: "approval"; approvalId: string; summary: string; status: ApprovalStatus; ask?: ApprovalAsk }
   | { type: "notification"; level: NotifyLevel; title: string; body: string }
   | { type: "error"; message: string }
   /** A file the user sent (or a plugin attached): `path` is relative to the workspaces root, `size` in bytes. */

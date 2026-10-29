@@ -24,6 +24,7 @@ export default {
   "approval.badSignature": "Invalid button signature",
   "approval.channelAsk": "🔐 {agent} asks you to confirm:\n{summary}",
   "approval.channelAskTool": "🔐 {agent} asks you to confirm an action ({tool}).",
+  "approval.desktopReason": "approve: {agent} — {what}",
   "approval.taintedNote": "⚠️ This session has read external content",
   "notify.awaitingApproval": "Waiting for your approval",
   "notify.budgetTitle": "{agent} has used up its daily budget",

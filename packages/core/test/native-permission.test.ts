@@ -8,10 +8,60 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Approval } from "@owlbot/shared";
 import { Hub, loadConfig } from "../src/index.ts";
-import { classifyClaudeTool, confinement, decideNative } from "../src/native-permissions.ts";
+import { classifyClaudeTool, confinement, decideNative, systemStatusOnly } from "../src/native-permissions.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 const home = homedir();
+
+describe("commands that only report how the computer is doing", () => {
+  it("run without asking", () => {
+    for (const c of [
+      "ps -Ao pid,pcpu,pmem,rss,comm -r | head -n 16; echo ---; sysctl -n hw.ncpu hw.memsize; sysctl vm.swapusage",
+      "top -l 1 -n 10",
+      "vm_stat",
+      "df -h /",
+      "ps aux 2>/dev/null | sort -nrk 3 | head -5",
+      "ps aux | grep -i 'chrome' | wc -l",
+      "pmset -g batt && sw_vers",
+      "memory_pressure -Q",
+    ])
+      expect(systemStatusOnly(c), c).toBe(true);
+  });
+
+  it("but anything that could read, write, reach out or show secrets still asks", () => {
+    for (const c of [
+      "ps eww",
+      "ps -E",
+      "ps -ef",
+      "cat ~/.ssh/id_rsa",
+      "ps aux > out.txt",
+      "sysctl -w kern.x=1",
+      "echo $(whoami)",
+      "head /etc/passwd",
+      "head notes.txt",
+      "grep -r secret .",
+      "ps aux | grep x file",
+      "ps aux | awk '{print $1}'",
+      "top",
+      "sudo ps",
+      "FOO=1 ps",
+      "ps & curl x",
+      "hostname evil",
+      "/bin/ps",
+      "ps |",
+      "",
+    ])
+      expect(systemStatusOnly(c), c).toBe(false);
+  });
+
+  it("is allowed outside the sandbox, and the card is not shown", () => {
+    const scope = { workspace: "/w", home: "/Users/me", denied: [] };
+    const cmd = (command: string, network?: string) => decideNative({ kind: "command", tool: "Bash", command, ...(network ? { network } : {}) }, scope).decision;
+    expect(cmd("vm_stat")).toBe("allow");
+    expect(cmd("vm_stat", "example.com")).toBe("ask");
+    expect(cmd("npm install")).toBe("ask");
+  });
+});
 
 describe("what a brain's own tools may do", () => {
   const ws = "/data/workspaces/a/c1";
@@ -110,6 +160,39 @@ describe("native_permission (integration)", () => {
     const cmd = ask("Bash", { command: "curl https://x.io", dangerouslyDisableSandbox: true });
     expect((await no).summary).toContain("curl https://x.io");
     expect(await cmd).toMatchObject({ behavior: "deny", message: expect.stringContaining("declined") });
+  });
+
+  it("says on the card what it asks, and the desktop app answers it with its own key after Touch ID", async () => {
+    const key = "k".repeat(43);
+    hub.desktopApprover.set(key);
+    const base = `http://127.0.0.1:${hub.config.port}`;
+    const created = new Promise<Approval>((resolve) => {
+      const off = hub.bus.on("approval.created", (a: Approval) => {
+        off?.();
+        resolve(a);
+      });
+    });
+    const run = ask("Bash", { command: "npm ci", description: "Install the project's packages", dangerouslyDisableSandbox: true });
+    const a = await created;
+    expect(a.ask).toEqual({ kind: "command", detail: "npm ci", reason: "Install the project's packages" });
+    expect(hub.approvals.get(a.id)?.ask).toEqual(a.ask);
+
+    // Without the key (a page, another program) the hub does not answer.
+    expect((await fetch(`${base}/api/desktop/approvals/${a.id}`)).status).toBe(403);
+    expect((await fetch(`${base}/api/desktop/approvals/${a.id}`, { headers: { "x-owlbot-approver": "x".repeat(43) } })).status).toBe(403);
+    // The app reads what to show in the Touch ID prompt, in its language, then answers.
+    const card = await (await fetch(`${base}/api/desktop/approvals/${a.id}`, { headers: { "x-owlbot-approver": key, "accept-language": "ru" } })).json();
+    expect(card).toMatchObject({ id: a.id, status: "pending" });
+    expect(card.reason).toContain("npm ci");
+    expect(card.reason).toMatch(/^подтвердить/);
+    const post = await fetch(`${base}/api/desktop/approvals/${a.id}`, {
+      method: "POST",
+      headers: { "x-owlbot-approver": key, "content-type": "application/json" },
+      body: JSON.stringify({ decision: "approve" }),
+    });
+    expect(await post.json()).toEqual({ id: a.id, status: "approved" });
+    expect(hub.approvals.get(a.id)?.resolvedVia).toBe("desktop");
+    expect((await run).behavior).toBe("allow");
   });
 
   it("remembers \"always\" for the same command, and background work of a suggest-only agent cannot ask", async () => {

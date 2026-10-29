@@ -152,6 +152,12 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     });
   });
   api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
+  // "Deny" on an approval card: saying no never runs anything, so the chat may do it. Saying yes takes the person's
+  // own proof: Face ID on the phone, Touch ID in the desktop app, the security console in a browser.
+  api.post("/api/approvals/:id/deny", async (req) => {
+    const a = hub.approvals.resolve((req.params as { id: string }).id, "deny", { via: opts.kind === "device" ? "device" : "web" });
+    return { id: a.id, status: a.status };
+  });
 
   // ----- team: every agent with its long-lived dialog (created on first listing), and the group chats -----
   api.get("/api/team", async () => hub.team.list());

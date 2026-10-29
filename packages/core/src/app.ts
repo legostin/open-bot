@@ -40,7 +40,7 @@ import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
 import { McpClientManager } from "./mcp/client.ts";
 import { AuthService } from "./auth.ts";
-import { DesktopTickets } from "./desktop-login.ts";
+import { DesktopApprover, DesktopTickets } from "./desktop-login.ts";
 import { MachineHub } from "./machines.ts";
 import { MachineActivityFeed } from "./activity.ts";
 import { DeviceRegistry } from "./devices.ts";
@@ -98,6 +98,8 @@ export class Hub {
   auth: AuthService;
   /** One-time sign-in tickets from the desktop app (see desktop-login.ts). */
   desktopTickets = new DesktopTickets();
+  /** The desktop app's key for answering approval cards with Touch ID (see desktop-login.ts). */
+  desktopApprover = new DesktopApprover();
   /** One-time invites: one link connects a computer or a phone (invites.ts). */
   invites: InviteRegistry;
   machines: MachineHub;

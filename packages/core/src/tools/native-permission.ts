@@ -3,7 +3,7 @@
 // requests its sandbox raises ("codex.command", "codex.fileChange", "codex.permissions"). The answer is Claude Code's
 // format, a JSON text: {"behavior":"allow","updatedInput":…} or {"behavior":"deny","message":…}. When the person
 // has to say yes, the hub shows the same approval card as for an external action and waits for it.
-import type { ToolResult } from "@owlbot/shared";
+import type { ApprovalAsk, ToolResult } from "@owlbot/shared";
 import { truncate } from "@owlbot/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { ApprovalService } from "../approvals.ts";
@@ -61,6 +61,19 @@ function summary(a: NativeAction): string {
   }
 }
 
+/** What the card says: the command or path as is, and the agent's own reason when it gave one. */
+function askOf(a: NativeAction): ApprovalAsk {
+  switch (a.kind) {
+    case "command":
+      return { kind: "command", detail: truncate(a.command, 2000), ...(a.reason ? { reason: truncate(a.reason, 300) } : {}), ...(a.network ? { host: a.network } : {}) };
+    case "read":
+    case "write":
+      return { kind: a.kind, detail: shownPath(a.path) };
+    default:
+      return { kind: "tool", detail: a.tool };
+  }
+}
+
 export function registerNativePermission(d: NativePermissionDeps): void {
   d.registry.register(
     {
@@ -107,6 +120,7 @@ export function registerNativePermission(d: NativePermissionDeps): void {
         tool,
         input: d.redactor.value(input),
         summary: text,
+        ask: askOf(action),
         effect: "external",
         tainted: ctx.tainted,
       });

@@ -1,9 +1,12 @@
 //! `owlbot://pair?hub=<url>&code=<code>`: the link the hub's Machines page offers to connect this computer. The test
 //! build's scheme is `owlbot-test` (flavor.rs). The hub window also uses `<scheme>://reset` and `<scheme>://quit` for
-//! its "This app" settings; those are only taken from that window, never from the system (`window_action`).
+//! its "This app" settings, and `<scheme>://approval?id=…&decision=approve|deny[&remember=1]` for its approval cards
+//! (approve.rs); those are only taken from that window, never from the system (`window_action`).
 
 use serde::Serialize;
 use tauri::Url;
+
+use crate::approve::Answer;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct PairLink {
@@ -39,13 +42,14 @@ pub fn parse(link: &Url, scheme: &str) -> Option<PairLink> {
   Some(PairLink { hub, code })
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WindowAction {
   Reset,
   Quit,
+  Approval(Answer),
 }
 
-/// `<scheme>://reset` or `<scheme>://quit` from the hub window's settings.
+/// `<scheme>://reset` or `<scheme>://quit` from the hub window's settings, an approval card's answer.
 pub fn window_action(link: &Url, scheme: &str) -> Option<WindowAction> {
   if link.scheme() != scheme {
     return None;
@@ -53,8 +57,28 @@ pub fn window_action(link: &Url, scheme: &str) -> Option<WindowAction> {
   match what(link) {
     "reset" => Some(WindowAction::Reset),
     "quit" => Some(WindowAction::Quit),
+    "approval" => approval(link).map(WindowAction::Approval),
     _ => None,
   }
+}
+
+fn approval(link: &Url) -> Option<Answer> {
+  let (mut id, mut decision, mut remember) = (None, None, false);
+  for (k, v) in link.query_pairs() {
+    match k.as_ref() {
+      "id" => id = Some(v.into_owned()),
+      "decision" => decision = Some(v.into_owned()),
+      "remember" => remember = v == "1",
+      _ => {}
+    }
+  }
+  let id = id.filter(|i| !i.is_empty() && i.len() <= 64 && i.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))?;
+  let approve = match decision?.as_str() {
+    "approve" => true,
+    "deny" => false,
+    _ => return None,
+  };
+  Some(Answer { id, approve, remember: approve && remember })
 }
 
 #[cfg(test)]
@@ -97,5 +121,17 @@ mod tests {
     assert_eq!(a("owlbot-test://quit", "owlbot-test"), Some(WindowAction::Quit));
     assert_eq!(a("owlbot://reset", "owlbot-test"), None);
     assert_eq!(a("owlbot://pair?hub=https://a.b&code=x", "owlbot"), None);
+  }
+
+  #[test]
+  fn reads_an_approval_cards_answer() {
+    let a = |s: &str| window_action(&Url::parse(s).unwrap(), "owlbot");
+    let answer = |id: &str, approve, remember| Some(WindowAction::Approval(Answer { id: id.into(), approve, remember }));
+    assert_eq!(a("owlbot://approval?id=a_1x-Y&decision=approve"), answer("a_1x-Y", true, false));
+    assert_eq!(a("owlbot://approval?id=a_1&decision=approve&remember=1"), answer("a_1", true, true));
+    assert_eq!(a("owlbot://approval?id=a_1&decision=deny&remember=1"), answer("a_1", false, false));
+    assert_eq!(a("owlbot://approval?id=a_1&decision=maybe"), None);
+    assert_eq!(a("owlbot://approval?id=../x&decision=approve"), None);
+    assert_eq!(a("owlbot://approval?decision=approve"), None);
   }
 }

@@ -2,7 +2,7 @@
 // deferred execution when the user answers after the inline wait timed out.
 
 import { createHmac, randomBytes } from "node:crypto";
-import type { Approval, ApprovalStatus, Rule, ToolEffect, ToolResult } from "@owlbot/shared";
+import type { Approval, ApprovalAsk, ApprovalStatus, ApprovalVia, Rule, ToolEffect, ToolResult } from "@owlbot/shared";
 import { newId, nowIso } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
@@ -20,6 +20,7 @@ const fromRow = (r: any): Approval => ({
   tool: r.tool,
   input: json(r.input, {}),
   summary: r.summary,
+  ...(r.ask ? { ask: json<ApprovalAsk>(r.ask, { kind: "tool", detail: "" }) } : {}),
   effect: r.effect,
   tainted: !!r.tainted,
   status: r.status,
@@ -31,8 +32,16 @@ const fromRow = (r: any): Approval => ({
 
 export type Decision = "approve" | "deny";
 
+/** What an approval asks, in a language (`tr`): the command or path from its `ask`, else its summary. */
+export function approvalText(a: Pick<Approval, "ask" | "summary">, tr: (key: string, params?: Record<string, string | number>) => string): string {
+  const ask = a.ask;
+  if (!ask || ask.kind === "tool") return a.summary;
+  if (ask.kind === "command") return ask.host ? tr("native.commandNetwork", { command: ask.detail, host: ask.host }) : tr("native.command", { command: ask.detail });
+  return tr(ask.kind === "read" ? "native.read" : "native.write", { path: ask.detail });
+}
+
 export interface ResolveOptions {
-  via: "console" | "telegram" | "device" | "rule" | "timeout";
+  via: ApprovalVia;
   /** Create an "always allow" rule from this approval. */
   remember?: boolean;
   /** Custom rule conditions (console can edit before saving). */
@@ -65,13 +74,14 @@ export class ApprovalService {
     }
   }
 
-  create(a: { sessionId: string; conversationId: string; taskId?: string; agentId: string; tool: string; input: unknown; summary: string; effect: ToolEffect; tainted: boolean }): Approval {
+  create(a: { sessionId: string; conversationId: string; taskId?: string; agentId: string; tool: string; input: unknown; summary: string; ask?: ApprovalAsk; effect: ToolEffect; tainted: boolean }): Approval {
     const approval: Approval = { ...a, id: newId("a"), status: "pending", createdAt: nowIso() };
+    if (!a.ask) delete approval.ask;
     this.db
       .prepare(
-        "insert into approvals(id, session_id, conversation_id, task_id, agent_id, tool, input, summary, effect, tainted, status, created_at) values (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "insert into approvals(id, session_id, conversation_id, task_id, agent_id, tool, input, summary, ask, effect, tainted, status, created_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?)",
       )
-      .run(approval.id, a.sessionId, a.conversationId, a.taskId ?? null, a.agentId, a.tool, JSON.stringify(a.input), a.summary, a.effect, a.tainted ? 1 : 0, "pending", approval.createdAt);
+      .run(approval.id, a.sessionId, a.conversationId, a.taskId ?? null, a.agentId, a.tool, JSON.stringify(a.input), a.summary, a.ask ? JSON.stringify(a.ask) : null, a.effect, a.tainted ? 1 : 0, "pending", approval.createdAt);
     this.audit.append(`agent:${a.agentId}`, "approval.create", a.tool, { id: approval.id, summary: a.summary });
     this.bus.emit("approval.created", approval);
     return approval;

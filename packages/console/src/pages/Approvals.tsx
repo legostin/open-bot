@@ -171,6 +171,8 @@ function ApprovalCard({ a, highlighted, now }: { a: ApprovalView; highlighted: b
     try {
       await api.resolveApproval(a.id, { decision });
       dropPending(a.id);
+      // Opened from the card in the chat as a small window for this one answer: done, back to the chat.
+      if (window.name === `approval-${a.id}`) return window.close();
       toast(decision === "approve" ? t("approvals.approvedOnce") : t("approvals.denied"));
       if (highlighted) navigate("#/approvals");
     } catch (e) {
@@ -406,6 +408,7 @@ function RememberDialog({ open, a, onClose, onDone }: { open: boolean; a: Approv
     setError(undefined);
     try {
       await api.resolveApproval(a.id, { decision: "approve", remember: true, rule: { ...r.rule, decision: "allow" } });
+      if (window.name === `approval-${a.id}`) return window.close();
       onDone();
     } catch (e) {
       setError(errorText(e));

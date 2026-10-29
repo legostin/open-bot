@@ -23,6 +23,7 @@ export default {
   "approval.badSignature": "Неверная подпись кнопки",
   "approval.channelAsk": "🔐 {agent} просит подтвердить:\n{summary}",
   "approval.channelAskTool": "🔐 {agent} просит подтвердить действие ({tool}).",
+  "approval.desktopReason": "подтвердить: {agent} — {what}",
   "approval.taintedNote": "⚠️ Сессия читала внешний контент",
   "notify.awaitingApproval": "Ждёт подтверждения",
   "notify.budgetTitle": "Бюджет агента {agent} исчерпан",

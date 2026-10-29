@@ -134,6 +134,8 @@ pub struct AppState {
   pub tray: Mutex<Option<tray::Tray>>,
   /// macOS: the login shell's PATH for owlbot-node (a GUI app gets a bare one; the hub reads it itself).
   pub path_env: Option<String>,
+  /// The key this run of the app answers approval cards with (approve.rs); the hub gets it over its stdin.
+  pub approver: String,
 }
 
 pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error::Error>> {
@@ -168,6 +170,7 @@ pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error:
     reset: Mutex::new(false),
     tray: Mutex::new(None),
     path_env,
+    approver: login::new_ticket(),
   });
   let state = handle.state::<AppState>();
   *state.tray.lock().unwrap() = Some(tray::build(&handle, &state.paths.flavor, settings.autostart)?);
@@ -222,7 +225,8 @@ fn spec(st: &AppState, mode: Mode) -> Spec {
   match mode {
     Mode::Hub => {
       env.push(("OWLBOT_DATA_DIR".into(), arg(&p.hub_data)));
-      Spec { program: p.node.clone(), args: vec![arg(&p.launch()), "run".into()], env, log: p.hub_log.clone(), ports: p.hub_ports(), restart_delay: delay }
+      let hello = vec![format!("approver {}", st.approver)];
+      Spec { program: p.node.clone(), args: vec![arg(&p.launch()), "run".into()], env, log: p.hub_log.clone(), ports: p.hub_ports(), restart_delay: delay, hello }
     }
     Mode::Node => {
       env.push(("OWLBOT_LANG".into(), texts().lang().into()));
@@ -231,7 +235,7 @@ fn spec(st: &AppState, mode: Mode) -> Spec {
       if let Some(path) = &st.path_env {
         env.push(("PATH".into(), path.clone()));
       }
-      Spec { program: p.node.clone(), args: vec![arg(&p.node_cli()), "run".into()], env, log: p.node_log.clone(), ports: vec![], restart_delay: delay }
+      Spec { program: p.node.clone(), args: vec![arg(&p.node_cli()), "run".into()], env, log: p.node_log.clone(), ports: vec![], restart_delay: delay, hello: vec![] }
     }
   }
 }
@@ -394,6 +398,7 @@ pub fn on_window_link(app: &AppHandle, url: &Url) {
   std::thread::spawn(move || match deeplink::window_action(&url, app.state::<AppState>().paths.flavor.scheme()) {
     Some(WindowAction::Reset) => on_menu(&app, "reset"),
     Some(WindowAction::Quit) => app.exit(0),
+    Some(WindowAction::Approval(answer)) => crate::approve::run(&app, answer),
     None => {
       on_link(&app, &url);
     }

@@ -1120,7 +1120,7 @@ export class SessionRunner {
     if (!msgId) return;
     const m = this.d.store.getMessage(msgId);
     if (!m) return;
-    this.d.store.updateMessage(m.id, { parts: [...m.parts, { type: "approval", approvalId: a.id, summary: a.summary, status: "pending" }] });
+    this.d.store.updateMessage(m.id, { parts: [...m.parts, { type: "approval", approvalId: a.id, summary: a.summary, status: "pending", ...(a.ask ? { ask: a.ask } : {}) }] });
   }
 
   private updateApprovalPart(a: Approval): void {

@@ -88,6 +88,8 @@ const MIGRATIONS: string[] = [
     conversation_id text, state text not null default '{}', version integer not null default 1,
     last_error text, created_at text not null, updated_at text not null);
   `,
+  // What an approval asks, for the card to say it plainly (ApprovalAsk).
+  `alter table approvals add column ask text;`,
 ];
 
 export function openDb(file: string): Db {

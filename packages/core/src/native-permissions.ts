@@ -92,10 +92,121 @@ export function decideNative(a: NativeAction, scope: NativeScope): NativeDecisio
       if (mine(a.path)) return { decision: "allow", reason: "inside the agent's folder" };
       return { decision: "ask", reason: "writes outside the agent's folder" };
     case "command":
+      if (!a.network && systemStatusOnly(a.command)) return { decision: "allow", reason: "only reads how the computer is doing" };
       return { decision: "ask", reason: a.network ? `a command reaching ${a.network}` : "a command outside the sandbox" };
     case "other":
       return { decision: "ask", reason: `an unknown tool (${a.tool})` };
   }
+}
+
+/**
+ * Commands that only report how the computer is doing (processes, memory, CPU, disks, the system's version), and
+ * filters over their output. The sandbox may refuse them (process lists), and the person should not have to say yes
+ * to "how loaded is my Mac". Anything else, a redirection or substitution, a path, or a flag that shows other
+ * processes' environment or writes, is not one: it asks.
+ */
+const STATUS: Record<string, (args: string[]) => boolean> = {
+  // `-E` (and `-e` in legacy mode, `e` BSD-style) shows each process's environment, secrets included; `-M`/`-N` read another kernel's memory.
+  ps: (args) => !args.some((x) => /^-?[A-Za-z]*[eEMN][A-Za-z]*$/.test(x)),
+  sysctl: (args) => !args.some((x) => x.includes("=") || /^-[A-Za-z]*[wf]/.test(x)),
+  top: (args) => args.some((x) => /^-[A-Za-z]*l/.test(x)),
+  pmset: (args) => args[0] === "-g",
+  memory_pressure: (args) => args.every((x) => x === "-Q"),
+  df: () => true,
+  vm_stat: numbersOrFlags,
+  iostat: numbersOrFlags,
+  uptime: none,
+  sw_vers: numbersOrFlags,
+  uname: numbersOrFlags,
+  hostname: (args) => args.every((x) => x.startsWith("-")),
+  whoami: none,
+  nproc: none,
+  date: (args) => args.every((x) => (x.startsWith("+") || x.startsWith("-")) && x !== "-s" && !x.startsWith("-f")),
+  echo: () => true,
+  printf: () => true,
+};
+/** Filters read what the command before them printed, never files: only flags, numbers and (for grep) one pattern. */
+const FILTERS: Record<string, (args: string[]) => boolean> = {
+  head: numbersOrFlags,
+  tail: numbersOrFlags,
+  sort: (args) => numbersOrFlags(args) && !args.some((x) => /^-[A-Za-z]*o/.test(x)),
+  uniq: numbersOrFlags,
+  wc: numbersOrFlags,
+  cut: numbersOrFlags,
+  column: numbersOrFlags,
+  tr: () => true,
+  grep: grepOverInput,
+  egrep: grepOverInput,
+  fgrep: grepOverInput,
+};
+
+function none(args: string[]): boolean {
+  return args.length === 0;
+}
+function numbersOrFlags(args: string[]): boolean {
+  return args.every((x) => x.startsWith("-") || /^[\d.,]+$/.test(x));
+}
+function grepOverInput(args: string[]): boolean {
+  if (args.some((x) => /^-[A-Za-z]*[frRd]/.test(x) || x.startsWith("--file") || x.startsWith("--include") || x.startsWith("--dir"))) return false;
+  return args.filter((x) => !x.startsWith("-") && !/^\d+$/.test(x)).length <= 1;
+}
+
+/** Shell words of one command line, split into commands by `|`, `||`, `&&`, `;` and new lines; undefined when it has
+ * anything a plain status command does not need (substitutions, redirections, globs, escapes, background). */
+function commands(line: string): { words: string[]; piped: boolean }[] | undefined {
+  // Throwing away error output is harmless.
+  const src = line.replace(/(^|\s)(2>&1|2>\/dev\/null|>\/dev\/null)(?=\s|$|[;|&])/g, "$1");
+  const out: { words: string[]; piped: boolean }[] = [];
+  let words: string[] = [];
+  let word: string | undefined;
+  let piped = false;
+  const end = (next: boolean) => {
+    if (word !== undefined) words.push(word);
+    word = undefined;
+    if (!words.length) return false;
+    out.push({ words, piped });
+    words = [];
+    piped = next;
+    return true;
+  };
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === "'" || c === '"') {
+      const close = src.indexOf(c, i + 1);
+      if (close < 0) return undefined;
+      const inner = src.slice(i + 1, close);
+      if (c === '"' && /[$`\\]/.test(inner)) return undefined;
+      word = (word ?? "") + inner;
+      i = close;
+    } else if (c === " " || c === "\t") {
+      if (word !== undefined) words.push(word);
+      word = undefined;
+    } else if (c === "|" || c === ";" || c === "\n" || c === "&") {
+      const two = src.slice(i, i + 2);
+      if (c === "&" && two !== "&&") return undefined;
+      if (two === "||" || two === "&&") i++;
+      if (!end(c === "|" && two !== "||")) return undefined;
+    } else if (/[<>`$(){}\\*?[\]~!#]/.test(c)) {
+      return undefined;
+    } else {
+      word = (word ?? "") + c;
+    }
+  }
+  if (word !== undefined || words.length) end(false);
+  else if (piped) return undefined;
+  return out;
+}
+
+/** True when a shell command only reports the computer's state (see STATUS). */
+export function systemStatusOnly(command: string): boolean {
+  const list = commands(command.trim());
+  if (!list?.length) return false;
+  return list.every(({ words: [name, ...args], piped }) => {
+    // A path in an argument may name a file anywhere; `df` only reports the disk it is on.
+    if (name !== "df" && args.some((x) => x.includes("/"))) return false;
+    const check = Object.hasOwn(STATUS, name) ? STATUS[name] : piped && Object.hasOwn(FILTERS, name) ? FILTERS[name] : undefined;
+    return !!check && check(args);
+  });
 }
 
 /** The path a summary shows: relative to the home when it is inside it. */

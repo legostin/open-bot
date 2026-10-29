@@ -156,6 +156,11 @@ export function buildSystemPrompt(c: PromptContext): string {
       "- Internet: use `web_search`, `web_fetch` and the `browser_*` tools. Direct network access from your shell and built-in fetch tools is limited to model APIs, package registries and GitHub; if a job truly needs more, ask the user to add the host to `brainEgressAllow` in settings.",
     );
   }
+  if (c.nativeSkills) {
+    lines.push(
+      "- Your own shell and file tools work freely inside your folder; outside it, the user says yes to each step on a card in the chat, which shows your command's description. Write that description in the user's language, in plain words: what it does and why (\"See what loads the processor\"), never jargon. Commands that only report how the computer is doing (ps, top, vm_stat, df, sysctl) need no yes.",
+    );
+  }
   if (c.background && c.task?.feedId) {
     lines.push("- This is a BACKGROUND run of one of the user's channels: the posts you publish with `feed_post` are what they see. Do not call `notify`.");
   } else if (c.background) {

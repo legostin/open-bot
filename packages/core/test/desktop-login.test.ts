@@ -1,7 +1,7 @@
 // One-time sign-in tickets of the desktop app and the commands it sends over the hub's stdin.
 import { describe, expect, it, vi } from "vitest";
 import { PassThrough } from "node:stream";
-import { DesktopTickets, readDesktopCommands } from "../src/desktop-login.ts";
+import { DesktopApprover, DesktopTickets, readDesktopCommands } from "../src/desktop-login.ts";
 
 const ticket = "a".repeat(43);
 
@@ -26,9 +26,22 @@ describe("desktop sign-in tickets", () => {
   it("reads the app's lines and stops when the pipe closes", async () => {
     const input = new PassThrough();
     const seen: string[] = [];
-    readDesktopCommands(input, { stop: () => seen.push("stop"), ticket: (t) => seen.push(`ticket ${t}`) });
-    input.write(`ticket ${ticket}\nnoise\nstop\n`);
+    readDesktopCommands(input, { stop: () => seen.push("stop"), ticket: (t) => seen.push(`ticket ${t}`), approver: (k) => seen.push(`approver ${k}`) });
+    input.write(`approver ${ticket}\nticket ${ticket}\nnoise\nstop\n`);
     input.end();
-    await vi.waitFor(() => expect(seen).toEqual([`ticket ${ticket}`, "stop", "stop"]));
+    await vi.waitFor(() => expect(seen).toEqual([`approver ${ticket}`, `ticket ${ticket}`, "stop", "stop"]));
+  });
+});
+
+describe("the desktop app's approval key", () => {
+  it("knows only the key the app gave it", () => {
+    const approver = new DesktopApprover();
+    expect(approver.check(ticket)).toBe(false);
+    approver.set("short");
+    expect(approver.enabled).toBe(false);
+    approver.set(ticket);
+    expect(approver.check(ticket)).toBe(true);
+    expect(approver.check("b".repeat(43))).toBe(false);
+    expect(approver.check(undefined)).toBe(false);
   });
 });

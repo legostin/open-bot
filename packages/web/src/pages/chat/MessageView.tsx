@@ -1,14 +1,16 @@
 // Rendering of one message and its parts. Plugins can override whole messages (chat.message) or tool cards
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
-import { memo, useState } from "react";
-import { Bell, Check, CircleAlert, CornerUpLeft, ExternalLink, FileText, Mic, ShieldAlert, X } from "lucide-react";
+import { memo, useEffect, useState } from "react";
+import { Bell, Check, CircleAlert, CornerUpLeft, FilePen, FileText, Mic, ShieldAlert, SquareTerminal, X } from "lucide-react";
 import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
 import { fileSize, formatDuration, formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import { native, nativeErrorText, type NativeBridge } from "../../lib/native";
 import { session } from "../../state/app";
+import { api, errorText } from "../../lib/api";
+import { approvalLink, desktopApp, DESKTOP_EVENT, type DesktopApprovalEvent } from "../../lib/desktop";
 import { showDetails } from "../../state/prefs";
 import { Markdown } from "../../components/markdown";
 import { Badge, Button, cx } from "../../components/ui";
@@ -74,7 +76,7 @@ function NativeApprovalActions({ approvalId, bridge }: { approvalId: string; bri
       </div>
     );
   return (
-    <div className="mt-2.5 flex flex-col gap-1.5">
+    <div className="mt-3 flex flex-col gap-1.5">
       <div className="flex gap-2">
         <Button variant="primary" className="flex-1" loading={busy === "approve"} disabled={busy !== null} onClick={() => void answer("approve")}>
           {t("message.approval.approve")}
@@ -92,37 +94,128 @@ function NativeApprovalActions({ approvalId, bridge }: { approvalId: string; bri
   );
 }
 
-function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" }> }) {
+/** The card's words for what the agent asks: a plain headline in the viewer's language and the detail as is. */
+function approvalWords(part: Extract<MessagePart, { type: "approval" }>): { headline: string; detail?: string; reason?: string; Icon: typeof ShieldAlert } {
+  const ask = part.ask;
+  switch (ask?.kind) {
+    case "command":
+      return {
+        headline: ask.host ? t("message.approval.ask.commandNetwork", { host: ask.host }) : t("message.approval.ask.command"),
+        detail: ask.detail,
+        reason: ask.reason,
+        Icon: SquareTerminal,
+      };
+    case "read":
+      return { headline: t("message.approval.ask.read"), detail: ask.detail, Icon: FileText };
+    case "write":
+      return { headline: t("message.approval.ask.write"), detail: ask.detail, Icon: FilePen };
+    default:
+      return { headline: part.summary, Icon: ShieldAlert };
+  }
+}
+
+/**
+ * Answering in the desktop app or a browser. "Deny" goes straight to the hub: saying no runs nothing. "Allow" takes
+ * the person's own proof: the desktop app asks for Touch ID (showing what the card asks, as the hub tells it) and
+ * answers itself; a browser opens the security console's card in a small window.
+ */
+function ApprovalActions({ approvalId }: { approvalId: string }) {
   const s = useStore(session);
+  const app = desktopApp();
+  const [busy, setBusy] = useState<"approve" | "always" | "deny" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!app?.approvals) return;
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<DesktopApprovalEvent>).detail;
+      if (d?.type !== "approval" || d.id !== approvalId) return;
+      if (d.outcome !== "done") setBusy(null);
+      if (d.outcome === "failed") setError(t("message.approval.failed", { error: d.error ?? "" }));
+    };
+    window.addEventListener(DESKTOP_EVENT, on);
+    return () => window.removeEventListener(DESKTOP_EVENT, on);
+  }, [app?.approvals, approvalId]);
+
+  const allow = (always: boolean) => {
+    setError(null);
+    if (app?.approvals) {
+      setBusy(always ? "always" : "approve");
+      location.href = approvalLink(app, approvalId, "approve", always);
+      return;
+    }
+    const url = `${s?.consoleUrl ?? ""}/#/approvals/${encodeURIComponent(approvalId)}`;
+    if (!window.open(url, `approval-${approvalId}`, "popup,width=460,height=620")) window.open(url, "_blank", "noopener");
+  };
+  const deny = async () => {
+    setBusy("deny");
+    setError(null);
+    try {
+      await api.post(`/api/approvals/${encodeURIComponent(approvalId)}/deny`);
+    } catch (e) {
+      setError(t("message.approval.failed", { error: errorText(e) }));
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="mt-3 flex flex-col gap-1.5">
+      <div className="flex gap-2">
+        <Button variant="primary" className="flex-1" loading={busy === "approve"} disabled={busy !== null} onClick={() => allow(false)}>
+          {t("message.approval.approve")}
+        </Button>
+        <Button variant="secondary" className="flex-1" loading={busy === "deny"} disabled={busy !== null} onClick={() => void deny()}>
+          {t("message.approval.deny")}
+        </Button>
+      </div>
+      {app?.approvals && (
+        <button
+          type="button"
+          className="self-center px-2 py-1 text-xs font-medium text-muted hover:text-fg disabled:opacity-50"
+          disabled={busy !== null}
+          onClick={() => allow(true)}
+        >
+          {busy === "always" ? t("message.approval.waiting") : t("message.approval.always")}
+        </button>
+      )}
+      {error && (
+        <div className="text-xs break-words text-danger" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" }> }) {
   const known = APPROVAL[part.status];
   const st = known ? { label: t(known.label), tone: known.tone } : { label: part.status, tone: "neutral" as const };
   const pending = part.status === "pending";
+  const { headline, detail, reason, Icon } = approvalWords(part);
+  const [open, setOpen] = useState(false);
   return (
     <div className={cx("w-full max-w-md rounded-2xl border bg-surface p-3.5 shadow-card", pending ? "border-warning/35 ring-4 ring-warning/8" : "border-hairline")}>
-      <div className="flex flex-wrap items-center gap-2.5">
-        <span className={cx("flex size-7 items-center justify-center rounded-full", pending ? "bg-warning-soft text-warning" : "bg-surface-2 text-muted")}>
-          <ShieldAlert className="size-4" />
+      <div className="flex items-start gap-2.5">
+        <span className={cx("mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full", pending ? "bg-warning-soft text-warning" : "bg-surface-2 text-muted")}>
+          <Icon className="size-4" />
         </span>
-        <span className="text-sm font-semibold">{pending ? t("message.approval.titlePending") : t("message.approval.title")}</span>
-        {/* "Awaiting approval" is already the title. */}
-        {!pending && <Badge tone={st.tone}>{st.label}</Badge>}
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-medium text-muted">{pending ? t("message.approval.asks") : <Badge tone={st.tone}>{st.label}</Badge>}</div>
+          <div className="mt-0.5 text-sm leading-snug font-semibold break-words">{headline}</div>
+        </div>
       </div>
-      <div className="mt-2 text-sm leading-relaxed break-words">{part.summary}</div>
-      {/* On the phone the answer is given here (Face ID); the security console stays on the computer. */}
-      {native && pending && <NativeApprovalActions approvalId={part.approvalId} bridge={native} />}
-      {s && !native && (
-        <a
-          href={`${s.consoleUrl}/#/approvals/${encodeURIComponent(part.approvalId)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={cx(
-            "press mt-3 inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold",
-            pending ? "candy" : "border border-hairline bg-surface text-fg hover:bg-surface-2",
-          )}
+      {reason && <div className="mt-2 text-sm leading-relaxed break-words text-fg/80">{reason}</div>}
+      {detail && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          title={open ? undefined : t("message.approval.showAll")}
+          className="mt-2 block w-full rounded-lg bg-surface-2 px-2.5 py-2 text-left font-mono text-xs leading-relaxed whitespace-pre-wrap text-fg/90 [overflow-wrap:anywhere]"
         >
-          {pending ? t("message.approval.open") : t("message.approval.details")} <ExternalLink className="size-3.5" />
-        </a>
+          <span className={open ? "block" : "line-clamp-3"}>{detail}</span>
+        </button>
       )}
+      {/* On the phone the answer is given here with Face ID; in the desktop app with Touch ID. */}
+      {pending && (native ? <NativeApprovalActions approvalId={part.approvalId} bridge={native} /> : <ApprovalActions approvalId={part.approvalId} />)}
     </div>
   );
 }
