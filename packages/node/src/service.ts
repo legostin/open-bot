@@ -32,6 +32,7 @@ function describe(method: string, p: any): string {
     case "brain.send":
     case "brain.steer":
       return `session=${p?.sessionId} (${typeof p?.turn?.text === "string" ? p.turn.text.length : 0} chars)`;
+    case "brain.warm":
     case "brain.interrupt":
     case "brain.close":
       return `session=${p?.sessionId}`;
@@ -104,6 +105,13 @@ export class NodeService {
     peer.handle(
       "brain.steer",
       this.wrap("brain.steer", async (p: any) => ({ accepted: await this.brains.steer(p ?? {}) })),
+    );
+    peer.handle(
+      "brain.warm",
+      this.wrap("brain.warm", async (p: any) => {
+        await this.brains.warm(p ?? {});
+        return {};
+      }),
     );
     peer.handle(
       "brain.interrupt",

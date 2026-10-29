@@ -189,6 +189,10 @@ export class SessionRunner {
   private kickoff?: NodeJS.Timeout;
   private streamingMessage = new Map<string, string>(); // conversationId -> messageId
   private turning = new Map<string, number>(); // conversationId -> turns in progress
+  /** Dialogs whose session is being opened ahead of the person's message (warm()). */
+  private warming = new Map<string, Promise<unknown>>();
+  /** Sessions opened ahead that start without the history: their first turn gets the recap. */
+  private freshAhead = new Set<string>();
   /** Group chats: the member answering now, then the ones waiting (while a round runs). */
   private floors = new Map<string, string[]>();
   /** Group chats: bumped by Stop, so rounds started or queued before it end. */
@@ -1317,6 +1321,8 @@ export class SessionRunner {
       resume,
       env,
       background,
+      // A dialog the person talks in keeps its brain's process between turns (warm()).
+      ...(warmable(conv, task) ? { keepWarm: true } : {}),
       // The brain's own shell and file tools stay in its folder; the rest it asks for (native-permissions.ts).
       ...(local && this.d.config.sandboxBrains
         ? { confine: { ...confinement(this.d.config.dataDir, workspace, local && ref.brainId === "claude-code" ? this.d.claudePluginDirs() : []), permissionTool: NATIVE_PERMISSION_TOOL } }
@@ -1351,6 +1357,45 @@ export class SessionRunner {
     const first = this.d.store.firstMessage(conversationId);
     const r = recap(msgs, { speaker, self: agentName(agent, hubLocale()), ...(first && first.id !== msgs[0]?.id ? { first } : {}) });
     return r && this.d.redactor.text(r);
+  }
+
+  /**
+   * The person opened a dialog or is typing in it: the session its next turn would use is opened and its brain gets
+   * ready (a CLI starts and waits), so the reply does not wait for that. Nothing happens while a turn runs there, for
+   * group chats and tasks, or when no brain of the agent can take a turn now. Never fails.
+   */
+  async warm(conversationId: string): Promise<boolean> {
+    const conv = this.d.store.getConversation(conversationId);
+    if (!conv || !warmable(conv) || this.turning.get(conv.id) || this.warming.has(conv.id)) return false;
+    const agent = this.d.agents.get(conv.agentId);
+    if (!agent) return false;
+    const job = (async () => {
+      const prior = this.d.store.activeSession(conv.id, agent.id);
+      const changedAt = this.d.settings.getKey<Record<string, string>>(BRAINS_CHANGED_KEY, {})[agent.id];
+      const stay = prior && !(changedAt && changedAt > prior.createdAt) ? prior.brainRef : undefined;
+      const { usable } = await this.candidates({ ...agent, brains: brainsFor(agent, "chat") }, stay);
+      const ref = usable[0];
+      if (!ref) return false;
+      const key = formatBrainRef(parseBrainRef(ref));
+      let live = prior ? this.live.get(prior.id) : undefined;
+      if (!live || live.brainRef !== key || live.stamp !== sessionStamp(agent, conv, "chat", this.d.toolNames?.())) {
+        if (live && prior) {
+          if (live.brainRef === key) await this.closeLive(prior.id);
+          else void this.closeLive(prior.id);
+        }
+        const opened = await this.openSession(conv, agent, ref, undefined, prior);
+        if (opened.fresh) this.freshAhead.add(opened.row.id);
+        live = this.live.get(opened.row.id)!;
+      }
+      await live.handle.warm();
+      return true;
+    })().catch(() => false);
+    this.warming.set(conv.id, job);
+    try {
+      return await job;
+    } finally {
+      this.warming.delete(conv.id);
+    }
   }
 
   async runTurn(conv: Conversation, prompt: string, opts: TurnOpts): Promise<TurnResult> {
@@ -1552,9 +1597,13 @@ export class SessionRunner {
       const key = formatBrainRef(parseBrainRef(ref));
       tried.add(key);
 
+      // A session being opened ahead of this turn (warm()) is the one to use.
+      await this.warming.get(conv.id);
       const curPrior = this.d.store.activeSession(conv.id, agent.id);
       let live = curPrior ? this.live.get(curPrior.id) : undefined;
       let row = curPrior;
+      // Opened ahead without the history: this first turn still gets the recap.
+      if (curPrior && this.freshAhead.delete(curPrior.id)) fresh = true;
       try {
         if (!live || live.brainRef !== key || live.stamp !== sessionStamp(agent, conv, kind, this.d.toolNames?.())) {
           // The same brain resumes the same conversation with the new instructions: let the old process finish first.
@@ -1776,6 +1825,11 @@ export class SessionRunner {
  * What a live session was opened with: a changed agent, a group's new members, or a setup chat that became its channel
  * or agent get a fresh session (resumed).
  */
+/** A conversation the person talks in with one agent (not a task, not a group chat): its brain stays warm between turns. */
+function warmable(conv: Conversation, task?: Task): boolean {
+  return !task && !conv.taskId && (conv.kind === "main" || conv.kind === "setup" || conv.kind === "chat");
+}
+
 function sessionStamp(agent: AgentDef, conv: Conversation, kind: WorkKind, tools = ""): string {
   // Only this kind's choice: changing how tasks think leaves the dialog's session alone.
   const stamp = `${JSON.stringify({ ...agent, thinking: thinkingFor(agent, kind) })}|${tools}`;

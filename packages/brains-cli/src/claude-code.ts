@@ -1,5 +1,6 @@
-// Claude Code as a brain: one headless `claude -p` process per turn, `--resume` between turns. The turn's input goes
+// Claude Code as a brain: a headless `claude -p` process, `--resume` when one has to start again. The turn's input goes
 // in as stream-json and stdin stays open while it runs: more user messages (steer) join the turn at its next step.
+// A task's process ends with its turn; a dialog's (keepWarm) waits for the next turn and can start before the first.
 // Uses the user's subscription (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, or a login in HOME, which the user
 // can make from the chat: `claude auth login` prints a sign-in page and reads the code that page shows from stdin).
 
@@ -8,7 +9,7 @@ import { join } from "node:path";
 import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@owlbot/shared";
 import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
 import type { Locale, Translate } from "@owlbot/shared/i18n";
-import { capture, childEnv, runLines, textOfToolContent } from "./proc.ts";
+import { capture, childEnv, runLines, textOfToolContent, type RunningProcess } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseClaudeBrowserLogin, runCliLogin } from "./login.ts";
 
@@ -46,6 +47,9 @@ export interface ClaudeCodeOptions {
   locale?: () => Locale;
   /** How long a sign-in from the chat may wait for the user to paste the code. */
   loginTimeoutMs?: number;
+  /** How long a dialog's process waits for its next turn (default 10 minutes), and how many wait at once (3). */
+  idleMs?: number;
+  maxWarm?: number;
 }
 
 /** Turns Claude Code stream-json messages into BrainEvents. Pure: easy to test with recorded fixtures. */
@@ -237,24 +241,78 @@ function userLine(text: string): string {
 
 /** After a result, how long the CLI may stay silent with input it has not taken before stdin is closed anyway. */
 const PENDING_INPUT_GRACE_MS = 30_000;
+/** A dialog's process waits this long for its next turn before it closes (BrainSessionOptions.keepWarm). */
+const IDLE_MS = 10 * 60_000;
+/** Processes kept waiting at once per provider; the one waiting longest closes first. */
+const MAX_WARM = 3;
+
+const TIMEOUT = Symbol("timeout");
+
+/** The lines of a process that outlives one turn: a timeout never loses a line, the next call gets it. */
+class LineReader {
+  private it: AsyncIterator<string>;
+  private pending?: Promise<IteratorResult<string>>;
+
+  constructor(lines: AsyncIterable<string>) {
+    this.it = lines[Symbol.asyncIterator]();
+  }
+
+  /** The next line, undefined once the process is gone, or TIMEOUT when none came within `ms`. */
+  async next(ms?: number): Promise<string | undefined | typeof TIMEOUT> {
+    this.pending ??= this.it.next();
+    let timer: NodeJS.Timeout | undefined;
+    const r = ms === undefined ? await this.pending : await Promise.race([this.pending, new Promise<typeof TIMEOUT>((res) => (timer = setTimeout(() => res(TIMEOUT), ms)))]);
+    clearTimeout(timer);
+    if (r === TIMEOUT) return TIMEOUT;
+    this.pending = undefined;
+    return r.done ? undefined : r.value;
+  }
+}
+
+/** The dialogs' processes waiting for their next turn: at most `max`, the one waiting longest closes first. */
+class WarmPool {
+  private waiting: ClaudeCodeSession[] = [];
+  private max: number;
+
+  constructor(max: number) {
+    this.max = max;
+  }
+
+  rest(s: ClaudeCodeSession): void {
+    this.take(s);
+    this.waiting.push(s);
+    while (this.waiting.length > this.max) this.waiting.shift()!.release();
+  }
+
+  take(s: ClaudeCodeSession): void {
+    const i = this.waiting.indexOf(s);
+    if (i >= 0) this.waiting.splice(i, 1);
+  }
+}
 
 class ClaudeCodeSession implements BrainSessionImpl {
   private resumeId?: string;
-  private child?: ReturnType<typeof runLines>;
+  private child?: RunningProcess;
+  private reader?: LineReader;
   /** This turn's messages so far: its input, then what steer() added (sent again if the turn has to start over). */
   private inputs: string[] = [];
   /** stdin is closed: the turn is ending and takes no more input. */
   private closing = false;
   private interrupted = false;
+  /** A turn is in progress (send() has not finished). */
+  private turning = false;
+  private idle?: NodeJS.Timeout;
   private o: BrainSessionOptions;
   private p: ClaudeCodeOptions;
   private dir: string;
   private caps: () => Promise<ClaudeCaps>;
+  private pool: WarmPool;
 
-  constructor(opts: BrainSessionOptions, p: ClaudeCodeOptions, caps: () => Promise<ClaudeCaps>) {
+  constructor(opts: BrainSessionOptions, p: ClaudeCodeOptions, caps: () => Promise<ClaudeCaps>, pool: WarmPool) {
     this.o = opts;
     this.p = p;
     this.caps = caps;
+    this.pool = pool;
     this.resumeId = opts.resume;
     this.dir = join(p.stateDir, "sessions", opts.sessionId.replace(/[^\w-]/g, "_"));
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
@@ -305,79 +363,155 @@ class ClaudeCodeSession implements BrainSessionImpl {
     return a;
   }
 
+  /** The process is there and takes input. */
+  private alive(): boolean {
+    return !!this.child && this.child.child.exitCode === null && !this.closing;
+  }
+
+  /** A process waiting on stdin: the CLI does its start-up (settings, MCP servers) before the first message comes. */
+  private async start(caps: ClaudeCaps): Promise<RunningProcess> {
+    const env = childEnv(process.env, {
+      ...this.o.env,
+      ...(await this.p.authEnv?.()),
+      DISABLE_AUTOUPDATER: "1",
+      CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "1",
+      // A permission question may wait for the person for minutes (tools/native-permission.ts).
+      ...(this.o.confine ? { MCP_TOOL_TIMEOUT: String(15 * 60_000) } : {}),
+    });
+    const proc = runLines(this.p.command?.() ?? "claude", this.args(caps), { cwd: this.o.workspace, env, keepInput: true });
+    this.child = proc;
+    this.reader = new LineReader(proc.lines);
+    this.closing = false;
+    void proc.exited.then(() => {
+      if (this.child !== proc) return;
+      this.child = undefined;
+      this.reader = undefined;
+      this.pool.take(this);
+    });
+    return proc;
+  }
+
+  async warm(): Promise<void> {
+    if (!this.o.keepWarm || this.turning || this.alive()) return;
+    const caps = await this.caps().catch((): ClaudeCaps => ({ snapshot: false }));
+    if (this.turning || this.alive()) return;
+    await this.start(caps);
+    this.rest();
+  }
+
+  /** Between turns: the process waits for the next one, then closes. */
+  private rest(): void {
+    clearTimeout(this.idle);
+    this.idle = setTimeout(() => this.release(), this.p.idleMs ?? IDLE_MS);
+    this.idle.unref?.();
+    this.pool.rest(this);
+  }
+
+  /** Let the waiting process go: stdin closes and the CLI exits. */
+  release(): void {
+    clearTimeout(this.idle);
+    this.pool.take(this);
+    if (this.turning) return;
+    const proc = this.child;
+    this.child = undefined;
+    this.reader = undefined;
+    if (!proc) return;
+    proc.endInput();
+    setTimeout(() => {
+      if (proc.child.exitCode === null) proc.child.kill("SIGTERM");
+    }, 10_000).unref();
+  }
+
   async *send(turn: BrainTurn): AsyncGenerator<BrainEvent> {
     this.interrupted = false;
     this.inputs = [turn.text];
-    const caps = await this.caps().catch((): ClaudeCaps => ({ snapshot: false }));
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const env = childEnv(process.env, {
-        ...this.o.env,
-        ...(await this.p.authEnv?.()),
-        DISABLE_AUTOUPDATER: "1",
-        CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "1",
-        // A permission question may wait for the person for minutes (tools/native-permission.ts).
-        ...(this.o.confine ? { MCP_TOOL_TIMEOUT: String(15 * 60_000) } : {}),
-      });
-      const t = brainsT(this.p.locale?.());
-      const parser = new ClaudeStreamParser(t);
-      this.closing = false;
-      const proc = runLines(this.p.command?.() ?? "claude", this.args(caps), { cwd: this.o.workspace, env, input: this.inputs.map(userLine).join(""), keepInput: true });
-      this.child = proc;
-      // The turn is over once a result comes and the CLI has taken every message: then stdin closes and it exits.
-      // A message it has not taken yet gets its own answer right after, in this process.
-      let grace: NodeJS.Timeout | undefined;
-      const close = () => {
+    this.turning = true;
+    clearTimeout(this.idle);
+    this.pool.take(this);
+    let kept = false;
+    try {
+      const caps = await this.caps().catch((): ClaudeCaps => ({ snapshot: false }));
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const t = brainsT(this.p.locale?.());
+        const parser = new ClaudeStreamParser(t);
+        // A dialog's process may be waiting already (warm, or the turn before); else it starts now.
+        const proc = this.alive() ? this.child! : await this.start(caps);
+        const reader = this.reader!;
+        for (const text of this.inputs) proc.write(userLine(text));
+        // The turn is over once a result comes and the CLI has taken every message. A dialog's process then waits for
+        // the next turn; otherwise stdin closes and it exits. A message it has not taken yet gets its own answer right
+        // after, in this process.
+        let grace = false;
+        const close = () => {
+          this.closing = true;
+          proc.endInput();
+        };
+        while (true) {
+          const line = await reader.next(grace && !this.closing ? PENDING_INPUT_GRACE_MS : undefined);
+          if (line === TIMEOUT) {
+            close();
+            continue;
+          }
+          if (line === undefined) break;
+          if (!line.trim().startsWith("{")) continue;
+          let msg: any;
+          try {
+            msg = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          for (const ev of parser.push(msg)) yield ev;
+          if (msg?.type === "result" && !this.closing) {
+            if (parser.replays < this.inputs.length) grace = true;
+            else if (this.o.keepWarm && !parser.resultError && !parser.limit && !this.interrupted) {
+              kept = true;
+              break;
+            } else close();
+          }
+        }
+        if (parser.sessionId) this.resumeId = parser.sessionId;
+        if (kept) {
+          yield { type: "done", resumeToken: this.resumeId };
+          return;
+        }
         this.closing = true;
-        proc.endInput();
-      };
-      for await (const line of proc.lines) {
-        clearTimeout(grace);
-        if (!line.trim().startsWith("{")) continue;
-        let msg: any;
-        try {
-          msg = JSON.parse(line);
-        } catch {
-          continue;
+        const exit = await proc.exited;
+        if (this.child === proc) {
+          this.child = undefined;
+          this.reader = undefined;
         }
-        for (const ev of parser.push(msg)) yield ev;
-        if (msg?.type === "result" && !this.closing) {
-          if (parser.replays >= this.inputs.length) close();
-          else grace = setTimeout(close, PENDING_INPUT_GRACE_MS);
+        if (this.interrupted) {
+          yield { type: "done", resumeToken: this.resumeId };
+          return;
         }
-      }
-      clearTimeout(grace);
-      this.closing = true;
-      const exit = await proc.exited;
-      this.child = undefined;
-      if (parser.sessionId) this.resumeId = parser.sessionId;
-      if (this.interrupted) {
+        if (parser.limit) {
+          yield { type: "limit_hit", resetAt: parser.limit.resetAt, detail: parser.limit.detail };
+          yield { type: "done", resumeToken: this.resumeId };
+          return;
+        }
+        if (exit.code !== 0 || parser.resultError || !parser.sawResult) {
+          const f = classifyClaudeFailure(proc.stderr(), parser.resultError, t);
+          // The conversation is gone or too full to go on: a fresh one, which starts from the hub's recap when it sent one.
+          if ((f.noSession || (f.full && turn.recap)) && attempt === 0 && this.resumeId) {
+            this.p.log?.(`resume ${this.resumeId} ${f.noSession ? "not found" : "is full"}, starting a fresh Claude Code session${turn.recap ? " from the recap" : ""}`);
+            this.resumeId = undefined;
+            if (turn.recap) this.inputs = [`${turn.recap}\n\n---\n${this.inputs[0]}`, ...this.inputs.slice(1)];
+            continue;
+          }
+          if (parser.resultError && exit.code === 0) yield { type: "error", message: parser.resultError };
+          else yield { type: "error", message: f.message, fatal: f.fatal };
+        }
         yield { type: "done", resumeToken: this.resumeId };
         return;
       }
-      if (parser.limit) {
-        yield { type: "limit_hit", resetAt: parser.limit.resetAt, detail: parser.limit.detail };
-        yield { type: "done", resumeToken: this.resumeId };
-        return;
-      }
-      if (exit.code !== 0 || parser.resultError || !parser.sawResult) {
-        const f = classifyClaudeFailure(proc.stderr(), parser.resultError, t);
-        // The conversation is gone or too full to go on: a fresh one, which starts from the hub's recap when it sent one.
-        if ((f.noSession || (f.full && turn.recap)) && attempt === 0 && this.resumeId) {
-          this.p.log?.(`resume ${this.resumeId} ${f.noSession ? "not found" : "is full"}, starting a fresh Claude Code session${turn.recap ? " from the recap" : ""}`);
-          this.resumeId = undefined;
-          if (turn.recap) this.inputs = [`${turn.recap}\n\n---\n${this.inputs[0]}`, ...this.inputs.slice(1)];
-          continue;
-        }
-        if (parser.resultError && exit.code === 0) yield { type: "error", message: parser.resultError };
-        else yield { type: "error", message: f.message, fatal: f.fatal };
-      }
-      yield { type: "done", resumeToken: this.resumeId };
-      return;
+    } finally {
+      this.turning = false;
+      if (kept && this.alive()) this.rest();
     }
   }
 
   steer(turn: BrainTurn): boolean {
-    if (!this.child || this.closing || this.interrupted) return false;
+    if (!this.turning || !this.child || this.closing || this.interrupted) return false;
     if (!this.child.write(userLine(turn.text))) return false;
     this.inputs.push(turn.text);
     return true;
@@ -386,8 +520,8 @@ class ClaudeCodeSession implements BrainSessionImpl {
   interrupt(): void {
     if (!this.child) return;
     this.interrupted = true;
-    this.child.child.kill("SIGINT");
     const c = this.child.child;
+    c.kill("SIGINT");
     setTimeout(() => {
       if (c.exitCode === null) c.kill("SIGKILL");
     }, 5000).unref();
@@ -395,6 +529,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
 
   close(): void {
     this.interrupt();
+    this.release();
     try {
       rmSync(join(this.dir, "token"), { force: true });
     } catch {
@@ -413,6 +548,7 @@ function writePrivate(file: string, content: string): void {
 }
 
 export function createClaudeCodeProvider(p: ClaudeCodeOptions): BrainProviderImpl {
+  const pool = new WarmPool(p.maxWarm ?? MAX_WARM);
   // What the installed CLI takes, read from its --help once per command and version.
   let caps: { key: string; caps: Promise<ClaudeCaps> } | undefined;
   const capsOf = (command: string, version: string, env: Record<string, string>): Promise<ClaudeCaps> => {
@@ -450,7 +586,7 @@ export function createClaudeCodeProvider(p: ClaudeCodeOptions): BrainProviderImp
       }
     },
     async createSession(opts: BrainSessionOptions): Promise<BrainSessionImpl> {
-      return new ClaudeCodeSession(opts, p, currentCaps);
+      return new ClaudeCodeSession(opts, p, currentCaps, pool);
     },
     // Browser sign-in to the subscription, kept in HOME like a terminal `/login`: the page shows a code to paste back.
     login({ env, onUpdate }) {

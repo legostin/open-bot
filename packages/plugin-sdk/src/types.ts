@@ -33,6 +33,8 @@ export interface BrainSessionImpl {
    * next turn.
    */
   steer?(turn: BrainTurn): Promise<boolean> | boolean;
+  /** Get ready for a turn soon (the person opened the chat or is typing): start what a turn would wait for. */
+  warm?(): Promise<void> | void;
   interrupt(): Promise<void> | void;
   close(): Promise<void> | void;
 }

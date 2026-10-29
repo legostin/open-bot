@@ -152,6 +152,11 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     });
   });
   api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
+  // The person opened the dialog or is typing: its brain gets ready ahead of the message (runner.warm), in the background.
+  api.post("/api/conversations/:id/warm", async (req) => {
+    void hub.runner.warm((req.params as any).id);
+    return { ok: true };
+  });
   // The buttons on an approval card in the chat: allow (once, or always: a rule from the card), or deny.
   api.post("/api/approvals/:id", async (req) => {
     const b = (req.body ?? {}) as { decision?: unknown; remember?: unknown };

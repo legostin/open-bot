@@ -219,6 +219,11 @@ export class BrainHost {
     return !!(s?.steer && (await s.steer(p.turn)));
   }
 
+  /** Get ready for a turn soon (a dialog the person opened). */
+  async warm(p: { sessionId: string }): Promise<void> {
+    await this.sessions.get(p.sessionId)?.session.warm?.();
+  }
+
   async interrupt(p: { sessionId: string }): Promise<void> {
     await this.sessions.get(p.sessionId)?.session.interrupt();
   }

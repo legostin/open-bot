@@ -422,6 +422,17 @@ export async function sendMessage(id: string, text: string, attachments: string[
   if (m && m.id) patchConv(id, (c) => (c.messages.some((x) => x.id === m.id) ? c : { ...c, messages: upsertMessage(c.messages, m) }));
 }
 
+/** When each dialog last asked the hub to get its brain ready. */
+const warmedAt = new Map<string, number>();
+
+/** The person opened the dialog or is typing: the hub gets its brain ready for the message (at most once a minute). */
+export function warmConversation(id: string): void {
+  const now = Date.now();
+  if (now - (warmedAt.get(id) ?? 0) < 60_000) return;
+  warmedAt.set(id, now);
+  api.post(`/api/conversations/${encodeURIComponent(id)}/warm`, {}).catch(() => {});
+}
+
 export async function interrupt(id: string): Promise<boolean> {
   const r = await api.post<{ interrupted: boolean }>(`/api/conversations/${encodeURIComponent(id)}/interrupt`, {});
   return !!r?.interrupted;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
@@ -162,6 +162,76 @@ describe("Claude Code provider (fake CLI)", () => {
     const s = await provider.createSession(opts({ resume: "full" }));
     const ev = await collect(s.send({ text: "x" }));
     expect(ev.find((e) => e.type === "error")).toMatchObject({ message: expect.stringContaining("Prompt is too long") });
+  });
+});
+
+describe("a dialog's warm process (keepWarm)", () => {
+  const stateDir = mkdtempSync(join(tmpdir(), "owl-cc-warm-"));
+  const text = (ev: BrainEvent[]) => ev.filter((e) => e.type === "text").map((e: any) => e.delta).join("");
+  /** How many processes a session started so far (the fake CLI writes its arguments once per run). */
+  const runs = (file: string) => (existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").filter(Boolean).length : 0);
+  const argsFile = () => join(mkdtempSync(join(tmpdir(), "owl-cc-args-")), "args.jsonl");
+  /** A process just started writes its arguments a moment later. */
+  const started = async (file: string, n: number) => {
+    for (let i = 0; i < 100 && runs(file) < n; i++) await new Promise((r) => setTimeout(r, 20));
+    return runs(file);
+  };
+
+  it("keeps one process for the dialog's turns, started ahead with warm()", async () => {
+    const provider = createClaudeCodeProvider({ command: () => fake, stateDir });
+    const file = argsFile();
+    const s = await provider.createSession(opts({ keepWarm: true, env: { FAKE_ARGS_FILE: file } }));
+    await s.warm?.();
+    expect(await started(file, 1)).toBe(1);
+    expect(text(await collect(s.send({ text: "one" })))).toBe("echo:oneresume=none model=default");
+    // The same process answers again: it was started without --resume and stays the conversation sess-1.
+    const second = await collect(s.send({ text: "two" }));
+    expect(text(second)).toBe("echo:tworesume=none model=default");
+    expect(second.at(-1)).toEqual({ type: "done", resumeToken: "sess-1" });
+    expect(runs(file)).toBe(1);
+    // Steering still joins a turn in progress, and an idle process takes none.
+    const slow = s.send({ text: "go SLOW" });
+    const later = setTimeout(() => expect(s.steer?.({ text: "and this" })).toBe(true), 100);
+    expect(text(await collect(slow))).toBe("slow done also:and this");
+    clearTimeout(later);
+    expect(s.steer?.({ text: "idle" })).toBe(false);
+    expect(runs(file)).toBe(1);
+    await s.close();
+  });
+
+  it("closes a process that waited too long, and the next turn resumes in a new one", async () => {
+    const provider = createClaudeCodeProvider({ command: () => fake, stateDir, idleMs: 150 });
+    const file = argsFile();
+    const s = await provider.createSession(opts({ keepWarm: true, env: { FAKE_ARGS_FILE: file } }));
+    await collect(s.send({ text: "one" }));
+    await new Promise((r) => setTimeout(r, 500));
+    expect(text(await collect(s.send({ text: "two" })))).toBe("echo:tworesume=sess-1 model=default");
+    expect(runs(file)).toBe(2);
+    await s.close();
+  });
+
+  it("keeps at most maxWarm processes waiting: the one waiting longest closes first", async () => {
+    const provider = createClaudeCodeProvider({ command: () => fake, stateDir, maxWarm: 1 });
+    const [fa, fb] = [argsFile(), argsFile()];
+    const a = await provider.createSession(opts({ keepWarm: true, env: { FAKE_ARGS_FILE: fa } }));
+    const b = await provider.createSession(opts({ keepWarm: true, env: { FAKE_ARGS_FILE: fb } }));
+    await collect(a.send({ text: "a1" }));
+    await collect(b.send({ text: "b1" }));
+    expect(text(await collect(b.send({ text: "b2" })))).toContain("resume=none");
+    expect(text(await collect(a.send({ text: "a2" })))).toContain("resume=sess-1");
+    expect([runs(fa), runs(fb)]).toEqual([2, 1]);
+    await Promise.all([a.close(), b.close()]);
+  });
+
+  it("a task's process still ends with its turn", async () => {
+    const provider = createClaudeCodeProvider({ command: () => fake, stateDir });
+    const file = argsFile();
+    const s = await provider.createSession(opts({ env: { FAKE_ARGS_FILE: file } }));
+    await s.warm?.();
+    expect(runs(file)).toBe(0);
+    await collect(s.send({ text: "one" }));
+    expect(text(await collect(s.send({ text: "two" })))).toContain("resume=sess-1");
+    expect(runs(file)).toBe(2);
   });
 });
 

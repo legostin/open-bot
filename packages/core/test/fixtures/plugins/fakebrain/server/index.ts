@@ -15,6 +15,8 @@ import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 const selves = new Map<string, string>();
 const slow = new Map<string, () => void>();
 const steered = new Map<string, string[]>();
+/** Sessions the hub got ready ahead of a turn (warm). */
+const warmed = new Set<string>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const lastLine = (text: string) => text.trim().split("\n").at(-1) ?? "";
 
@@ -83,6 +85,12 @@ export default {
             if (lastLine(turn.text) === "RECAP?") {
               const fresh = /^\[System\] Your session in this conversation was renewed[\s\S]*?\n\n---\n/.exec(turn.text)?.[0];
               yield { type: "text", delta: fresh ? `${id} started from: ${fresh.replace(/\s+/g, " ").trim()}` : `${id} backup: ${turn.recap ? "yes" : "none"}` };
+              yield { type: "done", resumeToken: `${id}-resume` };
+              return;
+            }
+            // Whether the hub got this session ready ahead of the turn, and whether it keeps it warm.
+            if (lastLine(turn.text) === "WARM?") {
+              yield { type: "text", delta: `${id} warm: ${warmed.has(o.sessionId) ? "yes" : "no"} keep: ${!!o.keepWarm}` };
               yield { type: "done", resumeToken: `${id}-resume` };
               return;
             }
@@ -174,6 +182,9 @@ export default {
                 },
               }
             : {}),
+          warm() {
+            warmed.add(o.sessionId);
+          },
           interrupt() {
             slow.get(o.sessionId)?.();
           },

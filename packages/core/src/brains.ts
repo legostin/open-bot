@@ -10,6 +10,8 @@ export interface BrainHandle {
   send(turn: BrainTurn, onEvent: (e: BrainEvent) => void): Promise<void>;
   /** More input for the turn in progress: true when the brain took it (its reply goes on in send()). */
   steer(turn: BrainTurn): Promise<boolean>;
+  /** Get ready for a turn soon; never fails (a brain without it just starts with the turn). */
+  warm(): Promise<void>;
   interrupt(): Promise<void>;
   close(): Promise<void>;
 }
@@ -187,6 +189,9 @@ export class BrainRegistry {
         // Plugins and machines from before steering do not know the method: the input becomes the next turn.
         const r = await peer.request<{ accepted?: boolean }>("brain.steer", { sessionId, turn }, { timeoutMs: 15_000 }).catch(() => undefined);
         return !!r?.accepted;
+      },
+      async warm() {
+        await peer.request("brain.warm", { sessionId }, { timeoutMs: 30_000 }).catch(() => {});
       },
       async interrupt() {
         await peer.request("brain.interrupt", { sessionId }, { timeoutMs: 10_000 }).catch(() => {});

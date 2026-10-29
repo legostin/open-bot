@@ -15,7 +15,7 @@ import { applyMention, filterMentions, mentionQuery, type MentionOption } from "
 import { canSend, readyPaths } from "../../lib/attachments";
 import { isStreaming } from "../../lib/messages";
 import { useStore } from "../../lib/store";
-import { agents, conversations, ensureAgents, groups, interrupt, sendMessage, useConversationMessages, useSelector } from "../../state/app";
+import { agents, conversations, ensureAgents, groups, interrupt, sendMessage, useConversationMessages, useSelector, warmConversation } from "../../state/app";
 import { toast } from "../../state/toast";
 import { addFiles, removeFiles, usePendingFiles } from "../../state/attachments";
 import { AttachmentChips } from "./AttachmentChips";
@@ -215,6 +215,11 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
   useEffect(() => {
     keepDraft(conversationId, text);
   }, [conversationId, text]);
+  // Opening the chat and typing get the agent's brain ready, so the reply does not wait for it to start.
+  const typing = text.length > 0;
+  useEffect(() => {
+    if (!isGroup) warmConversation(conversationId);
+  }, [conversationId, typing, isGroup]);
   useEffect(() => {
     if (!streaming) setStopping(false);
   }, [streaming]);

@@ -320,6 +320,11 @@ peer.handle("brain.steer", async (p: { sessionId: string; turn: BrainTurn }) => 
   return { accepted: !!(s?.steer && (await s.steer(p.turn))) };
 });
 
+peer.handle("brain.warm", async (p: { sessionId: string }) => {
+  await brainSessions.get(p.sessionId)?.warm?.();
+  return {};
+});
+
 peer.handle("brain.interrupt", async (p: { sessionId: string }) => {
   await brainSessions.get(p.sessionId)?.interrupt();
   return {};

@@ -689,6 +689,11 @@ export interface BrainSessionOptions {
    * (a remote machine, or a hub isolated by unix users).
    */
   confine?: { denyRead: string[]; allowRead: string[]; permissionTool: string };
+  /**
+   * A dialog the person talks in: the brain keeps its process between turns (and may start it before the first one,
+   * `warm`), so a reply does not wait for a CLI to start. Unset for tasks: their process ends with the turn.
+   */
+  keepWarm?: boolean;
 }
 
 export type BrainEvent =
