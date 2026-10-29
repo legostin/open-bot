@@ -223,7 +223,7 @@ describe("agents as entry points (integration)", () => {
     });
     expect(dialog).toContain("## How you work");
     expect(dialog).toContain("two requests in one message are two tasks");
-    expect(dialog).toContain("- coder: Coder — Writes code (brains on: Studio)");
+    expect(dialog).toContain("- coder: Coder — Writes code (on: Studio)");
     expect(dialog).toContain("- m1: Studio (offline when this session started)");
     const inTask = buildSystemPrompt({ ...base, task: { id: "t1", title: "x", createdBy: "agent" } as Task });
     expect(inTask).not.toContain("## How you work");

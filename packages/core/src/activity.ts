@@ -12,6 +12,7 @@ interface Turn extends MachineWork {
   machineId: string;
   /** While a call waits for the user's approval: the step to return to. */
   held?: WorkStep;
+  heldDetail?: string;
 }
 
 const COMMAND = /^(Bash|BashOutput|KillShell|shell|exec_command|local_shell)$/;
@@ -26,6 +27,45 @@ export function stepOfTool(name: string): WorkStep {
   if (EDITING.test(name)) return "editing";
   if (WEB.test(name)) return "web";
   return "tool";
+}
+
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+const short = (v: string, max = 60) => (v.length > max ? `${v.slice(0, max - 1)}…` : v);
+
+/**
+ * What a tool call is about, in a few words for the chat's "now" line: a file's name, a search or a site, a command's
+ * first words, or the tool's own name (the hub's tools; the web turns the known ones into words).
+ */
+export function detailOfTool(name: string, input: unknown): string | undefined {
+  const i = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  switch (stepOfTool(name)) {
+    case "command": {
+      const cmd = str(i.command) ?? (Array.isArray(i.command) ? i.command.filter((x) => typeof x === "string").join(" ") : undefined);
+      return cmd ? short(cmd.split("\n")[0]) : undefined;
+    }
+    case "reading":
+    case "editing": {
+      const files = Array.isArray(i.files) ? i.files.filter((x) => typeof x === "string") : [];
+      const path = str(i.file_path) ?? str(i.notebook_path) ?? str(i.path) ?? files[0];
+      if (path) return short(path.split(/[\\/]/).filter(Boolean).pop() ?? path);
+      return str(i.pattern) ? short(str(i.pattern)!) : undefined;
+    }
+    case "web": {
+      const url = str(i.url);
+      if (url) {
+        try {
+          return new URL(url).host;
+        } catch {
+          return short(url);
+        }
+      }
+      return str(i.query) ? short(str(i.query)!) : undefined;
+    }
+    case "tool":
+      return name.replace(/^mcp__owlbot__/, "");
+    default:
+      return undefined;
+  }
 }
 
 /** How long changes collect before one "machines.activity" goes out. */
@@ -63,15 +103,18 @@ export class MachineActivityFeed {
     this.changed();
   }
 
-  step(id: string, step: WorkStep): void {
+  step(id: string, step: WorkStep, detail?: string): void {
     const turn = this.turns.get(id);
     if (!turn) return;
     if (turn.held) {
       turn.held = step;
+      turn.heldDetail = detail;
       return;
     }
-    if (turn.step === step) return;
+    if (turn.step === step && turn.detail === detail) return;
     turn.step = step;
+    if (detail) turn.detail = detail;
+    else delete turn.detail;
     this.changed();
   }
 
@@ -81,10 +124,14 @@ export class MachineActivityFeed {
       if (turn.conversationId !== a.conversationId || turn.agentId !== a.agentId) continue;
       if (waiting && !turn.held) {
         turn.held = turn.step;
+        turn.heldDetail = turn.detail;
         turn.step = "approval";
+        delete turn.detail;
       } else if (!waiting && turn.held) {
         turn.step = turn.held;
+        if (turn.heldDetail) turn.detail = turn.heldDetail;
         turn.held = undefined;
+        turn.heldDetail = undefined;
       } else continue;
       this.changed();
     }
@@ -100,7 +147,7 @@ export class MachineActivityFeed {
       [...this.turns.values()]
         .filter((t) => t.machineId === machineId)
         .sort((a, b) => (a.startedAt < b.startedAt ? -1 : a.startedAt > b.startedAt ? 1 : 0))
-        .map(({ machineId: _, held: __, ...w }) => w);
+        .map(({ machineId: _, held: __, heldDetail: ___, ...w }) => w);
     return [
       { id: "local", name: hubName(), online: true, work: work("local") },
       ...this.machines.list().map((m) => ({ id: m.id, name: m.name, online: m.status === "online", work: work(m.id) })),

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "@owlbot/shared";
 import { Hub, loadConfig } from "../src/index.ts";
+import { buildSystemPrompt } from "../src/prompt.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -74,5 +75,63 @@ describe("front desk (integration)", () => {
     expect(hub.store.activeSession(c, "assistant")!.id).toBe(opened.id);
     const task = hub.store.createTask({ agentId: "assistant", title: "w", goal: "WARM?", createdBy: "user", background: false });
     expect(await hub.runner.warm(task.conversationId)).toBe(false);
+  });
+
+  it("thinks fast in a dialog with no choice of its own, and gives each task the brain and depth the agent chose", async () => {
+    hub.agents.save({ id: "desk", name: "Desk", description: "Front desk", brains: ["fake@local", "fake2:a@local"], tools: ["*"], skills: ["*"], prompt: "Hi.", initiative: 1 } as any);
+    expect(await ask("desk", "THINKING?")).toBe("fake thinks: model=quick effort=low");
+    const c = hub.store.agentConversation("desk").id;
+    const delegated = async (input: Record<string, unknown>) => {
+      const before = hub.store.listTasks({ limit: 500 }).length;
+      const reply = await ask("desk", `CALL task_delegate ${JSON.stringify({ goal: "THINKING?", title: "t", ...input })}`);
+      if (!reply.includes("Task created")) return reply;
+      const t = await until(() => hub.store.listTasks({ limit: 500 }).length > before && hub.store.listTasks({ limit: 1 })[0], "the task");
+      return (await until(() => (hub.store.getTask(t.id)?.status === "done" ? hub.store.getTask(t.id) : undefined), "the task to finish")).result;
+    };
+    // No choice: tasks following an auto dialog think balanced.
+    expect(await delegated({})).toBe("fake thinks: model=smart effort=medium");
+    expect(await delegated({ depth: "deep" })).toBe("fake thinks: model=smart effort=high");
+    expect(await delegated({ depth: "fast", brain: "fake2" })).toBe("fake2 thinks: model=default effort=default");
+    expect(await delegated({ brain: "nope" })).toContain("desk has no brain nope. Its brains: fake@local, fake2:a@local.");
+    // The task line in the dialog names the choice for the agent.
+    const said = hub.store.listMessages(c, { limit: 500 }).flatMap((m) => m.parts).filter((p) => p.type === "tool_result").map((p: any) => p.output);
+    expect(said.some((o: string) => /Task created: .*\(fake2, fast\)/.test(o))).toBe(true);
+  });
+
+  it("shows a task's permission question in the dialog that started it, and its answer there", async () => {
+    const dialog = hub.store.agentConversation("desk").id;
+    const parent = hub.store.createTask({ agentId: "desk", title: "Check the disk", goal: "x", createdBy: "agent", background: false, parentConversationId: dialog });
+    // A sub-task of that task asks: the card goes up to the dialog, under the sub-task's line.
+    const child = hub.store.createTask({ agentId: "desk", title: "Read the logs", goal: "y", createdBy: "agent", background: false, parentConversationId: parent.conversationId, parentTaskId: parent.id });
+    const a = hub.approvals.create({ sessionId: "s", conversationId: child.conversationId, taskId: child.id, agentId: "desk", tool: "Bash", input: {}, summary: "Run: ps", effect: "external", tainted: false });
+    const card = () => hub.store.listMessages(dialog, { limit: 50 }).find((m) => m.parts.some((p) => p.type === "approval" && p.approvalId === a.id));
+    const shown = await until(card, "the card in the dialog");
+    expect(shown.parts).toEqual([{ type: "task", taskId: child.id }, { type: "approval", approvalId: a.id, summary: "Run: ps", status: "pending" }]);
+    hub.approvals.resolve(a.id, "approve", { via: "console" });
+    await until(() => (card()?.parts.find((p) => p.type === "approval") as any)?.status === "approved", "the answer in the dialog");
+    // A task the person started from the Tasks page has no dialog to show it in.
+    const own = hub.store.createTask({ agentId: "desk", title: "Mine", goal: "z", createdBy: "user", background: false });
+    const before = hub.store.listMessages(dialog, { limit: 50 }).length;
+    hub.approvals.create({ sessionId: "s", conversationId: own.conversationId, taskId: own.id, agentId: "desk", tool: "Bash", input: {}, summary: "Run: ls", effect: "external", tainted: false });
+    await sleep(100);
+    expect(hub.store.listMessages(dialog, { limit: 50 }).length).toBe(before);
+  });
+
+  it("tells a dialog which brains are here and what each is for", () => {
+    const agent = { id: "desk", name: "Desk", description: "", brains: ["claude-code@local", "codex@local"], tools: ["*"], skills: ["*"], prompt: "Hi.", initiative: 1 } as any;
+    const dispatch = {
+      team: [{ id: "desk", name: "Desk", description: "Front desk", where: ["Mac"], brains: ["claude-code", "codex"] }],
+      computers: [{ id: "local", name: "Mac", online: true }],
+      brains: [
+        { id: "claude-code", label: "Claude Code", models: ["opus", "sonnet"], ready: true },
+        { id: "codex", label: "Codex", models: [], ready: false },
+      ],
+    };
+    const p = buildSystemPrompt({ agent, timezone: "UTC", language: "en", consoleUrl: "", background: false, skills: [], nativeSkills: true, appended: [], dispatch, thinking: { brain: "Claude Code", kind: "chat", model: "sonnet", effort: "low", preset: "auto" } });
+    expect(p).toContain("You are the front desk");
+    expect(p).toContain("- desk: Desk (you) — Front desk (brains: claude-code, codex; on: Mac)");
+    expect(p).toContain("Brains here (`brain` in task_delegate):\n- claude-code: Claude Code (models: opus, sonnet) — analysis, research, writing, the browser, everyday work; can code too");
+    expect(p).toContain("- codex: Codex — code: changes, refactors, tests, scripts, debugging (not ready now)");
+    expect(p).toContain("You think with Claude Code: model sonnet, effort low, chosen by the hub for your dialogs");
   });
 });

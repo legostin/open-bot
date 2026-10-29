@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Brain, Check, ChevronDown, ChevronRight, ListChecks, Plus, Scale, Sparkles, Zap } from "lucide-react";
+import { Brain, Check, ChevronDown, ChevronRight, ListChecks, Plus, Scale, Sparkles, Wand2, Zap } from "lucide-react";
 import type { AgentDef, ThinkingPreset } from "@owlbot/shared";
 import { errorText } from "../../lib/api";
 import { useStore } from "../../lib/store";
@@ -17,8 +17,8 @@ import { toast } from "../../state/toast";
 import { Badge, cx, Spinner } from "../../components/ui";
 import { t } from "../../i18n";
 
-export const PRESETS: ThinkingPreset[] = ["fast", "balanced", "deep"];
-export const PRESET_ICONS = { fast: Zap, balanced: Scale, deep: Sparkles } as const;
+export const PRESETS: ThinkingPreset[] = ["auto", "fast", "balanced", "deep"];
+export const PRESET_ICONS = { auto: Wand2, fast: Zap, balanced: Scale, deep: Sparkles } as const;
 
 export function BrainPicker({ agent }: { agent: AgentDef }) {
   const list = useStore(brains);

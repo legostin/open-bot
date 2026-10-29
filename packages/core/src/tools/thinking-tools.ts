@@ -23,7 +23,8 @@ const KINDS = "chat = your dialogs and group chats (and teammates' messages), al
 function overview(v: ThinkingView): string {
   const kinds = WORK_KINDS.map((k) => `- ${describeKind(v, k)}`);
   const brains = v.brains.filter((b) => b.ready).map((b) => {
-    const presets = THINKING_PRESETS.map((p) => `${p} = ${[b.presets[p]?.model, b.presets[p]?.effort].filter(Boolean).join(" ") || "default"}`).join("; ");
+    // "auto" is the hub's choice, not a brain's: each brain's own presets.
+    const presets = THINKING_PRESETS.filter((p) => p !== "auto").map((p) => `${p} = ${[b.presets[p]?.model, b.presets[p]?.effort].filter(Boolean).join(" ") || "default"}`).join("; ");
     return `- ${b.ref} (${b.label}): models ${b.models.map((m) => m.id).join(", ") || "(its own only)"}; efforts ${b.efforts.join(", ") || "(none)"}; presets: ${presets}`;
   });
   return [...kinds, "", "Brains that answer now:", ...brains].join("\n");

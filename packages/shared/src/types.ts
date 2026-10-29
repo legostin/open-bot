@@ -457,6 +457,8 @@ export interface Task {
   tainted?: boolean;
   /** A channel's gathering run (Feed): it works in the channel's own folder, and its output is the channel's posts. */
   feedId?: string;
+  /** The brain and depth whoever started it chose for this job (task_delegate), over the agent's choice for tasks. */
+  thinking?: ThinkingChoice;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -537,8 +539,12 @@ export interface AgentDef {
   i18n?: Partial<Record<Locale, { name?: string; description?: string }>>;
 }
 
-/** How deeply an agent thinks, in plain words: each brain maps it to one of its models and an effort (ProbeResult.presets). */
-export type ThinkingPreset = "fast" | "balanced" | "deep";
+/**
+ * How deeply an agent thinks, in plain words: each brain maps it to one of its models and an effort (ProbeResult.presets).
+ * "auto": the hub decides. A dialog thinks fast on the quickest brain that can take the turn; other work thinks
+ * balanced, unless whoever started a task chose for it (Task.thinking).
+ */
+export type ThinkingPreset = "auto" | "fast" | "balanced" | "deep";
 
 /**
  * How an agent thinks for a kind of work: a preset, or an exact model and effort (they win over the preset's). `brain`
@@ -803,6 +809,8 @@ export interface MachineWork {
   title?: string;
   brainId: string;
   step: WorkStep;
+  /** What the step is about: a file's name, a search or a site, a command's first words, or the tool's name. */
+  detail?: string;
   startedAt: ISODate;
 }
 

@@ -90,6 +90,8 @@ const MIGRATIONS: string[] = [
   `,
   // What an approval asks, for the card to say it plainly (ApprovalAsk).
   `alter table approvals add column ask text;`,
+  // The brain and depth chosen for a task by whoever started it (Task.thinking, JSON).
+  `alter table tasks add column thinking text;`,
 ];
 
 export function openDb(file: string): Db {

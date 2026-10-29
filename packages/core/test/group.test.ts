@@ -390,7 +390,7 @@ describe("group chats (storage)", () => {
     const file = join(mkdtempSync(join(tmpdir(), "owl-group-db-")), "owlbot.db");
     const old = openDb(file);
     // Schema 6: phones' devices, before group chats.
-    old.exec("alter table conversations drop column members; alter table tasks drop column question; alter table tasks drop column kind; alter table tasks drop column tainted; alter table tasks drop column from_agent; drop table invites; drop table feeds; drop table feed_posts; alter table tasks drop column feed_id; alter table conversations drop column purpose; alter table conversations drop column entity; drop table pages; alter table approvals drop column ask; update schema_version set v = 6;");
+    old.exec("alter table conversations drop column members; alter table tasks drop column question; alter table tasks drop column kind; alter table tasks drop column tainted; alter table tasks drop column from_agent; drop table invites; drop table feeds; drop table feed_posts; alter table tasks drop column feed_id; alter table conversations drop column purpose; alter table conversations drop column entity; drop table pages; alter table approvals drop column ask; alter table tasks drop column thinking; update schema_version set v = 6;");
     old.prepare("insert into conversations(id, kind, title, agent_id, created_at, updated_at) values ('c1', 'chat', 'Old', 'assistant', ?, ?)").run("2026-10-01T10:00:00.000Z", "2026-10-01T10:00:00.000Z");
     old.close();
 
@@ -405,12 +405,12 @@ describe("group chats (storage)", () => {
     const file = join(mkdtempSync(join(tmpdir(), "owl-group-db-")), "owlbot.db");
     const old = openDb(file);
     // What those builds left: version 6 with the members column, no phones' tables.
-    old.exec("drop table devices; drop table device_pairing_codes; alter table tasks drop column question; alter table tasks drop column kind; alter table tasks drop column tainted; alter table tasks drop column from_agent; drop table invites; drop table feeds; drop table feed_posts; alter table tasks drop column feed_id; alter table conversations drop column purpose; alter table conversations drop column entity; drop table pages; alter table approvals drop column ask; update schema_version set v = 6;");
+    old.exec("drop table devices; drop table device_pairing_codes; alter table tasks drop column question; alter table tasks drop column kind; alter table tasks drop column tainted; alter table tasks drop column from_agent; drop table invites; drop table feeds; drop table feed_posts; alter table tasks drop column feed_id; alter table conversations drop column purpose; alter table conversations drop column entity; drop table pages; alter table approvals drop column ask; alter table tasks drop column thinking; update schema_version set v = 6;");
     old.prepare("insert into conversations(id, kind, title, agent_id, members, created_at, updated_at) values ('g1', 'group', 'Trip', 'assistant', ?, ?, ?)").run('["assistant","scout"]', "2026-10-27T01:00:00.000Z", "2026-10-27T01:00:00.000Z");
     old.close();
 
     const db = openDb(file);
-    expect(db.prepare("select v from schema_version").get()).toEqual({ v: 14 });
+    expect(db.prepare("select v from schema_version").get()).toEqual({ v: 15 });
     expect(db.prepare("select count(*) as n from devices").get()).toEqual({ n: 0 });
     expect(new Store(db, new EventBus()).getConversation("g1")?.members).toEqual(["assistant", "scout"]);
     db.close();

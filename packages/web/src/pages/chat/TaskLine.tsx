@@ -10,7 +10,8 @@ import type { AgentDef, Task } from "@owlbot/shared";
 import { useStore } from "../../lib/store";
 import { taskStatus, threadStatus, type Tone } from "../../lib/format";
 import { agents, ensureAgents, ensureMachineActivity, ensureTasks, machineActivity, tasks } from "../../state/app";
-import { brainMachine } from "../../state/brains";
+import { brainMachine, brains } from "../../state/brains";
+import { stepText, useWork } from "./LiveStep";
 import { AgentAvatar } from "../../components/AgentAvatar";
 import { Markdown } from "../../components/markdown";
 import { cx } from "../../components/ui";
@@ -22,6 +23,8 @@ export function TaskLine({ taskId, text, reply, from }: { taskId: string; text?:
   const list = useStore(tasks);
   const agentList = useStore(agents);
   const machines = useStore(machineActivity);
+  const brainList = useStore(brains);
+  const work = useWork({ taskId });
   useEffect(() => {
     ensureTasks();
     ensureAgents();
@@ -36,6 +39,11 @@ export function TaskLine({ taskId, text, reply, from }: { taskId: string; text?:
   const where = machineId === "local" ? undefined : (machines?.find((m) => m.id === machineId)?.name ?? machineId);
   const st = taskStatus(task.status);
   const working = task.status === "running" || task.status === "queued";
+  // While it runs: what it does now ("Reading plan.md…"), else its state.
+  const now = task.status === "running" && work && work.step !== "writing" && !(work.step === "thinking" && !work.detail) ? stepText(work) : undefined;
+  // The brain and depth chosen for it, in a word each.
+  const brainName = task.thinking?.brain ? (brainList?.find((b) => b.ref === task.thinking!.brain || b.ref.split("@")[0] === task.thinking!.brain)?.label ?? task.thinking.brain) : undefined;
+  const how = [brainName, task.thinking?.preset ? t(`thinking.preset.${task.thinking.preset}`) : undefined].filter(Boolean).join(" · ");
   return (
     <Link
       href={`/tasks/${encodeURIComponent(task.id)}`}
@@ -44,8 +52,8 @@ export function TaskLine({ taskId, text, reply, from }: { taskId: string; text?:
     >
       <AgentAvatar avatar={agent?.avatar} id={task.agentId} name={name} size={22} running={task.status === "running"} />
       <span className="min-w-0 flex-1 truncate font-medium text-fg">{task.title}</span>
-      {where && <span className="shrink-0 text-xs text-muted">{where}</span>}
-      <Status label={st.label} tone={st.tone} working={working} />
+      {(where || how) && <span className="hidden shrink-0 text-xs text-muted sm:inline">{[where, how].filter(Boolean).join(" · ")}</span>}
+      <Status label={now ?? st.label} tone={st.tone} working={working} />
     </Link>
   );
 }
@@ -53,9 +61,9 @@ export function TaskLine({ taskId, text, reply, from }: { taskId: string; text?:
 /** A task's state: a word in its tone, with a breathing amber dot while it works. */
 function Status({ label, tone, working }: { label: string; tone: Tone; working: boolean }) {
   return (
-    <span className={cx("inline-flex shrink-0 items-center gap-1.5 text-xs font-medium", working ? "text-accent-text" : toneText(tone))}>
-      {working && <span className="live-dot size-1.5 rounded-full" />}
-      {label}
+    <span className={cx("inline-flex max-w-[55%] min-w-0 shrink-0 items-center gap-1.5 text-xs font-medium", working ? "text-accent-text" : toneText(tone))}>
+      {working && <span className="live-dot size-1.5 shrink-0 rounded-full" />}
+      <span className="truncate">{label}</span>
     </span>
   );
 }

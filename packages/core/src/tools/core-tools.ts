@@ -3,7 +3,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { ImageItem, MapIcon, MapMarker, MapRoute, MessagePart, RouteMode, ToolDescriptor, ToolResult } from "@owlbot/shared";
-import { MAP_ICONS } from "@owlbot/shared";
+import { brainsFor, isThinkingPreset, MAP_ICONS, sameBrain } from "@owlbot/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { SkillIndex } from "../skills.ts";
 import type { VaultService } from "../vault/service.ts";
@@ -163,13 +163,22 @@ export function registerCoreTools(d: CoreToolDeps): void {
           title: { type: "string", description: "Short title the user sees (≤ 60 chars), in the user's language" },
           agent: { type: "string", description: "Agent id (default: you). See task_agents." },
           machine: { type: "string", description: "Computer id or name to run on, when the work needs that computer's files, apps or hardware (default: the agent's usual brain). See task_agents." },
+          brain: { type: "string", description: "The brain that fits the job best, one of the agent's (\"Brains here\" in your instructions): e.g. codex for code, claude-code for analysis and research. Default: the agent's usual one." },
+          depth: { type: "string", enum: ["fast", "balanced", "deep"], description: "How hard to think: fast for simple errands, balanced for everyday work, deep for hard problems (code, analysis, careful writing). Default: the agent's choice for tasks." },
         },
         required: ["goal"],
       },
     },
     (i, ctx) => {
       const agentId = i.agent ? String(i.agent) : ctx.agentId;
-      if (!d.agents.get(agentId)) return text(`No agent ${agentId}. See task_agents.`, true);
+      const target = d.agents.get(agentId);
+      if (!target) return text(`No agent ${agentId}. See task_agents.`, true);
+      const brain = typeof i.brain === "string" && i.brain.trim() ? i.brain.trim() : undefined;
+      // "codex" stands for the agent's Codex wherever it runs; a brain it does not have is refused with the ones it has.
+      const lead = brain ? brainsFor(target, "task", { brain })[0] : undefined;
+      if (brain && !target.brains.some((b) => sameBrain(b, lead!))) return text(`${agentId} has no brain ${brain}. Its brains: ${target.brains.join(", ")}.`, true);
+      const depth = isThinkingPreset(i.depth) && i.depth !== "auto" ? i.depth : undefined;
+      const thinking = { ...(depth ? { preset: depth } : {}), ...(brain ? { brain } : {}) };
       if (depthOf(ctx.taskId) >= MAX_TASK_DEPTH) return text("Tasks are already nested too deep here: do this part yourself.", true);
       let goal = String(i.goal);
       let place: { brainRef?: string; machineName: string; note?: string } | undefined;
@@ -188,12 +197,14 @@ export function registerCoreTools(d: CoreToolDeps): void {
         background: ctx.background,
         createdBy: "agent",
         ...(place?.brainRef ? { brainRef: place.brainRef } : {}),
+        ...(depth || brain ? { thinking } : {}),
         // Instructions from a session that read outside content may carry it: the task starts marked too.
         ...(ctx.tainted ? { tainted: true } : {}),
       });
       d.attachPart(ctx.conversationId, { type: "task", taskId: t.id });
       const where = place ? ` on ${place.machineName}${place.brainRef ? "" : " (through the machine tools)"}` : "";
-      return text(`Task created: ${t.id} “${t.title}”${where}. It works on the side; its questions and its result will arrive here as messages.`);
+      const how = [brain, depth].filter(Boolean).join(", ");
+      return text(`Task created: ${t.id} “${t.title}”${where}${how ? ` (${how})` : ""}. It works on the side; its questions and its result will arrive here as messages.`);
     },
   );
 

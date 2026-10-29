@@ -3,7 +3,7 @@
 
 import type { AgentDef, AgentThinking, ProbeResult, ThinkingChoice, ThinkingPreset, WorkKind } from "./types.ts";
 
-export const THINKING_PRESETS: readonly ThinkingPreset[] = ["fast", "balanced", "deep"];
+export const THINKING_PRESETS: readonly ThinkingPreset[] = ["auto", "fast", "balanced", "deep"];
 export const WORK_KINDS: readonly WorkKind[] = ["chat", "task", "feed", "schedule"];
 
 /** Efforts from least to most, as brains name them: an effort a brain lacks becomes the nearest one it has. */
@@ -101,18 +101,42 @@ export function withChoice(prev: AgentThinking | undefined, kind: WorkKind, choi
 /** Whether the choice says how deeply to think (rather than only which brain). */
 const hasDepth = (c: ThinkingChoice | undefined): c is ThinkingChoice => !!c && !!(c.preset || c.model || c.effort);
 
-/** The kind's own choice when it has one, else the general one (chat). */
-export function thinkingFor(agent: Pick<AgentDef, "thinking">, kind: WorkKind): ThinkingChoice {
-  const general = agent.thinking?.chat;
+/**
+ * The kind's own choice when it has one, else the general one (chat). An agent with neither a choice nor an agent-wide
+ * model (from before `thinking`) thinks "auto". Work other than dialogs that follows an "auto" dialog thinks balanced.
+ */
+export function thinkingFor(agent: Pick<AgentDef, "thinking" | "model">, kind: WorkKind): ThinkingChoice {
+  const general = agent.thinking?.chat ?? (agent.model ? undefined : { preset: "auto" as const });
   const own = kind === "chat" ? general : agent.thinking?.[kind];
   const depth = hasDepth(own) ? own : general;
   const brain = own?.brain ?? (depth === general ? general?.brain : undefined);
+  const preset = depth?.preset === "auto" && kind !== "chat" && depth !== own ? "balanced" : depth?.preset;
   return {
-    ...(depth?.preset ? { preset: depth.preset } : {}),
+    ...(preset ? { preset } : {}),
     ...(depth?.model ? { model: depth.model } : {}),
     ...(depth?.effort ? { effort: depth.effort } : {}),
     ...(brain ? { brain } : {}),
   };
+}
+
+/**
+ * How a task thinks: the brain and depth whoever started it chose (Task.thinking), over its kind's choice. A chosen
+ * depth replaces the kind's exact model and effort; a chosen brain goes first.
+ */
+export function taskThinking(agent: Pick<AgentDef, "thinking" | "model">, kind: WorkKind, chosen?: ThinkingChoice): ThinkingChoice {
+  const base = thinkingFor(agent, kind);
+  if (!chosen) return base;
+  const depth = chosen.preset ? { preset: chosen.preset } : { ...(base.preset ? { preset: base.preset } : {}), ...(base.model ? { model: base.model } : {}), ...(base.effort ? { effort: base.effort } : {}) };
+  const brain = chosen.brain ?? base.brain;
+  return { ...depth, ...(brain ? { brain } : {}) };
+}
+
+/** How soon a brain answers, for "auto" (lower first): the API at once, a CLI after starting a process; here before elsewhere. */
+export function brainSpeed(ref: string): number {
+  const r = ref.includes("@") ? ref : `${ref}@local`;
+  const [id, machine] = [r.slice(0, r.lastIndexOf("@")), r.slice(r.lastIndexOf("@") + 1)];
+  const kind = id.startsWith("api") ? 0 : id.startsWith("claude-code") ? 1 : id.startsWith("codex") ? 2 : 3;
+  return (machine === "local" ? 0 : 10) + kind;
 }
 
 /** Mirrors parseBrainRef: "claude-code" and "claude-code@local" are the same brain. */
@@ -121,10 +145,20 @@ export function sameBrain(a: string, b: string): boolean {
   return norm(a.trim()) === norm(b.trim());
 }
 
-/** The agent's brains in the order a kind of work tries them: the choice's brain first. */
-export function brainsFor(agent: Pick<AgentDef, "brains" | "thinking">, kind: WorkKind): string[] {
-  const first = thinkingFor(agent, kind).brain;
-  return first ? [first, ...agent.brains.filter((b) => !sameBrain(b, first))] : agent.brains;
+/**
+ * The agent's brains in the order a kind of work tries them: the choice's brain first; for an "auto" dialog the
+ * quickest first (brainSpeed). `choice` is the work's own (taskThinking), when it has one.
+ */
+export function brainsFor(agent: Pick<AgentDef, "brains" | "thinking" | "model">, kind: WorkKind, choice: ThinkingChoice = thinkingFor(agent, kind)): string[] {
+  const first = choice.brain;
+  if (first) {
+    // A brain id ("codex") stands for the agent's brains of that kind, wherever they run.
+    const named = first.includes("@") ? agent.brains.filter((b) => sameBrain(b, first)) : agent.brains.filter((b) => b.split("@")[0].split(":")[0] === first || b.split("@")[0] === first);
+    const lead = named.length ? named : [first];
+    return [...lead, ...agent.brains.filter((b) => !lead.some((l) => sameBrain(l, b)))];
+  }
+  if (kind === "chat" && choice.preset === "auto") return [...agent.brains].sort((a, b) => brainSpeed(a) - brainSpeed(b));
+  return agent.brains;
 }
 
 /** The effort a brain takes nearest to `effort` (the next lower one first), or undefined when it takes none. */
@@ -158,7 +192,8 @@ export function resolveThinking(
   legacyModel?: string,
 ): ResolvedThinking {
   const exact = !choice.brain || sameBrain(choice.brain, brainRef);
-  const p = choice.preset ? probe?.presets?.[choice.preset] : undefined;
+  // "auto" thinks fast (other work following an auto dialog was made balanced by thinkingFor).
+  const p = choice.preset ? probe?.presets?.[choice.preset === "auto" ? "fast" : choice.preset] : undefined;
   const model = (exact ? choice.model : undefined) ?? p?.model ?? legacyModel;
   const effort = fitEffort((exact ? choice.effort : undefined) ?? p?.effort, probe?.efforts);
   const fromPreset = !!choice.preset && !(exact && (choice.model || choice.effort));

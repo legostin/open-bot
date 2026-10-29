@@ -4,7 +4,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ToolResult, WorkKind } from "@owlbot/shared";
-import { brainsFor, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
+import { brainsFor, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, taskThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
 import { confinement } from "./native-permissions.ts";
 import { NATIVE_PERMISSION_TOOL } from "./tools/native-permission.ts";
 import type { Config } from "./config.ts";
@@ -21,7 +21,7 @@ import type { EventBus } from "./bus.ts";
 import type { Redactor } from "./vault/redact.ts";
 import type { ToolGateway } from "./tools/gateway.ts";
 import type { ApprovalService } from "./approvals.ts";
-import { stepOfTool, type MachineActivityFeed } from "./activity.ts";
+import { detailOfTool, stepOfTool, type MachineActivityFeed } from "./activity.ts";
 import type { EgressProxy } from "./egress.ts";
 import { DEFAULT_BRAIN_EGRESS } from "./settings.ts";
 import { buildSystemPrompt } from "./prompt.ts";
@@ -1041,13 +1041,23 @@ export class SessionRunner {
   private dispatchContext(): NonNullable<Parameters<typeof buildSystemPrompt>[0]["dispatch"]> {
     const computers = this.computers();
     const name = (id: string) => computers.find((c) => c.id === id)?.name ?? this.d.machineName(id) ?? id;
+    const brainIds = (refs: string[]) => [...new Set(refs.map((b) => parseBrainRef(b).brainId))];
     const team = this.d.agents.list().map((a) => ({
       id: a.id,
       name: agentName(a, hubLocale()),
       description: a.description,
       where: [...new Set(a.brains.map((b) => name(parseBrainRef(b).machineId)))],
+      brains: brainIds(a.brains),
     }));
-    return { team, computers };
+    // Each kind of brain once: ready when one of them (on any computer) is signed in and answers.
+    const listed = this.d.brains.list();
+    const brains = brainIds(listed.map((b) => b.ref)).map((id) => {
+      const of = listed.filter((b) => b.brainId === id);
+      const ready = of.find((b) => b.probe?.available && b.probe.authenticated);
+      const probe = (ready ?? of[0])?.probe;
+      return { id, label: of[0]?.label ?? id, models: probe?.models ?? [], ready: !!ready };
+    });
+    return { team, computers, brains };
   }
 
   /** ", on <computer>" for a task placed on another computer. */
@@ -1120,22 +1130,38 @@ export class SessionRunner {
   }
 
   private attachApprovalPart(a: Approval): void {
+    const part: MessagePart = { type: "approval", approvalId: a.id, summary: a.summary, status: "pending", ...(a.ask ? { ask: a.ask } : {}) };
     const msgId = this.streamingMessage.get(a.conversationId);
-    if (!msgId) return;
-    const m = this.d.store.getMessage(msgId);
-    if (!m) return;
-    this.d.store.updateMessage(m.id, { parts: [...m.parts, { type: "approval", approvalId: a.id, summary: a.summary, status: "pending", ...(a.ask ? { ask: a.ask } : {}) }] });
+    const m = msgId ? this.d.store.getMessage(msgId) : undefined;
+    if (m) this.d.store.updateMessage(m.id, { parts: [...m.parts, part] });
+    // A task's question for the person also shows where the person is: in the dialog that started it, under the
+    // task's line, so they answer without opening the task.
+    const dialog = this.starterDialog(a.taskId);
+    if (dialog) this.d.store.addMessage({ conversationId: dialog.id, role: "assistant", agentId: dialog.agentId, parts: [{ type: "task", taskId: a.taskId! }, part], status: "complete" });
   }
 
   private updateApprovalPart(a: Approval): void {
-    const msgs = this.d.store.listMessages(a.conversationId, { limit: 50 });
-    for (const m of msgs) {
-      if (m.parts.some((p) => p.type === "approval" && p.approvalId === a.id)) {
-        this.d.store.updateMessage(m.id, {
-          parts: m.parts.map((p) => (p.type === "approval" && p.approvalId === a.id ? { ...p, status: a.status } : p)),
-        });
+    const where = [a.conversationId, this.starterDialog(a.taskId)?.id].filter((c): c is string => !!c);
+    for (const conversationId of where) {
+      for (const m of this.d.store.listMessages(conversationId, { limit: 50 })) {
+        if (m.parts.some((p) => p.type === "approval" && p.approvalId === a.id)) {
+          this.d.store.updateMessage(m.id, {
+            parts: m.parts.map((p) => (p.type === "approval" && p.approvalId === a.id ? { ...p, status: a.status } : p)),
+          });
+        }
       }
     }
+  }
+
+  /** The conversation the person started a task from (through the tasks that started it): a dialog or a group chat. */
+  private starterDialog(taskId: string | undefined): Conversation | undefined {
+    let task = taskId ? this.d.store.getTask(taskId) : undefined;
+    for (let depth = 0; task && depth < 6; depth++) {
+      const parent = task.parentConversationId ? this.d.store.getConversation(task.parentConversationId) : undefined;
+      if (parent && parent.kind !== "task" && !parent.taskId) return parent;
+      task = task.parentTaskId ? this.d.store.getTask(task.parentTaskId) : undefined;
+    }
+    return undefined;
   }
 
   // ---------- turns ----------
@@ -1248,7 +1274,7 @@ export class SessionRunner {
     // How it thinks: the choice for this kind of work, as a model and an effort of this brain.
     const kind = workKind(task);
     const probe = await this.d.brains.probe(formatBrainRef(ref)).catch(() => undefined);
-    const thinking = resolveThinking(thinkingFor(agent, kind), formatBrainRef(ref), probe, agent.model);
+    const thinking = resolveThinking(task ? taskThinking(agent, kind, task.thinking) : thinkingFor(agent, kind), formatBrainRef(ref), probe, agent.model);
     const sameBrain = prior && formatBrainRef(parseBrainRef(prior.brainRef)) === formatBrainRef(ref);
     let row: SessionRow;
     let token: string;
@@ -1566,7 +1592,7 @@ export class SessionRunner {
     const pinned = task?.brainRef ? [task.brainRef] : undefined;
     let waits = 0;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates({ ...agent, brains: brainsFor(agent, kind) }, stay, pinned, !!task);
+      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates({ ...agent, brains: brainsFor(agent, kind, task ? taskThinking(agent, kind, task.thinking) : undefined) }, stay, pinned, !!task);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
       // The agent's brains are busy with other turns (a teammate wrote while it works): the turn waits in line.
@@ -1755,7 +1781,7 @@ export class SessionRunner {
             this.d.store.updateSession(row.id, { tainted: true });
             row.tainted = true;
           }
-          activity?.step(turnKey, stepOfTool(e.name));
+          activity?.step(turnKey, stepOfTool(e.name), detailOfTool(e.name, this.d.redactor.value(e.input)));
           flush(true);
           break;
         }

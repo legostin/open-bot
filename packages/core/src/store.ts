@@ -2,7 +2,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import type { Conversation, Message, MessagePart, Task, TaskStatus } from "@owlbot/shared";
-import { newId, nowIso } from "@owlbot/shared";
+import { newId, nowIso, parseThinkingChoice } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import { t } from "./i18n.ts";
@@ -68,6 +68,7 @@ const taskFrom = (r: any): Task => ({
   ...(r.from_agent ? { from: r.from_agent } : {}),
   ...(r.tainted ? { tainted: true } : {}),
   ...(r.feed_id ? { feedId: r.feed_id } : {}),
+  ...(parseThinkingChoice(json(r.thinking, undefined)) ? { thinking: parseThinkingChoice(json(r.thinking, undefined)) } : {}),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -247,7 +248,7 @@ export class Store {
     const task: Task = { ...t, id, conversationId: conv.id, status: t.status ?? "queued", createdAt: now, updatedAt: now };
     this.db
       .prepare(
-        "insert into tasks(id, conversation_id, parent_conversation_id, parent_task_id, agent_id, title, goal, status, brain_ref, created_by, trigger_id, background, result, error, resume_at, kind, tainted, from_agent, feed_id, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "insert into tasks(id, conversation_id, parent_conversation_id, parent_task_id, agent_id, title, goal, status, brain_ref, created_by, trigger_id, background, result, error, resume_at, kind, tainted, from_agent, feed_id, thinking, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       )
       .run(
         task.id,
@@ -269,6 +270,7 @@ export class Store {
         task.tainted ? 1 : 0,
         task.from ?? null,
         task.feedId ?? null,
+        task.thinking ? JSON.stringify(task.thinking) : null,
         now,
         now,
       );

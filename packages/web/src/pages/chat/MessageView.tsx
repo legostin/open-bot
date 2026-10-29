@@ -28,6 +28,7 @@ import { Choices, FeedCard } from "./ChatButtons";
 import { ThinkingCard } from "./ThinkingCard";
 import { PageCard } from "./PageCard";
 import { TaskLine } from "./TaskLine";
+import { LiveStep } from "./LiveStep";
 import { ConnectDeviceCard } from "./ConnectDeviceCard";
 import { WidgetCard } from "./WidgetCard";
 import { t, type MessageKey } from "../../i18n";
@@ -336,7 +337,7 @@ function Parts({ message }: { message: Message }) {
             return null;
         }
       })}
-      {streaming && (items.length === 0 || items[items.length - 1].kind !== "part") && <TypingDots />}
+      {streaming && (items.length === 0 || items[items.length - 1].kind !== "part") && <LiveStep conversationId={message.conversationId} agentId={message.agentId} fallback={<TypingDots />} />}
     </>
   );
 }

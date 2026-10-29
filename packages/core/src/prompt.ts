@@ -24,7 +24,12 @@ export interface PromptContext {
   /** A group chat the agent takes part in: its title and members, the lead first. */
   group?: { title: string; members: Array<{ id: string; name: string }> };
   /** The agent's own dialog: who can take tasks (and where their brains run) and the computers tasks can run on. */
-  dispatch?: { team: Array<{ id: string; name: string; description: string; where: string[] }>; computers: Array<{ id: string; name: string; online: boolean }> };
+  dispatch?: {
+    team: Array<{ id: string; name: string; description: string; where: string[]; brains?: string[] }>;
+    computers: Array<{ id: string; name: string; online: boolean }>;
+    /** The brains the team can think with (by id), for `brain` in task_delegate. */
+    brains?: Array<{ id: string; label: string; models: string[]; ready: boolean }>;
+  };
   /** A thread where the agent answers a teammate who wrote to it (team_message): who that is. */
   thread?: { id: string; name: string };
   /** A short setup chat ("New channel", "Add agent"): what it makes, and what it already became. */
@@ -38,6 +43,7 @@ const KIND_NAMES: Record<WorkKind, string> = { chat: "your dialogs", task: "task
 /** "You think with Claude Code: model opus, effort high (the user's "deep" choice for tasks)." */
 function thinkingLine(t: NonNullable<PromptContext["thinking"]>): string {
   const how = [t.model ? `model ${t.model}` : "its default model", t.effort ? `effort ${t.effort}` : ""].filter(Boolean).join(", ");
+  if (t.preset === "auto") return `You think with ${t.brain}: ${how}, chosen by the hub for ${KIND_NAMES[t.kind]} (quick answers here; deep work goes to tasks).`;
   return `You think with ${t.brain}: ${how}${t.preset ? ` (the user's "${t.preset}" choice for ${KIND_NAMES[t.kind]})` : ""}.`;
 }
 
@@ -53,21 +59,36 @@ function setupWhere(s: NonNullable<PromptContext["making"]>): string {
     : "This is a short setup chat: the person tapped \"Add agent\" and you already asked what it should do. Ask only what is still missing, in one short message at a time, then draft it with `hub_agent_draft` (create it on their yes). This chat then becomes the new agent's.";
 }
 
+/** What each kind of brain is best at, for choosing one per task. */
+const BRAIN_FIT: Record<string, string> = {
+  "claude-code": "analysis, research, writing, the browser, everyday work; can code too",
+  codex: "code: changes, refactors, tests, scripts, debugging",
+  api: "quick answers and writing; no shell or files of its own",
+};
+
 /** A dialog's agent is the user's entry point: quick things itself, everything with steps as tasks on the side. */
 function howYouWork(c: PromptContext & { dispatch: NonNullable<PromptContext["dispatch"]> }): string[] {
   const lines = [
     "## How you work",
     "You are the user's entry point. They tell you what they need — often several things at once, and more while you work — and they want results, not to watch you work.",
-    "- Answer right away when it takes a moment: conversation, something you know, one quick lookup.",
+    "- You are the front desk: the user hears from you at once. Answer right away when it takes a moment: conversation, something you know, one quick lookup. Never do long work in this dialog: it keeps the user waiting and blocks the conversation.",
     '- A question or a small request for a teammate goes to them with `team_message`, the way you would write to a colleague — also when the user says "ask X" or writes @id. Their reply comes back to you here; say in a few words that you asked and end your turn unless you have more to do. Writing to them again continues the same thread.',
-    "- Anything with steps (checking, research, browsing, running commands, writing or changing code or files, long reading) goes to a task with `task_delegate`, one task per independent request: two requests in one message are two tasks. Then say in one short line what you started and end your turn; do not wait for tasks.",
+    "- Anything with steps or deep thought (coding, analysis, checking, research, browsing, running commands, writing or changing code or files, long reading, careful writing) goes to a task with `task_delegate` at once, one task per independent request: two requests in one message are two tasks. Then say in one short line what you started and end your turn; do not wait for tasks.",
+    "- Pick the brain and depth that fit each task (`brain`, `depth` in task_delegate; Brains here, below): Codex for code, Claude Code for analysis, research, writing and the browser; `deep` for hard problems, `balanced` for everyday work, `fast` for simple errands. A brain that is busy or over its limit is replaced by the next one by itself.",
     "- Choose who does it: yourself, or the teammate whose role fits better. Choose where: the computer whose files, apps or hardware the work needs (`machine`). If the right agent or computer is unclear and the choice matters, ask the user one short question first; otherwise choose, and name your choice in a few words.",
     "- The user may write again while tasks run. A new request is a new task; a detail or a correction for work in progress goes to that task with `task_message`; \"stop that\" is `task_cancel`. The `[Open tasks you started]` lines before a message show what is still going.",
     "- A task may ask you something (a `[System]` note). Answer with `task_message` when you know (this dialog, memory); otherwise ask the user in one short message, then pass their answer on.",
     "- When a task finishes, its result comes to you: tell the user the outcome in a few lines, in your own words.",
   ];
-  const team = c.dispatch.team.map((a) => `- ${a.id}: ${a.name}${a.id === c.agent.id ? " (you)" : ""} — ${a.description || "no description"}${a.where.length ? ` (brains on: ${a.where.join(", ")})` : ""}`);
+  const team = c.dispatch.team.map((a) => {
+    const brains = a.brains?.length ? `brains: ${a.brains.join(", ")}` : "";
+    const where = a.where.length ? `on: ${a.where.join(", ")}` : "";
+    const about = [brains, where].filter(Boolean).join("; ");
+    return `- ${a.id}: ${a.name}${a.id === c.agent.id ? " (you)" : ""} — ${a.description || "no description"}${about ? ` (${about})` : ""}`;
+  });
   if (team.length) lines.push("", "Your team (`to` in team_message, `agent` in task_delegate):", ...team);
+  const brains = (c.dispatch.brains ?? []).map((b) => `- ${b.id}: ${b.label}${b.models.length ? ` (models: ${b.models.join(", ")})` : ""} — ${BRAIN_FIT[b.id.split(":")[0]] ?? "general work"}${b.ready ? "" : " (not ready now)"}`);
+  if (brains.length) lines.push("", "Brains here (`brain` in task_delegate):", ...brains);
   if (c.dispatch.computers.length > 1) {
     lines.push(
       "",

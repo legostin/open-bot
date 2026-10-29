@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentDef } from "../src/types.ts";
-import { brainsFor, fitEffort, parseThinking, patchChoice, resolveThinking, thinkingFor, withChoice, workKind } from "../src/thinking.ts";
+import { brainsFor, brainSpeed, fitEffort, parseThinking, patchChoice, resolveThinking, taskThinking, thinkingFor, withChoice, workKind } from "../src/thinking.ts";
 
 const presets = { fast: { model: "sonnet", effort: "low" }, balanced: { model: "opus", effort: "medium" }, deep: { model: "opus", effort: "xhigh" } };
 const claude = { presets, efforts: ["low", "medium", "high", "xhigh", "max"] };
@@ -22,9 +22,35 @@ describe("thinking per kind of work", () => {
     expect(thinkingFor(a, "schedule")).toEqual({ preset: "fast" });
     // A brain alone keeps the chat's depth.
     expect(thinkingFor(a, "feed")).toEqual({ preset: "fast", brain: "codex" });
-    expect(brainsFor(a, "feed")).toEqual(["codex", "claude-code@local"]);
+    // "codex" stands for the agent's own Codex.
+    expect(brainsFor(a, "feed")).toEqual(["codex@local", "claude-code@local"]);
     expect(brainsFor(a, "chat")).toEqual(["claude-code@local", "codex@local"]);
-    expect(thinkingFor({ brains: [] }, "task")).toEqual({});
+    // No choice at all: dialogs think "auto", other work balanced; an agent-wide model from before keeps its way.
+    expect(thinkingFor({ brains: [] }, "chat")).toEqual({ preset: "auto" });
+    expect(thinkingFor({ brains: [] }, "task")).toEqual({ preset: "balanced" });
+    expect(thinkingFor({ brains: [], model: "old" }, "chat")).toEqual({});
+  });
+
+  it("lets an auto dialog take the quickest brain first, thinking fast", () => {
+    const a = agent({ chat: { preset: "auto" }, task: { preset: "deep" } }, ["codex@local", "claude-code@mach_1", "claude-code@local", "api:anthropic"]);
+    expect(brainsFor(a, "chat")).toEqual(["api:anthropic", "claude-code@local", "codex@local", "claude-code@mach_1"]);
+    // Tasks keep the agent's order and their own depth.
+    expect(brainsFor(a, "task")).toEqual(["codex@local", "claude-code@mach_1", "claude-code@local", "api:anthropic"]);
+    expect(resolveThinking({ preset: "auto" }, "claude-code@local", claude)).toEqual({ model: "sonnet", effort: "low", preset: "auto" });
+    expect(brainSpeed("api:openai")).toBeLessThan(brainSpeed("claude-code"));
+    // A brain the person chose for the dialog still comes first.
+    expect(brainsFor(agent({ chat: { preset: "auto", brain: "codex@local" } }), "chat")).toEqual(["codex@local", "claude-code@local"]);
+  });
+
+  it("gives a task the brain and depth whoever started it chose", () => {
+    const a = agent({ task: { model: "opus", effort: "max", brain: "claude-code@local" } });
+    expect(taskThinking(a, "task")).toEqual({ model: "opus", effort: "max", brain: "claude-code@local" });
+    // A chosen depth replaces the exact model and effort; a chosen brain goes first.
+    expect(taskThinking(a, "task", { preset: "fast" })).toEqual({ preset: "fast", brain: "claude-code@local" });
+    const both = taskThinking(a, "task", { preset: "deep", brain: "codex" });
+    expect(both).toEqual({ preset: "deep", brain: "codex" });
+    expect(brainsFor(a, "task", both)).toEqual(["codex@local", "claude-code@local"]);
+    expect(resolveThinking(both, "codex@local", { efforts: ["low", "high"], presets: { deep: { effort: "high" } } })).toEqual({ effort: "high", preset: "deep" });
   });
 
   it("resolves a preset on each brain, exact choices on their own brain, and the old agent-wide model last", () => {
