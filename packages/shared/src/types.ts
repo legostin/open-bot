@@ -662,6 +662,14 @@ export interface BrainSessionOptions {
   resume?: string;
   env: Record<string, string>;
   background: boolean;
+  /**
+   * Keep the brain's own tools (shell, files) in a sandbox, when it has one (core/src/native-permissions.ts): commands
+   * may write only in the workspace and temp folders and reach the network only through the hub's egress proxy; they
+   * may not read `denyRead` (the person's credentials, the hub's data) except `allowRead` inside it. Anything beyond
+   * that, the brain asks the hub through the MCP tool `permissionTool`, which may ask the person. Unset: no sandbox
+   * (a remote machine, or a hub isolated by unix users).
+   */
+  confine?: { denyRead: string[]; allowRead: string[]; permissionTool: string };
 }
 
 export type BrainEvent =

@@ -11,6 +11,7 @@ import { capture, childEnv, runLines } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseCodexDeviceLogin, runCliLogin } from "./login.ts";
 import { AppServerUnsupported, CodexAppTurn, listCodexModels, parseCodexReset, type CodexModel } from "./codex-app.ts";
+import { askHub } from "./hub-permission.ts";
 
 export { parseCodexReset };
 
@@ -116,10 +117,18 @@ class CodexSession implements BrainSessionImpl {
   }
 
   private sandbox(): "read-only" | "workspace-write" | "danger-full-access" {
-    return this.p.sandbox?.() ?? "danger-full-access";
+    const chosen = this.p.sandbox?.() ?? "danger-full-access";
+    // Confined by the hub: never wider than the workspace (BrainSessionOptions.confine).
+    return this.o.confine ? (chosen === "read-only" ? "read-only" : "workspace-write") : chosen;
   }
 
-  /** `-c` overrides: the hub's MCP server, no approvals, the sandbox. */
+  /** What the sandbox would not let through, Codex asks for; confined, the hub answers (hub-permission.ts). */
+  private ask(): ((tool: string, input: Record<string, unknown>) => Promise<boolean>) | undefined {
+    const confine = this.o.confine;
+    return confine ? (tool, input) => askHub(this.o.mcp, confine.permissionTool, tool, input) : undefined;
+  }
+
+  /** `-c` overrides: the hub's MCP server, approvals (asked of the hub when confined), the sandbox. */
   private config(): string[] {
     const [command, ...args] = this.o.mcp.bridgeCommand.length ? this.o.mcp.bridgeCommand : ["owlbot-mcp-bridge"];
     return [
@@ -127,8 +136,9 @@ class CodexSession implements BrainSessionImpl {
       `mcp_servers.owlbot.args=[${args.map(tomlString).join(",")}]`,
       `mcp_servers.owlbot.env={OWLBOT_URL=${tomlString(this.o.mcp.url)},OWLBOT_TOKEN_FILE=${tomlString(join(this.dir, "token"))}}`,
       `mcp_servers.owlbot.tool_timeout_sec=3600`,
-      `approval_policy="never"`,
+      this.o.confine ? `approval_policy="on-request"` : `approval_policy="never"`,
       `sandbox_mode=${tomlString(this.sandbox())}`,
+      ...(this.o.confine ? ["sandbox_workspace_write.network_access=false"] : []),
       ...(this.o.effort ? [`model_reasoning_effort=${tomlString(this.o.effort)}`] : []),
     ];
   }
@@ -147,7 +157,7 @@ class CodexSession implements BrainSessionImpl {
     const env = childEnv(process.env, { ...this.o.env, ...(await this.p.authEnv?.()) });
     if (!this.execOnly) {
       const start = () =>
-        new CodexAppTurn({ command: this.p.command?.() ?? "codex", config: this.config(), cwd: this.o.workspace, env, model: this.o.model, effort: this.o.effort, sandbox: this.sandbox(), threadId: this.threadId });
+        new CodexAppTurn({ command: this.p.command?.() ?? "codex", config: this.config(), cwd: this.o.workspace, env, model: this.o.model, effort: this.o.effort, sandbox: this.sandbox(), threadId: this.threadId, ask: this.ask() });
       let app = start();
       this.app = app;
       try {

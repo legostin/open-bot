@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
 import { claudePresets, ClaudeStreamParser, codexThinking, createClaudeCodeProvider, createCodexProvider, CodexStreamParser, listCodexModels, parseClaudeHelp, parseCodexReset } from "../src/index.ts";
+import { approvalAnswer } from "../src/codex-app.ts";
+import { askHub } from "../src/hub-permission.ts";
 
 const fake = join(import.meta.dirname, "fixtures", "fake-claude.mjs");
 
@@ -272,5 +274,60 @@ describe("Codex provider (fake CLI)", () => {
       if (old === undefined) delete process.env.FAKE_CODEX_NO_APP;
       else process.env.FAKE_CODEX_NO_APP = old;
     }
+  });
+});
+
+describe("confined brains (BrainSessionOptions.confine)", () => {
+  const confine = { denyRead: ["/Users/x/.ssh", "/data"], allowRead: ["/data/workspaces/a"], permissionTool: "native_permission" };
+
+  it("Claude Code runs its shell in the sandbox and asks the hub for the rest; no bare rule opens files or Bash", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "owl-cc-state-"));
+    const provider = createClaudeCodeProvider({ command: () => fake, stateDir });
+    const argsFile = join(mkdtempSync(join(tmpdir(), "owl-cc-args-")), "args.jsonl");
+    const s = await provider.createSession(opts({ confine, env: { FAKE_ARGS_FILE: argsFile } }));
+    await collect(s.send({ text: "hi" }));
+    const args = JSON.parse(readFileSync(argsFile, "utf8").trim().split("\n")[0]) as string[];
+    const after = (flag: string) => args[args.indexOf(flag) + 1];
+    expect(after("--permission-mode")).toBe("acceptEdits");
+    expect(after("--permission-prompt-tool")).toBe("mcp__owlbot__native_permission");
+    expect(after("--allowedTools").split(",")).toEqual(["WebFetch", "WebSearch", "TodoWrite", "Task", "Skill", "mcp__owlbot"]);
+    const settings = JSON.parse(readFileSync(after("--settings"), "utf8"));
+    expect(settings.sandbox).toMatchObject({ enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: true, filesystem: { denyRead: confine.denyRead, allowRead: confine.allowRead }, network: { allowedDomains: [] } });
+    // Unconfined, as before.
+    const plainArgs = join(mkdtempSync(join(tmpdir(), "owl-cc-args-")), "args.jsonl");
+    await collect((await provider.createSession(opts({ env: { FAKE_ARGS_FILE: plainArgs } }))).send({ text: "hi" }));
+    const plain = JSON.parse(readFileSync(plainArgs, "utf8").trim().split("\n")[0]) as string[];
+    expect(plain[plain.indexOf("--permission-mode") + 1]).toBe("dontAsk");
+    expect(plain).not.toContain("--permission-prompt-tool");
+  });
+
+  it("Codex asks the hub about what its sandbox would not let through, in each request's own answer format", async () => {
+    const asked: Array<[string, unknown]> = [];
+    const ask = (yes: boolean) => async (tool: string, input: Record<string, unknown>) => (asked.push([tool, input]), yes);
+    expect(await approvalAnswer("item/commandExecution/requestApproval", { command: "curl https://x.io", cwd: "/w", reason: "net", networkApprovalContext: { host: "x.io", protocol: "https" } }, ask(true))).toEqual({ decision: "accept" });
+    expect(asked[0]).toEqual(["codex.command", { command: "curl https://x.io", cwd: "/w", reason: "net", network: { host: "x.io" } }]);
+    expect(await approvalAnswer("item/fileChange/requestApproval", { grantRoot: "/etc" }, ask(false))).toEqual({ decision: "decline" });
+    expect(await approvalAnswer("item/permissions/requestApproval", { permissions: { network: { enabled: true }, fileSystem: null } }, ask(true))).toEqual({ permissions: { network: { enabled: true } }, scope: "turn" });
+    expect(await approvalAnswer("item/permissions/requestApproval", { permissions: { network: { enabled: true } } }, ask(false))).toEqual({ permissions: {}, scope: "turn" });
+    expect(await approvalAnswer("execCommandApproval", { command: ["ls", "-la"], cwd: "/w" }, ask(true))).toEqual({ decision: "approved" });
+    expect(asked.at(-1)).toEqual(["codex.command", { command: "ls -la", cwd: "/w", reason: undefined }]);
+    // Without the hub to ask, it is a no.
+    expect(await approvalAnswer("item/commandExecution/requestApproval", { command: "rm -rf x" })).toEqual({ decision: "decline" });
+  });
+
+  it("asks the hub over the session's MCP endpoint; any failure is a no", async () => {
+    let sent: any;
+    const fetchOk = (async (_url: string, init: any) => {
+      sent = { auth: init.headers.authorization, body: JSON.parse(init.body) };
+      return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({ behavior: "allow", updatedInput: {} }) }] } }));
+    }) as typeof fetch;
+    expect(await askHub({ url: "http://h/mcp", token: "t1" }, "native_permission", "codex.command", { command: "ls" }, fetchOk)).toBe(true);
+    expect(sent).toEqual({ auth: "Bearer t1", body: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "native_permission", arguments: { tool_name: "codex.command", input: { command: "ls" } } } } });
+    const deny = (async () => new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({ behavior: "deny", message: "no" }) }] } }))) as unknown as typeof fetch;
+    expect(await askHub({ url: "http://h/mcp", token: "t1" }, "native_permission", "codex.command", {}, deny)).toBe(false);
+    const broken = (async () => {
+      throw new Error("down");
+    }) as unknown as typeof fetch;
+    expect(await askHub({ url: "http://h/mcp", token: "t1" }, "native_permission", "codex.command", {}, broken)).toBe(false);
   });
 });

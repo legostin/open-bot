@@ -157,9 +157,42 @@ export interface AppServerSetup {
   effort?: string;
   sandbox: string;
   threadId?: string;
+  /** Ask the hub about what the sandbox would not let through; without it every approval is declined. */
+  ask?: (tool: string, input: Record<string, unknown>) => Promise<boolean>;
 }
 
 type Pending = { resolve: (v: any) => void; reject: (e: any) => void };
+
+/** The answer to one of Codex's approval requests, asking `ask` (the hub) what it is about. */
+export async function approvalAnswer(method: string, params: Record<string, any>, ask?: (tool: string, input: Record<string, unknown>) => Promise<boolean>): Promise<unknown> {
+  const command = Array.isArray(params.command) ? params.command.join(" ") : typeof params.command === "string" ? params.command : "";
+  const net = params.networkApprovalContext && typeof params.networkApprovalContext === "object" ? { host: params.networkApprovalContext.host } : undefined;
+  switch (method) {
+    case "item/commandExecution/requestApproval": {
+      const yes = !!ask && (await ask("codex.command", { command, cwd: params.cwd, reason: params.reason, ...(net ? { network: net } : {}) }));
+      return { decision: yes ? "accept" : "decline" };
+    }
+    case "item/fileChange/requestApproval": {
+      const yes = !!ask && (await ask("codex.fileChange", { grantRoot: params.grantRoot, reason: params.reason }));
+      return { decision: yes ? "accept" : "decline" };
+    }
+    case "item/permissions/requestApproval": {
+      const wanted = (params.permissions ?? {}) as { network?: unknown; fileSystem?: unknown };
+      const yes = !!ask && (await ask("codex.permissions", { reason: params.reason, permissions: wanted }));
+      return { permissions: yes ? { ...(wanted.network ? { network: wanted.network } : {}), ...(wanted.fileSystem ? { fileSystem: wanted.fileSystem } : {}) } : {}, scope: "turn" };
+    }
+    case "execCommandApproval": {
+      const yes = !!ask && (await ask("codex.command", { command, cwd: params.cwd, reason: params.reason }));
+      return { decision: yes ? "approved" : { denied: { rejection: "The person did not allow it." } } };
+    }
+    case "applyPatchApproval": {
+      const yes = !!ask && (await ask("codex.fileChange", { grantRoot: params.grantRoot, reason: params.reason }));
+      return { decision: yes ? "approved" : { denied: { rejection: "The person did not allow it." } } };
+    }
+    default:
+      return { decision: "decline" };
+  }
+}
 
 /** The app-server could not start a turn at all (an old Codex without it): the caller uses `codex exec`. */
 export class AppServerUnsupported extends Error {}
@@ -215,9 +248,13 @@ export class CodexAppTurn {
       return;
     }
     if (m.id !== undefined && m.method) {
-      // approval_policy is "never": an approval still asked is declined, anything else is not supported here.
       const approval = /requestApproval|Approval$/.test(m.method);
-      this.proc?.write(`${JSON.stringify(approval ? { id: m.id, result: { decision: "decline" } } : { id: m.id, error: { code: -32601, message: "not supported by Owlbot" } })}\n`);
+      if (!approval) {
+        this.proc?.write(`${JSON.stringify({ id: m.id, error: { code: -32601, message: "not supported by Owlbot" } })}\n`);
+        return;
+      }
+      // Confined, the hub decides (and may ask the person); otherwise approval_policy is "never" and this is a no.
+      void approvalAnswer(m.method, m.params ?? {}, this.s.ask).then((result) => this.proc?.write(`${JSON.stringify({ id: m.id, result })}\n`));
       return;
     }
     if (m.method === "thread/started" && m.params?.thread?.id) this.threadId = m.params.thread.id;
@@ -257,7 +294,7 @@ export class CodexAppTurn {
         throw new AppServerUnsupported(exit ? proc.stderr().trim().split("\n").slice(-3).join("\n") : "codex app-server did not answer");
       }
       this.notify("initialized");
-      const thread = { cwd: this.s.cwd, approvalPolicy: "never", sandbox: this.s.sandbox, ...(this.s.model ? { model: this.s.model } : {}) };
+      const thread = { cwd: this.s.cwd, approvalPolicy: this.s.ask ? "on-request" : "never", sandbox: this.s.sandbox, ...(this.s.model ? { model: this.s.model } : {}) };
       let r: any;
       if (this.threadId) r = await this.request("thread/resume", { threadId: this.threadId, ...thread }).catch(() => undefined);
       // The thread to resume is gone: a fresh one, which starts from the hub's recap when it sent one.

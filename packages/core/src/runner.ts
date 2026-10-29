@@ -5,6 +5,8 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ToolResult, WorkKind } from "@owlbot/shared";
 import { brainsFor, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
+import { confinement } from "./native-permissions.ts";
+import { NATIVE_PERMISSION_TOOL } from "./tools/native-permission.ts";
 import type { Config } from "./config.ts";
 import type { Store, SessionRow } from "./store.ts";
 import type { Settings } from "./settings.ts";
@@ -1315,6 +1317,10 @@ export class SessionRunner {
       resume,
       env,
       background,
+      // The brain's own shell and file tools stay in its folder; the rest it asks for (native-permissions.ts).
+      ...(local && this.d.config.sandboxBrains
+        ? { confine: { ...confinement(this.d.config.dataDir, workspace, local && ref.brainId === "claude-code" ? this.d.claudePluginDirs() : []), permissionTool: NATIVE_PERMISSION_TOOL } }
+        : {}),
     });
     this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv, kind, this.d.toolNames?.()) });
     if (!sameBrain) this.d.audit.append("core", "session.open", row.id, { agent: agent.id, brain: formatBrainRef(ref), conversation: conv.id, task: task?.id });
@@ -1694,6 +1700,8 @@ export class SessionRunner {
         case "tool_call": {
           produced = true;
           parts.push({ type: "tool_call", id: e.id, name: e.name, input: this.d.redactor.value(e.input) });
+          // The brain's own tools (its shell, files, web) never pass the gateway: the security log gets them here.
+          if (!this.d.gateway.has(e.name)) this.d.audit.append(`agent:${agent.id}`, "brain.tool", e.name, { sessionId: row.id, input: truncateInput(this.d.redactor.value(e.input)) });
           if (NATIVE_SOURCE_TOOLS.test(e.name) && !row.tainted) {
             this.d.store.updateSession(row.id, { tainted: true });
             row.tainted = true;
@@ -1830,3 +1838,11 @@ function resultText(r: ToolResult): string {
 }
 
 export { newId, nowIso };
+
+/** A tool input for the security log: long strings cut, so a written file does not fill it. */
+function truncateInput(v: unknown, depth = 0): unknown {
+  if (typeof v === "string") return truncate(v, 500);
+  if (Array.isArray(v)) return depth > 3 ? "[…]" : v.slice(0, 20).map((x) => truncateInput(x, depth + 1));
+  if (v && typeof v === "object") return depth > 3 ? "{…}" : Object.fromEntries(Object.entries(v).slice(0, 30).map(([k, x]) => [k, truncateInput(x, depth + 1)]));
+  return v;
+}

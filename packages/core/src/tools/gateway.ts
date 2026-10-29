@@ -11,6 +11,7 @@ import type { AuditLog } from "../audit.ts";
 import type { Redactor } from "../vault/redact.ts";
 import type { Settings } from "../settings.ts";
 import { BACKGROUND_ALWAYS_ALLOWED, decide } from "../policy/engine.ts";
+import { NATIVE_PERMISSION_TOOL } from "./native-permission.ts";
 import { HUB_TOOL_PREFIX } from "./hub-tools.ts";
 
 export interface AgentLookup {
@@ -54,12 +55,19 @@ export class ToolGateway {
   }
 
   /** Tools this session may see. */
+  /** A tool the hub has (the brains' own tools are not). */
+  has(name: string): boolean {
+    return !!this.d.registry.get(name);
+  }
+
   listFor(s: SessionRow): ToolDescriptor[] {
     const agent = this.agentFor(s);
     return this.d.registry.list().filter((t) => this.visible(t, agent, s));
   }
 
   private visible(t: ToolDescriptor, agent: AgentDef, s: SessionRow): boolean {
+    // The CLIs' permission prompt (native-permission.ts): theirs only, never on the model's list of an API brain.
+    if (t.name === NATIVE_PERMISSION_TOOL) return /^(claude-code|codex)\b/.test(s.brainRef ?? "");
     const job = this.d.jobTools?.(s) ?? [];
     if (!matchesAny(t.name, agent.tools.length ? agent.tools : ["*"]) && !SHOW_TOOLS.includes(t.name) && !job.includes(t.name)) return false;
     // Hub administration belongs to the default agent alone (see tools/hub-tools.ts).

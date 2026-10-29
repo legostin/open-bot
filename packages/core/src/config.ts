@@ -44,6 +44,12 @@ export interface Config {
   /** Install missing Claude Code / Codex CLIs into <data>/tools on sign-in (desktop installers; never under isolation). */
   installClis: boolean;
   /**
+   * Keep local CLI brains' own tools in their sandbox (macOS Seatbelt; BrainSessionOptions.confine). On by default on
+   * macOS, where the brains run as the person; OWLBOT_SANDBOX_BRAINS=0 turns it off. A hub isolated by unix users
+   * has its own walls.
+   */
+  sandboxBrains: boolean;
+  /**
    * HOME of the brain CLIs (claude, codex), where their logins live: <data>/home/agent, or OWLBOT_BRAIN_HOME. The
    * desktop app sets that to the user's own home, so a CLI they already signed in to works as is, and Claude Code on
    * macOS finds the login keychain (it looks for it through HOME). Never under user isolation.
@@ -121,6 +127,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     },
     egressEnforced: env.OWLBOT_EGRESS_ENFORCED === "iptables" ? "iptables" : "proxy",
     installClis: env.OWLBOT_INSTALL_CLIS === "1" && env.OWLBOT_ISOLATION !== "users",
+    sandboxBrains: env.OWLBOT_SANDBOX_BRAINS !== "0" && env.OWLBOT_ISOLATION !== "users" && process.platform === "darwin",
     brainHome: "",
     vaultPassphraseFile: env.OWLBOT_VAULT_PASSPHRASE_FILE && existsSync(env.OWLBOT_VAULT_PASSPHRASE_FILE) ? env.OWLBOT_VAULT_PASSPHRASE_FILE : undefined,
     timezone: env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",

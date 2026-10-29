@@ -117,7 +117,8 @@ export function suggestRule(tool: string, input: unknown, agentId?: string): Omi
   const conditions: RuleCondition[] = [];
   const targets = extractTargets(input);
   // Prefer narrowing by recipients/domains found in well-known fields.
-  const fields = ["to", "recipient", "email", "chat", "chatId", "channel", "url", "domain", "host"];
+  // The brains' own tools (native-permission.ts): the exact command or file.
+  const fields = ["to", "recipient", "email", "chat", "chatId", "channel", "url", "domain", "host", "command", "file_path", "notebook_path", "path"];
   for (const f of fields) {
     const v = getField(input, f);
     if (typeof v === "string" && v) {

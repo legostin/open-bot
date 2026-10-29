@@ -209,6 +209,27 @@ export function claudePresets(efforts?: string[]): NonNullable<ProbeResult["pres
   return { fast: { model: "sonnet", ...e("low") }, balanced: { model: "opus", ...e("medium") }, deep: { model: "opus", ...(efforts?.includes("xhigh") ? e("xhigh") : e("high")) } };
 }
 
+/** Tools a confined session may use without asking: the web (through the hub's proxy), planning, subagents, skills, the hub. */
+const CONFINED_ALLOWED = /^(WebFetch|WebSearch|TodoWrite|Task|Agent|Skill|ToolSearch|mcp__owlbot)$/;
+
+/**
+ * Claude Code's sandbox for a confined session (macOS Seatbelt): commands write in the workspace and the temp folder,
+ * read anything but `denyRead` (except `allowRead`), and reach no network; one that needs more retries outside the
+ * sandbox, which the permission tool decides. No sandbox, no session: it never falls back to running unsandboxed.
+ */
+export function sandboxSettings(confine: NonNullable<BrainSessionOptions["confine"]>): Record<string, unknown> {
+  return {
+    sandbox: {
+      enabled: true,
+      failIfUnavailable: true,
+      autoAllowBashIfSandboxed: true,
+      allowUnsandboxedCommands: true,
+      filesystem: { denyRead: confine.denyRead, allowRead: confine.allowRead },
+      network: { allowedDomains: [] },
+    },
+  };
+}
+
 /** One user message on stream-json stdin. */
 function userLine(text: string): string {
   return `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text }] } })}\n`;
@@ -245,10 +266,18 @@ class ClaudeCodeSession implements BrainSessionImpl {
       JSON.stringify({ mcpServers: { owlbot: { type: "stdio", command, args, env: { OWLBOT_URL: opts.mcp.url, OWLBOT_TOKEN_FILE: tokenFile } } } }),
     );
     writePrivate(join(this.dir, "prompt.md"), opts.systemPrompt);
+    if (opts.confine) writePrivate(join(this.dir, "settings.json"), JSON.stringify(sandboxSettings(opts.confine)));
   }
 
   private args(caps: ClaudeCaps): string[] {
-    const tools = this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS;
+    const confine = this.o.confine;
+    // Confined: the shell runs in the sandbox, edits are accepted inside the workspace, and everything else (reading
+    // the person's files, writing elsewhere, a command outside the sandbox) goes to the hub's permission tool. No bare
+    // allow rule may open the file tools or Bash, or it would answer for the hub.
+    const tools = confine ? (this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS).filter((x) => CONFINED_ALLOWED.test(x)) : (this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS);
+    const mode = confine
+      ? ["--permission-mode", "acceptEdits", "--permission-prompt-tool", `mcp__owlbot__${confine.permissionTool}`, "--settings", join(this.dir, "settings.json")]
+      : ["--permission-mode", "dontAsk"];
     const a = [
       "-p",
       "--input-format",
@@ -258,8 +287,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
       "stream-json",
       "--verbose",
       "--include-partial-messages",
-      "--permission-mode",
-      "dontAsk",
+      ...mode,
       "--allowedTools",
       tools.join(","),
       "--strict-mcp-config",
@@ -287,6 +315,8 @@ class ClaudeCodeSession implements BrainSessionImpl {
         ...(await this.p.authEnv?.()),
         DISABLE_AUTOUPDATER: "1",
         CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "1",
+        // A permission question may wait for the person for minutes (tools/native-permission.ts).
+        ...(this.o.confine ? { MCP_TOOL_TIMEOUT: String(15 * 60_000) } : {}),
       });
       const t = brainsT(this.p.locale?.());
       const parser = new ClaudeStreamParser(t);

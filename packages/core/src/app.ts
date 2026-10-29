@@ -34,6 +34,7 @@ import { registerThinkingTools } from "./tools/thinking-tools.ts";
 import { thinkingView } from "./thinking.ts";
 import { registerPageTools } from "./tools/page-tools.ts";
 import { registerGroupTools } from "./tools/group-tools.ts";
+import { registerNativePermission } from "./tools/native-permission.ts";
 import { Pages } from "./pages.ts";
 import { registerCoreTools } from "./tools/core-tools.ts";
 import { McpEndpoint } from "./mcp/server.ts";
@@ -337,6 +338,18 @@ export class Hub {
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
     });
     registerGroupTools({ registry: this.tools, store: this.store, agents: this.agents });
+    registerNativePermission({
+      registry: this.tools,
+      approvals: this.approvals,
+      rules: this.rules,
+      store: this.store,
+      settings: this.settings,
+      audit: this.audit,
+      redactor: this.vault.redactor,
+      agents: this.agents,
+      dataDir: config.dataDir,
+      roots: () => this.plugins.enabledLayouts().filter((l) => l.formats.includes("claude") && !l.manifest.builtin).map((l) => l.dir),
+    });
     registerPageTools({
       registry: this.tools,
       pages: this.pages,
