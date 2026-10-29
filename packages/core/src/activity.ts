@@ -18,7 +18,7 @@ interface Turn extends MachineWork {
 const COMMAND = /^(Bash|BashOutput|KillShell|shell|exec_command|local_shell)$/;
 const READING = /^(Read|Glob|Grep|LS|NotebookRead|read_file|list_dir|view)$/;
 const EDITING = /^(Edit|MultiEdit|Write|NotebookEdit|apply_patch|write_file)$/;
-const WEB = /^(WebFetch|WebSearch|web_search|fetch)$/i;
+const WEB = /^(WebFetch|WebSearch|fetch|web_(search|fetch|rss))$/i;
 
 /** What a tool call does, by the tool's name (Claude Code's, Codex's, the hub's own). */
 export function stepOfTool(name: string): WorkStep {

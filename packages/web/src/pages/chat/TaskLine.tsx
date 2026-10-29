@@ -39,8 +39,8 @@ export function TaskLine({ taskId, text, reply, from }: { taskId: string; text?:
   const where = machineId === "local" ? undefined : (machines?.find((m) => m.id === machineId)?.name ?? machineId);
   const st = taskStatus(task.status);
   const working = task.status === "running" || task.status === "queued";
-  // While it runs: what it does now ("Reading plan.md…"), else its state.
-  const now = task.status === "running" && work && work.step !== "writing" && !(work.step === "thinking" && !work.detail) ? stepText(work) : undefined;
+  // While it runs: what it does now ("Thinking…", "Reading plan.md…"), else its state.
+  const now = task.status === "running" && work ? stepText(work) : undefined;
   // The brain and depth chosen for it, in a word each.
   const brainName = task.thinking?.brain ? (brainList?.find((b) => b.ref === task.thinking!.brain || b.ref.split("@")[0] === task.thinking!.brain)?.label ?? task.thinking.brain) : undefined;
   const how = [brainName, task.thinking?.preset ? t(`thinking.preset.${task.thinking.preset}`) : undefined].filter(Boolean).join(" · ");
@@ -52,7 +52,8 @@ export function TaskLine({ taskId, text, reply, from }: { taskId: string; text?:
     >
       <AgentAvatar avatar={agent?.avatar} id={task.agentId} name={name} size={22} running={task.status === "running"} />
       <span className="min-w-0 flex-1 truncate font-medium text-fg">{task.title}</span>
-      {(where || how) && <span className="hidden shrink-0 text-xs text-muted sm:inline">{[where, how].filter(Boolean).join(" · ")}</span>}
+      {/* While it works, its step says more than the brain it runs on. */}
+      {(where || (how && !now)) && <span className="hidden shrink-0 text-xs text-muted sm:inline">{[where, now ? undefined : how].filter(Boolean).join(" · ")}</span>}
       <Status label={now ?? st.label} tone={st.tone} working={working} />
     </Link>
   );
@@ -61,7 +62,7 @@ export function TaskLine({ taskId, text, reply, from }: { taskId: string; text?:
 /** A task's state: a word in its tone, with a breathing amber dot while it works. */
 function Status({ label, tone, working }: { label: string; tone: Tone; working: boolean }) {
   return (
-    <span className={cx("inline-flex max-w-[55%] min-w-0 shrink-0 items-center gap-1.5 text-xs font-medium", working ? "text-accent-text" : toneText(tone))}>
+    <span className={cx("inline-flex max-w-[45%] min-w-0 shrink-0 items-center gap-1.5 text-xs font-medium", working ? "text-accent-text" : toneText(tone))}>
       {working && <span className="live-dot size-1.5 shrink-0 rounded-full" />}
       <span className="truncate">{label}</span>
     </span>

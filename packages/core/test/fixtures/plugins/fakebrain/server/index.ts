@@ -89,8 +89,8 @@ export default {
               return;
             }
             // Whether the hub got this session ready ahead of the turn, and whether it keeps it warm.
-            if (lastLine(turn.text) === "WARM?") {
-              yield { type: "text", delta: `${id} warm: ${warmed.has(o.sessionId) ? "yes" : "no"} keep: ${!!o.keepWarm}` };
+            if (lastLine(turn.text.replace(/\n+When you are done[^\n]*\s*$/, "")) === "WARM?") {
+              yield { type: "text", delta: `${id} warm: ${warmed.has(o.sessionId) ? "yes" : "no"} keep: ${!!o.keepWarm} desk: ${!!o.frontDesk}` };
               yield { type: "done", resumeToken: `${id}-resume` };
               return;
             }

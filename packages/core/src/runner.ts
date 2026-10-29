@@ -1347,8 +1347,10 @@ export class SessionRunner {
       resume,
       env,
       background,
-      // A dialog the person talks in keeps its brain's process between turns (warm()).
+      // A dialog the person talks in keeps its brain's process between turns (warm()), and is a front desk: its
+      // brain only looks; commands and file changes go to tasks.
       ...(warmable(conv, task) ? { keepWarm: true } : {}),
+      ...(!task && !conv.taskId && conv.kind !== "task" ? { frontDesk: true } : {}),
       // The brain's own shell and file tools stay in its folder; the rest it asks for (native-permissions.ts).
       ...(local && this.d.config.sandboxBrains
         ? { confine: { ...confinement(this.d.config.dataDir, workspace, local && ref.brainId === "claude-code" ? this.d.claudePluginDirs() : []), permissionTool: NATIVE_PERMISSION_TOOL } }

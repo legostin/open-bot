@@ -173,6 +173,11 @@ export function registerCoreTools(d: CoreToolDeps): void {
       const agentId = i.agent ? String(i.agent) : ctx.agentId;
       const target = d.agents.get(agentId);
       if (!target) return text(`No agent ${agentId}. See task_agents.`, true);
+      // A brain that calls the tool before loading its schema guesses the names: "task" or "instructions" is the goal.
+      // A call with none of them starts nothing.
+      const given = [i.goal, i.task, i.instructions, i.prompt].find((v) => typeof v === "string" && v.trim());
+      if (!given) return text("No task started: give it `goal` (complete, self-contained instructions) and a short `title`.", true);
+      i = { ...i, goal: given };
       const brain = typeof i.brain === "string" && i.brain.trim() ? i.brain.trim() : undefined;
       // "codex" stands for the agent's Codex wherever it runs; a brain it does not have is refused with the ones it has.
       const lead = brain ? brainsFor(target, "task", { brain })[0] : undefined;

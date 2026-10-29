@@ -213,6 +213,9 @@ export function claudePresets(efforts?: string[]): NonNullable<ProbeResult["pres
   return { fast: { model: "sonnet", ...e("low") }, balanced: { model: "opus", ...e("medium") }, deep: { model: "opus", ...(efforts?.includes("xhigh") ? e("xhigh") : e("high")) } };
 }
 
+/** What a dialog's front desk may not do itself (BrainSessionOptions.frontDesk): run commands, change files. */
+const FRONT_DESK_DENIED = ["Bash", "BashOutput", "KillShell", "Write", "Edit", "MultiEdit", "NotebookEdit"];
+
 /** Tools a confined session may use without asking: the web (through the hub's proxy), planning, subagents, skills, the hub. */
 const CONFINED_ALLOWED = /^(WebFetch|WebSearch|TodoWrite|Task|Agent|Skill|ToolSearch|mcp__owlbot)$/;
 
@@ -332,7 +335,8 @@ class ClaudeCodeSession implements BrainSessionImpl {
     // Confined: the shell runs in the sandbox, edits are accepted inside the workspace, and everything else (reading
     // the person's files, writing elsewhere, a command outside the sandbox) goes to the hub's permission tool. No bare
     // allow rule may open the file tools or Bash, or it would answer for the hub.
-    const tools = confine ? (this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS).filter((x) => CONFINED_ALLOWED.test(x)) : (this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS);
+    const all = this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS;
+    const tools = (confine ? all.filter((x) => CONFINED_ALLOWED.test(x)) : all).filter((x) => !this.o.frontDesk || !FRONT_DESK_DENIED.includes(x));
     const mode = confine
       ? ["--permission-mode", "acceptEdits", "--permission-prompt-tool", `mcp__owlbot__${confine.permissionTool}`, "--settings", join(this.dir, "settings.json")]
       : ["--permission-mode", "dontAsk"];
@@ -354,6 +358,8 @@ class ClaudeCodeSession implements BrainSessionImpl {
       "--append-system-prompt-file",
       join(this.dir, "prompt.md"),
     ];
+    // A dialog's front desk only looks; commands and file changes are a task's (task_delegate).
+    if (this.o.frontDesk) a.push("--disallowedTools", FRONT_DESK_DENIED.join(","));
     if (this.o.model) a.push("--model", this.o.model);
     if (this.o.effort && caps.efforts?.includes(this.o.effort)) a.push("--effort", this.o.effort);
     // A resumed conversation takes the agent's current instructions (they change with its profile and how it thinks).

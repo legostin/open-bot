@@ -22,7 +22,7 @@ describe("machines activity", () => {
     expect(["Bash", "shell", "exec_command"].map(stepOfTool)).toEqual(["command", "command", "command"]);
     expect(["Read", "Grep", "Glob"].map(stepOfTool)).toEqual(["reading", "reading", "reading"]);
     expect(["Edit", "Write", "apply_patch"].map(stepOfTool)).toEqual(["editing", "editing", "editing"]);
-    expect(["WebSearch", "WebFetch", "web_search"].map(stepOfTool)).toEqual(["web", "web", "web"]);
+    expect(["WebSearch", "WebFetch", "web_search", "web_fetch", "web_rss"].map(stepOfTool)).toEqual(["web", "web", "web", "web", "web"]);
     expect(stepOfTool("google_calendar_list_events")).toBe("tool");
   });
 

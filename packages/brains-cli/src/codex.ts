@@ -117,6 +117,8 @@ class CodexSession implements BrainSessionImpl {
   }
 
   private sandbox(): "read-only" | "workspace-write" | "danger-full-access" {
+    // A dialog's front desk only looks: commands that change things are a task's (BrainSessionOptions.frontDesk).
+    if (this.o.frontDesk) return "read-only";
     const chosen = this.p.sandbox?.() ?? "danger-full-access";
     // Confined by the hub: never wider than the workspace (BrainSessionOptions.confine).
     return this.o.confine ? (chosen === "read-only" ? "read-only" : "workspace-write") : chosen;
@@ -125,7 +127,8 @@ class CodexSession implements BrainSessionImpl {
   /** What the sandbox would not let through, Codex asks for; confined, the hub answers (hub-permission.ts). */
   private ask(): ((tool: string, input: Record<string, unknown>) => Promise<boolean>) | undefined {
     const confine = this.o.confine;
-    return confine ? (tool, input) => askHub(this.o.mcp, confine.permissionTool, tool, input) : undefined;
+    // The front desk asks for nothing more: what its sandbox does not let through is a task's work.
+    return confine && !this.o.frontDesk ? (tool, input) => askHub(this.o.mcp, confine.permissionTool, tool, input) : undefined;
   }
 
   /** `-c` overrides: the hub's MCP server, approvals (asked of the hub when confined), the sandbox. */
@@ -136,9 +139,9 @@ class CodexSession implements BrainSessionImpl {
       `mcp_servers.owlbot.args=[${args.map(tomlString).join(",")}]`,
       `mcp_servers.owlbot.env={OWLBOT_URL=${tomlString(this.o.mcp.url)},OWLBOT_TOKEN_FILE=${tomlString(join(this.dir, "token"))}}`,
       `mcp_servers.owlbot.tool_timeout_sec=3600`,
-      this.o.confine ? `approval_policy="on-request"` : `approval_policy="never"`,
+      this.ask() ? `approval_policy="on-request"` : `approval_policy="never"`,
       `sandbox_mode=${tomlString(this.sandbox())}`,
-      ...(this.o.confine ? ["sandbox_workspace_write.network_access=false"] : []),
+      ...(this.o.confine && !this.o.frontDesk ? ["sandbox_workspace_write.network_access=false"] : []),
       ...(this.o.effort ? [`model_reasoning_effort=${tomlString(this.o.effort)}`] : []),
     ];
   }

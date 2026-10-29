@@ -371,6 +371,28 @@ describe("confined brains (BrainSessionOptions.confine)", () => {
     expect(plain).not.toContain("--permission-prompt-tool");
   });
 
+  it("a dialog's front desk only looks: no shell or file changes of its own, nothing to ask for", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "owl-cc-state-"));
+    const claude = createClaudeCodeProvider({ command: () => fake, stateDir });
+    const argsFile = join(mkdtempSync(join(tmpdir(), "owl-cc-args-")), "args.jsonl");
+    await collect((await claude.createSession(opts({ confine, frontDesk: true, env: { FAKE_ARGS_FILE: argsFile } }))).send({ text: "hi" }));
+    const args = JSON.parse(readFileSync(argsFile, "utf8").trim().split("\n")[0]) as string[];
+    expect(args[args.indexOf("--disallowedTools") + 1].split(",")).toEqual(expect.arrayContaining(["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"]));
+    const plain = createClaudeCodeProvider({ command: () => fake, stateDir, allowedTools: () => ["Bash", "Read", "WebSearch", "mcp__owlbot"] });
+    const plainFile = join(mkdtempSync(join(tmpdir(), "owl-cc-args-")), "args.jsonl");
+    await collect((await plain.createSession(opts({ frontDesk: true, env: { FAKE_ARGS_FILE: plainFile } }))).send({ text: "hi" }));
+    const pa = JSON.parse(readFileSync(plainFile, "utf8").trim().split("\n")[0]) as string[];
+    expect(pa[pa.indexOf("--allowedTools") + 1]).toBe("Read,WebSearch,mcp__owlbot");
+
+    const codex = createCodexProvider({ command: () => join(import.meta.dirname, "fixtures", "fake-codex.mjs"), stateDir, sandbox: () => "workspace-write" });
+    const codexFile = join(mkdtempSync(join(tmpdir(), "owl-cx-args-")), "args.jsonl");
+    await collect((await codex.createSession(opts({ confine, frontDesk: true, env: { FAKE_ARGS_FILE: codexFile } }))).send({ text: "hi" }));
+    const started = JSON.parse(readFileSync(codexFile, "utf8").trim().split("\n")[0]);
+    expect(started).toMatchObject({ sandbox: "read-only", approvalPolicy: "never" });
+    expect(started.args).toContain('sandbox_mode="read-only"');
+    expect(started.args).toContain('approval_policy="never"');
+  });
+
   it("Codex asks the hub about what its sandbox would not let through, in each request's own answer format", async () => {
     const asked: Array<[string, unknown]> = [];
     const ask = (yes: boolean) => async (tool: string, input: Record<string, unknown>) => (asked.push([tool, input]), yes);

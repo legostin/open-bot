@@ -700,6 +700,11 @@ export interface BrainSessionOptions {
    * `warm`), so a reply does not wait for a CLI to start. Unset for tasks: their process ends with the turn.
    */
   keepWarm?: boolean;
+  /**
+   * The person's dialog is a front desk: the brain's own tools only look (read files, search the web); running
+   * commands and changing files is work for a task (task_delegate), so the dialog never waits on it.
+   */
+  frontDesk?: boolean;
 }
 
 export type BrainEvent =

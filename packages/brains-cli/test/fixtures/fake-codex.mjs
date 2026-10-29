@@ -3,7 +3,7 @@
 // exits 0. The mode comes from FAKE_CODEX_LOGIN or the file HOME/.fake-codex-login: "ok" (default), "fail" or "hang".
 // `app-server` speaks the v2 JSON-RPC the brain uses (turn/start, turn/steer, turn/interrupt); FAKE_CODEX_NO_APP=1
 // makes it an old Codex without one. `exec --json` answers "exec:<input>".
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -140,6 +140,8 @@ function appServer() {
       case "initialized":
         return;
       case "thread/start":
+        // What the brain asked for, for tests that check it: the -c overrides and the thread's sandbox and approvals.
+        if (process.env.FAKE_ARGS_FILE) appendFileSync(process.env.FAKE_ARGS_FILE, `${JSON.stringify({ args, sandbox: p.sandbox, approvalPolicy: p.approvalPolicy })}\n`);
         threadId = `th-${process.pid}`;
         model = p.model ?? "default";
         note("thread/started", { thread: { id: threadId } });

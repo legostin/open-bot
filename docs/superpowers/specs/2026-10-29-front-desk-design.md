@@ -43,6 +43,11 @@ like a warm one.
   follows an `auto` dialog thinks `balanced`.
 - The dialog's prompt makes it a front desk: answer in a moment what takes a moment; anything with steps or deep
   thought goes to a task at once, with one short line to the person; never do long work in the dialog.
+- The front desk's own tools only look (`BrainSessionOptions.frontDesk`): Claude Code runs without Bash, Write,
+  Edit, MultiEdit and NotebookEdit; Codex gets a read-only sandbox and asks for nothing. A prompt alone did not hold
+  (checked live: a "fast" Claude Code wrote and ran a script in the dialog itself); without the tools it delegates.
+- `task_delegate` refuses a call without a goal, and takes `task`/`instructions` as the goal: Claude Code loads MCP
+  schemas lazily and its first call may guess the names.
 
 ### 3. The right brain for each task
 
@@ -79,3 +84,14 @@ like a warm one.
   a task's approval card shows in the starter dialog and updates there; `detail` in machine activity.
 - web: the live line's text for each step.
 - Measured end to end on a throwaway hub with the real Claude Code: message to first text, before and after.
+
+## Measured after (throwaway hub, real Claude Code, same three messages)
+
+| | message 1 | message 2 | message 3 |
+| --- | --- | --- | --- |
+| before (one process per turn, brain's default model) | 10.4 s | 5.7 s | 3.4 s |
+| after, chat opened first (warm), "auto" | 3.1–3.4 s | 2.7 s (one run 7.7 s) | 0.9–4.7 s |
+| after, no warm-up | 7.6 s | 2.6 s | 1.7 s |
+
+The model's own latency varies by several seconds between runs; the process start (3+ s) is gone from every message
+but the very first one after the chat has been closed for 10 minutes.

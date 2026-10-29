@@ -70,11 +70,14 @@ describe("front desk (integration)", () => {
     const c = hub.store.agentConversation("assistant").id;
     expect(await hub.runner.warm(c)).toBe(true);
     const opened = hub.store.activeSession(c, "assistant")!;
-    expect(await ask("assistant", "WARM?")).toBe("fake warm: yes keep: true");
+    // A dialog is a front desk too: its brain only looks, commands and file changes are a task's.
+    expect(await ask("assistant", "WARM?")).toBe("fake warm: yes keep: true desk: true");
     // The session it opened is the one the turn used.
     expect(hub.store.activeSession(c, "assistant")!.id).toBe(opened.id);
-    const task = hub.store.createTask({ agentId: "assistant", title: "w", goal: "WARM?", createdBy: "user", background: false });
+    const task = hub.runner.createTask({ agentId: "assistant", title: "w", goal: "WARM?", createdBy: "user", background: false });
     expect(await hub.runner.warm(task.conversationId)).toBe(false);
+    const done = await until(() => (hub.store.getTask(task.id)?.status === "done" ? hub.store.getTask(task.id) : undefined), "the task");
+    expect(done.result).toBe("fake warm: no keep: false desk: false");
   });
 
   it("thinks fast in a dialog with no choice of its own, and gives each task the brain and depth the agent chose", async () => {
@@ -93,6 +96,12 @@ describe("front desk (integration)", () => {
     expect(await delegated({ depth: "deep" })).toBe("fake thinks: model=smart effort=high");
     expect(await delegated({ depth: "fast", brain: "fake2" })).toBe("fake2 thinks: model=default effort=default");
     expect(await delegated({ brain: "nope" })).toContain("desk has no brain nope. Its brains: fake@local, fake2:a@local.");
+    // A call without its goal starts nothing.
+    const count = hub.store.listTasks({ limit: 500 }).length;
+    expect(await ask("desk", "CALL task_delegate {}")).toContain("No task started: give it `goal`");
+    expect(hub.store.listTasks({ limit: 500 }).length).toBe(count);
+    // A guessed name for the goal is taken as it.
+    expect(await delegated({ goal: undefined, task: "THINKING?" })).toBe("fake thinks: model=smart effort=medium");
     // The task line in the dialog names the choice for the agent.
     const said = hub.store.listMessages(c, { limit: 500 }).flatMap((m) => m.parts).filter((p) => p.type === "tool_result").map((p: any) => p.output);
     expect(said.some((o: string) => /Task created: .*\(fake2, fast\)/.test(o))).toBe(true);
