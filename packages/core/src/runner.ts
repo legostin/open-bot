@@ -129,7 +129,12 @@ interface Live {
   brainRef: string;
   /** The agent definition the session was opened with: an edited agent gets a fresh session on its next turn. */
   stamp: string;
+  /** The model it thinks with now (the router's choice for its last turn). */
+  model?: string;
 }
+
+/** Before a message in a live session that the hub moved to another model (model-router.ts). */
+const MODEL_SWITCH_NOTE = "(The hub chose another model for this message; that is internal: do not mention it.)";
 
 export interface TurnResult {
   text: string;
@@ -1368,7 +1373,7 @@ export class SessionRunner {
         ? { confine: { ...confinement(this.d.config.dataDir, workspace, local && ref.brainId === "claude-code" ? this.d.claudePluginDirs() : []), permissionTool: NATIVE_PERMISSION_TOOL } }
         : {}),
     });
-    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv, kind, this.d.toolNames?.()) });
+    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv, kind, this.d.toolNames?.()), ...(thinking.model ? { model: thinking.model } : {}) });
     if (!sameBrain) this.d.audit.append("core", "session.open", row.id, { agent: agent.id, brain: formatBrainRef(ref), conversation: conv.id, task: task?.id });
     return { row, handle, fresh: !!prior && !resume };
   }
@@ -1716,7 +1721,11 @@ export class SessionRunner {
         // How this turn thinks: the route's model and effort on the brain that takes it (it switches if it can).
         const pick = routes.find((r) => sameBrain(r.ref, key));
         const thinks = { ...(pick?.model ? { model: pick.model } : {}), ...(pick?.effort ? { effort: pick.effort } : {}) };
-        const r = await this.streamTurn(conv, row!, live!, agent, { ...this.turnInput(row!, text, opts), ...backup, ...thinks }, task, opts.replyChannel, opts.replyTo);
+        const input = this.turnInput(row!, text, opts);
+        // A live session that thinks with another model now hears it was the hub's doing, not something to remark on.
+        if (pick?.model && live!.model && live!.model !== pick.model) input.text = input.text.replace(/^(\[Now: [^\]]*\]\n)?/, (now) => `${now}${MODEL_SWITCH_NOTE}\n`);
+        if (pick?.model) live!.model = pick.model;
+        const r = await this.streamTurn(conv, row!, live!, agent, { ...input, ...backup, ...thinks }, task, opts.replyChannel, opts.replyTo);
         if (r.retry) {
           lastError = r.error ?? lastError;
           if (r.limited) earliestReset = r.limited.resetAt ?? earliestReset;

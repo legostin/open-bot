@@ -67,6 +67,9 @@ like a warm one.
 - Models switch per turn without starting over: Claude Code takes `set_model` and `apply_flag_settings
   {effortLevel}` control requests on stdin (checked live: Sonnet → Haiku → Opus, low → high in one process); Codex
   and the API brain take the turn's model and effort (`BrainTurn.model`, `effort`).
+- Claude Code records a switch as a `/model` command whose output "goes straight to the user", and a light model
+  then remarks on it ("model switched to Haiku"). The rules say what that trace is, and a turn whose model changed
+  starts with a one-line note not to mention it (checked live: the remark is gone).
 - Providers: the API brain's OpenAI-compatible providers are one table (`plugins/brain-api/server/settings.ts`
   PROVIDERS): Kimi (Moonshot), DeepSeek, GLM (Z.ai), Qwen, Gemini, Grok (xAI), Mistral, Groq, besides Anthropic,
   OpenAI and OpenRouter. Each has its key in the vault (a setup card), its host, and its main models; `extraModels`
@@ -116,5 +119,6 @@ like a warm one.
 | after, chat opened first (warm), "auto" | 3.1–3.4 s | 2.7 s (one run 7.7 s) | 0.9–4.7 s |
 | after, no warm-up | 7.6 s | 2.6 s | 1.7 s |
 
-The model's own latency varies by several seconds between runs; the process start (3+ s) is gone from every message
+Routed (front desk Sonnet low, "thanks" on Haiku, back to Sonnet, one warm process): 2.5–4.8 s, 2.8–4.0 s, 3.0–4.9 s;
+the router and the brain checks take under a millisecond. The model's own latency varies by several seconds between runs; the process start (3+ s) is gone from every message
 but the very first one after the chat has been closed for 10 minutes.
