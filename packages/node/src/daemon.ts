@@ -81,7 +81,8 @@ export function createNodeDaemon(o: NodeDaemonOptions): NodeDaemon {
   const files = new FileSync({
     roots: [{ name: "workspaces", dir: policy.get().workspacesRoot }],
     stateFile: join(o.home, "files.db"),
-    self: config.name || "machine",
+    // Not the machine's bare name: a hub replica on the same machine is a peer of its own (its own journal).
+    self: `${config.name || "machine"}-node`,
     log: (m) => o.log(`files: ${m}`),
   });
   service.files = files;

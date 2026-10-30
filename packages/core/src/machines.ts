@@ -203,7 +203,7 @@ export class MachineHub {
       if (busy || peer.closed || !files() || (this.cluster && !this.cluster.leads())) return;
       busy = true;
       void files()!
-        .syncFrom(this.name(id) ?? id, {
+        .syncFrom(`${this.name(id) ?? id}-node`, {
           changesSince: (cursor, limit) => peer.request("files.changes", { cursor, limit }, { timeoutMs: 60_000 }),
           read: async (root, path, sha) => {
             const b = await peer.request<string | null>("files.read", { root, path, sha }, { timeoutMs: 300_000 });
