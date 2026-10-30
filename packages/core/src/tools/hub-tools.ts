@@ -486,7 +486,7 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         "Show an integration's card in this chat so the user can connect it (e.g. Google Calendar: a Connect button that signs in with Google; " +
-        "Telegram: its setup steps; remote-access: a permanent link to Owlbot from anywhere, through Tailscale). " +
+        "Telegram: its setup steps; Granola: a Sign in button that opens its own sign-in; remote-access: a permanent link to Owlbot from anywhere, through Tailscale). " +
         "Use it whenever the user wants to connect a service, or a tool says it is not connected. Ids: see hub_integrations_list.",
       inputSchema: obj({ id: { type: "string", description: "Integration id" } }, ["id"]),
     },
@@ -504,7 +504,9 @@ export function registerHubTools(hub: Hub): void {
               ? "turned off; the card has a switch"
               : view.status === "broken"
                 ? "its sign-in stopped working; the card has Reconnect"
-                : "not connected yet";
+                : view.connect === "signin"
+                  ? "not signed in yet; the card has a Sign in button"
+                  : "not connected yet";
       return text(
         `The ${view.name} card is shown in the chat: ${state}. ` +
           (view.status === "connected" ? "" : "Tell the user in a sentence to press the button on it; you get a system note once it is connected."),

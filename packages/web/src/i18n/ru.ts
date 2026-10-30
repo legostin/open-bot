@@ -67,6 +67,7 @@ export default {
   "integrations.status.off": "Выключено",
   "integrations.status.unavailable": "Недоступно",
   "integrations.connectGoogle": "Войти через Google",
+  "integrations.signIn": "Войти в {name}",
   "integrations.reconnect": "Переподключить",
   "integrations.setup": "Настроить",
   "integrations.hideSetup": "Скрыть",

@@ -46,8 +46,11 @@ export const IntegrationSchema = z.object({
   category: z.string().default("other"),
   /** A lucide icon name. */
   icon: z.string().default("puzzle"),
-  /** google: the hub's Google sign-in; setup: the plugin's setup card; none: works as it is. */
-  connect: z.enum(["google", "setup", "none"]).default("none"),
+  /**
+   * google: the hub's Google sign-in; setup: the plugin's setup card; signin: its MCP server's own sign-in in the
+   * browser (OAuth, e.g. Granola); none: works as it is.
+   */
+  connect: z.enum(["google", "setup", "signin", "none"]).default("none"),
   /** OAuth scopes the plugin needs from the provider (connect: google). */
   scopes: z.array(z.string()).default([]),
   /** One line under the name in the library ("%key%" for a translation). */

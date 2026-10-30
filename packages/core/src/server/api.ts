@@ -15,6 +15,7 @@ import { applyThinking } from "../thinking.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
 import { googleScopes, listCatalog, listIntegrations } from "../integrations.ts";
+import { callbackParams } from "../connections.ts";
 import { machineHubUrl, qrSvg } from "../pairing.ts";
 import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
 
@@ -537,6 +538,28 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
       );
     }
     return view;
+  });
+  // An integration whose MCP server has its own sign-in (Granola): the address to open, the pasted way back, signing out.
+  const signinServer = (id: string): string => {
+    if (hub.plugins.get(id)?.layout?.manifest.integration?.connect !== "signin") throw new HttpError(404, "connections.notFound", { id });
+    const s = hub.mcpClients.list().find((x) => x.source === id);
+    if (!s) throw new HttpError(409, "mcp.noSignin", { name: id });
+    return s.name;
+  };
+  api.post("/api/integrations/:id/signin", async (req) => {
+    const b = (req.body ?? {}) as { conversationId?: unknown };
+    return { url: await hub.mcpClients.signIn(signinServer((req.params as any).id), typeof b.conversationId === "string" ? b.conversationId : undefined) };
+  });
+  api.delete("/api/integrations/:id/signin", async (req) => {
+    const id = (req.params as any).id as string;
+    await hub.mcpClients.signOut(signinServer(id));
+    hub.bus.emit("connections.updated", { provider: id });
+    return { ok: true };
+  });
+  api.post("/api/mcp/signin/complete", async (req) => {
+    const r = await hub.mcpClients.completeSignIn(callbackParams(String((req.body as any)?.url ?? "")));
+    hub.mcpSignedIn(r.source, r.conversationId);
+    return { ok: true };
   });
   api.get("/api/connections", async () => ({ google: { available: hub.connections.available("google"), account: hub.connections.get("google") ?? null } }));
   api.post("/api/connections/google/start", async (req) => {

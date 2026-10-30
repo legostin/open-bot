@@ -9,7 +9,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
 import { LOCALES, localeFromEnv } from "@owlbot/shared";
-import { errorText, hubLocale, LocalizedError, requestLocale, tFor } from "../i18n.ts";
+import { errorText, hubLocale, localizePluginValue, LocalizedError, requestLocale, tFor } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
 import { clientIp, FailureBudget, hostAllowed, HttpError, originAllowed, originsFor, sendFile } from "./http.ts";
@@ -227,16 +227,15 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
       return reply.send(r.body ?? "");
     });
 
-    // ---------- Google sends the browser back here after the sign-in (state is the proof, no session needed) ----------
+    // ---------- A sign-in sends the browser back here (state is the proof, no session needed) ----------
 
-    app.get("/oauth/callback", async (req, reply) => {
+    /** The page the browser lands on: done (with who or what was connected) or why not. */
+    const oauthPage = async (req: FastifyRequest, reply: FastifyReply, finish: (q: URLSearchParams) => Promise<string>) => {
       const t = tFor(requestLocale(req));
       let ok = true;
       let detail = "";
       try {
-        const r = await hub.connections.complete(new URLSearchParams((req.url.split("?")[1] ?? "")));
-        hub.connectionDone(r.account, r.origin);
-        detail = r.account.account;
+        detail = await finish(new URLSearchParams(req.url.split("?")[1] ?? ""));
       } catch (e) {
         ok = false;
         detail = errorText(e, requestLocale(req));
@@ -247,11 +246,30 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   <style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#111}h1{font-size:1.4rem}a{color:inherit}</style></head>
   <body><h1>${esc(title)}</h1><p>${esc(ok ? `${detail}. ${t("oauth.doneText")}` : detail)}</p><p><a href="${esc(cfg.publicUrl)}">${esc(t("oauth.back"))}</a></p></body></html>`;
       return reply.code(ok ? 200 : 400).header("content-type", "text/html; charset=utf-8").header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'").send(html);
-    });
+    };
+
+    // Google.
+    app.get("/oauth/callback", (req, reply) =>
+      oauthPage(req, reply, async (q) => {
+        const r = await hub.connections.complete(q);
+        hub.connectionDone(r.account, r.origin);
+        return r.account.account;
+      }),
+    );
+
+    // An MCP server's own sign-in (an integration such as Granola).
+    app.get("/oauth/mcp", (req, reply) =>
+      oauthPage(req, reply, async (q) => {
+        const r = await hub.mcpClients.completeSignIn(q);
+        hub.mcpSignedIn(r.source, r.conversationId);
+        const rec = hub.plugins.get(r.source);
+        return rec?.layout ? localizePluginValue(rec.layout, rec.layout.manifest.name, requestLocale(req)) : r.name;
+      }),
+    );
   }
 
   // The local-only routes do not exist on the link: say so instead of serving the page.
-  if (remote) for (const path of ["/hooks/*", "/oauth/callback"]) app.all(path, async () => Promise.reject(new HttpError(404, "not found")));
+  if (remote) for (const path of ["/hooks/*", "/oauth/callback", "/oauth/mcp"]) app.all(path, async () => Promise.reject(new HttpError(404, "not found")));
 
   // ---------- authenticated API ----------
 

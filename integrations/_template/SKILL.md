@@ -37,7 +37,8 @@ from sunrise-sunset.org): copy it and change what it does, keep its shape.
    - delete `"builtin"` and `"defaultEnabled"`: an integration installed on a hub is turned on when it is installed;
    - `integration`: `category` (everyday, travel, money, work, reading, communication, home, assistant), `icon`
      (a Lucide icon name, e.g. `cloud-sun`, `plane`, `wallet`), `connect` (`none`; `setup` when it needs a key or
-     setup), `summary` and `example` (`"%integration.summary%"`, `"%integration.example%"`); no `popular`;
+     setup; `signin` for a service's own MCP server with a browser sign-in, see below), `summary` and `example`
+     (`"%integration.summary%"`, `"%integration.example%"`); no `popular`;
    - `permissions.network`: the exact hosts it calls (`api.example.com`, `*.example.com`); never `"*"` unless the
      user gives the addresses at run time;
    - `contributes.widgets`: the card kinds the tools show (`[]` and no `ui` when there is no card);
@@ -80,6 +81,21 @@ card, straight into the vault:
 and set `"connect": "setup"` in `integration`. In the code: `const { value } = await ctx.vault.get("vault://<id>_api_key")`
 when a tool needs it; when it is missing, answer that the user should connect the integration (hub_plugin_setup shows
 the card).
+
+## A service with its own MCP server
+
+When the service runs an official MCP server (Streamable HTTP, often with a browser sign-in: Granola, for one), the
+integration needs no code: a manifest, the locales and an `.mcp.json` beside `.owlbot-plugin/` (see
+`integrations/granola`):
+
+```json
+{ "mcpServers": { "<id>": { "type": "http", "url": "https://mcp.example.com/mcp" } } }
+```
+
+Name the server like the integration's id, so its tools are `<id>_<tool>`. With `"connect": "signin"` the hub signs in
+for the person (OAuth discovery, client registration, PKCE; the tokens go into the vault): the catalog and its card in
+the chat show a Sign in button. A built-in integration may list the server's tools that only read in `"readTools"`
+(they then run without asking); other tools ask the person each time.
 
 ## In the Owlbot repository
 

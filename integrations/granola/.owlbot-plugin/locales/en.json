@@ -1,0 +1,6 @@
+{
+  "name": "Granola",
+  "description": "Your Granola meeting notes for the agents: find and read meetings, their summaries and transcripts, and ask questions across all of them. Connects through Granola's own sign-in; the free plan covers the last 30 days.",
+  "integration.summary": "Meeting notes from Granola: what was said and decided",
+  "integration.example": "What did we decide at yesterday's meeting?"
+}

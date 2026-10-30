@@ -1018,8 +1018,8 @@ export interface IntegrationView {
   summary: string;
   category: string;
   icon: string;
-  /** "remote": the core's access from anywhere (RemoteView). */
-  connect: "google" | "setup" | "none" | "remote";
+  /** "remote": the core's access from anywhere (RemoteView); "signin": its MCP server's own sign-in (Granola). */
+  connect: "google" | "setup" | "signin" | "none" | "remote";
   status: IntegrationStatus;
   /** The connected account (e.g. an email), when there is one. */
   account?: string;

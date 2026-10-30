@@ -22,7 +22,7 @@ import { t, type MessageKey } from "../i18n";
 import { pluginLoad } from "../plugins/host";
 import { usePluginRegistry } from "../plugins/slots";
 import { Icon } from "../components/icon";
-import { GoogleConnection } from "../components/IntegrationCard";
+import { GoogleConnection, ServiceSignIn } from "../components/IntegrationCard";
 import { RemoteAccessCard } from "../components/RemoteAccessCard";
 import { SchemaForm } from "../components/SchemaForm";
 import { PluginSetupCard } from "../components/SecretCards";
@@ -428,6 +428,7 @@ function PluginPage({ id }: { id: string }) {
 
       {v.connect === "remote" && <RemoteAccessCard />}
       {v.connect === "google" && on && v.status !== "unavailable" && <GoogleConnection view={v} />}
+      {v.connect === "signin" && on && <ServiceSignIn view={v} />}
 
       {hasSetup && (
         <Disclosure title={t("plugins.setup")} open={v.status === "needs-setup" || v.status === "broken"}>

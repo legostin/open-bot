@@ -1,0 +1,13 @@
+{
+  "id": "granola",
+  "name": "%name%",
+  "version": "0.1.0",
+  "author": "Owlbot",
+  "description": "%description%",
+  "builtin": true,
+  "defaultEnabled": false,
+  "integration": {"category": "work", "icon": "notebook-text", "connect": "signin", "summary": "%integration.summary%", "example": "%integration.example%"},
+  "permissions": {
+    "network": ["mcp.granola.ai", "mcp-auth.granola.ai"]
+  }
+}

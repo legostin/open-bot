@@ -600,7 +600,18 @@ export class Hub {
   private pluginMcpFiles() {
     return (this.plugins?.list() ?? [])
       .filter((r) => r.enabled && r.layout?.mcpFile)
-      .map((r) => ({ pluginId: r.id, file: r.layout!.mcpFile!, dir: r.dir, network: r.granted.network }));
+      .map((r) => ({ pluginId: r.id, file: r.layout!.mcpFile!, dir: r.dir, network: r.granted.network, builtin: r.source === "builtin" }));
+  }
+
+  /** A sign-in to a plugin's MCP server finished: the chat that showed its card hears it and carries on. */
+  mcpSignedIn(source: string, conversationId?: string): void {
+    this.bus.emit("connections.updated", { provider: source });
+    if (!conversationId || !this.store.getConversation(conversationId)) return;
+    const tools = this.tools.list().filter((d) => d.owner.startsWith("mcp:") && this.mcpClients.list().some((s) => s.source === source && `mcp:${s.name}` === d.owner));
+    this.runner.tellAgent(
+      conversationId,
+      `[System] The user signed in to ${source}; it works now${tools.length ? ` and its tools are available: ${tools.map((d) => d.name).join(", ")}` : ""}. Carry on with what it was needed for.`,
+    );
   }
 
   /** Approval cards also go to channels (Telegram) with signed buttons. */

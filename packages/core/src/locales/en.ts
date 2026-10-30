@@ -112,6 +112,11 @@ export default {
   "chat.error": "error",
   "channel.notConnected": "not connected",
   "mcp.connectionClosed": "connection closed",
+  "mcp.needsSignin": "waiting for you to sign in",
+  "mcp.noSignin": "{name} has no sign-in",
+  "mcp.signedIn": "Already signed in to {name}",
+  "mcp.signinFailed": "Could not start signing in to {name}: {error}",
+  "mcp.signinExpired": "This sign-in has expired: start it again",
 
   // plugins
   "plugin.notFound": "Plugin not found",

@@ -111,6 +111,11 @@ export default {
   "chat.error": "ошибка",
   "channel.notConnected": "не подключён",
   "mcp.connectionClosed": "соединение закрыто",
+  "mcp.needsSignin": "ждёт, когда вы войдёте",
+  "mcp.noSignin": "У {name} нет входа",
+  "mcp.signedIn": "Вход в {name} уже выполнен",
+  "mcp.signinFailed": "Не удалось начать вход в {name}: {error}",
+  "mcp.signinExpired": "Этот вход устарел: начните заново",
 
   // plugins
   "plugin.notFound": "Плагин не найден",

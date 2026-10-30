@@ -67,6 +67,7 @@ export default {
   "integrations.status.off": "Off",
   "integrations.status.unavailable": "Unavailable",
   "integrations.connectGoogle": "Connect with Google",
+  "integrations.signIn": "Sign in to {name}",
   "integrations.reconnect": "Reconnect",
   "integrations.setup": "Set up",
   "integrations.hideSetup": "Hide",
