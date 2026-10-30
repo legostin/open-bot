@@ -571,7 +571,9 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
     "fill_secret",
     "local-write",
     "Type a secret from the vault into an input field by ref without revealing it: the login item's password (default), username or a TOTP code. " +
-      "The vault checks that the item is allowed for the current site. The value is never returned. Then submit the form with browser_submit.",
+      "The vault checks that the item is allowed for the current site. The value is never returned. Moving a sign-in step on (Next, Log in) is a plain " +
+      "browser_click. A site's login is a vault login item (vault_list shows them); when there is none, ask the user for it with hub_secret_request and " +
+      "login { domain } (the card keeps it for that site), never in a message.",
     {
       ref: refProp,
       vaultRef: { type: "string", description: "vault://<id> of a login item." },

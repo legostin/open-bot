@@ -23,6 +23,9 @@ export function pageScript(op: string, a: any): any {
   // A site's check instead of the page: a captcha, or one that passes by itself.
   const CHECK = new RegExp(rules.check || "$^", "iu");
   const CHECK_PASSING = new RegExp(rules.checkPassing || "$^", "iu");
+  // A step of signing in: what its fields are, and words of signing up instead.
+  const CREDENTIAL = new RegExp(rules.credential || "$^", "iu");
+  const SIGN_UP = new RegExp(rules.signUp || "$^", "iu");
   const LINK_WORDS = Number(rules.linkWords) || 6;
   /** Roles that only focus, tick or choose: clicking them is never the action itself (the form's submit is). */
   const FIELD_ROLES = ["checkbox", "radio", "option", "tab", "combobox", "textbox", "searchbox", "slider", "spinbutton", "menuitemcheckbox", "menuitemradio", "listbox", "treeitem"];
@@ -153,6 +156,25 @@ export function pageScript(op: string, a: any): any {
       .replace(/[_\-.:\/\\\d]+/g, " ");
   }
   /** Fields and choices: typing into them, ticking or choosing is not the action itself. */
+  /**
+   * A step of signing in, not up: the form asks only for a username, an email or a phone, the current password or a
+   * one-time code. Moving it on signs the person in on this site and needs no approval; creating an account still does.
+   */
+  function signInStep(form: any, label: string) {
+    if (!form || SIGN_UP.test(label)) return false;
+    const fields = Array.from(form.querySelectorAll("input, select, textarea")).filter((f: any) => {
+      const type = String(f.getAttribute("type") || "text").toLowerCase();
+      return !["hidden", "submit", "button", "image", "reset", "checkbox", "radio"].includes(type) && visible(f);
+    });
+    if (!fields.length || fields.length > 3) return false;
+    return fields.every((f: any) => {
+      const type = String(f.getAttribute("type") || "text").toLowerCase();
+      const ac = String(f.getAttribute("autocomplete") || "").toLowerCase();
+      if (ac.includes("new-password")) return false;
+      if (type === "password" || type === "email" || type === "tel" || /\b(username|email|tel|current-password|one-time-code)\b/.test(ac)) return true;
+      return CREDENTIAL.test([f.getAttribute("name"), f.id, f.getAttribute("aria-label"), f.getAttribute("placeholder"), nameOf(f)].map(words).join(" "));
+    });
+  }
   function fieldLike(el: any) {
     const tag = el.tagName.toLowerCase();
     if (tag === "select" || tag === "textarea" || tag === "option") return true;
@@ -233,7 +255,7 @@ export function pageScript(op: string, a: any): any {
     } else if (asksConfirm(ctrl)) {
       mark("confirm");
     } else if (form && !search && ((tag === "button" && (type === "" || type === "submit")) || (tag === "input" && (type === "submit" || type === "image")))) {
-      mark("form");
+      if (!signInStep(form, label)) mark("form");
     } else if (form && !search && type !== "reset" && (tag === "button" || norm(ctrl.getAttribute("role")) === "button") && PROCEED.test(label)) {
       // A JS wizard's "Continue" in a checkout or payment form.
       const formHint = [form.id, form.getAttribute("name"), form.getAttribute("class"), form.getAttribute("action"), form.getAttribute("aria-label")].map(words).join(" ");

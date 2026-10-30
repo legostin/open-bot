@@ -486,7 +486,9 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     return { ...r, vaultState: hub.vault.state() };
   });
   api.post("/api/secret-requests/:id", async (req) => {
-    const { request } = hub.secrets.fulfil((req.params as any).id, String((req.body as any)?.value ?? ""), "user");
+    const b = (req.body ?? {}) as { value?: unknown; username?: unknown; password?: unknown };
+    const value = b.password !== undefined ? { username: b.username === undefined ? undefined : String(b.username), password: String(b.password) } : String(b.value ?? "");
+    const { request } = hub.secrets.fulfil((req.params as any).id, value, "user");
     return { ...request, vaultState: hub.vault.state() };
   });
   api.post("/api/secret-requests/:id/cancel", async (req) => ({ ...hub.secrets.cancel((req.params as any).id, "user"), vaultState: hub.vault.state() }));

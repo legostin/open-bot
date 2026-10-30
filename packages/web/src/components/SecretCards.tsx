@@ -105,6 +105,76 @@ export function SecretInput({
   );
 }
 
+/** A website's login: the username (filled in when the agent knows it) and the password, kept for that site only. */
+function LoginInput({ domain, username: known, exists, onSave }: { domain: string; username?: string; exists?: boolean; onSave: (v: { username: string; password: string }) => Promise<void> }) {
+  const [username, setUsername] = useState(known ?? "");
+  const [password, setPassword] = useState("");
+  const [shown, setShown] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!password || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave({ username: username.trim(), password });
+      setPassword("");
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-1.5">
+      <Input
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        placeholder={t("secret.login.username")}
+        aria-label={t("secret.login.username")}
+        autoComplete="off"
+        spellCheck={false}
+        autoCapitalize="off"
+        data-1p-ignore=""
+        data-lpignore="true"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1 basis-56">
+          <Input
+            type={shown ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={t("secret.login.password")}
+            aria-label={t("secret.login.password")}
+            autoComplete="off"
+            spellCheck={false}
+            autoCapitalize="off"
+            data-1p-ignore=""
+            data-lpignore="true"
+            className="pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShown((v) => !v)}
+            className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1 text-muted hover:text-fg"
+            aria-label={shown ? t("secret.hide") : t("secret.show")}
+          >
+            {shown ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        </div>
+        <Button type="submit" variant="primary" loading={busy} disabled={!password} icon={<Lock className="size-4" />}>
+          {exists ? t("secret.replace") : t("secret.save")}
+        </Button>
+      </div>
+      {error && <div className="text-xs text-danger">{error}</div>}
+      <div className="flex items-center gap-1.5 text-xs text-muted">
+        <ShieldCheck className="size-3.5 shrink-0" /> {t("secret.login.privacy", { domain })}
+      </div>
+    </form>
+  );
+}
+
 /** Creates or unlocks the vault right here when a secret needs it. Renders children once the vault is open. */
 export function VaultGate({ children }: { children: React.ReactNode }) {
   const s = useStore(session);
@@ -192,11 +262,20 @@ export function SecretRequestCard({ part }: { part: Extract<MessagePart, { type:
           <Hint hint={req?.hint} link={req?.link} />
           <VaultGate>
             {req?.exists && <div className="text-xs text-muted">{t("secret.replaceHint")}</div>}
-            <SecretInput
-              vaultId={part.vaultId}
-              exists={req?.exists}
-              onSave={async (value) => setReq(await api.post<SecretRequest>(`/api/secret-requests/${encodeURIComponent(part.requestId)}`, { value }))}
-            />
+            {req?.login ? (
+              <LoginInput
+                domain={req.login.domain}
+                username={req.login.username}
+                exists={req.exists}
+                onSave={async (v) => setReq(await api.post<SecretRequest>(`/api/secret-requests/${encodeURIComponent(part.requestId)}`, v))}
+              />
+            ) : (
+              <SecretInput
+                vaultId={part.vaultId}
+                exists={req?.exists}
+                onSave={async (value) => setReq(await api.post<SecretRequest>(`/api/secret-requests/${encodeURIComponent(part.requestId)}`, { value }))}
+              />
+            )}
           </VaultGate>
           <div>
             <Button variant="ghost" size="sm" onClick={() => api.post<SecretRequest>(`/api/secret-requests/${encodeURIComponent(part.requestId)}/cancel`).then(setReq)}>

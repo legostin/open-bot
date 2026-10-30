@@ -162,6 +162,8 @@ export interface SecretRequest {
   /** Plugin that uses the secret; its `setting` receives "vault://<vaultId>". */
   pluginId?: string;
   setting?: string;
+  /** A site's login instead of one value: the card asks for a username and a password, kept for this domain only. */
+  login?: { domain: string; username?: string };
   conversationId?: string;
   status: SecretRequestStatus;
   /** Whether the vault already holds an item with this id (saving replaces it). */
