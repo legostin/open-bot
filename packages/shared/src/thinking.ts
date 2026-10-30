@@ -144,6 +144,14 @@ export function expandBrains(refs: readonly string[], listed: readonly string[])
     const add = wild ? listed.filter((l) => l.startsWith(`${wild[1]}:`) && (wild[2] ? l.endsWith(wild[2]) : l.endsWith("@local") || !l.includes("@"))) : [ref];
     for (const r of add) if (!out.some((o) => sameBrain(o, r))) out.push(r);
   }
+  // The pool: a brain the hub runs itself also stands for the same brain on every connected machine, after the
+  // agent's own order, so work goes to whichever machine can take it now.
+  for (const ref of [...out]) {
+    const at = ref.lastIndexOf("@");
+    if (at > 0 && ref.slice(at + 1) !== "local") continue;
+    const id = at > 0 ? ref.slice(0, at) : ref;
+    for (const l of listed) if (l.startsWith(`${id}@`) && !l.endsWith("@local") && !out.some((o) => sameBrain(o, l))) out.push(l);
+  }
   return out;
 }
 

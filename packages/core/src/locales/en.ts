@@ -131,9 +131,11 @@ export default {
   // machines
   "machines.execApproval": "Run on {machine}: {command}",
   "machines.revokeApproval": "Disconnect the computer {machine} from Owlbot",
+  "machines.setupApproval": "Change what the computer {machine} may use: brains, keys, models and spend limit",
   "machines.writeApproval": "Write a file on {machine}: {path}",
   "machine.badPairingCode": "The invite has expired or was already used. Ask for a new link in the chat",
   "machine.badPublicKey": "Invalid public key",
+  "machine.notFound": "No such computer",
   "device.badPairingCode": "The invite has expired or was already used. Ask for a new link in the chat.",
   "device.badPublicKey": "The phone sent an invalid key",
   "setup.feed.title": "New channel",

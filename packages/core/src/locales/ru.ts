@@ -130,9 +130,11 @@ export default {
   // machines
   "machines.execApproval": "Выполнить на машине {machine}: {command}",
   "machines.revokeApproval": "Отключить компьютер {machine} от Owlbot",
+  "machines.setupApproval": "Изменить, что может использовать компьютер {machine}: интеллекты, ключи, модели и лимит расхода",
   "machines.writeApproval": "Записать файл на машине {machine}: {path}",
   "machine.badPairingCode": "Приглашение устарело или уже использовано. Попросите новую ссылку в чате",
   "machine.badPublicKey": "Неверный публичный ключ",
+  "machine.notFound": "Такого компьютера нет",
   "device.badPairingCode": "Приглашение устарело или уже использовано. Попросите новую ссылку в чате.",
   "device.badPublicKey": "Телефон прислал неверный ключ",
   "setup.feed.title": "Новый канал",

@@ -162,6 +162,11 @@ export class BrainRegistry {
     this.probeCache.delete(formatBrainRef(parseBrainRef(refStr)));
   }
 
+  /** Forget a machine's probes (its setup changed: other models, another sign-in). */
+  invalidateMachine(machineId: string): void {
+    for (const k of [...this.probeCache.keys()]) if (k.endsWith(`@${machineId}`)) this.probeCache.delete(k);
+  }
+
   /** Forget every probe result (their details are in the hub language, which just changed). */
   invalidateAll(): void {
     this.probeCache.clear();

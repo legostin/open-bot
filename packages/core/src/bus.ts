@@ -1,6 +1,6 @@
 // In-process event bus. Web clients and plugin subscribers are attached by the server and plugin host.
 
-import type { AgentDraft, BrainLoginState, DeviceNetwork, Feed, FeedPost, GroupChat, InviteUsed, MachineActivity, PageView, RemoteView, TeamMember, UiEvent } from "@owlbot/shared";
+import type { AgentDraft, BrainLoginState, DeviceNetwork, Feed, FeedPost, GroupChat, InviteUsed, MachineActivity, PageView, RemoteView, ReplicaState, TeamMember, UiEvent } from "@owlbot/shared";
 
 export type BusEvents = {
   "message.created": any;
@@ -38,6 +38,14 @@ export type BusEvents = {
   /** A connected account (Google) came, went or broke. */
   "connections.updated": { provider: string };
   "machine.updated": any;
+  /** A machine's setup (brains, keys, models, limit) changed. */
+  "machine.setup": { machineId: string };
+  /** A machine's gateway reported spend. */
+  "machine.spend": { machineId: string };
+  /** The cluster's replicas, who leads (cluster.ts). */
+  "cluster.updated": ReplicaState[];
+  /** Rows came from another replica: open apps re-read what they show. */
+  "replica.synced": { tables: string[] };
   /** What every machine is doing now (activity.ts). */
   "machines.activity": MachineActivity[];
   /** A phone paired, was renamed or revoked: listeners re-read the list. */
@@ -108,6 +116,10 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "settings.updated":
     case "connections.updated":
     case "machine.updated":
+    case "machine.setup":
+    case "machine.spend":
+    case "cluster.updated":
+    case "replica.synced":
     case "machines.activity":
     case "device.updated":
     case "devices.network":

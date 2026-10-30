@@ -97,6 +97,16 @@ const MIGRATIONS: string[] = [
   alter table messages add column model text;
   alter table messages add column effort text;
   `,
+  // The cluster (docs/superpowers/specs/2026-10-30-cluster-design.md): what the person set for each machine, what its
+  // key-mode brains spent, and the hub's replicas.
+  `
+  create table machine_settings(machine_id text primary key, data text not null, updated_at text not null);
+  create table machine_spend(day text not null, machine_id text not null, brain_id text not null, provider text not null, model text not null,
+    input_tokens integer not null default 0, output_tokens integer not null default 0, usd real not null default 0,
+    primary key(day, machine_id, brain_id, provider, model));
+  create table replicas(id text primary key, name text not null, public_key text not null, urls text not null default '[]',
+    priority integer not null, created_at text not null, revoked integer not null default 0);
+  `,
 ];
 
 export function openDb(file: string): Db {

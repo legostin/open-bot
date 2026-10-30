@@ -7,6 +7,7 @@
     "packages/mcp-bridge/src",
     "packages/brains-cli/src",
     "packages/node/src",
+    "packages/replica/src",
     "packages/testkit/src",
     "plugins/*/server"
   ],

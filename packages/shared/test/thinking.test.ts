@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentDef } from "../src/types.ts";
 import { modelLabel } from "../src/models.ts";
-import { brainsFor, brainSpeed, fitEffort, parseThinking, patchChoice, resolveThinking, taskThinking, thinkingFor, withChoice, workKind } from "../src/thinking.ts";
+import { brainsFor, brainSpeed, expandBrains, fitEffort, parseThinking, patchChoice, resolveThinking, taskThinking, thinkingFor, withChoice, workKind } from "../src/thinking.ts";
 
 const presets = { fast: { model: "sonnet", effort: "low" }, balanced: { model: "opus", effort: "medium" }, deep: { model: "opus", effort: "xhigh" } };
 const claude = { presets, efforts: ["low", "medium", "high", "xhigh", "max"] };
@@ -100,5 +100,18 @@ describe("thinking per kind of work", () => {
     expect(modelLabel("claude-opus-4-20250514")).toBe("Opus 4");
     expect(modelLabel("haiku")).toBe("Haiku");
     expect(modelLabel("deepseek-chat")).toBe("deepseek-chat");
+  });
+});
+
+describe("the pool of machines", () => {
+  const listed = ["claude-code@local", "codex@local", "api:openai@local", "claude-code@mach_vps", "codex@mach_vps", "codex@mach_pc"];
+
+  it("adds the same brain on every machine after the agent's own order", () => {
+    expect(expandBrains(["claude-code@local", "api:*"], listed)).toEqual(["claude-code@local", "api:openai@local", "claude-code@mach_vps"]);
+    expect(expandBrains(["codex"], listed)).toEqual(["codex", "codex@mach_vps", "codex@mach_pc"]);
+  });
+
+  it("keeps a machine the agent named where it put it and adds nothing for it", () => {
+    expect(expandBrains(["codex@mach_pc", "codex@local"], listed)).toEqual(["codex@mach_pc", "codex@local", "codex@mach_vps"]);
   });
 });

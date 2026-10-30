@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import type { Machine, MachineInfo, ToolResult } from "@owlbot/shared";
+import type { Machine, MachineInfo, MachineUsage, ToolResult } from "@owlbot/shared";
 import { createRpcPeer, newId, nowIso, wsTransport, type RpcPeer, type WsLike } from "@owlbot/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
@@ -11,6 +11,7 @@ import type { AuditLog } from "./audit.ts";
 import type { ToolRegistry } from "./tools/registry.ts";
 import { hubLocale, LocalizedError } from "./i18n.ts";
 import { InviteRegistry } from "./invites.ts";
+import type { MachineSetups } from "./machine-setup.ts";
 
 export const NODE_AUTH_PREFIX = "owlbot-node-auth:";
 
@@ -30,14 +31,35 @@ export class MachineHub {
   brains: BrainRegistry;
   audit: AuditLog;
   invites: InviteRegistry;
+  setups?: MachineSetups;
   private peers = new Map<string, RpcPeer>();
 
-  constructor(d: { db: Db; bus: EventBus; brains: BrainRegistry; audit: AuditLog; invites?: InviteRegistry }) {
+  constructor(d: { db: Db; bus: EventBus; brains: BrainRegistry; audit: AuditLog; invites?: InviteRegistry; setups?: MachineSetups }) {
     this.db = d.db;
     this.bus = d.bus;
     this.brains = d.brains;
     this.audit = d.audit;
     this.invites = d.invites ?? new InviteRegistry(d);
+    this.setups = d.setups;
+    // A changed setup, an unlocked or sealed vault (keys come or go), a new day for a limit: the machines hear it.
+    this.bus.on("machine.setup", (e: { machineId: string }) => void this.pushSetup(e.machineId));
+    this.bus.on("vault.state", () => {
+      for (const id of this.peers.keys()) void this.pushSetup(id);
+    });
+  }
+
+  /** Sends a machine its setup (node.setup); a daemon from before setups ignores it. */
+  async pushSetup(machineId: string): Promise<void> {
+    const peer = this.peers.get(machineId);
+    if (!peer || peer.closed || !this.setups) return;
+    const setup = this.setups.nodeSetup(machineId);
+    try {
+      await peer.request("node.setup", setup, { timeoutMs: 20_000 });
+      this.brains.invalidateMachine(machineId);
+      this.bus.emit("brains.updated", {});
+    } catch {
+      /* an older daemon, or it went away */
+    }
   }
 
   /** An invite (invites.ts): it pairs a computer, or a phone just as well. */
@@ -145,7 +167,16 @@ export class MachineHub {
       this.brains.registerMachine(id, m.name, peer, p.brains ?? []);
       this.bus.emit("machine.updated", m);
       this.bus.emit("brains.updated", {});
+      // After the hello's answer: the daemon then takes requests.
+      setTimeout(() => void this.pushSetup(id), 0);
       return { machineId: id, name: m.name, language: hubLocale() };
+    });
+    peer.onNotification("node.usage", (u: MachineUsage) => {
+      if (!this.setups || !u || typeof u !== "object") return;
+      const before = this.setups.checkLimit(id);
+      const over = this.setups.record(id, u);
+      this.bus.emit("machine.spend", { machineId: id });
+      if (over && !before) void this.pushSetup(id);
     });
     peer.handle("node.ping", () => {
       this.db.prepare("update machines set last_seen_at = ? where id = ?").run(nowIso(), id);

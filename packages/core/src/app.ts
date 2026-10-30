@@ -42,6 +42,7 @@ import { McpClientManager } from "./mcp/client.ts";
 import { AuthService } from "./auth.ts";
 import { DesktopTickets } from "./desktop-login.ts";
 import { MachineHub } from "./machines.ts";
+import { MachineSetups } from "./machine-setup.ts";
 import { MachineActivityFeed } from "./activity.ts";
 import { DeviceRegistry } from "./devices.ts";
 import { InviteRegistry } from "./invites.ts";
@@ -101,6 +102,7 @@ export class Hub {
   /** One-time invites: one link connects a computer or a phone (invites.ts). */
   invites: InviteRegistry;
   machines: MachineHub;
+  setups: MachineSetups;
   /** What every machine is doing now, for the machines block (activity.ts). */
   activity: MachineActivityFeed;
   /** Phones paired with the hub (the Owlbot app) and the device port they talk to. */
@@ -180,7 +182,8 @@ export class Hub {
         owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),
     });
     this.invites = new InviteRegistry({ db: this.db, bus: this.bus, audit: this.audit });
-    this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit, invites: this.invites });
+    this.setups = new MachineSetups({ db: this.db, bus: this.bus, audit: this.audit, vault: () => this.vault });
+    this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit, invites: this.invites, setups: this.setups });
     this.activity = new MachineActivityFeed(this.bus, this.machines);
     this.devices = new DeviceRegistry({ db: this.db, bus: this.bus, audit: this.audit, invites: this.invites });
     this.locations = new UserLocations(this.settings, (id) => !!this.devices.get(id));

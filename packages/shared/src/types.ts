@@ -847,6 +847,88 @@ export interface MachineActivity {
   work: MachineWork[];
 }
 
+// ---------- Machines: brain setup, keys and spend (docs/superpowers/specs/2026-10-30-cluster-design.md) ----------
+
+/** The CLI brains a machine (owlbot-node) runs. */
+export type MachineBrainId = "claude-code" | "codex";
+
+/** A model a machine's brain may use; price in dollars per million tokens. */
+export interface MachineModel {
+  id: string;
+  /** KEY_PROVIDERS id the model is served by (key mode); unset: the brain's own (subscription). */
+  provider?: string;
+  price?: { input: number; output: number };
+}
+
+/** How one CLI brain on a machine signs in and what it may use. */
+export interface MachineBrainSetup {
+  /** subscription: the CLI's own sign-in on that machine; key: provider keys from the hub's vault, through the machine's gateway. */
+  auth: "subscription" | "key";
+  /** Key mode: KEY_PROVIDERS ids whose keys the machine may use. */
+  providers?: string[];
+  /** The models it may use; none listed: any (subscription), none (key). */
+  models?: MachineModel[];
+}
+
+/** What the person set for a machine in the hub (machine_settings). */
+export interface MachineSettings {
+  brains: Partial<Record<MachineBrainId, MachineBrainSetup>>;
+  /** How much the machine's key-mode brains may spend per period, in dollars. */
+  limit?: { usd: number; period: "day" | "month" };
+}
+
+/** What the hub sends a node (node.setup): its settings with the keys resolved, and the spend so far. */
+export interface NodeSetup {
+  brains: Partial<Record<MachineBrainId, { auth: "subscription" | "key"; models: MachineModel[]; providers?: Array<{ id: string; key: string }> }>>;
+  limit?: { usd: number; period: "day" | "month"; spent: number; resetsAt: ISODate };
+  /** The hub's vault is locked: key-mode brains wait for it. */
+  sealed?: boolean;
+}
+
+/** One model call a machine's gateway made (node.usage). */
+export interface MachineUsage {
+  brainId: MachineBrainId;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  usd: number;
+  at: ISODate;
+}
+
+/** A machine's setup and what it spent this period (GET /api/machines/:id/setup, machine_setup_get). */
+export interface MachineSetupView {
+  machineId: string;
+  settings: MachineSettings;
+  spent: { usd: number; period: "day" | "month"; since: ISODate };
+  /** Providers with a key in the vault. */
+  keys: string[];
+}
+
+// ---------- Cluster: hub replicas ----------
+
+/** A hub replica: a machine that holds the whole hub and may lead (replicas). */
+export interface Replica {
+  id: string;
+  name: string;
+  /** Device-app addresses (https, the hub's shared certificate). */
+  urls: string[];
+  /** Who leads first: 1, then 2… */
+  priority: number;
+  createdAt: ISODate;
+}
+
+/** A replica as the cluster sees it now (GET /api/cluster). */
+export interface ReplicaState extends Replica {
+  self: boolean;
+  online: boolean;
+  role: "leader" | "standby" | "unknown";
+  sealed: boolean;
+  lastSeenAt?: ISODate;
+}
+
 // ---------- Devices (phones running the Owlbot app) ----------
 
 export interface Device {
@@ -995,6 +1077,10 @@ export type UiEvent =
   | { type: "settings.updated"; data: Record<string, unknown> }
   | { type: "connections.updated"; data: { provider: string } }
   | { type: "machine.updated"; data: Machine }
+  | { type: "machine.setup"; data: { machineId: string } }
+  | { type: "machine.spend"; data: { machineId: string } }
+  | { type: "cluster.updated"; data: ReplicaState[] }
+  | { type: "replica.synced"; data: { tables: string[] } }
   | { type: "machines.activity"; data: MachineActivity[] }
   | { type: "device.updated"; data: { id: string } }
   | { type: "devices.network"; data: DeviceNetwork }

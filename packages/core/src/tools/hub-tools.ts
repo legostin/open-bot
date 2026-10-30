@@ -11,7 +11,8 @@
 // The one exception is profile_update at the end: every agent may change its own profile when the user asks.
 
 import type { AgentDef, AgentDraft, JsonSchema, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
-import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
+import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
+import { SetupError } from "../machine-setup.ts";
 import type { Hub } from "../app.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
@@ -341,6 +342,103 @@ export function registerHubTools(hub: Hub): void {
       if (!m) return text(`No machine ${i.machine}.`, true);
       hub.machines.revoke(m.id);
       return text(`Machine ${m.name} disconnected.`);
+    },
+  );
+
+  const setupText = (machineId: string): string => {
+    const v = hub.setups.view(machineId);
+    const name = hub.machines.name(machineId) ?? machineId;
+    const brains = Object.entries(v.settings.brains)
+      .map(([id, b]) => {
+        const models = (b!.models ?? []).map((m) => `${m.id}${m.provider ? ` via ${m.provider}` : ""}${m.price ? ` ($${m.price.input}/$${m.price.output} per 1M in/out)` : ""}`);
+        return `- ${id}: ${b!.auth === "key" ? `API key (${(b!.providers ?? []).join(", ")})` : "subscription signed in on that machine"}; models: ${models.length ? models.join(", ") : "any"}`;
+      })
+      .join("\n");
+    const limit = v.settings.limit ? `$${v.settings.limit.usd} per ${v.settings.limit.period}` : "none";
+    return (
+      `Machine ${name} (${machineId}).\nBrains:\n${brains || "- not set: each CLI uses its own sign-in on that machine, any model"}\n` +
+      `Spend limit: ${limit}; spent since ${v.spent.since}: $${v.spent.usd.toFixed(2)}.\nKeys in the vault: ${v.keys.length ? v.keys.join(", ") : "none"} ` +
+      `(providers: ${KEY_PROVIDERS.map((p) => `${p.id} → ${p.wire === "openai" ? "codex" : "claude-code"}, vault ${p.vaultId}`).join("; ")}).`
+    );
+  };
+
+  reg(
+    {
+      name: "machine_setup_get",
+      effect: "read",
+      description:
+        "What a connected computer's brains may use: subscription or API key from the vault, the allowed models with prices, the spend limit and what it spent. " +
+        "Call it before machine_setup_set.",
+      inputSchema: obj({ machine: { type: "string", description: "Machine id or name" } }, ["machine"]),
+    },
+    (i) => {
+      const m = hub.machines.find(String(i.machine));
+      if (!m) return text(`No machine ${i.machine}. See machine_list.`, true);
+      return text(setupText(m.id));
+    },
+  );
+
+  reg(
+    {
+      name: "machine_setup_set",
+      effect: "external",
+      approvalSummary: "%machines.setupApproval%",
+      description:
+        "Set what a connected computer's CLI brains may use (replaces its whole setup; read machine_setup_get first and keep what the person did not ask to change). " +
+        "Per brain (claude-code, codex): auth \"subscription\" (the CLI's own sign-in on that machine) or \"key\" (provider keys from the hub's vault reach that machine's memory only, through its gateway, which also enforces the models and the limit). " +
+        "Claude Code takes providers anthropic, deepseek, moonshot, zhipu; Codex takes openai. In key mode list the allowed models, each with its provider and price in dollars per million input/output tokens " +
+        "(look the price up on the provider's site if you do not know it); a model the CLI asks for off the list becomes the cheapest allowed one. A missing key: ask for it with secret_request under the provider's vault id. " +
+        "limit: { usd, period: day|month } for the key-mode spend; past it those brains rest until the period ends. Needs the person's approval.",
+      inputSchema: obj(
+        {
+          machine: { type: "string", description: "Machine id or name" },
+          brains: {
+            type: "object",
+            description: "By brain id: { auth, providers?, models? }",
+            properties: Object.fromEntries(
+              ["claude-code", "codex"].map((b) => [
+                b,
+                {
+                  type: "object",
+                  properties: {
+                    auth: { type: "string", enum: ["subscription", "key"] },
+                    providers: { type: "array", items: { type: "string" } },
+                    models: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          provider: { type: "string" },
+                          price: { type: "object", properties: { input: { type: "number" }, output: { type: "number" } }, required: ["input", "output"] },
+                        },
+                        required: ["id"],
+                      },
+                    },
+                  },
+                  required: ["auth"],
+                },
+              ]),
+            ),
+          },
+          limit: { type: "object", properties: { usd: { type: "number" }, period: { type: "string", enum: ["day", "month"] } }, required: ["usd"] },
+        },
+        ["machine", "brains"],
+      ),
+    },
+    (i, ctx) => {
+      const m = hub.machines.find(String(i.machine));
+      if (!m) return text(`No machine ${i.machine}. See machine_list.`, true);
+      try {
+        hub.setups.set(m.id, { brains: i.brains, limit: i.limit }, ctx?.agentId ? `agent:${ctx.agentId}` : "user");
+      } catch (e: any) {
+        if (e instanceof SetupError) return text(e.message, true);
+        throw e;
+      }
+      const missing = Object.values(hub.setups.get(m.id).brains)
+        .flatMap((b) => (b?.auth === "key" ? (b.providers ?? []) : []))
+        .filter((p) => !hub.setups.view(m.id).keys.includes(p));
+      return text(`${setupText(m.id)}${missing.length ? `\nNo key yet for: ${missing.join(", ")}. Ask for it with secret_request (vault id ${missing.map((p) => keyProvider(p)?.vaultId).join(", ")}).` : ""}`);
     },
   );
 
