@@ -523,7 +523,8 @@ export class Cluster {
       return;
     }
     // A replica behind this one leads (it took over while this one was away): catch up, then ask for the lead.
-    const fresh = (db: DbName) => Date.now() - (this.peers.get(leader.id)?.current[db] ?? 0) < 5_000;
+    // Pulls are long polls (20 s): one that came back with nothing more within that time means caught up.
+    const fresh = (db: DbName) => Date.now() - (this.peers.get(leader.id)?.current[db] ?? 0) < 25_000;
     this.wantLead = fresh("main") && fresh("vault");
   }
 

@@ -3,7 +3,6 @@
 // replica's address. Machines connected here (/node/ws, /mcp) reach the leader the same way over the link. The
 // replicas' own routes stay here.
 
-import { createHash } from "node:crypto";
 import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { TLSSocket } from "node:tls";
@@ -11,14 +10,12 @@ import type { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fast
 import WebSocket from "ws";
 import type { Hub } from "../app.ts";
 import { linkHttp } from "../replica-link.ts";
+import { pinMatches, pinnedAgent } from "@owlbot/replica";
 
 const HERE = /^\/api\/replica\//;
 const HOP = new Set(["connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade", "te", "trailer"]);
 
-const pinOk = (s: TLSSocket, fingerprint: string): boolean => {
-  const der = s.getPeerCertificate?.()?.raw;
-  return !!der && createHash("sha256").update(der).digest("base64url") === fingerprint;
-};
+const pinOk = (s: TLSSocket, fingerprint: string): boolean => pinMatches(s, fingerprint);
 
 function headersFor(h: IncomingHttpHeaders, ip: string): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
@@ -62,7 +59,7 @@ export function forwardToLeader(hub: Hub, req: FastifyRequest, reply: FastifyRep
   reply.hijack();
   const up = (https ? httpsRequest : httpRequest)(
     url,
-    { method: req.method, headers: headersFor(req.headers, req.ip), ...(https ? { rejectUnauthorized: false } : {}), timeout: 6 * 3600_000 },
+    { method: req.method, headers: headersFor(req.headers, req.ip), ...(https ? { rejectUnauthorized: false, agent: pinnedAgent } : {}), timeout: 6 * 3600_000 },
     (res) => {
       const headers: Record<string, string | string[]> = {};
       for (const [k, v] of Object.entries(res.headers)) if (v !== undefined && !HOP.has(k)) headers[k] = v;
@@ -70,7 +67,13 @@ export function forwardToLeader(hub: Hub, req: FastifyRequest, reply: FastifyRep
       res.pipe(reply.raw);
     },
   );
-  if (https) up.on("socket", (s) => s.once("secureConnect", () => !pinOk(s as TLSSocket, fingerprint) && up.destroy(new Error("leader certificate"))));
+  if (https) {
+    up.on("socket", (s) => {
+      const check = () => !pinOk(s as TLSSocket, fingerprint) && up.destroy(new Error("leader certificate"));
+      if ((s as any)._secureEstablished) check();
+      else s.once("secureConnect", check);
+    });
+  }
   up.on("error", () => {
     if (!reply.raw.headersSent) reply.raw.writeHead(502, { "content-type": "application/json" });
     reply.raw.end(JSON.stringify({ error: `The hub is moving to ${target.name}; try again in a moment` }));
@@ -119,7 +122,7 @@ export function pipeToLeader(hub: Hub, socket: WebSocket, req: FastifyRequest, a
   const fingerprint = hub.deviceTls().fingerprint;
   const url = new URL(req.url, target.url.replace(/^http/, "ws"));
   const headers: Record<string, string> = { ...headers0, origin: target.url };
-  const up = new WebSocket(url, { headers, rejectUnauthorized: false, handshakeTimeout: 10_000 });
+  const up = new WebSocket(url, { headers, rejectUnauthorized: false, agent: pinnedAgent, handshakeTimeout: 10_000 });
   up.on("upgrade", (res) => {
     const s = res.socket as TLSSocket;
     if (url.protocol === "wss:" && !pinOk(s, fingerprint)) up.terminate();

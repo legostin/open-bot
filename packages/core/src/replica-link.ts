@@ -2,11 +2,10 @@
 // a link that some networks cannot reach (Funnel) still talks to a replica with a public address, and everything goes
 // both ways over it — the replicas' own calls, and the phones' requests and WebSockets a standby forwards to the leader.
 
-import { createHash } from "node:crypto";
 import type { TLSSocket } from "node:tls";
 import WebSocket from "ws";
 import { createRpcPeer, wsTransport, type RpcPeer, type WsLike } from "@owlbot/shared";
-import { pinnedRequest, signRequest, type ReplicaKey } from "@owlbot/replica";
+import { pinMatches, pinnedAgent, pinnedRequest, signRequest, type ReplicaKey } from "@owlbot/replica";
 
 export const LINK_PATH = "/api/replica/link";
 
@@ -36,7 +35,7 @@ export interface LinkServer {
   fingerprint(): string;
 }
 
-const pinOk = (der: Uint8Array | undefined, fingerprint: string) => !!der && createHash("sha256").update(der).digest("base64url") === fingerprint;
+const pinOk = (s: unknown, fingerprint: string) => pinMatches(s as TLSSocket, fingerprint);
 
 /** Serves a link: the peer's calls, and its forwarded HTTP requests and WebSockets to this replica's device app. */
 export function serveLink(rpc: RpcPeer, from: string, server: LinkServer): void {
@@ -58,8 +57,8 @@ export function serveLink(rpc: RpcPeer, from: string, server: LinkServer): void 
   rpc.handle("replica.ws.open", (r: { app?: "main" | "device"; id: string; path: string; headers: Record<string, string> }) => {
     const main = r.app === "main";
     const base = (main ? server.mainUrl() : server.deviceUrl()).replace(/^http/, "ws");
-    const ws = new WebSocket(`${base}${r.path}`, { headers: r.headers, ...(main ? {} : { rejectUnauthorized: false }), handshakeTimeout: 10_000 });
-    if (!main) ws.on("upgrade", (res) => !pinOk((res.socket as TLSSocket).getPeerCertificate?.()?.raw, server.fingerprint()) && ws.terminate());
+    const ws = new WebSocket(`${base}${r.path}`, { headers: r.headers, ...(main ? {} : { rejectUnauthorized: false, agent: pinnedAgent }), handshakeTimeout: 10_000 });
+    if (!main) ws.on("upgrade", (res) => !pinOk(res.socket, server.fingerprint()) && ws.terminate());
     sockets.set(r.id, ws);
     ws.on("message", (d, binary) => rpc.notify("replica.ws.msg", { id: r.id, data: binary ? Buffer.from(d as Buffer).toString("base64") : String(d), binary }));
     const gone = () => {
@@ -95,12 +94,12 @@ export function dialLink(o: { url: string; key: ReplicaKey; fingerprint: string;
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url, {
       headers: { authorization: signRequest(o.key, "GET", LINK_PATH, "") },
-      rejectUnauthorized: !url.startsWith("wss:") ? undefined : false,
+      ...(url.startsWith("wss:") ? { rejectUnauthorized: false, agent: pinnedAgent } : {}),
       handshakeTimeout: o.timeoutMs ?? 8_000,
       maxPayload: 64 * 1024 * 1024,
     });
     ws.on("upgrade", (res) => {
-      if (url.startsWith("wss:") && !pinOk((res.socket as TLSSocket).getPeerCertificate?.()?.raw, o.fingerprint)) ws.terminate();
+      if (url.startsWith("wss:") && !pinOk(res.socket, o.fingerprint)) ws.terminate();
     });
     ws.once("open", () => resolve(ws));
     ws.once("error", reject);

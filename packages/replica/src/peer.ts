@@ -3,7 +3,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import type { TLSSocket } from "node:tls";
 import { ed25519 } from "@noble/curves/ed25519.js";
 
@@ -70,6 +70,24 @@ export interface PinnedResponse {
 export class PinError extends Error {}
 
 /**
+ * Pinned connections never resume a TLS session: on a resumed one the peer's certificate may not be there to check.
+ * A socket checked once stays checked while it is kept alive.
+ */
+export const pinnedAgent = new HttpsAgent({ keepAlive: true, maxCachedSessions: 0 });
+const checked = new WeakMap<TLSSocket, string>();
+
+/** Whether a TLS socket shows the hub's certificate (and remembers which one it showed). */
+export function pinMatches(s: TLSSocket, fingerprint: string): boolean {
+  const seen = checked.get(s);
+  if (seen !== undefined) return seen === fingerprint;
+  const der = s.getPeerCertificate?.()?.raw;
+  if (!der) return false;
+  const fp = fingerprintOfDer(der);
+  checked.set(s, fp);
+  return fp === fingerprint;
+}
+
+/**
  * One HTTP(S) request. With a fingerprint, the server's certificate must be that one (any CA, a self-signed one
  * included); without one, the usual CA checks apply. The body is read whole.
  */
@@ -86,7 +104,7 @@ export function pinnedRequest(
       {
         method: o.method ?? "GET",
         headers: { ...(o.headers ?? {}), ...(body.length ? { "content-length": String(Buffer.byteLength(body)) } : {}) },
-        ...(https && o.fingerprint ? { rejectUnauthorized: false } : {}),
+        ...(https && o.fingerprint ? { rejectUnauthorized: false, agent: pinnedAgent } : {}),
         timeout: o.timeoutMs ?? 30_000,
         ...(o.signal ? { signal: o.signal } : {}),
       },
@@ -100,10 +118,9 @@ export function pinnedRequest(
     if (https && o.fingerprint) {
       req.on("socket", (s) => {
         const check = () => {
-          const der = (s as TLSSocket).getPeerCertificate?.()?.raw;
-          if (!der || fingerprintOfDer(der) !== o.fingerprint) req.destroy(new PinError(`certificate of ${u.host} is not the hub's`));
+          if (!pinMatches(s as TLSSocket, o.fingerprint!)) req.destroy(new PinError(`certificate of ${u.host} is not the hub's`));
         };
-        if ((s as TLSSocket).authorized !== undefined && (s as any).encrypted && (s as any)._secureEstablished) check();
+        if ((s as any)._secureEstablished) check();
         else s.once("secureConnect", check);
       });
     }
