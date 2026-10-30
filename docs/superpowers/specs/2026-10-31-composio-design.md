@@ -8,8 +8,10 @@ MCP servers with open registration) stay as they are and are preferred where the
 
 ## What the person sees
 
-- **Catalog.** Nine ready cards in their situations: Slack, GitHub, HubSpot (work), Gmail (communication), Google
-  Drive, Google Docs, Google Sheets, Dropbox, Box (work); Discord is not among them (see the plugin below). They look like any other card, with a small
+- **Catalog.** Ready cards in their situations: Slack, GitHub, HubSpot, Google Drive, Docs, Sheets, Calendar, Meet,
+  OneDrive, Dropbox, Box, Trello, Jira, Zoom, Calendly, Figma, Salesforce (work); Gmail, Outlook, Microsoft Teams,
+  LinkedIn (communication); Google Tasks (everyday); YouTube, Reddit (reading). Only apps Composio signs in to with
+  its own OAuth app: not Discord (see the plugin below), Spotify, X or Shopify (they need the person's own client). They look like any other card, with a small
   **Composio** badge next to the name. Apps an agent connects from the chat show up the same way, with the badge.
   One more card, **Composio**, holds the key (group "other").
 - **The badge** opens a short note (a popover on the web, a sheet on iOS):
