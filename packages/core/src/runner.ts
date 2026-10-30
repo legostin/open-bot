@@ -220,6 +220,8 @@ export class SessionRunner {
 
   start(): void {
     this.d.store.failStreamingMessages();
+    // A card that never got into a chat (asked outside a turn by an older hub, or on another replica) gets one now.
+    for (const a of this.d.approvals.list(["pending"], 200)) if (!this.hasApprovalPart(a)) this.attachApprovalPart(a);
     for (const t of this.d.store.listTasks({ status: ["running", "waiting_approval", "interrupted"] })) {
       this.d.store.updateTask(t.id, { status: "queued" });
     }
@@ -1146,10 +1148,21 @@ export class SessionRunner {
     const msgId = this.streamingMessage.get(a.conversationId);
     const m = msgId ? this.d.store.getMessage(msgId) : undefined;
     if (m) this.d.store.updateMessage(m.id, { parts: [...m.parts, part] });
+    // Asked outside a turn (a replica waiting for the vault key, a card left from before a restart): the card is a
+    // message of its own, or the person would only get a reminder without buttons.
+    else if (this.d.store.getConversation(a.conversationId)) {
+      this.d.store.addMessage({ conversationId: a.conversationId, role: "assistant", agentId: a.agentId, parts: [part], status: "complete" });
+    }
     // A task's question for the person also shows where the person is: in the dialog that started it, under the
     // task's line, so they answer without opening the task.
     const dialog = this.starterDialog(a.taskId);
     if (dialog) this.d.store.addMessage({ conversationId: dialog.id, role: "assistant", agentId: dialog.agentId, parts: [{ type: "task", taskId: a.taskId! }, part], status: "complete" });
+  }
+
+  /** A card for this approval is in its conversation or in the dialog that started its task. */
+  private hasApprovalPart(a: Approval): boolean {
+    const where = [a.conversationId, this.starterDialog(a.taskId)?.id].filter((c): c is string => !!c);
+    return where.some((c) => this.d.store.listMessages(c, { limit: 200 }).some((m) => m.parts.some((p) => p.type === "approval" && p.approvalId === a.id)));
   }
 
   private updateApprovalPart(a: Approval): void {

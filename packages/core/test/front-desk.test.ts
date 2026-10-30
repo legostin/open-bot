@@ -146,6 +146,17 @@ describe("front desk (integration)", () => {
     expect(hub.store.listMessages(dialog, { limit: 50 }).length).toBe(before);
   });
 
+  it("shows a card asked outside a turn as a message of its own, with its answer", async () => {
+    // A replica waiting for the vault key asks with no agent turn running: the card still needs its buttons.
+    const conv = hub.store.agentConversation("desk").id;
+    const a = hub.approvals.create({ sessionId: "cluster", conversationId: conv, agentId: "desk", tool: "replica_unlock", input: { replica: "r" }, summary: "Unlock the vault on vps", effect: "external", tainted: false });
+    const card = () => hub.store.listMessages(conv, { limit: 50 }).find((m) => m.parts.some((p) => p.type === "approval" && p.approvalId === a.id));
+    const shown = await until(card, "the card");
+    expect(shown).toMatchObject({ role: "assistant", agentId: "desk", parts: [{ type: "approval", approvalId: a.id, summary: "Unlock the vault on vps", status: "pending" }] });
+    hub.approvals.resolve(a.id, "deny", { via: "console" });
+    await until(() => (card()?.parts[0] as any)?.status === "denied", "the answer on the card");
+  });
+
   it("tells a dialog which brains are here and what each is for", () => {
     const agent = { id: "desk", name: "Desk", description: "", brains: ["claude-code@local", "codex@local"], tools: ["*"], skills: ["*"], prompt: "Hi.", initiative: 1 } as any;
     const dispatch = {
