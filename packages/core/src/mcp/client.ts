@@ -104,14 +104,14 @@ export class McpClientManager {
   }
 
   /** Reconcile running connections with the desired set. */
-  async sync(pluginMcpFiles: Array<{ pluginId: string; file: string; dir: string; network: string[]; builtin?: boolean }>): Promise<void> {
+  async sync(pluginMcpFiles: Array<{ pluginId: string; file: string; dir: string; data?: string; network: string[]; builtin?: boolean }>): Promise<void> {
     const desired = new Map<string, { source: string; config: McpServerConfig; trusted: boolean }>();
     for (const [name, cfg] of Object.entries(this.readUserServers())) desired.set(sanitizeToolName(name), { source: "user", config: cfg, trusted: false });
     for (const p of pluginMcpFiles) {
       try {
         const j = JSON.parse(readFileSync(p.file, "utf8"));
         for (const [name, cfg] of Object.entries((j.mcpServers ?? j) as Record<string, McpServerConfig>)) {
-          const expanded = expandPluginRoot(cfg, p.dir);
+          const expanded = expandPluginRoot(cfg, p.dir, p.data);
           expanded.network = expanded.network ?? p.network;
           // A server named like its plugin is the plugin itself (integrations/granola: granola_<tool>).
           desired.set(sanitizeToolName(name === p.pluginId ? name : `${p.pluginId}-${name}`), { source: p.pluginId, config: expanded, trusted: !!p.builtin });
@@ -206,6 +206,7 @@ export class McpClientManager {
     const conn: Conn = { name, source, config, trusted, status: config.disabled ? "disabled" : "connecting", tools: [] };
     this.conns.set(name, conn);
     if (config.disabled) return;
+    let stderrTail = "";
     try {
       const client = new Client({ name: "owlbot-hub", version: this.config.version });
       const type = config.type ?? (config.url ? "http" : "stdio");
@@ -233,7 +234,10 @@ export class McpClientManager {
         } else {
           childEnv = { ...scrubEnv(process.env), ...env };
         }
-        await client.connect(new StdioClientTransport({ command, args, env: childEnv, cwd: config.cwd, stderr: "pipe" }));
+        const transport = new StdioClientTransport({ command, args, env: childEnv, cwd: config.cwd, stderr: "pipe" });
+        // A server that quits while starting says why on stderr: its last line becomes the error the person sees.
+        transport.stderr?.on("data", (d: Buffer) => (stderrTail = (stderrTail + d.toString()).slice(-2000)));
+        await client.connect(transport);
       } else {
         if (!config.url) throw new Error("url is required");
         const headers = this.resolveSecrets(name, config.headers);
@@ -296,7 +300,7 @@ export class McpClientManager {
       this.audit.append("core", "mcp.connect", name, { source, tools: conn.tools.length });
     } catch (e: any) {
       conn.status = "error";
-      conn.error = e?.message ?? String(e);
+      conn.error = stderrTail.trim().split("\n").at(-1)?.trim() || (e?.message ?? String(e));
       console.error(`[mcp] ${name}: ${conn.error}`);
     }
   }
@@ -335,8 +339,12 @@ function normalizeResult(r: any): ToolResult {
   return { content, isError: !!r?.isError };
 }
 
-function expandPluginRoot(cfg: McpServerConfig, dir: string): McpServerConfig {
-  const sub = (s: string) => s.replaceAll("${CLAUDE_PLUGIN_ROOT}", dir).replaceAll("${PLUGIN_ROOT}", dir).replaceAll("${OWLBOT_PLUGIN_ROOT}", dir);
+/** A plugin's .mcp.json may name its own folder, its data folder and the hub's Node (a launcher written in TypeScript runs on it). */
+function expandPluginRoot(cfg: McpServerConfig, dir: string, data?: string): McpServerConfig {
+  const sub = (s: string) => {
+    const out = s.replaceAll("${CLAUDE_PLUGIN_ROOT}", dir).replaceAll("${PLUGIN_ROOT}", dir).replaceAll("${OWLBOT_PLUGIN_ROOT}", dir).replaceAll("${OWLBOT_NODE}", process.execPath);
+    return data ? out.replaceAll("${OWLBOT_PLUGIN_DATA}", data) : out;
+  };
   return {
     ...cfg,
     command: cfg.command ? sub(cfg.command) : undefined,

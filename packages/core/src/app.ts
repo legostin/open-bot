@@ -608,7 +608,7 @@ export class Hub {
   private pluginMcpFiles() {
     return (this.plugins?.list() ?? [])
       .filter((r) => r.enabled && r.layout?.mcpFile)
-      .map((r) => ({ pluginId: r.id, file: r.layout!.mcpFile!, dir: r.dir, network: r.granted.network, builtin: r.source === "builtin" }));
+      .map((r) => ({ pluginId: r.id, file: r.layout!.mcpFile!, dir: r.dir, data: this.plugins.dataDirOf(r.id), network: r.granted.network, builtin: r.source === "builtin" }));
   }
 
   /** A sign-in to a plugin's MCP server finished: the chat that showed its card hears it and carries on. */

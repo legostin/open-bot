@@ -20,6 +20,8 @@
 
 Плагины Claude Code (`.claude-plugin/plugin.json`) и Codex (`.codex-plugin/plugin.json`) ставятся как есть: их скиллы, команды, агенты и MCP-серверы становятся доступны. Плагины Claude Code к тому же передаются интеллекту Claude Code на хабе через `--plugin-dir`, поэтому их хуки работают там.
 
+В `.mcp.json` `${OWLBOT_PLUGIN_ROOT}` (или `${CLAUDE_PLUGIN_ROOT}`) — папка плагина, `${OWLBOT_PLUGIN_DATA}` — его папка данных, `${OWLBOT_NODE}` — собственный Node хаба, так что локальный сервер может быть запускателем на TypeScript внутри плагина (`integrations/blender`). Локальный сервер ходит только на хосты из `permissions.network` плагина; если он завершился при запуске, последняя строка его stderr становится ошибкой, которую видно на плагине.
+
 ## Структура
 
 ```

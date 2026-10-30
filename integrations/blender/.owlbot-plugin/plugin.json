@@ -1,0 +1,13 @@
+{
+  "id": "blender",
+  "name": "%name%",
+  "version": "0.1.0",
+  "author": "Owlbot",
+  "description": "%description%",
+  "builtin": true,
+  "defaultEnabled": false,
+  "integration": {"category": "work", "icon": "box", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%"},
+  "permissions": {
+    "network": ["projects.blender.org", "pypi.org", "files.pythonhosted.org"]
+  }
+}

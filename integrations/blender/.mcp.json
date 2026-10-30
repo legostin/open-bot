@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "blender": {
+      "command": "${OWLBOT_NODE}",
+      "args": ["--disable-warning=ExperimentalWarning", "${OWLBOT_PLUGIN_ROOT}/mcp/launch.ts"],
+      "env": { "BLENDER_MCP_DATA": "${OWLBOT_PLUGIN_DATA}" }
+    }
+  }
+}

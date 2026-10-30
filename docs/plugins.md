@@ -20,6 +20,8 @@ A plugin can add:
 
 Claude Code plugins (`.claude-plugin/plugin.json`) and Codex plugins (`.codex-plugin/plugin.json`) install as they are: their skills, commands, agents and MCP servers become available. Claude Code plugins are also passed to the hub's Claude Code brain with `--plugin-dir`, so their hooks run there.
 
+In `.mcp.json`, `${OWLBOT_PLUGIN_ROOT}` (or `${CLAUDE_PLUGIN_ROOT}`) is the plugin's folder, `${OWLBOT_PLUGIN_DATA}` its data folder and `${OWLBOT_NODE}` the hub's own Node, so a local server can be a TypeScript launcher in the plugin (`integrations/blender`). A local server reaches only the plugin's `permissions.network` hosts; when it exits while starting, the last line of its stderr is the error shown on the plugin.
+
 ## Layout
 
 ```

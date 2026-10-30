@@ -97,6 +97,16 @@ for the person (OAuth discovery, client registration, PKCE; the tokens go into t
 the chat show a Sign in button. A built-in integration may list the server's tools that only read in `"readTools"`
 (they then run without asking); other tools ask the person each time.
 
+A server that runs on this computer (stdio) is a `command` instead of a `url`. `${OWLBOT_NODE}` is the hub's own Node
+(a launcher written in TypeScript runs on it, nothing to install), `${OWLBOT_PLUGIN_ROOT}` the integration's folder and
+`${OWLBOT_PLUGIN_DATA}` its data folder; the server reaches only the hosts in `permissions.network`. When it cannot
+start, it says why on stderr and exits: its last line is what the person sees on the integration. `integrations/blender`
+is one: its launcher finds the app, prepares the official server and relays MCP to it.
+
+```json
+{ "mcpServers": { "<id>": { "command": "${OWLBOT_NODE}", "args": ["${OWLBOT_PLUGIN_ROOT}/mcp/launch.ts"], "env": { "DATA": "${OWLBOT_PLUGIN_DATA}" } } } }
+```
+
 ## In the Owlbot repository
 
 Built-in integrations live in `integrations/` (this template is `integrations/_template`). People adding one work only

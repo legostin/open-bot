@@ -78,13 +78,12 @@ export async function listIntegrations(hub: Hub, locale: Locale, opts: { all?: b
       const down = channels.find((c) => !c.connected);
       if (missing || down) Object.assign(view, { status: "needs-setup", ...(down?.detail ? { detail: down.detail } : {}) });
       else if (channels[0]?.detail) view.account = channels[0].detail;
-    } else if (integ.connect === "signin") {
-      // Its MCP server's own sign-in: connected once every server of the plugin is.
-      const servers = hub.mcpClients.list().filter((s) => s.source === r.id);
-      const failed = servers.find((s) => s.status === "error");
-      if (failed) Object.assign(view, { status: "broken", ...(failed.error ? { detail: failed.error } : {}) });
-      else if (!servers.length || servers.some((s) => s.status !== "connected")) view.status = "needs-setup";
     }
+    // Its MCP servers: one that failed to start says why; a sign-in is connected once every server of the plugin is.
+    const servers = r.enabled ? hub.mcpClients.list().filter((s) => s.source === r.id) : [];
+    const failed = servers.find((s) => s.status === "error");
+    if (failed && view.status !== "unavailable") Object.assign(view, { status: "broken", ...(failed.error ? { detail: failed.error } : {}) });
+    else if (integ.connect === "signin" && r.enabled && (!servers.length || servers.some((s) => s.status !== "connected"))) view.status = "needs-setup";
     // Its process fell over: broken, whatever its connection says.
     if (r.enabled && (r.status === "crashed" || r.status === "error") && view.status !== "unavailable")
       Object.assign(view, { status: "broken", ...(r.lastError ? { detail: r.lastError } : {}) });
