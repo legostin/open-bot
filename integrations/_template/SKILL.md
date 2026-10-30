@@ -107,6 +107,31 @@ is one: its launcher finds the app, prepares the official server and relays MCP 
 { "mcpServers": { "<id>": { "command": "${OWLBOT_NODE}", "args": ["${OWLBOT_PLUGIN_ROOT}/mcp/launch.ts"], "env": { "DATA": "${OWLBOT_PLUGIN_DATA}" } } } }
 ```
 
+## Several apps through one outside service
+
+An integration that connects many apps through a hosted service (`integrations/composio`: Slack, GitHub, Gmail… via
+Composio) lists each app as a catalog entry of its own, and says which outside service they go through:
+
+```json
+"integration": {
+  "category": "other", "icon": "plug", "connect": "setup", "summary": "%integration.summary%",
+  "via": { "name": "Composio", "about": "%via.about%", "link": "https://composio.dev" },
+  "entries": [{ "id": "slack", "name": "Slack", "summary": "%entry.slack%", "category": "work", "icon": "message-square", "example": "%example.slack%" }]
+}
+```
+
+- Entries show in the catalog as `<id>:<entry>` (`composio:slack`), even while the integration is off. `via` puts the
+  service's badge on each; its `about` (`{name}` is the entry's name) is the note the badge opens: say plainly who
+  keeps the account's keys and who sees the calls.
+- The running plugin reports every entry's state, and entries it adds, with `ctx.catalog.update([{ id, status, connect,
+  account?, detail? }])` (`status`: `connected`, `needs-setup` or `broken`; `connect`: `setup` while its own key is
+  missing, else `signin`). Added entries carry `name`, `summary`, `category`, `icon` too; keep them in `ctx.storage`
+  and report them again on start.
+- `ctx.catalog.onSignIn(entry => ({ url }))` gives the address of the entry's Sign in button; report the entry
+  `connected` once it works (poll the service: nothing comes back to the hub, so a phone can sign in too), and the
+  chat that asked hears it. `ctx.catalog.onSignOut(entry => …)` signs it out; `ctx.tools.unregister(name)` takes back
+  its tools.
+
 ## In the Owlbot repository
 
 Built-in integrations live in `integrations/` (this template is `integrations/_template`). People adding one work only
