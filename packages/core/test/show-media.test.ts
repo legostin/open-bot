@@ -189,6 +189,14 @@ describe("agents show images and maps", () => {
     const inDialog = hub.store.listMessages(conv, { limit: 500 }).find((m) => m.parts.some((p) => p.type === "task" && p.taskId === task.id) && m.parts.some((p) => p.type === "images"));
     expect(inDialog?.parts.find((p) => p.type === "images")).toMatchObject({ items: [{ caption: "Render" }] });
 
+    // A full-size PNG render goes as it is (11 MB); past 30 MB it does not.
+    writeFileSync(join(taskWs, "out", "big.png"), Buffer.concat([PNG, Buffer.alloc(11 * 1024 * 1024)]));
+    expect((await show({ images: [{ path: "out/big.png" }] }, { conversationId: task.conversationId, taskId: task.id, workspace: taskWs })).isError).toBeFalsy();
+    writeFileSync(join(taskWs, "out", "huge.png"), Buffer.concat([PNG, Buffer.alloc(31 * 1024 * 1024)]));
+    expect((await show({ images: [{ path: "out/huge.png" }] }, { conversationId: task.conversationId, taskId: task.id, workspace: taskWs })).content[0]).toMatchObject({
+      text: expect.stringContaining("larger than 30 MB"),
+    });
+
     // The dialog shows what its task made, by the file's full path; a folder that is not its own or its tasks' stays closed.
     const dialogWs = hub.runner.workspacePath({ agentId: "assistant", conversationId: conv });
     expect((await show({ images: [{ path: join(taskWs, "out", "render.png") }] }, { conversationId: conv, workspace: dialogWs })).isError).toBeFalsy();

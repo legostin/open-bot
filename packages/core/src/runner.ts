@@ -29,7 +29,7 @@ import { buildSystemPrompt } from "./prompt.ts";
 import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
-import { MAX_IMAGE_BYTES, readWorkspaceImage } from "./media.ts";
+import { readWorkspaceImage } from "./media.ts";
 import { clockTime, TurnClock } from "./clock.ts";
 import { busy, situation, TASK_STATE } from "./situation.ts";
 import type { UserLocations } from "./user-location.ts";
@@ -175,7 +175,7 @@ const BRAINS_CHANGED_KEY = "brainsChangedAt";
 /** What plugins may add before one turn's input (turn.context), in characters. */
 const MAX_TURN_CONTEXT = 12_000;
 /** Workspace images a channel gets inline with one reply, in all. */
-const MAX_INLINE_MEDIA_BYTES = 4 * MAX_IMAGE_BYTES;
+const MAX_INLINE_MEDIA_BYTES = 40 * 1024 * 1024;
 
 export class SessionRunner {
   d: RunnerDeps;

@@ -75,7 +75,9 @@ const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif
 const EXT: Record<string, string> = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/bmp": ".bmp", "image/svg+xml": ".svg", "image/avif": ".avif" };
 
 const clipCaption = (s: string | undefined) => (s && s.length > CAPTION_MAX ? `${s.slice(0, CAPTION_MAX - 1)}…` : s || undefined);
-const asPhoto = (m: ImageMedia) => !m.data || PHOTO_TYPES.has(m.mimeType ?? "");
+/** Telegram takes photos up to 10 MB; a bigger picture (a render) goes as a document, up to 50 MB. */
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+const asPhoto = (m: ImageMedia) => !m.data || (PHOTO_TYPES.has(m.mimeType ?? "") && (m.data.length * 3) / 4 <= PHOTO_MAX_BYTES);
 
 function uploadOf(m: ImageMedia, field: string): UploadFile {
   return { field, data: Buffer.from(m.data ?? "", "base64"), name: m.name ?? `image${EXT[m.mimeType ?? ""] ?? ""}`, type: m.mimeType ?? "application/octet-stream" };

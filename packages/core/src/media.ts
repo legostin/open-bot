@@ -11,8 +11,11 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, sep } from "node:path";
 import { pinnedLookup } from "./egress.ts";
 
-/** Largest image an agent can show from its workspace, or a channel gets inline. */
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+/**
+ * Largest image an agent can show from its workspace, or a channel gets inline: a PNG render or a full-size screenshot
+ * as it is (the chat loads it from the hub; Telegram gets one over 10 MB as a document).
+ */
+export const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
 /** Largest external image the proxy passes on. */
 export const MAX_PROXY_BYTES = 15 * 1024 * 1024;
 export const MEDIA_TTL_MS = 7 * 24 * 3600_000;

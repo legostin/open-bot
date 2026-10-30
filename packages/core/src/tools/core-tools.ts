@@ -115,7 +115,7 @@ function workspaceImage(path: string, workspace: string, root: string, more: str
   const st = statSync(real);
   if (!st.isFile()) return { error: `${path}: not a file` };
   if (!imageTypeOf(real)) return { error: `${path}: not an image (png, jpg, gif, webp, avif, bmp or svg)` };
-  if (st.size > MAX_IMAGE_BYTES) return { error: `${path}: larger than 10 MB` };
+  if (st.size > MAX_IMAGE_BYTES) return { error: `${path}: larger than ${MAX_IMAGE_BYTES / 1024 / 1024} MB` };
   return `file:${relative(realRoot, real).split(sep).join("/")}`;
 }
 
@@ -411,7 +411,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
         "When your reply also goes to the user's phone (Telegram), the images go with it. Use it whenever a picture says more than words: photos of a place or product, " +
         "charts and screenshots you made, search results with images. Each image is either `url` (a public http(s) image address) or `path` " +
         "(an image file: relative to your workspace, or an absolute path in it or in the folder of a task you started; png, jpg, gif, webp, avif, bmp or svg, " +
-        "up to 10 MB). Shown inside a task, the images also reach the dialog that started it. Add a short `caption` in the user's language. " +
+        "up to 30 MB, a PNG render as it is). Shown inside a task, the images also reach the dialog that started it. Add a short `caption` in the user's language. " +
         "Do not repeat the images as markdown in your text; refer to them in words.",
       effect: "read",
       inputSchema: {
