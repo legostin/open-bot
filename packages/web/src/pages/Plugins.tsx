@@ -25,6 +25,7 @@ import { Icon } from "../components/icon";
 import { GoogleConnection, ServiceSignIn } from "../components/IntegrationCard";
 import { RemoteAccessCard } from "../components/RemoteAccessCard";
 import { SchemaForm } from "../components/SchemaForm";
+import { ViaBadge } from "../components/ViaBadge";
 import { PluginSetupCard } from "../components/SecretCards";
 import { Badge, Button, cx, EmptyState, ErrorNote, Field, Input, Loading, Modal, Page, Spinner, Toggle } from "../components/ui";
 
@@ -162,7 +163,10 @@ function PopularTile({ v, situation }: { v: IntegrationView; situation: string }
         <StateMark v={v} compact />
       </div>
       <div className="min-w-0">
-        <div className="truncate text-[14px] font-medium">{v.name}</div>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[14px] font-medium">{v.name}</span>
+          {v.via && <ViaBadge via={v.via} />}
+        </div>
         <p className="line-clamp-2 text-xs leading-snug text-muted">{v.summary}</p>
       </div>
     </button>
@@ -174,7 +178,10 @@ function CatalogRow({ v, situation }: { v: IntegrationView; situation: string })
     <button type="button" onClick={() => openPanelItem("plugins", v.id)} className="group flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-surface-2/60">
       <PluginIcon v={v} situation={situation} />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{v.name}</div>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-medium">{v.name}</span>
+          {v.via && <ViaBadge via={v.via} />}
+        </div>
         <p className="truncate text-[13px] text-muted">{v.summary}</p>
       </div>
       <StateMark v={v} />
@@ -365,7 +372,10 @@ function PluginPage({ id }: { id: string }) {
       <div className="flex items-start gap-3.5">
         <PluginIcon v={v} situation={situation} size="lg" />
         <div className="min-w-0 flex-1 pt-0.5">
-          <h3 className="font-display text-lg leading-tight font-semibold">{v.name}</h3>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h3 className="font-display text-lg leading-tight font-semibold">{v.name}</h3>
+            {v.via && <ViaBadge via={v.via} />}
+          </div>
           <p className="mt-0.5 text-xs text-muted">
             {[sectionTitle, plugin && (plugin.source === "builtin" ? t("plugins.builtin") : t("plugins.installedByYou")), plugin?.version && `v${plugin.version}`].filter(Boolean).join(" · ")}
           </p>
@@ -429,6 +439,8 @@ function PluginPage({ id }: { id: string }) {
       {v.connect === "remote" && <RemoteAccessCard />}
       {v.connect === "google" && on && v.status !== "unavailable" && <GoogleConnection view={v} />}
       {v.connect === "signin" && on && <ServiceSignIn view={v} />}
+      {/* One of a plugin's entries waiting for the plugin's key (Composio's): its field, here and now. */}
+      {v.plugin && v.connect === "setup" && on && <PluginSetupCard pluginId={v.plugin} bare />}
 
       {hasSetup && (
         <Disclosure title={t("plugins.setup")} open={v.status === "needs-setup" || v.status === "broken"}>

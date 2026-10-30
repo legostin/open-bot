@@ -1,7 +1,7 @@
 // One integration of the library, on its page and in the chat (hub_integration_connect): its status and the button
 // that moves it forward. Google ones sign in through the hub (a new tab; a pasted return address when the browser
 // cannot reach the hub on 127.0.0.1), setup ones open their plugin's setup card, an off one turns on, and access from
-// anywhere shows its own steps (RemoteAccessCard).
+// anywhere shows its own steps (RemoteAccessCard). One going through an outside service (Composio) carries its badge.
 
 import { useState } from "react";
 import { CheckCircle2, ExternalLink } from "lucide-react";
@@ -15,6 +15,7 @@ import { t, type MessageKey } from "../i18n";
 import { Icon } from "./icon";
 import { PluginSetupCard, VaultGate } from "./SecretCards";
 import { RemoteAccessCard } from "./RemoteAccessCard";
+import { ViaBadge } from "./ViaBadge";
 import { Badge, Button, cx, Input, Spinner } from "./ui";
 
 const STATUS_LABEL: Record<IntegrationView["status"], MessageKey> = {
@@ -81,7 +82,8 @@ function GoogleSignIn({ view, conversationId }: { view: IntegrationView; convers
 
 /**
  * An integration whose service has its own sign-in (Granola's MCP server): sign in in the browser, which comes back
- * by itself on this computer or as a pasted address from another device; once signed in, sign out.
+ * by itself on this computer or as a pasted address from another device; once signed in, sign out. One whose plugin
+ * watches for the finished sign-in (`signinReturn: false`, Composio's apps) needs nothing pasted back.
  */
 export function ServiceSignIn({ view, conversationId }: { view: IntegrationView; conversationId?: string }) {
   const [busy, setBusy] = useState(false);
@@ -139,7 +141,8 @@ export function ServiceSignIn({ view, conversationId }: { view: IntegrationView;
             {t("integrations.signIn", { name: view.name })}
           </Button>
         </div>
-        {waiting && (
+        {waiting && view.signinReturn === false && <p className="text-xs text-muted">{t("integrations.waitingByItself")}</p>}
+        {waiting && view.signinReturn !== false && (
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm">
             <span>{t("integrations.waiting")}</span>
             <span className="text-xs text-muted">{t("integrations.pasteHint")}</span>
@@ -206,7 +209,8 @@ export function GoogleConnection({ view, conversationId }: { view: IntegrationVi
 }
 
 export function IntegrationCard({ view, conversationId, className }: { view: IntegrationView; conversationId?: string; className?: string }) {
-  const [setupOpen, setSetupOpen] = useState(false);
+  // An entry waiting for its plugin's key (Composio's) shows the key's field at once: it is the only step there is.
+  const [setupOpen, setSetupOpen] = useState(!!view.plugin && view.connect === "setup" && view.status !== "connected");
   const [busy, setBusy] = useState(false);
   const action = primaryAction(view);
   const run = async (fn: () => Promise<unknown>) => {
@@ -229,6 +233,7 @@ export function IntegrationCard({ view, conversationId, className }: { view: Int
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-semibold">{view.name}</span>
+            {view.via && <ViaBadge via={view.via} />}
             <Badge tone={STATUS_TONE[view.status]} dot>
               {t(STATUS_LABEL[view.status])}
             </Badge>
@@ -262,7 +267,7 @@ export function IntegrationCard({ view, conversationId, className }: { view: Int
               {t(setupOpen ? "integrations.hideSetup" : "integrations.setup")}
             </Button>
           </div>
-          {setupOpen && <PluginSetupCard pluginId={view.id} bare />}
+          {setupOpen && <PluginSetupCard pluginId={view.plugin ?? view.id} bare />}
         </>
       )}
     </div>

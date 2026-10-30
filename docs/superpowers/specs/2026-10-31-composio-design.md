@@ -55,7 +55,8 @@ Two general abilities, for any integration of this kind.
 ### The "through an outside service" badge
 
 - `integration.via` in the manifest: `{ name, about, link }` (`about` is a `"%key%"` of the plugin's own locales,
-  with `{name}` for the entry's name). Every entry of the plugin and its own card get it.
+  with `{name}` for the entry's name). Every entry of the plugin gets it, and so does its own card unless that card
+  is the service itself (the Composio card has no Composio badge).
 - `IntegrationView.via?: { name: string; about: string; link?: string }` (`packages/shared/src/types.ts`), localized
   for the reader. The web and iOS draw the badge and its note from it; the text lives in the plugin's catalogs.
 
