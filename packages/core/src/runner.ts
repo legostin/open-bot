@@ -1096,7 +1096,7 @@ export class SessionRunner {
   }
 
   private async reportTaskDone(task: Task): Promise<void> {
-    const result = truncate(task.result ?? "", 6000);
+    const result = taskResult(task);
     // A teammate's reply: under the sender's message line, and to the sender, who carries on with it.
     if (task.kind === "message") {
       this.fillReply(task, truncate(task.result ?? "", 4000));
@@ -2011,6 +2011,16 @@ function finalAnswer(parts: MessagePart[]): string {
   const tail = texts(lastTool + 1).join("").trim();
   // Answered, then called a tool and said nothing more: the answer is the last thing it said.
   return tail || (texts(0).findLast((s) => s.trim()) ?? "").trim();
+}
+
+/** Reports this long reach their starter whole; a longer one ends with a pointer to the rest (task_status has all of it). */
+const TASK_RESULT_MAX = 24_000;
+
+/** A finished task's result for whoever started it: whole, or cut with a note saying how to read the rest. */
+export function taskResult(task: Pick<Task, "id" | "result">, max = TASK_RESULT_MAX): string {
+  const all = task.result ?? "";
+  if (all.length <= max) return all;
+  return `${all.slice(0, max)}\n…[cut at ${max} of ${all.length} characters: task_status {"taskId":"${task.id}"} has the whole result]`;
 }
 
 function resultText(r: ToolResult): string {

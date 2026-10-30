@@ -10,6 +10,7 @@ import type { AgentDef, Message, Task } from "@owlbot/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { createCoreCall } from "../src/core-call.ts";
 import { buildSystemPrompt } from "../src/prompt.ts";
+import { taskResult } from "../src/runner.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -68,6 +69,18 @@ class Client {
 }
 
 const textOf = (m: Message) => m.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("");
+
+describe("a finished task's report", () => {
+  it("reaches its starter whole, and a very long one says where the rest is", () => {
+    const report = "Отчёт. ".repeat(1000);
+    expect(taskResult({ id: "t_1", result: report })).toBe(report);
+    const long = "x".repeat(30_000);
+    const cut = taskResult({ id: "t_2", result: long });
+    expect(cut.startsWith("x".repeat(24_000) + "\n…[cut at 24000 of 30000 characters")).toBe(true);
+    expect(cut).toContain('task_status {"taskId":"t_2"} has the whole result');
+    expect(taskResult({ id: "t_3" })).toBe("");
+  });
+});
 
 describe("agents as entry points (integration)", () => {
   let hub: Hub;
