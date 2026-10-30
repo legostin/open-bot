@@ -5,7 +5,7 @@ import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 import { ArrowLeft, ChevronRight, ExternalLink, LogOut, MessageCircleMore, ShieldCheck, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import { logout, session } from "../state/app";
-import { closePanel, openPanel, panel } from "../state/panel";
+import { closePanel, openPanel, panel, panelBack } from "../state/panel";
 import { usePluginRegistry } from "../plugins/slots";
 import { PluginBoundary } from "../plugins/boundary";
 import { t } from "../i18n";
@@ -17,7 +17,6 @@ import { GROUPS, SECTIONS, sectionDef, type PanelSection } from "./nav";
 import { AgentsPage } from "../pages/Agents";
 import { BrainsPage } from "../pages/Brains";
 import { PluginsPage } from "../pages/Plugins";
-import { CatalogPage } from "../pages/Catalog";
 import { MachinesPage } from "../pages/Machines";
 import { DevicesPage } from "../pages/Devices";
 import { McpPage } from "../pages/Mcp";
@@ -35,8 +34,6 @@ function SectionBody({ section }: { section: PanelSection }) {
       return <BrainsPage />;
     case "plugins":
       return <PluginsPage />;
-    case "integrations":
-      return <CatalogPage />;
     case "machines":
       return <MachinesPage />;
     case "devices":
@@ -68,7 +65,6 @@ const TILE: Record<string, AvatarColor> = {
   skills: "pink",
   tasks: "blue",
   notifications: "red",
-  integrations: "teal",
   brains: "indigo",
   plugins: "orange",
   machines: "slate",
@@ -184,7 +180,7 @@ export function SettingsPanel() {
   }, [p.open]);
   useEffect(() => {
     body.current?.scrollTo({ top: 0 });
-  }, [p.section]);
+  }, [p.section, p.item]);
 
   if (!p.open) return null;
   const home = p.section === "home";
@@ -209,7 +205,7 @@ export function SettingsPanel() {
       >
         <div className="glass flex h-12 shrink-0 items-center gap-1 px-2">
           {!home && (
-            <IconButton label={t("common.back")} onClick={() => openPanel("home")} className="size-8">
+            <IconButton label={t("common.back")} onClick={panelBack} className="size-8">
               <ArrowLeft className="size-[18px]" />
             </IconButton>
           )}

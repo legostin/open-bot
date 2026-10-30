@@ -181,6 +181,8 @@ export default {
   "catalog.section.reading": "Новости и чтение",
   "catalog.section.communication": "Связь",
   "catalog.section.home": "Дом",
+  "catalog.section.assistant": "Ассистент",
+  "catalog.section.brains": "Интеллект",
   "catalog.section.other": "Ещё",
   "oauth.doneTitle": "Google подключён",
   "oauth.doneText": "Эту вкладку можно закрыть и вернуться в Owlbot.",

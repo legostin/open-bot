@@ -1,0 +1,6 @@
+{
+  "id": "plain",
+  "name": "Plain",
+  "description": "A plugin without a catalog card",
+  "builtin": true
+}

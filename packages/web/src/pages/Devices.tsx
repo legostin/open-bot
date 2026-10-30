@@ -8,7 +8,7 @@ import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";
 import { toast } from "../state/toast";
 import { useRemote } from "../state/remote";
-import { openPanel } from "../state/panel";
+import { openPanelItem } from "../state/panel";
 import { t } from "../i18n";
 import { PhoneAccess, useDevices } from "../components/DevicePairing";
 import { InviteBlock } from "../components/Invite";
@@ -57,7 +57,7 @@ export function DevicesPage() {
             ) : (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <p className="min-w-0 flex-1 text-sm text-muted">{t("remote.devicesOff")}</p>
-                <Button size="sm" onClick={() => openPanel("integrations")}>
+                <Button size="sm" onClick={() => openPanelItem("plugins", "remote-access")}>
                   {t("remote.devicesSetUp")}
                 </Button>
               </div>

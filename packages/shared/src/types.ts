@@ -1037,8 +1037,13 @@ export interface CatalogSection {
   items: IntegrationView[];
 }
 
-/** Everything the person can turn on (GET /api/catalog): integrations, widgets and abilities, by situation. */
+/**
+ * Everything the person can turn on (GET /api/catalog): integrations, widgets and abilities, by situation.
+ * With `?all=1` (the Plugins panel) every plugin is in it, those without a catalog card too.
+ */
 export interface CatalogView {
+  /** Ids of the popular entries, most popular first: the ones the person uses most, then the hub's own picks. */
+  popular: string[];
   sections: CatalogSection[];
 }
 

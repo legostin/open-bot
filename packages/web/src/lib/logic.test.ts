@@ -140,6 +140,8 @@ describe("settings panel sections", () => {
     expect(sectionForPath("/mcp-servers/")).toBe("mcp");
     expect(sectionForPath("/settings")).toBe("settings");
     expect(sectionForPath("/devices")).toBe("devices");
+    // The integrations catalog became part of the Plugins one.
+    expect(sectionForPath("/integrations")).toBe("plugins");
     expect(sectionForPath("/chat/abc")).toBeUndefined();
     expect(sectionForPath("/tasks/t1")).toBeUndefined();
   });

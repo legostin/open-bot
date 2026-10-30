@@ -1,5 +1,7 @@
 {
   "name": "Triggers",
+  "integration.summary": "Reminders, schedules and watching pages: the team starts on its own",
+  "integration.example": "Remind me tomorrow at 9 to call the bank",
   "description": "Proactivity: schedules, reminders, page watches, webhooks and regular reviews that start background tasks for agents",
   "settings.allowPrivateUrls.title": "Allow watching local network addresses",
   "settings.allowPrivateUrls.description": "By default watch triggers do not access localhost and internal addresses (SSRF protection)",

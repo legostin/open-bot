@@ -1,6 +1,7 @@
-// The catalog's entries: whether one is on, what its switch and button do, search, and each situation's colour.
+// The catalog's entries: whether one is on, what its switch and button do, search, the popular ones, and each
+// situation's colour.
 
-import type { CatalogSection, IntegrationView } from "@owlbot/shared";
+import type { CatalogSection, CatalogView, IntegrationView } from "@owlbot/shared";
 
 type Entry = Pick<IntegrationView, "connect" | "status">;
 
@@ -42,6 +43,31 @@ export function filterCatalog(sections: CatalogSection[], query: string): Catalo
     .filter((s) => s.items.length);
 }
 
+/** What a catalog row shows of an entry's state: on, waiting for the person, broken; nothing when it is off. */
+export function rowState(v: Entry): "on" | "attention" | "broken" | undefined {
+  if (v.status === "connected") return "on";
+  if (v.status === "needs-setup") return "attention";
+  if (v.status === "broken") return "broken";
+  return undefined;
+}
+
+/** The popular entries, in their order (ids the catalog no longer has are skipped). */
+export function popularEntries(c: CatalogView): Array<{ entry: IntegrationView; situation: string }> {
+  return (c.popular ?? []).flatMap((id) => {
+    const found = findEntry(c, id);
+    return found ? [found] : [];
+  });
+}
+
+/** An entry and the situation it is listed under. */
+export function findEntry(c: CatalogView, id: string): { entry: IntegrationView; situation: string } | undefined {
+  for (const s of c.sections) {
+    const entry = s.items.find((v) => v.id === id);
+    if (entry) return { entry, situation: s.id };
+  }
+  return undefined;
+}
+
 /** Each situation's colour: the tint of its entries' icons. */
 export const SITUATION_HUE: Record<string, string> = {
   everyday: "#e9a23b",
@@ -51,7 +77,9 @@ export const SITUATION_HUE: Record<string, string> = {
   reading: "#e2733a",
   communication: "#2a92d6",
   home: "#d9579a",
-  other: "#8a6fd8",
+  assistant: "#c9822b",
+  brains: "#8a6fd8",
+  other: "#7d8590",
 };
 
 export function hueOf(situation: string): string {

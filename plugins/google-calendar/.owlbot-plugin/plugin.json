@@ -24,7 +24,8 @@
     "connect": "google",
     "scopes": ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"],
     "summary": "%integration.summary%",
-    "example": "%integration.example%"
+    "example": "%integration.example%",
+    "popular": 3
   },
   "permissions": {
     "network": ["www.googleapis.com"],

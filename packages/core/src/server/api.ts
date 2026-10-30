@@ -520,7 +520,7 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
 
   // ----- integrations: the library's cards, the catalog (the same cards by situation), and the hub's Google sign-in -----
   api.get("/api/integrations", async (req) => listIntegrations(hub, requestLocale(req)));
-  api.get("/api/catalog", async (req) => listCatalog(hub, requestLocale(req)));
+  api.get("/api/catalog", async (req) => listCatalog(hub, requestLocale(req), { all: ["1", "true"].includes(String((req.query as any)?.all)) }));
   api.post("/api/integrations/:id/enabled", async (req) => {
     const id = (req.params as any).id as string;
     if (!hub.plugins.get(id)?.layout?.manifest.integration) throw new HttpError(404, "connections.notFound", { id });
