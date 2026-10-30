@@ -152,6 +152,18 @@ describe("an integration with its own sign-in", () => {
     await expect(hub.mcpClients.signIn("notes")).rejects.toMatchObject({ status: 409 });
   });
 
+  it("shows its Sign in card in the chat, even when the agent asks for the setup card", async () => {
+    const conv = hub.store.agentConversation("assistant");
+    const ctx = { conversationId: conv.id, agentId: "assistant", sessionId: "s", machineId: "local", workspace: tmpdir(), tainted: false, background: false } as any;
+    for (const name of ["hub_integration_connect", "hub_plugin_setup"]) {
+      const r = await hub.tools.get(name)!.invoke({ id: "notes" }, ctx);
+      expect((r.content[0] as any).text).toMatch(/^The Notes card is shown in the chat: not signed in yet; the card has a Sign in button\./);
+    }
+    const parts = hub.store.listMessages(conv.id).flatMap((m) => m.parts);
+    expect(parts.filter((p: any) => p.type === "integration" && p.id === "notes")).toHaveLength(2);
+    expect(parts.some((p) => p.type === "plugin_setup")).toBe(false);
+  });
+
   it("signs in through the browser and the hub's /oauth/mcp, and the tools arrive", async () => {
     hub.vault.init("signin-test-passphrase");
     const url = new URL(await hub.mcpClients.signIn("notes"));

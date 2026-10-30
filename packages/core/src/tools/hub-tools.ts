@@ -13,7 +13,7 @@
 // The one exception is profile_update at the end: every agent may change its own profile when the user asks.
 
 import { isAbsolute, relative, resolve } from "node:path";
-import type { AgentDef, AgentDraft, JsonSchema, Locale, MachineSettings, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import type { AgentDef, AgentDraft, IntegrationView, JsonSchema, Locale, MachineSettings, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
 import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
 import { normalizeSettings, SetupError } from "../machine-setup.ts";
 import type { Hub } from "../app.ts";
@@ -703,25 +703,32 @@ export function registerHubTools(hub: Hub): void {
       const id = String(i.id ?? "");
       const view = (await listIntegrations(hub, hubLocale())).find((x) => x.id === id);
       if (!view) return text(`No integration "${id}". Known: ${(await listIntegrations(hub, hubLocale())).map((x) => x.id).join(", ")}.`, true);
-      hub.runner.attachPart(ctx.conversationId, { type: "integration", id });
-      const state =
-        view.status === "connected"
-          ? `already connected${view.account ? ` (${view.account})` : ""}; the card shows it`
-          : view.status === "unavailable"
-            ? `unavailable in this build: ${view.detail ?? ""}`
-            : view.status === "off"
-              ? "turned off; the card has a switch"
-              : view.status === "broken"
-                ? "its sign-in stopped working; the card has Reconnect"
-                : view.connect === "signin"
-                  ? "not signed in yet; the card has a Sign in button"
-                  : "not connected yet";
-      return text(
-        `The ${view.name} card is shown in the chat: ${state}. ` +
-          (view.status === "connected" ? "" : "Tell the user in a sentence to press the button on it; you get a system note once it is connected."),
-      );
+      return integrationCard(view, ctx.conversationId);
     },
   );
+
+  /** An integration's card in the chat, and what the agent should tell the user about it. */
+  function integrationCard(view: IntegrationView, conversationId: string): ToolResult {
+    hub.runner.attachPart(conversationId, { type: "integration", id: view.id });
+    const state =
+      view.status === "connected"
+        ? `already connected${view.account ? ` (${view.account})` : ""}; the card shows it`
+        : view.status === "unavailable"
+          ? `unavailable in this build: ${view.detail ?? ""}`
+          : view.status === "off"
+            ? "turned off; the card has a switch"
+            : view.status === "broken"
+              ? view.connect === "google" || view.connect === "signin"
+                ? "its sign-in stopped working; the card has Reconnect"
+                : `it does not work: ${view.detail ?? "see the card"}`
+              : view.connect === "signin"
+                ? "not signed in yet; the card has a Sign in button"
+                : "not connected yet";
+    return text(
+      `The ${view.name} card is shown in the chat: ${state}. ` +
+        (view.status === "connected" ? "" : "Tell the user in a sentence to press the button on it; you get a system note once it is connected."),
+    );
+  }
 
   reg(
     {
@@ -729,10 +736,14 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         "Show a plugin's setup card in this chat: the secrets it needs (typed into secure fields, straight into the vault) and its own setup steps " +
-        "(e.g. the Telegram pairing button). Use it whenever the user wants to connect or fix a plugin, instead of sending them to settings pages.",
+        "(e.g. the Telegram pairing button). Use it whenever the user wants to connect or fix a plugin, instead of sending them to settings pages. " +
+        "An integration connected by a sign-in (Google, Granola, Notion, Linear…) gets its own card from hub_integration_connect; asked here, that card is shown.",
       inputSchema: obj({ id: { type: "string", description: "Plugin id, see hub_plugins_list" } }, ["id"]),
     },
     async (i, ctx) => {
+      // A sign-in, or nothing to set up: the integration's own card is the one with the right button.
+      const integration = (await listIntegrations(hub, hubLocale())).find((x) => x.id === String(i.id) && x.connect !== "setup");
+      if (integration) return integrationCard(integration, ctx.conversationId);
       const view = hub.secrets.setupView(String(i.id), hubLocale());
       hub.runner.attachPart(ctx.conversationId, { type: "plugin_setup", pluginId: view.pluginId });
       const missing = view.secrets.filter((s) => !s.present);
