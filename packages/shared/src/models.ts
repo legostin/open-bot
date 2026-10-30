@@ -36,6 +36,8 @@ export interface ModelMeta {
   deprecated?: boolean;
   /** USD per million tokens, input and output, when the provider says. */
   price?: { input: number; output: number };
+  /** It takes images, when the provider says. */
+  images?: boolean;
 }
 
 /**
@@ -48,12 +50,13 @@ export const KNOWN_MODELS: ReadonlyArray<readonly [RegExp, Traits]> = [
   [/opus/i, { tier: 5, speed: 1, cost: 3, good: ["reasoning", "writing", "code", "vision"] }],
   [/sonnet/i, { tier: 4, speed: 2, cost: 2, good: ["writing", "code", "vision"] }],
   [/haiku/i, { tier: 2, speed: 3, cost: 1, good: ["vision"] }],
-  // OpenAI. GPT-6 Astra is the flagship; the GPT-5.6 line goes by size: Sol, Terra, then Luna, the small quick one.
+  // OpenAI. GPT-6 Astra is the flagship; each generation's line goes by size: Sol the workhorse, Terra, then Luna, the
+  // small quick one (GPT-6.1 Sol and Terra, GPT-6 Luna in late 2026).
   [/gpt-?6[\w.]*-?(mini|nano|luna)/i, { tier: 3, speed: 3, cost: 1, good: ["code"] }],
-  [/gpt-?6/i, { tier: 5, speed: 1, cost: 3, good: ["reasoning", "code", "writing", "vision"] }],
   [/gpt-?[\d.]*-?luna/i, { tier: 2, speed: 3, cost: 1 }],
   [/gpt-?[\d.]*-?terra/i, { tier: 3, speed: 3, cost: 1, good: ["code"] }],
   [/gpt-?[\d.]*-?sol\b/i, { tier: 4, speed: 2, cost: 2, good: ["code", "reasoning", "writing"] }],
+  [/gpt-?6/i, { tier: 5, speed: 1, cost: 3, good: ["reasoning", "code", "writing", "vision"] }],
   [/codex[-_.]?(mini|spark)/i, { tier: 3, speed: 3, cost: 1, good: ["code"] }],
   [/codex/i, { tier: 4, speed: 2, cost: 2, good: ["code", "reasoning"] }],
   [/gpt-?5[\w.]*-?nano/i, { tier: 2, speed: 3, cost: 1 }],
@@ -131,6 +134,7 @@ export function profileFrom(m: ModelMeta): ModelProfile {
   else if (LIGHT.test(d)) Object.assign(p, { tier: Math.min(p.tier, /\bcod(e|ing)|agentic\b/i.test(d) ? 3 : 2), speed: 3, cost: 1 });
   else if (MIDDLE.test(d)) Object.assign(p, { tier: Math.min(Math.max(p.tier, 3), 4), speed: Math.max(p.speed, 2) });
   if (/\bcod(e|ing)\b/i.test(d) && !p.good?.includes("code")) p.good = ["code", ...(p.good ?? [])];
+  if (m.images && !p.good?.includes("vision")) p.good = [...(p.good ?? []), "vision"];
   if (m.price) {
     const blended = (m.price.input + 3 * m.price.output) / 4;
     p.cost = blended < 1 ? 1 : blended < 8 ? 2 : 3;

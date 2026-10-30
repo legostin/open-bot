@@ -39,8 +39,10 @@ export function parseModels(protocol: VariantInfo["protocol"], body: unknown): L
     const completion = Number(x.pricing?.completion);
     const price = Number.isFinite(prompt) && Number.isFinite(completion) && prompt >= 0 ? { input: prompt * 1e6, output: completion * 1e6 } : undefined;
     const deprecated = !!(x.deprecation || x.deprecated || x.expiration_date);
+    const inputs = x.architecture?.input_modalities;
+    const images = Array.isArray(inputs) && inputs.includes("image");
     const created = typeof x.created === "number" ? x.created : typeof x.created_at === "string" ? Date.parse(x.created_at) / 1000 : undefined;
-    out.push({ meta: { id, ...(name ? { name } : {}), ...(description ? { description } : {}), ...(price ? { price } : {}), ...(deprecated ? { deprecated } : {}) }, ...(created ? { created } : {}) });
+    out.push({ meta: { id, ...(name ? { name } : {}), ...(description ? { description } : {}), ...(price ? { price } : {}), ...(deprecated ? { deprecated } : {}), ...(images ? { images } : {}) }, ...(created ? { created } : {}) });
   }
   if (protocol === "anthropic") return out;
   return out.sort((a, z) => (z.created ?? 0) - (a.created ?? 0));

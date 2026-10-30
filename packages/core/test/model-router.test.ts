@@ -77,6 +77,31 @@ describe("routing a request", () => {
       },
     };
     expect(route([told], { need: "light" })[0]).toMatchObject({ model: "gpt-6-astra", effort: "low" });
+    // A newer Codex (0.165, 2026-10-30) is offered GPT-6.1 and GPT-6 Luna too: each need gets its own model.
+    const newer: RouteBrain = {
+      ref: "codex@local",
+      probe: {
+        catalog: markLegacy(
+          [
+            ["gpt-6.1-sol", "Latest workhorse model for coding and everyday work."],
+            ["gpt-6-astra", "Frontier intelligence for the most demanding work."],
+            ["gpt-6.1-terra", "GPT-6.1 Terra Codex model."],
+            ["gpt-6-sol", "Previous generation workhorse model."],
+            ["gpt-6-luna", "Fast and affordable model for easier tasks."],
+            ["gpt-5.6-sol", "Older generation workhorse model."],
+            ["gpt-5.6-luna", "Older fast and efficient model."],
+          ].map(([id, description]) => profileFrom({ id, description, images: true })),
+        ),
+        efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      },
+    };
+    expect(newer.probe!.catalog!.filter((m) => m.legacy).map((m) => m.id)).toEqual(["gpt-6-sol", "gpt-5.6-sol", "gpt-5.6-luna"]);
+    expect(newer.probe!.catalog!.find((m) => m.id === "gpt-6.1-terra")).toMatchObject({ tier: 3, speed: 3 });
+    expect(newer.probe!.catalog!.every((m) => m.good?.includes("vision"))).toBe(true);
+    expect(route([newer], { need: "light" })[0]).toMatchObject({ model: "gpt-6-luna", effort: "low" });
+    expect(route([newer], { need: "quick" })[0]).toMatchObject({ model: "gpt-6.1-sol", effort: "low" });
+    expect(route([newer], { need: "standard", skill: "code", hands: true })[0]).toMatchObject({ model: "gpt-6.1-sol", effort: "medium" });
+    expect(route([newer], { need: "deep" })[0]).toMatchObject({ model: "gpt-6-astra", effort: "xhigh" });
     // With nothing current, an older model still works.
     expect(route([{ ref: "x@local", probe: { catalog: [profileFrom({ id: "old-1", description: "Older fast model." })] } }], { need: "light" })[0]).toMatchObject({ model: "old-1" });
   });
