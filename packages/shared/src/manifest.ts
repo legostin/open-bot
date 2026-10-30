@@ -50,7 +50,6 @@ export const IntegrationViaSchema = z.object({
   about: z.string().min(1),
   link: z.string().url().optional(),
 });
-export type IntegrationVia = z.infer<typeof IntegrationViaSchema>;
 
 /** The id of one of a plugin's catalog entries ("slack"); the catalog shows it as "<plugin>:<entry>". */
 export const ENTRY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;

@@ -4,7 +4,6 @@
 import type { Locale } from "./i18n.ts";
 import type { ModelProfile, ModelSkill } from "./models.ts";
 import type { AgentAvatar } from "./avatar.ts";
-import type { IntegrationVia } from "./manifest.ts";
 
 export type ISODate = string;
 
@@ -1104,6 +1103,13 @@ export type UiEvent =
 // ---------- Integrations ----------
 
 export type IntegrationStatus = "connected" | "needs-setup" | "off" | "unavailable" | "broken";
+
+/** The outside service an integration goes through (Composio): its badge, and the note about it in the reader's language. */
+export interface IntegrationVia {
+  name: string;
+  about: string;
+  link?: string;
+}
 
 /** A card of the integrations library (GET /api/integrations) and an entry of the catalog (GET /api/catalog). */
 export interface IntegrationView {
