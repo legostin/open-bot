@@ -1,6 +1,7 @@
-// Mock LLM server for tests: speaks the Anthropic Messages API (POST /v1/messages) and the OpenAI
-// Chat Completions API (POST /v1/chat/completions), streaming (SSE) and non-streaming, with the real
-// event shapes. Responses are scripted turn by turn; every request is recorded.
+// Mock LLM server for tests: speaks the Anthropic Messages API (POST /v1/messages), the OpenAI
+// Chat Completions API (POST /v1/chat/completions) and the OpenAI Responses API (POST /v1/responses),
+// streaming (SSE) and non-streaming, with the real event shapes. Responses are scripted turn by turn;
+// every request is recorded.
 //
 //   const llm = await startMockLlm();
 //   llm.script([{ toolCalls: [{ name: "echo", input: { text: "hi" } }] }, { text: "Done" }]);
@@ -25,9 +26,12 @@ export interface MockTurn {
   headers?: Record<string, string>;
   /** Error message for non-2xx responses. */
   error?: string;
-  /** Anthropic only: a thinking block (with a fake signature) before the text. */
+  /**
+   * Reasoning before the text: an Anthropic thinking block (with a fake signature) or an OpenAI Responses reasoning
+   * item (with fake encrypted content when the request includes "reasoning.encrypted_content").
+   */
   thinking?: string;
-  /** Override the stop reason (Anthropic `stop_reason`, OpenAI `finish_reason`). */
+  /** Override the stop reason (Anthropic `stop_reason`, OpenAI `finish_reason`, Responses `incomplete_details.reason`). */
   stopReason?: string;
   /** Delay between streamed chunks, ms (for interrupt tests). */
   chunkDelayMs?: number;
@@ -103,7 +107,8 @@ export async function startMockLlm(opts: MockLlmOptions = {}): Promise<MockLlm> 
       }
       const anthropic = req.method === "POST" && /\/messages$/.test(path);
       const openai = req.method === "POST" && /\/chat\/completions$/.test(path);
-      if (!anthropic && !openai) return json(res, 404, { error: { message: `mock-llm: no route ${req.method} ${path}` } });
+      const responses = req.method === "POST" && /\/responses$/.test(path);
+      if (!anthropic && !openai && !responses) return json(res, 404, { error: { message: `mock-llm: no route ${req.method} ${path}` } });
 
       const turn = queue.shift() ?? opts.defaultTurn;
       if (!turn) {
@@ -122,6 +127,7 @@ export async function startMockLlm(opts: MockLlmOptions = {}): Promise<MockLlm> 
       const n = ++seq;
       const inputTokens = turn.usage?.inputTokens ?? Math.max(1, Math.ceil(raw.length / 4));
       if (anthropic) await anthropicResponse(res, body ?? {}, turn, n, inputTokens);
+      else if (responses) await responsesResponse(res, body ?? {}, turn, n, inputTokens);
       else await openaiResponse(res, body ?? {}, turn, n, inputTokens);
     } catch (e: any) {
       if (!res.headersSent) json(res, 500, { error: { message: `mock-llm: ${e?.message ?? e}` } });
@@ -325,5 +331,73 @@ async function openaiResponse(res: http.ServerResponse, body: any, turn: MockTur
   await w.data(chunk({}, finish));
   if (body.stream_options?.include_usage) await w.data({ id, object: "chat.completion.chunk", created, model, choices: [], usage });
   await w.data("[DONE]");
+  if (!w.closed) res.end();
+}
+
+// ---------- OpenAI Responses ----------
+
+async function responsesResponse(res: http.ServerResponse, body: any, turn: MockTurn, n: number, inputTokens: number): Promise<void> {
+  const model = String(body.model ?? "gpt-mock");
+  const encrypted = Array.isArray(body.include) && body.include.includes("reasoning.encrypted_content");
+  const output: any[] = [];
+  if (turn.thinking !== undefined) output.push({ id: `rs_mock_${n}`, type: "reasoning", summary: [], ...(encrypted ? { encrypted_content: `enc_mock_${n}` } : {}) });
+  if (turn.text) output.push({ id: `msg_mock_${n}`, type: "message", status: "completed", role: "assistant", content: [{ type: "output_text", text: turn.text, annotations: [] }] });
+  (turn.toolCalls ?? []).forEach((c, i) =>
+    output.push({ id: `fc_mock_${n}_${i}`, type: "function_call", status: "completed", call_id: `call_mock_${n}_${i}`, name: c.name, arguments: JSON.stringify(c.input ?? {}) }),
+  );
+  // "max_output_tokens" or "content_filter": the response ends incomplete.
+  const incomplete = turn.stopReason;
+  const reasoningTokens = turn.thinking !== undefined ? tokens(turn.thinking) : 0;
+  const outputTokens = turn.usage?.outputTokens ?? tokens((turn.text ?? "") + JSON.stringify(turn.toolCalls ?? [])) + reasoningTokens;
+  const usage = {
+    input_tokens: inputTokens,
+    input_tokens_details: { cached_tokens: 0 },
+    output_tokens: outputTokens,
+    output_tokens_details: { reasoning_tokens: reasoningTokens },
+    total_tokens: inputTokens + outputTokens,
+  };
+  const createdAt = Math.floor(Date.now() / 1000);
+  const response = (status: string, out: any[]) => ({
+    id: `resp_mock_${n}`,
+    object: "response",
+    created_at: createdAt,
+    status,
+    model,
+    output: out,
+    incomplete_details: status === "incomplete" ? { reason: incomplete } : null,
+    usage: status === "in_progress" ? null : usage,
+  });
+  const final = incomplete ? "incomplete" : "completed";
+
+  if (!body.stream) {
+    json(res, 200, response(final, output), turn.headers);
+    return;
+  }
+
+  sseHead(res, turn.headers);
+  const w = new SseWriter(res, turn.chunkDelayMs ?? 0);
+  let seqNo = 0;
+  const ev = (type: string, data: Record<string, unknown>) => w.event(type, { type, sequence_number: seqNo++, ...data });
+  await ev("response.created", { response: response("in_progress", []) });
+  await ev("response.in_progress", { response: response("in_progress", []) });
+  for (let i = 0; i < output.length; i++) {
+    const item = output[i];
+    if (item.type === "reasoning") {
+      await ev("response.output_item.added", { output_index: i, item: { id: item.id, type: "reasoning", summary: [] } });
+    } else if (item.type === "message") {
+      const text = item.content[0].text as string;
+      await ev("response.output_item.added", { output_index: i, item: { ...item, status: "in_progress", content: [] } });
+      await ev("response.content_part.added", { item_id: item.id, output_index: i, content_index: 0, part: { type: "output_text", text: "", annotations: [] } });
+      for (const t of textChunks(text)) await ev("response.output_text.delta", { item_id: item.id, output_index: i, content_index: 0, delta: t });
+      await ev("response.output_text.done", { item_id: item.id, output_index: i, content_index: 0, text });
+      await ev("response.content_part.done", { item_id: item.id, output_index: i, content_index: 0, part: item.content[0] });
+    } else {
+      await ev("response.output_item.added", { output_index: i, item: { ...item, status: "in_progress", arguments: "" } });
+      for (const p of jsonChunks(JSON.parse(item.arguments))) await ev("response.function_call_arguments.delta", { item_id: item.id, output_index: i, delta: p });
+      await ev("response.function_call_arguments.done", { item_id: item.id, output_index: i, arguments: item.arguments });
+    }
+    await ev("response.output_item.done", { output_index: i, item });
+  }
+  await ev(`response.${final}`, { response: response(final, output) });
   if (!w.closed) res.end();
 }

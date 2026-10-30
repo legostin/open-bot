@@ -94,6 +94,30 @@ describe("mock LLM", () => {
     expect(chunks.at(-1).usage.total_tokens).toBeGreaterThan(0);
   });
 
+  it("streams Responses items: reasoning, text and function calls, then usage", async () => {
+    llm.script([{ thinking: "hmm", text: "Hi you", toolCalls: [{ name: "echo", input: { text: "yo" } }] }]);
+    const res = await post("/v1/responses", { model: "gpt-mock", stream: true, include: ["reasoning.encrypted_content"], input: [] });
+    const events = sse(await res.text()).map((e) => ({ event: e.event, data: JSON.parse(e.data) }));
+    expect(events.every((e) => e.event === e.data.type)).toBe(true);
+    expect(events[0].event).toBe("response.created");
+    const text = events.filter((e) => e.event === "response.output_text.delta").map((e) => e.data.delta).join("");
+    expect(text).toBe("Hi you");
+    const items = events.filter((e) => e.event === "response.output_item.done").map((e) => e.data.item);
+    expect(items.map((i) => i.type)).toEqual(["reasoning", "message", "function_call"]);
+    expect(items[0].encrypted_content).toBe("enc_mock_1");
+    expect(items[2]).toMatchObject({ call_id: "call_mock_1_0", name: "echo", arguments: '{"text":"yo"}' });
+    const args = events.filter((e) => e.event === "response.function_call_arguments.delta").map((e) => e.data.delta).join("");
+    expect(JSON.parse(args)).toEqual({ text: "yo" });
+    const last = events.at(-1)!;
+    expect(last.event).toBe("response.completed");
+    expect(last.data.response.usage.output_tokens).toBeGreaterThan(0);
+
+    llm.script([{ text: "cut", stopReason: "max_output_tokens" }]);
+    const plain = await (await post("/v1/responses", { model: "gpt-mock", input: [] })).json();
+    expect(plain).toMatchObject({ status: "incomplete", incomplete_details: { reason: "max_output_tokens" } });
+    expect(plain.output[0].content[0].text).toBe("cut");
+  });
+
   it("returns non-streaming OpenAI completions and errors", async () => {
     llm.script([{ text: "plain" }, { status: 401, error: "bad key" }]);
     const r1 = await (await post("/v1/chat/completions", { model: "gpt-mock", messages: [] })).json();

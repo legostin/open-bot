@@ -77,7 +77,8 @@ describe("API brain: effort and compaction", () => {
 
     await h.brainCreate("api", opts("e-openai", { variant: "openai", effort: "high" }));
     await h.brainSend("e-openai", { text: "hi" });
-    expect(llm.requests.at(-1)!.body.reasoning_effort).toBe("high");
+    expect(llm.requests.at(-1)!.body.reasoning).toEqual({ effort: "high" });
+    expect(llm.requests.at(-1)!.body.reasoning_effort).toBeUndefined();
 
     await h.brainCreate("api", opts("e-router", { variant: "openrouter", effort: "low" }));
     await h.brainSend("e-router", { text: "hi" });
@@ -90,14 +91,16 @@ describe("API brain: effort and compaction", () => {
   });
 
   it("goes on without the effort when an OpenAI-compatible model refuses it", async () => {
-    llm.script([{ status: 400, error: "Unsupported parameter: 'reasoning_effort' is not supported with this model." }, { text: "fine" }, { text: "again" }]);
+    llm.script([{ status: 400, error: "Unsupported parameter: 'reasoning.effort' is not supported with this model." }, { text: "fine" }, { text: "again" }]);
     await h.brainCreate("api", opts("e-refused", { variant: "openai", effort: "high" }));
     const ev = await h.brainSend("e-refused", { text: "hi" });
     expect(text(ev)).toBe("fine");
     expect(ev.some((e) => e.type === "error")).toBe(false);
-    expect(llm.requests[1].body.reasoning_effort).toBeUndefined();
+    expect(llm.requests[0].body.reasoning).toEqual({ effort: "high" });
+    expect(llm.requests[1].body.reasoning).toBeUndefined();
+    expect(llm.requests[1].body.include).toBeUndefined();
     await h.brainSend("e-refused", { text: "more" });
-    expect(llm.requests[2].body.reasoning_effort).toBeUndefined();
+    expect(llm.requests[2].body.reasoning).toBeUndefined();
   });
 
   it("folds the older part into a summary while the user reads, and nothing of it reaches the chat", async () => {

@@ -91,6 +91,11 @@ export interface VariantInfo {
   presets: (s: ApiSettings) => NonNullable<ProbeResult["presets"]>;
   /** The models it offers, for the hub to choose from per request (the default model and extraModels join them). */
   models: string[];
+  /**
+   * OpenAI's own Responses API (POST /responses) instead of Chat Completions: the newest OpenAI models take function
+   * tools together with a reasoning effort only there.
+   */
+  responses?: boolean;
 }
 
 const OPENAI_EFFORTS = ["low", "medium", "high"];
@@ -141,6 +146,7 @@ export const VARIANTS: Record<string, VariantInfo> = {
     efforts: OPENAI_EFFORTS,
     presets: () => OPENAI_PRESETS,
     models: ["gpt-5-nano", "gpt-5-mini", "gpt-5"],
+    responses: true,
   },
   openrouter: {
     id: "openrouter",

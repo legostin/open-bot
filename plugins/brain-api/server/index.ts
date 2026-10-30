@@ -1,5 +1,5 @@
 // Builtin plugin "brain-api": the "api" brain — our own agent loop over LLM APIs.
-// Variants (brain refs "api:<variant>"): anthropic (Messages API), openai, openrouter, the OpenAI-compatible providers
+// Variants (brain refs "api:<variant>"): anthropic (Messages API), openai (Responses API), openrouter, the OpenAI-compatible providers
 // (settings.ts PROVIDERS: Kimi, DeepSeek, GLM, Qwen, Gemini, Grok, Mistral, Groq) and custom (any OpenAI-compatible
 // endpoint: Ollama, LM Studio, vLLM). Tools come from the hub's MCP endpoint.
 

@@ -1,4 +1,4 @@
-// Interface between the agent loop and the provider adapters (Anthropic Messages, OpenAI Chat Completions).
+// Interface between the agent loop and the provider adapters (Anthropic Messages, OpenAI Responses, Chat Completions).
 
 import type { BrainEvent } from "@owlbot/shared";
 import type { HistoryMessage, Part } from "./history.ts";
