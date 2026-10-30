@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   decideHeadless,
   filenameFromDisposition,
+  findChrome,
+  launchArgs,
+  windowedUserAgent,
   isPrivateHost,
   normalizeUrl,
   proxyFromEnv,
@@ -40,6 +43,36 @@ describe("settings", () => {
     expect(decideHeadless("auto", {}, "win32")).toBe(true);
     expect(decideHeadless("never", {}, "win32")).toBe(false);
     expect(decideHeadless("always", { DISPLAY: ":99" }, "linux")).toBe(true);
+  });
+});
+
+describe("an ordinary browser", () => {
+  it("finds Google Chrome where it is installed", () => {
+    const mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    expect(findChrome("darwin", {}, (p) => p === mac)).toBe(mac);
+    expect(findChrome("darwin", { HOME: "/Users/me" }, (p) => p.startsWith("/Users/me/"))).toBe("/Users/me/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
+    expect(findChrome("linux", {}, (p) => p === "/usr/bin/google-chrome")).toBe("/usr/bin/google-chrome");
+    expect(findChrome("win32", { LOCALAPPDATA: "C:/Users/me/AppData/Local" }, (p) => p.includes("Local"))).toMatch(/Local.Google.Chrome.Application.chrome\.exe$/);
+    expect(findChrome("linux", {}, () => false)).toBeNull();
+  });
+
+  it("calls itself Chrome when headless", () => {
+    expect(windowedUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36")).toBe(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+    );
+  });
+
+  it("launches without automation switches, with a screen and user agent only when headless", () => {
+    const ua = "Mozilla/5.0 Chrome/156.0.0.0";
+    const headless = launchArgs({ headless: true, platform: "darwin", userAgent: ua, proxy: true });
+    expect(headless).toContain("--disable-blink-features=AutomationControlled");
+    expect(headless).toContain(`--user-agent=${ua}`);
+    expect(headless.some((a) => a.startsWith("--screen-info={1920x1080"))).toBe(true);
+    expect(headless).toContain("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
+    const headed = launchArgs({ headless: false, platform: "linux", userAgent: ua, proxy: false });
+    expect(headed.some((a) => a.startsWith("--user-agent") || a.startsWith("--screen-info"))).toBe(false);
+    expect(headed).toContain("--window-size=1280,900");
+    expect(headed.some((a) => a.includes("enable-automation") || a.includes("webrtc"))).toBe(false);
   });
 });
 

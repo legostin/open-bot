@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Builtin browser plugin: Playwright Chromium with a persistent profile, live view and takeover",
+  "description": "Builtin browser plugin: Google Chrome or Playwright Chromium with a persistent profile, live view and takeover",
   "dependencies": {
     "playwright": "^1.64.1"
   }

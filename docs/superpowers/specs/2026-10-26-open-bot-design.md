@@ -334,8 +334,9 @@ budget: { backgroundRunsPerDay: 30 }
 
 ### 8.1 Браузер (плагин `browser`)
 
-- Chromium (Playwright) с постоянным профилем; в Docker — под Xvfb в обычном режиме, вне Docker — headless, если нет дисплея.
-- В образе Chromium уже есть. Вне Docker плагин при старте проверяет его и, если нет, сам запускает `playwright install chromium` (CLI из node_modules, через egress-прокси с токеном плагина); браузерные вызовы ждут эту одну установку, неудачная повторяется при следующем вызове. `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` отключает автоустановку.
+- Обычный браузер с постоянным профилем: установленный Google Chrome, иначе полный Chromium Playwright (не headless shell); в Docker — под Xvfb в обычном режиме, вне Docker — headless, если нет дисплея.
+- Для сайтов он выглядит как браузер человека: без `--enable-automation` и `navigator.webdriver`, окно своего размера (без эмуляции viewport), в headless — экран (`--screen-info`) и user agent без «Headless» (его называет сам браузер при первом запуске). Проверки, которые проходят сами (Cloudflare), `browser.open` пережидает, глядя на страницу только из изолированного мира Playwright: наш скрипт в мире страницы их ломает.
+- В образе Chromium уже есть. Без Google Chrome плагин при старте проверяет его и, если нет, сам запускает `playwright install chromium` (CLI из node_modules, через egress-прокси с токеном плагина); браузерные вызовы ждут эту одну установку, неудачная повторяется при следующем вызове. `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` отключает автоустановку.
 - Инструменты: `browser.open`, `browser.snapshot` (интерактивные элементы со ссылками `ref`), `browser.click`, `browser.type`, `browser.fill_secret` (vault-ссылка, значение печатает плагин), `browser.screenshot`, `browser.scroll`, `browser.tabs`, `browser.back`, `browser.download` (в карантин workspace).
 - Живой экран: CDP `Page.startScreencast` → WebSocket → панель веба. Перехват: события мыши и клавиатуры из веба → `Input.dispatch*`; агент на паузе, пока управление у пользователя.
 - Капчи агент не решает — просит перехватить управление.

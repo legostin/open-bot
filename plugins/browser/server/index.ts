@@ -1,4 +1,4 @@
-// Builtin browser plugin: Playwright Chromium with a persistent profile, agent tools, live view and user takeover.
+// Builtin browser plugin: Google Chrome (or Playwright's Chromium) with a persistent profile, agent tools, live view and user takeover.
 
 import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
 import { BrowserManager } from "./manager.ts";
@@ -11,8 +11,8 @@ const plugin: PluginModule = {
     // The browser itself starts lazily on the first tool call (or when the user opens it in the live view).
     const mgr = new BrowserManager(ctx);
     manager = mgr;
-    // Outside Docker Playwright's Chromium may be missing: download it now in the background, so the first
-    // browser call does not wait for all of it (calls during the install wait for it).
+    // Without Google Chrome, Playwright's Chromium may be missing outside Docker: download it now in the background, so
+    // the first browser call does not wait for all of it (calls during the install wait for it).
     mgr.installer.check();
     registerTools(ctx, mgr);
     ctx.ui.onMessage((m) => mgr.onUiMessage(m));

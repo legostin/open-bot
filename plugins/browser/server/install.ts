@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, sep } from "node:path";
+import { dirname, join } from "node:path";
 import type { PluginLogger } from "@owlbot/plugin-sdk";
 import { cut, ToolError } from "./util.ts";
 
@@ -25,7 +25,7 @@ export interface InstallProcess {
 }
 
 export interface InstallerDeps {
-  /** Files the launch can need (full Chromium for a window, the headless shell without one). */
+  /** Files the launch needs that may be missing (none when Google Chrome is used). */
   executables(): string[];
   exists(path: string): boolean;
   /** Start `playwright install chromium`; every output line goes to `onLine`. */
@@ -250,26 +250,6 @@ function playwrightPackageJson(): string {
   return createRequire(import.meta.url).resolve("playwright/package.json");
 }
 
-/**
- * The executables `launchPersistentContext` uses: full Chromium when headed, Playwright's headless shell when headless.
- * `playwright install chromium` installs both. The headless shell has no public API: ask Playwright's registry, and
- * if that internal module moved, look for the shell's directory next to Chromium's.
- */
-export function chromiumExecutables(chromiumPath: string): string[] {
-  const out = [chromiumPath];
-  try {
-    const core = createRequire(playwrightPackageJson())("playwright-core/lib/coreBundle");
-    const shell = core?.registry?.registry?.findExecutable?.("chromium-headless-shell")?.executablePath?.();
-    if (typeof shell === "string" && shell) return [...out, shell];
-  } catch {
-    /* fall back below */
-  }
-  // <browsers>/chromium-<rev>/chrome-…/chrome → <browsers>/chromium_headless_shell-<rev>/INSTALLATION_COMPLETE
-  const m = /^(.*[\\/])chromium-(\d+)[\\/]/.exec(chromiumPath);
-  if (m) out.push(`${m[1]}chromium_headless_shell-${m[2]}${sep}INSTALLATION_COMPLETE`);
-  return out;
-}
-
 /** Playwright's CLI from node_modules (npx may not be on PATH), run with this Node. */
 export function playwrightCli(): string {
   try {
@@ -321,12 +301,13 @@ export function spawnPlaywrightInstall(onLine: (line: string) => void): InstallP
 
 /** The installer wired to Playwright and this process. */
 export function createChromiumInstaller(opts: {
-  chromiumPath: () => string;
+  /** Files the launch needs: Playwright's full Chromium (the headless shell is never used). */
+  executables: () => string[];
   log: Pick<PluginLogger, "info" | "warn">;
   onChange?: () => void;
 }): ChromiumInstaller {
   return new ChromiumInstaller({
-    executables: () => chromiumExecutables(opts.chromiumPath()),
+    executables: opts.executables,
     exists: existsSync,
     spawn: spawnPlaywrightInstall,
     log: opts.log,

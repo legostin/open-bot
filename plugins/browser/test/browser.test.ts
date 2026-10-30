@@ -532,7 +532,10 @@ describe("browser plugin (headless Chromium)", () => {
     h.uiMessage({ type: "watch", on: true });
     const frame = await until(() => emits().find((e) => e.channel === "frame"));
     expect(Buffer.from(frame.payload.data, "base64")[0]).toBe(0xff);
-    expect(frame.payload).toMatchObject({ width: 1280, height: 800, url: base + "/counter" });
+    // The page gets what the 1280×900 window leaves under its toolbar.
+    expect(frame.payload).toMatchObject({ width: 1280, url: base + "/counter" });
+    expect(frame.payload.height).toBeGreaterThan(700);
+    const height: number = frame.payload.height;
     await until(() => emits().find((e) => e.channel === "state" && e.payload.running && e.payload.url === base + "/counter"));
 
     h.uiMessage({ type: "control", on: true });
@@ -541,12 +544,12 @@ describe("browser plugin (headless Chromium)", () => {
     expect(blocked.isError).toBe(true);
     expect(text(blocked)).toContain("The user is controlling the browser");
 
-    // Click the big button (top-left 640x400 of the 1280x800 viewport) and type into the field below it.
+    // Click the big button (top-left 640x400 of the page) and type into the field below it.
     const framesBefore = emits().filter((e) => e.channel === "frame").length;
     for (const action of ["down", "up"]) h.uiMessage({ type: "input", event: "mouse", action, x: 0.1, y: 0.1, button: "left", clickCount: 1 });
     // The repaint after the click arrives as a screencast frame.
     await until(() => emits().filter((e) => e.channel === "frame").length > framesBefore);
-    for (const action of ["down", "up"]) h.uiMessage({ type: "input", event: "mouse", action, x: 0.1, y: 520 / 800, button: "left", clickCount: 1 });
+    for (const action of ["down", "up"]) h.uiMessage({ type: "input", event: "mouse", action, x: 0.1, y: 520 / height, button: "left", clickCount: 1 });
     for (const key of ["a", "b"]) {
       h.uiMessage({ type: "input", event: "key", action: "down", key, code: `Key${key.toUpperCase()}` });
       h.uiMessage({ type: "input", event: "key", action: "up", key, code: `Key${key.toUpperCase()}` });

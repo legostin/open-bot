@@ -147,6 +147,40 @@ export const PROCEED_LABEL_RE = new RegExp(
   "iu",
 );
 
+/**
+ * A check a site shows instead of the page that passes by itself within seconds (Cloudflare's interstitial). Russian:
+ * "browser check", "checking the browser", "running a security check".
+ */
+export const CHECK_PASSING_RE = new RegExp(
+  [
+    "just a moment",
+    "performing security verification",
+    "checking your browser",
+    "\\u043f\\u0440\\u043e\\u0432\\u0435\\u0440\\u043a\\u0430 \\u0431\\u0440\\u0430\\u0443\\u0437\\u0435\\u0440\\u0430",
+    "\\u043f\\u0440\\u043e\\u0432\\u0435\\u0440\\u044f\\u0435\\u043c \\u0431\\u0440\\u0430\\u0443\\u0437\\u0435\\u0440",
+    "\\u0432\\u044b\\u043f\\u043e\\u043b\\u043d\\u0435\\u043d\\u0438\\u0435 \\u043f\\u0440\\u043e\\u0432\\u0435\\u0440\\u043a\\u0438 \\u0431\\u0435\\u0437\\u043e\\u043f\\u0430\\u0441\\u043d\\u043e\\u0441\\u0442\\u0438",
+  ].join("|"),
+  "iu",
+);
+
+/**
+ * A captcha or "not a robot" check a person has to pass. Russian: "confirm that you are not a robot", "I'm not a robot",
+ * "you are not a robot?" (Yandex), "requests from your device look automated", "suspicious traffic" (Google).
+ */
+export const CHECK_RE = new RegExp(
+  [
+    "verify you are (?:a )?human",
+    "are you a robot",
+    "unusual traffic from your computer",
+    "\\u043f\\u043e\\u0434\\u0442\\u0432\\u0435\\u0440\\u0434\\u0438\\u0442\\u0435, \\u0447\\u0442\\u043e \\u0432\\u044b \\u043d\\u0435 \\u0440\\u043e\\u0431\\u043e\\u0442",
+    "\\u044f \\u043d\\u0435 \\u0440\\u043e\\u0431\\u043e\\u0442",
+    "\\u0432\\u044b \\u043d\\u0435 \\u0440\\u043e\\u0431\\u043e\\u0442\\?",
+    "\\u043f\\u043e\\u0445\\u043e\\u0436\\u0438 \\u043d\\u0430 \\u0430\\u0432\\u0442\\u043e\\u043c\\u0430\\u0442\\u0438\\u0447\\u0435\\u0441\\u043a\\u0438\\u0435",
+    "\\u043f\\u043e\\u0434\\u043e\\u0437\\u0440\\u0438\\u0442\\u0435\\u043b\\u044c\\u043d\\u044b\\u0439 \\u0442\\u0440\\u0430\\u0444\\u0438\\u043a",
+  ].join("|"),
+  "iu",
+);
+
 /** Everything the page script needs to classify elements (regex sources: RegExp objects do not cross into the page). */
 export const PAGE_RULES = {
   action: ACTION_LABEL_RE.source,
@@ -156,6 +190,8 @@ export const PAGE_RULES = {
   hint: ACTION_HINT_RE.source,
   checkoutForm: CHECKOUT_FORM_RE.source,
   proceed: PROCEED_LABEL_RE.source,
+  check: CHECK_RE.source,
+  checkPassing: CHECK_PASSING_RE.source,
 };
 
 /** Keys that activate the focused element: Enter (submits forms, sends chat messages) and Space (presses buttons). */

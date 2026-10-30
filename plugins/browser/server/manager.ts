@@ -1,21 +1,24 @@
-// Browser lifecycle: lazy Chromium launch with a persistent profile, active tab, serialized agent tool calls,
+// Browser lifecycle: lazy launch of Google Chrome (or Playwright's Chromium) as an ordinary browser with a persistent
+// profile, active tab, serialized agent tool calls,
 // idle shutdown, dialogs and downloads, live view (CDP screencast) and user takeover (CDP input).
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { chromium } from "playwright";
-import type { BrowserContext, CDPSession, Dialog, Download, Frame, Locator, Page } from "playwright";
+import type { BrowserContext, CDPSession, Dialog, Download, Frame, LaunchOptions, Locator, Page } from "playwright";
 import { mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolResult } from "@owlbot/shared";
 import type { PluginContext } from "@owlbot/plugin-sdk";
 import { createChromiumInstaller, INSTALL_WAIT_MS, isMissingExecutableError, type ChromiumInstaller } from "./install.ts";
 import { pageCall } from "./page-script.ts";
-import { PAGE_RULES, type FocusInfo } from "./safety.ts";
+import { CHECK_PASSING_RE, PAGE_RULES, type FocusInfo } from "./safety.ts";
 import {
   cut,
   decideHeadless,
+  findChrome,
   formatSize,
   isPrivateHost,
+  launchArgs,
   normalizeUrl,
   proxyFromEnv,
   readSettings,
@@ -23,15 +26,23 @@ import {
   sleep,
   ToolError,
   uniquePath,
+  windowedUserAgent,
   withTimeout,
+  WINDOW,
   type BrowserSettings,
+  type ProxyConfig,
 } from "./util.ts";
 
 export { ToolError };
 
-export const VIEWPORT = { width: 1280, height: 800 };
+/** What a page gets of the window until it says (the toolbar takes the rest). */
+export const VIEWPORT = { width: WINDOW.width, height: WINDOW.height - 87 };
 const WATCH_TTL_MS = 30_000;
 const FRAME_INTERVAL_MS = 100;
+
+/** Which browser to launch: Google Chrome by its path, or Playwright's full Chromium. */
+type Engine = Pick<LaunchOptions, "executablePath" | "channel">;
+const CHROMIUM: Engine = { channel: "chromium" };
 
 export interface Classified {
   /** Activating it is an action with consequences: only browser_submit (approved by the user) does it. */
@@ -70,6 +81,8 @@ export class BrowserManager {
   settings: BrowserSettings;
   /** Installs Playwright's Chromium when it is missing (outside Docker); launches wait for it. */
   readonly installer: ChromiumInstaller;
+  /** Google Chrome on this computer, launched instead of Playwright's Chromium (no download then). */
+  readonly chrome: string | null;
   readonly downloadsDir: string;
   private readonly profileDir: string;
   private context: BrowserContext | null = null;
@@ -82,6 +95,8 @@ export class BrowserManager {
   private downloadWaiters: Array<(r: { done: Promise<DownloadRecord> }) => void> = [];
   private acceptDialogs = false;
   private headlessMode: boolean | null = null;
+  /** Each engine's own user agent without "Headless", found once per process. */
+  private userAgents = new Map<string, string>();
   private timers: NodeJS.Timeout[] = [];
   // live view and takeover
   private watchers = new Map<string, number>();
@@ -102,8 +117,10 @@ export class BrowserManager {
   constructor(ctx: PluginContext) {
     this.ctx = ctx;
     this.settings = readSettings(ctx.settings);
+    this.chrome = findChrome(process.platform, process.env);
     this.installer = createChromiumInstaller({
-      chromiumPath: () => chromium.executablePath(),
+      // With Google Chrome nothing is downloaded; if Chrome then fails to start, the launch installs Chromium itself.
+      executables: () => (this.chrome ? [] : [chromium.executablePath()]),
       log: ctx.log,
       onChange: () => this.scheduleState(),
     });
@@ -160,40 +177,51 @@ export class BrowserManager {
   }
 
   private async launch(): Promise<BrowserContext> {
-    // Outside Docker Chromium may still be downloading (or missing): wait for that one install.
-    await this.installer.ensure(INSTALL_WAIT_MS);
+    // Without Google Chrome, Playwright's Chromium may still be downloading (or missing): wait for that one install.
+    if (!this.chrome) await this.installer.ensure(INSTALL_WAIT_MS);
     mkdirSync(this.profileDir, { recursive: true });
     mkdirSync(this.downloadsDir, { recursive: true });
     // A previous process (or container) may have left Chromium's profile lock behind; we are the only user of it.
     for (const f of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) rmSync(join(this.profileDir, f), { force: true });
     const headless = decideHeadless(this.settings.headless, process.env, process.platform);
     const proxy = proxyFromEnv(process.env, this.settings.allowLocalNetwork);
-    const open = (h: boolean) =>
-      // Default channel: Playwright's headless shell when headless, full Chromium when headed (Xvfb in Docker).
-      chromium.launchPersistentContext(this.profileDir, {
+    // Google Chrome when the computer has it, else Playwright's full Chromium (never its headless shell).
+    let used = "Chromium";
+    const open = async (h: boolean, engine: Engine) => {
+      const c = await chromium.launchPersistentContext(this.profileDir, {
+        ...engine,
         headless: h,
-        viewport: VIEWPORT,
+        // The window's own size, as in a person's browser (an emulated viewport makes the screen the page's size).
+        viewport: null,
         acceptDownloads: true,
+        ignoreDefaultArgs: ["--enable-automation"],
         ...(proxy ? { proxy } : {}),
-        args: [
-          "--no-first-run",
-          "--no-default-browser-check",
-          "--disable-features=Translate",
-          // WebRTC must not open UDP connections around the egress proxy.
-          ...(proxy ? ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"] : []),
-        ],
+        args: launchArgs({ headless: h, platform: process.platform, userAgent: h ? await this.userAgent(engine, proxy) : undefined, proxy: !!proxy }),
       });
+      used = engine.executablePath ? "Google Chrome" : "Chromium";
+      return c;
+    };
     // Playwright still misses a browser file the installer's check did not know about: run the installer, retry once.
-    const openOrInstall = async (h: boolean): Promise<BrowserContext> => {
+    const openChromium = async (h: boolean): Promise<BrowserContext> => {
       try {
-        return await open(h);
+        return await open(h, CHROMIUM);
       } catch (e: any) {
         const msg = String(e?.message ?? e);
         if (!isMissingExecutableError(msg) || this.installer.disabled) throw e;
         this.ctx.log.warn(`Playwright cannot find a browser executable (${msg.split("\n")[0]}): running the installer`);
         await this.installer.ensure(INSTALL_WAIT_MS, true);
-        return await open(h);
+        return await open(h, CHROMIUM);
       }
+    };
+    const openOrInstall = async (h: boolean): Promise<BrowserContext> => {
+      if (this.chrome) {
+        try {
+          return await open(h, { executablePath: this.chrome });
+        } catch (e: any) {
+          this.ctx.log.warn(`Google Chrome did not start (${String(e?.message ?? e).split("\n")[0]}): using Playwright's Chromium`);
+        }
+      }
+      return openChromium(h);
     };
     let context: BrowserContext;
     try {
@@ -215,7 +243,7 @@ export class BrowserManager {
         throw new ToolError(`Could not start the browser: ${detail}`, "launch", { detail });
       }
     }
-    this.ctx.log.info(`browser started (${this.headlessMode ? "headless" : "headed"}${proxy ? ", via egress proxy" : ""})`);
+    this.ctx.log.info(`browser started (${used}, ${this.headlessMode ? "headless" : "headed"}${proxy ? ", via egress proxy" : ""})`);
     context.on("close", () => this.onContextClosed(context));
     context.on("page", (p) => {
       this.trackPage(p);
@@ -230,6 +258,37 @@ export class BrowserManager {
     this.scheduleState();
     this.syncCast();
     return context;
+  }
+
+  /**
+   * What this engine calls itself with a window. Headless it says "HeadlessChrome" everywhere, workers included, and
+   * only a launch flag changes that: ask a throwaway headless instance once (about:blank, no network).
+   */
+  private async userAgent(engine: Engine, proxy: ProxyConfig | undefined): Promise<string | undefined> {
+    const key = engine.executablePath ?? String(engine.channel);
+    const known = this.userAgents.get(key);
+    if (known) return known;
+    try {
+      const b = await chromium.launch({ ...engine, headless: true, ...(proxy ? { proxy } : {}), args: ["--no-first-run"] });
+      try {
+        const ua = windowedUserAgent(await (await b.newPage()).evaluate(() => navigator.userAgent));
+        this.userAgents.set(key, ua);
+        return ua;
+      } finally {
+        await b.close().catch(() => {});
+      }
+    } catch (e: any) {
+      // The real launch will report what is wrong; the browser still works, only less like a person's.
+      this.ctx.log.warn(`could not read the browser's user agent: ${String(e?.message ?? e).split("\n")[0]}`);
+      return undefined;
+    }
+  }
+
+  /** The page's size in CSS pixels (there is no emulated viewport: it is what the window leaves). */
+  async pageSize(page: Page): Promise<{ width: number; height: number }> {
+    const vp = page.viewportSize();
+    if (vp) return vp;
+    return page.evaluate<{ width: number; height: number }>("({ width: innerWidth, height: innerHeight })").catch(() => VIEWPORT);
   }
 
   async close(): Promise<void> {
@@ -525,6 +584,19 @@ export class BrowserManager {
     return r as T;
   }
 
+  /**
+   * A check that passes by itself (Cloudflare's "Just a moment") is up. Asked only from Playwright's isolated world
+   * (title, selectors, text): a script of ours running in the page's own world stops such checks from passing.
+   * `refused`: the site answered 403/429/498/503, so a page still without text is a check getting ready.
+   */
+  async passingCheck(page: Page, refused = false): Promise<boolean> {
+    if (await page.locator("#challenge-form, #cf-challenge-running").count().catch(() => 0)) return true;
+    const title = await page.title().catch(() => "");
+    const body = (await page.locator("body").innerText({ timeout: 2000 }).catch(() => "")).trim();
+    if (refused && !title && body.replace(/\W/g, "").length < 20) return true;
+    return CHECK_PASSING_RE.test(`${title} ${body.slice(0, 1500)}`);
+  }
+
   /** Find an element by ref in any frame of the page. */
   async locate(page: Page, ref: string): Promise<{ frame: Frame; loc: Locator }> {
     const r = String(ref ?? "").trim();
@@ -749,7 +821,7 @@ export class BrowserManager {
     if (this.cast?.page !== page) {
       await this.stopCastNow();
       const cdp = await this.context!.newCDPSession(page!);
-      const vp = page!.viewportSize() ?? VIEWPORT;
+      const vp = await this.pageSize(page!);
       const cast: Cast = { page: page!, cdp, width: vp.width, height: vp.height, lastEmit: 0, pending: null, timer: null };
       this.cast = cast;
       cdp.on("Page.screencastFrame", (f) => {

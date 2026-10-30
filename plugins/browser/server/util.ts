@@ -58,6 +58,58 @@ export function decideHeadless(setting: HeadlessSetting, env: NodeJS.ProcessEnv,
   return true;
 }
 
+/**
+ * Google Chrome installed on this computer. Sites take it for the person's own browser; Playwright's Chromium has no
+ * Chrome brand, and its headless shell gives itself away on every check.
+ */
+export function findChrome(platform: NodeJS.Platform, env: NodeJS.ProcessEnv, exists: (p: string) => boolean = existsSync): string | null {
+  const candidates: string[] = [];
+  if (platform === "darwin") {
+    const app = "Google Chrome.app/Contents/MacOS/Google Chrome";
+    candidates.push(join("/Applications", app));
+    if (env.HOME) candidates.push(join(env.HOME, "Applications", app));
+  } else if (platform === "win32") {
+    const exe = join("Google", "Chrome", "Application", "chrome.exe");
+    for (const root of [env.PROGRAMFILES, env["PROGRAMFILES(X86)"], env.LOCALAPPDATA]) if (root) candidates.push(join(root, exe));
+  } else {
+    candidates.push("/opt/google/chrome/chrome", "/usr/bin/google-chrome-stable", "/usr/bin/google-chrome");
+  }
+  return candidates.find((p) => exists(p)) ?? null;
+}
+
+/** The browser window; the page gets what its toolbar leaves (about 1280×813). */
+export const WINDOW = { width: 1280, height: 900 };
+
+/** A screen behind a headless window, with the work area a menu bar, dock or taskbar leaves (headless has none of its own). */
+function screenInfo(platform: NodeJS.Platform): string {
+  if (platform === "darwin") return "{1920x1080 workAreaTop=25 workAreaBottom=70}";
+  if (platform === "win32") return "{1920x1080 workAreaBottom=48}";
+  return "{1920x1080 workAreaTop=32}";
+}
+
+/** Headless Chrome calls itself "HeadlessChrome" (to pages, in headers and in workers); with a window it says "Chrome". */
+export function windowedUserAgent(ua: string): string {
+  return ua.replace(/HeadlessChrome\//g, "Chrome/");
+}
+
+/**
+ * Flags of an ordinary browser. Playwright's `--enable-automation` (the "controlled by automated software" bar and
+ * navigator.webdriver) is dropped through `ignoreDefaultArgs`; the rest keeps automation from showing to pages.
+ * Headless needs its user agent (`userAgent`, from {@link windowedUserAgent}) and a screen.
+ */
+export function launchArgs(o: { headless: boolean; platform: NodeJS.Platform; userAgent?: string; proxy: boolean }): string[] {
+  return [
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-features=Translate",
+    "--disable-blink-features=AutomationControlled",
+    `--window-size=${WINDOW.width},${WINDOW.height}`,
+    ...(o.headless ? [`--screen-info=${screenInfo(o.platform)}`, ...(o.userAgent ? [`--user-agent=${o.userAgent}`] : [])] : []),
+    // WebRTC must not open UDP connections around the egress proxy.
+    ...(o.proxy ? ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"] : []),
+  ];
+}
+
 export interface ProxyConfig {
   server: string;
   username?: string;

@@ -6,7 +6,6 @@ import { existsSync } from "node:fs";
 import {
   autoInstallDisabled,
   ChromiumInstaller,
-  chromiumExecutables,
   errorLine,
   isMissingExecutableError,
   playwrightCli,
@@ -241,11 +240,7 @@ describe("install helpers", () => {
     expect(errorLine(["|■■ | 10% of 1 MiB"])).toBeNull();
   });
 
-  it("locates Playwright's CLI and the executables in node_modules", () => {
+  it("locates Playwright's CLI in node_modules", () => {
     expect(existsSync(playwrightCli())).toBe(true);
-    const exes = chromiumExecutables(CHROME);
-    expect(exes[0]).toBe(CHROME);
-    expect(exes).toHaveLength(2);
-    expect(exes[1]).toMatch(/chromium_headless_shell-\d+/);
   });
 });

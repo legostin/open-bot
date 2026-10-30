@@ -20,6 +20,9 @@ export function pageScript(op: string, a: any): any {
   const HINT = new RegExp(rules.hint || "$^", "i");
   const CHECKOUT_FORM = new RegExp(rules.checkoutForm || "$^", "iu");
   const PROCEED = new RegExp(rules.proceed || "$^", "iu");
+  // A site's check instead of the page: a captcha, or one that passes by itself.
+  const CHECK = new RegExp(rules.check || "$^", "iu");
+  const CHECK_PASSING = new RegExp(rules.checkPassing || "$^", "iu");
   const LINK_WORDS = Number(rules.linkWords) || 6;
   /** Roles that only focus, tick or choose: clicking them is never the action itself (the form's submit is). */
   const FIELD_ROLES = ["checkbox", "radio", "option", "tab", "combobox", "textbox", "searchbox", "slider", "spinbutton", "menuitemcheckbox", "menuitemradio", "listbox", "treeitem"];
@@ -375,10 +378,11 @@ export function pageScript(op: string, a: any): any {
         break;
       }
     }
+    // Yandex's SmartCaptcha page and Google's "unusual traffic" page.
+    if (!captcha) captcha = /\/showcaptcha|\/sorry\/index/.test(location.pathname);
     if (!captcha) {
-      const sample = (document.title + " " + String((document.body && document.body.innerText) || "").slice(0, 1500)).toLowerCase();
-      // Russian: "confirm that you are not a robot", "I'm not a robot", "browser check".
-      captcha = /just a moment|verify you are (a )?human|are you a robot|\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435, \u0447\u0442\u043e \u0432\u044b \u043d\u0435 \u0440\u043e\u0431\u043e\u0442|\u044f \u043d\u0435 \u0440\u043e\u0431\u043e\u0442|\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430/.test(sample);
+      const sample = document.title + " " + String((document.body && document.body.innerText) || "").slice(0, 1500);
+      captcha = CHECK_PASSING.test(sample) || CHECK.test(sample);
     }
     const se = document.scrollingElement || document.documentElement;
     return {
