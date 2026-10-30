@@ -585,6 +585,8 @@ export class Hub {
   reindex(): void {
     const layouts = this.plugins?.enabledLayouts() ?? [];
     this.skills.setRoots([
+      // Skills the hub ships sit beside its built-in plugins (integrations/_template is make-integration).
+      ...this.config.builtinPluginsDirs.map((dir) => ({ source: "owlbot", skillsDir: dir })),
       { source: "user", skillsDir: join(this.config.dataDir, "skills"), commandsDir: join(this.config.dataDir, "commands") },
       ...layouts.map((l) => ({ source: l.manifest.id, skillsDir: l.skillsDir, commandsDir: l.commandsDir })),
     ]);

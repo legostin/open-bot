@@ -123,7 +123,7 @@ describe("pages (integration)", () => {
     writeFileSync(join(kit, "theme.css"), ":root{--radius:.75rem}");
     const config = loadConfig(
       { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-pages-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents"), pagesKitDir: kit },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-pages-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), pagesKitDir: kit },
     );
     hub = new Hub(config);
     await hub.start();

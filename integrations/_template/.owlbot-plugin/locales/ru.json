@@ -1,0 +1,11 @@
+{
+  "name": "Восход и закат",
+  "description": "Восход, закат и долгота дня для любого места и даты от sunrise-sunset.org — карточкой в чате.",
+  "integration.summary": "Когда встаёт и садится солнце где угодно — карточкой",
+  "integration.example": "Во сколько сегодня закат в Лиссабоне?",
+  "card.label": "Восход и закат: {place}",
+  "card.sunrise": "Восход",
+  "card.sunset": "Закат",
+  "card.day": "День {length}",
+  "card.hours": "{h} ч {m} мин"
+}

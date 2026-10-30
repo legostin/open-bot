@@ -10,10 +10,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** `@owlbot/<name>` → its folder and `exports`, from packages/* and plugins/*. */
+/** `@owlbot/<name>` → its folder and `exports`, from packages/*, plugins/* and integrations/*. */
 export function workspaces(root = APP_ROOT) {
   const out = new Map();
-  for (const group of ["packages", "plugins"]) {
+  for (const group of ["packages", "plugins", "integrations"]) {
     let dirs = [];
     try {
       dirs = readdirSync(join(root, group));

@@ -1,13 +1,16 @@
-// Build UI modules of builtin plugins: plugins/<id>/ui/src/index.tsx → plugins/<id>/ui/dist/index.js
+// Build UI modules of builtin plugins: {plugins,integrations}/<id>/ui/src/index.tsx → …/<id>/ui/dist/index.js
 // React, ReactDOM and @owlbot/ui stay external: the host provides them through the import map.
-// Usage: node scripts/build-ui-plugins.mjs [pluginDir ...]   (default: every plugins/* with ui/src)
+// Usage: node scripts/build-ui-plugins.mjs [pluginDir ...]   (default: every plugins/* and integrations/* with ui/src)
 
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
 
 const root = resolve(import.meta.dirname, "..");
-const dirs = process.argv.length > 2 ? process.argv.slice(2).map((d) => resolve(d)) : readdirSync(join(root, "plugins")).map((d) => join(root, "plugins", d));
+const dirs =
+  process.argv.length > 2
+    ? process.argv.slice(2).map((d) => resolve(d))
+    : ["plugins", "integrations"].flatMap((group) => readdirSync(join(root, group)).map((d) => join(root, group, d)));
 
 const EXTERNAL = ["react", "react/jsx-runtime", "react-dom", "react-dom/client", "@owlbot/ui"];
 let built = 0;

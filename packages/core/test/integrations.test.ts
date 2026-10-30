@@ -102,7 +102,7 @@ describe("integrations and the Google sign-in", () => {
         OWLBOT_GOOGLE_REVOKE_URL: `${base}/revoke`,
         OWLBOT_GOOGLE_USERINFO_URL: `${base}/userinfo`,
       },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-int-")), builtinPluginsDir: plugins, builtinAgentsDir: join(fixtures, "agents") },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-int-")), builtinPluginsDirs: [plugins], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
     await hub.start();

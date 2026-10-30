@@ -10,13 +10,16 @@
 //
 // The one exception is profile_update at the end: every agent may change its own profile when the user asks.
 
-import type { AgentDef, AgentDraft, JsonSchema, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import { isAbsolute, relative, resolve } from "node:path";
+import type { AgentDef, AgentDraft, JsonSchema, Locale, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
 import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
 import type { Hub } from "../app.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
-import { hubLocale } from "../i18n.ts";
+import { hubLocale, tFor } from "../i18n.ts";
 import { listIntegrations } from "../integrations.ts";
+import type { InstallPreview } from "../plugins/host.ts";
+import { ruleMatches } from "../policy/engine.ts";
 import { inviteUrl, machineHubUrl } from "../pairing.ts";
 import { isSetupStep, SETUP_STEPS } from "../setup.ts";
 
@@ -314,6 +317,75 @@ export function registerHubTools(hub: Hub): void {
     },
   );
 
+  reg(
+    {
+      name: "plugin_install",
+      effect: "local-write",
+      description:
+        "Install a plugin on this hub, or update one installed earlier: an integration you built in your workspace with the make-integration skill " +
+        "(source: its folder, e.g. integrations/<id>) or one from a git URL. The user sees its name and everything it asks for (internet hosts, " +
+        "secrets, hub actions) on an approval card and decides; once allowed it is installed and turned on, and shows in the Plugins catalog. " +
+        "Built-in plugins cannot be replaced.",
+      inputSchema: obj({ source: { type: "string", description: "A folder in your workspace (relative to it, or absolute) or a git URL (https://…)" } }, ["source"]),
+    },
+    async (i, ctx) => {
+      const raw = String(i.source ?? "").trim();
+      if (!raw) return text("Give source: a folder in your workspace or a git URL.", true);
+      let source = raw;
+      if (!/^(https?:\/\/|git@|ssh:\/\/)/.test(raw)) {
+        if (ctx.machineId !== "local")
+          return text("This chat works on another computer, whose folders the hub cannot read: push the plugin to a git repository and give its URL.", true);
+        source = resolve(ctx.workspace, raw);
+        const rel = relative(ctx.workspace, source);
+        if (!rel || rel.startsWith("..") || isAbsolute(rel)) return text(`Only a folder inside your workspace (${ctx.workspace}) can be installed.`, true);
+      }
+      const locale = hubLocale();
+      const preview = await hub.plugins.prepareInstall(source, locale);
+      const { id, name } = preview.manifest;
+      const tool = HUB_TOOL_PREFIX + "plugin_install";
+      const rules = hub.rules.list().filter((r) => ruleMatches(r, tool, ctx.agentId, i));
+      if (rules.some((r) => r.decision === "deny")) {
+        hub.plugins.discardInstall(preview.stagingId);
+        return text(`Refused by the user's rule: ${name} (${id}) is not installed.`, true);
+      }
+      // Installing code is the person's call, with what it asks for in front of them (an "always" rule answers for them).
+      if (!rules.some((r) => r.decision === "allow")) {
+        const summary = installSummary(preview, locale);
+        const approval = hub.approvals.create({
+          sessionId: ctx.sessionId,
+          conversationId: ctx.conversationId,
+          taskId: ctx.taskId,
+          agentId: ctx.agentId,
+          tool,
+          input: { source: raw, id, permissions: preview.permissions },
+          summary,
+          effect: "external",
+          tainted: ctx.tainted,
+        });
+        const outcome = await hub.approvals.wait(approval.id, Math.max(120_000, hub.settings.get().approvalInlineWaitSec * 1000));
+        if (outcome !== "approved") {
+          hub.plugins.discardInstall(preview.stagingId);
+          if (outcome === "timeout") {
+            try {
+              hub.approvals.resolve(approval.id, "deny", { via: "timeout" });
+            } catch {
+              /* already answered */
+            }
+            return text(`The user did not answer in time: ${name} (${id}) is not installed. Ask them in your reply and call again when they say yes.`, true);
+          }
+          return text(`The user declined installing ${name} (${id}).`, true);
+        }
+      }
+      const rec = await hub.plugins.confirmInstall(preview.stagingId);
+      const tools = hub.tools.list().filter((d) => d.owner === id).map((d) => d.name);
+      return text(
+        `Installed ${name} (${id}) and turned it on (status: ${rec.status}${rec.lastError ? `, error: ${rec.lastError}` : ""}). ` +
+          (tools.length ? `Its tools: ${tools.join(", ")}; they reach you from your next turn. ` : "") +
+          "It is in the Plugins catalog now. Tell the user in a sentence what it does and what to ask; fix and install again if something is off.",
+      );
+    },
+  );
+
   // ---------- machines ----------
 
   reg(
@@ -395,7 +467,8 @@ export function registerHubTools(hub: Hub): void {
       description:
         "The catalog: services the user can connect and abilities they can turn on (access from anywhere, Google Calendar, Telegram, web search, the browser, " +
         "weather, currency rates, Wikipedia, holidays, crypto prices, world clock…) with their status (connected and as whom, needs-setup, off, broken, unavailable). " +
-        "Check it before saying something cannot be done: an ability that is off can be turned on with hub_integration_connect.",
+        "Check it before saying something cannot be done: an ability that is off can be turned on with hub_integration_connect. " +
+        "When nothing here does what the user wants, offer to build an integration for it: the make-integration skill, then hub_plugin_install.",
       inputSchema: obj({}),
     },
     async () => {
@@ -672,6 +745,18 @@ function validateSettings(p: Record<string, unknown>): string | undefined {
 
 function maskSecrets(s: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(s ?? {}).map(([k, v]) => [k, SECRET_KEY.test(k) && typeof v === "string" && v && !v.startsWith("vault://") ? "•••" : v]));
+}
+
+/** The approval card's line for installing a plugin: its name and everything it asks for, in the person's language. */
+export function installSummary(p: Pick<InstallPreview, "manifest" | "permissions" | "warnings">, locale: Locale): string {
+  const t = tFor(locale);
+  const perms = p.permissions;
+  const asks = [
+    perms.network.length ? t("plugin.ask.network", { hosts: perms.network.join(", ") }) : t("plugin.ask.offline"),
+    ...(perms.vault.length ? [t("plugin.ask.vault", { items: perms.vault.join(", ") })] : []),
+    ...(perms.core.length ? [t("plugin.ask.core", { methods: perms.core.join(", ") })] : []),
+  ];
+  return [`${t("plugin.ask.install", { name: p.manifest.name, id: p.manifest.id })}: ${asks.join("; ")}.`, ...p.warnings].join(" ");
 }
 
 /** Whether `pluginId` hosts the brain the calling session runs on. */

@@ -8,7 +8,8 @@
     "packages/brains-cli/src",
     "packages/node/src",
     "packages/testkit/src",
-    "plugins/*/server"
+    "plugins/*/server",
+    "integrations/*/server"
   ],
   "exclude": ["**/node_modules", "**/dist"]
 }

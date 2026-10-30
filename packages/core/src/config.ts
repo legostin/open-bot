@@ -33,7 +33,11 @@ export interface Config {
   internalUrl: string;
   allowedHosts: string[];
   appRoot: string;
-  builtinPluginsDir: string;
+  /**
+   * Folders of built-in plugins: the hub's own (plugins/) and the integrations (integrations/). A subfolder starting
+   * with "_" or "." is not a plugin; one with a SKILL.md is a skill the hub ships (integrations/_template).
+   */
+  builtinPluginsDirs: string[];
   builtinAgentsDir: string;
   webDist: string;
   /** The pages kit's build (packages/pages-kit/dist), which pages run on. */
@@ -114,7 +118,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     },
     allowedHosts,
     appRoot,
-    builtinPluginsDir: join(appRoot, "plugins"),
+    builtinPluginsDirs: [join(appRoot, "plugins"), join(appRoot, "integrations")],
     builtinAgentsDir: join(appRoot, "agents"),
     webDist: join(appRoot, "packages", "web", "dist"),
     pagesKitDir: join(appRoot, "packages", "pages-kit", "dist"),

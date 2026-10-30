@@ -132,7 +132,7 @@ describe("the link's gateways", () => {
         OWLBOT_TAILNET_BIN: FAKE,
         TZ: "UTC",
       },
-      { dataDir, builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
+      { dataDir, builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
     );
     hub = new Hub(config);
     await hub.start();

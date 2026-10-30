@@ -1,0 +1,96 @@
+---
+name: make-integration
+description: Build a new Owlbot integration (a plugin that connects a service or adds an ability, listed in the Plugins catalog) and install it on this hub. Use when the user wants something no existing integration does, asks to connect a service, or asks you to make a plugin.
+---
+
+# Making an integration
+
+An integration is a plugin: one folder with a manifest, English and Russian texts, a server module with tools,
+and optionally a card that shows results in the chat. This folder is a complete working one (sunrise and sunset
+from sunrise-sunset.org): copy it and change what it does, keep its shape.
+
+```
+<id>/
+  .owlbot-plugin/plugin.json         manifest: id, name, the catalog card, permissions, tools, widgets, settings
+  .owlbot-plugin/locales/en.json     every text a person reads (English is the source and the fallback)
+  .owlbot-plugin/locales/ru.json     the same keys in Russian
+  server/index.ts                    the tools (TypeScript run directly by Node: no build)
+  ui/src/index.tsx                   the card (widget) drawn in the chat, optional
+  test/<id>.test.ts                  tests against a fake of the service (in the Owlbot repository)
+  package.json                       the folder's npm name; `dependencies` only if truly needed
+```
+
+## Before you build
+
+1. Call hub_integrations_list: if something already does it, turn it on (hub_integration_connect) instead.
+2. Ask the user only what you cannot find out: which service, and whether it needs their account or a key.
+   Prefer services that work without a key. Never ask for a key in the chat as text: a key goes into the vault
+   through the setup card (see Secrets).
+
+## Steps
+
+1. Pick an id: lowercase letters, digits and dashes, 2–41 characters (e.g. `air-quality`). Tools are exposed as
+   `<id with _ for ->_<tool name>`.
+2. Copy this skill's folder into your workspace as `integrations/<id>/`, without this SKILL.md.
+3. `.owlbot-plugin/plugin.json`:
+   - `id`; `name` and `description` stay `"%name%"` / `"%description%"` (the texts live in the locales);
+   - delete `"builtin"` and `"defaultEnabled"`: an integration installed on a hub is turned on when it is installed;
+   - `integration`: `category` (everyday, travel, money, work, reading, communication, home, assistant), `icon`
+     (a Lucide icon name, e.g. `cloud-sun`, `plane`, `wallet`), `connect` (`none`; `setup` when it needs a key or
+     setup), `summary` and `example` (`"%integration.summary%"`, `"%integration.example%"`); no `popular`;
+   - `permissions.network`: the exact hosts it calls (`api.example.com`, `*.example.com`); never `"*"` unless the
+     user gives the addresses at run time;
+   - `contributes.widgets`: the card kinds the tools show (`[]` and no `ui` when there is no card);
+   - `contributes.settings`: a JSON Schema of the person's settings, only if there are any.
+4. `locales/en.json` and `locales/ru.json`: the same keys, natural text in each language. Tool descriptions and tool
+   results are for the model: English, in the code, not in the locales.
+5. `server/index.ts`: register the tools in `activate(ctx)`.
+   - A tool has a `name`, a `description` that tells the model when to use it and what to pass, an `inputSchema`,
+     and an `effect`: `read` (looks something up), `local-write` (changes something on the hub), `external` (acts in
+     the world: sends, books, pays; the user approves each call). Set `source: true` when the result comes from
+     outside (web pages, APIs).
+   - Validate the input and answer mistakes with `isError` text the model can act on. Catch network errors; use
+     `AbortSignal.timeout(…)` on every request; send a User-Agent naming Owlbot.
+   - To show a card: `ctx.widgets.show(call, "<kind>", data)` with plain JSON (under 64 KB), and say in the result's
+     text that a card is shown so the model does not repeat it.
+   - Read settings from `ctx.settings` and `ctx.onSettingsChange`. Keep an address setting (`apiUrl`) for tests.
+   - Only erasable TypeScript: no enums, namespaces or parameter properties; `import type` for types. No npm
+     packages unless unavoidable (then list them in package.json `dependencies`; they install without scripts).
+6. `ui/src/index.tsx`: one file that imports only `react` and `@owlbot/ui` (and `import type` from the server). It
+   draws each widget kind with `ui.widgets.add(kind, Component)`; texts come from `ui.i18n.t`. Style with inline
+   styles and the page's CSS variables (`var(--muted)`, `var(--border)`, `var(--surface-2)`, `var(--accent)`). The hub
+   compiles it when installing.
+7. Check it: `node --check` cannot read TypeScript, so run `node server/index.ts` from the folder: it must exit with
+   no error. Read your manifest and both locale files once more: every `"%key%"` must exist in both.
+8. Install: call hub_plugin_install with `source: "integrations/<id>"`. The user sees what it asks for and allows
+   it. Then tell them in a sentence what it does and suggest the example to try. To change it, edit the folder and
+   install again: the new version replaces the old one.
+
+## Secrets
+
+A key or token never goes into the code, the settings or the chat. Declare it and the hub asks for it on a setup
+card, straight into the vault:
+
+```json
+"contributes": { "setup": { "secrets": [ { "vault": "<id>_api_key", "setting": "apiKey", "title": "%setup.key.title%",
+  "hint": "%setup.key.hint%", "link": "https://example.com/account/keys", "required": true } ] } },
+"permissions": { "vault": ["<id>_api_key"] }
+```
+
+and set `"connect": "setup"` in `integration`. In the code: `const { value } = await ctx.vault.get("vault://<id>_api_key")`
+when a tool needs it; when it is missing, answer that the user should connect the integration (hub_plugin_setup shows
+the card).
+
+## In the Owlbot repository
+
+Built-in integrations live in `integrations/` (this template is `integrations/_template`). People adding one work only
+in its folder:
+
+- `npm run new:integration -- <id>` copies this template to `integrations/<id>/` with the id filled in;
+- built-in ones keep `"builtin": true` and `"defaultEnabled": false` (they wait in the catalog until turned on);
+  `"popular": <n>` puts one among the catalog's popular picks;
+- test with `@owlbot/testkit`'s `startPlugin` against a fake of the service (see `test/sun.test.ts`), then
+  `npx vitest run integrations/<id>`, `npm run typecheck` and `npm run build:ui-plugins`;
+- every text a person reads goes through the locales; `packages/core/test/i18n.test.ts` checks both languages.
+
+The plugin API in full: `docs/plugins.md` in the repository.

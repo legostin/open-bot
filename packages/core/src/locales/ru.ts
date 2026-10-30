@@ -126,6 +126,11 @@ export default {
   "plugin.warn.approvals": "Плагин может отвечать на подтверждения от вашего имени.",
   "plugin.warn.skills": "Скиллы, команды и MCP-серверы плагина станут доступны агентам.",
   "plugin.warn.mcp": "Плагин добавляет MCP-серверы, они будут запущены как процессы.",
+  "plugin.ask.install": "Установить плагин «{name}» ({id})",
+  "plugin.ask.network": "интернет: {hosts}",
+  "plugin.ask.offline": "без интернета",
+  "plugin.ask.vault": "секреты: {items}",
+  "plugin.ask.core": "действия в хабе: {methods}",
 
   // machines
   "machines.execApproval": "Выполнить на машине {machine}: {command}",

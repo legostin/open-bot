@@ -127,6 +127,11 @@ export default {
   "plugin.warn.approvals": "The plugin can answer approvals on your behalf.",
   "plugin.warn.skills": "The plugin's skills, commands and MCP servers become available to agents.",
   "plugin.warn.mcp": "The plugin adds MCP servers; they will run as processes.",
+  "plugin.ask.install": "Install the plugin “{name}” ({id})",
+  "plugin.ask.network": "internet: {hosts}",
+  "plugin.ask.offline": "no internet",
+  "plugin.ask.vault": "secrets: {items}",
+  "plugin.ask.core": "hub actions: {methods}",
 
   // machines
   "machines.execApproval": "Run on {machine}: {command}",

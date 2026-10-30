@@ -41,7 +41,7 @@ describe("the catalog and plugin widgets", () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
       { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-catalog-")), builtinPluginsDir: plugins, builtinAgentsDir: join(fixtures, "agents") },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-catalog-")), builtinPluginsDirs: [plugins], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
     await hub.start();

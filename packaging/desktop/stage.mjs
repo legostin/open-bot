@@ -30,11 +30,14 @@ export function wanted(src) {
   const rel = relative(ROOT, src).split(sep).join("/");
   if (rel === "") return true;
   const parts = rel.split("/");
-  if (parts.includes("node_modules") || parts.includes("test") || parts.includes("e2e")) return false;
-  if (/\.test\.[cm]?[jt]sx?$/.test(rel)) return false;
+  if (parts.includes("node_modules")) return false;
   const [top, pkg, sub] = parts;
+  // The integration template is the agents' make-integration skill: it ships whole, sources and test included.
+  if (top === "integrations" && pkg === "_template") return true;
+  if (parts.includes("test") || parts.includes("e2e")) return false;
+  if (/\.test\.[cm]?[jt]sx?$/.test(rel)) return false;
   if (top === "packages" && (pkg === "web" || pkg === "console" || pkg === "pages-kit") && sub && sub !== "dist" && sub !== "package.json") return false;
-  if (top === "plugins" && sub === "ui" && parts[3] === "src") return false;
+  if ((top === "plugins" || top === "integrations") && sub === "ui" && parts[3] === "src") return false;
   // The desktop app is built around the stage; its manifest stays so `npm ci` finds the workspace.
   if (top === "packages" && pkg === "desktop" && sub && sub !== "package.json") return false;
   // The Tailscale node's Go sources stay behind; stage() copies the target's binaries.
@@ -155,7 +158,7 @@ export async function stage({ target, skipBuild = false }) {
   mkdirSync(app, { recursive: true });
 
   for (const f of ["package.json", "package-lock.json"]) cpSync(join(ROOT, f), join(app, f));
-  for (const d of ["agents", "packages", "plugins"]) cpSync(join(ROOT, d), join(app, d), { recursive: true, filter: wanted });
+  for (const d of ["agents", "packages", "plugins", "integrations"]) cpSync(join(ROOT, d), join(app, d), { recursive: true, filter: wanted });
   for (const f of ["launch.mjs", "resolve.mjs"]) cpSync(join(ROOT, "packaging", "desktop", f), join(app, "packaging", "desktop", f));
   for (const need of ["packages/web/dist/index.html", "packages/console/dist/index.html", "packages/pages-kit/dist/kit.js", "packages/node/dist/owlbot-node.mjs"]) {
     if (!existsSync(join(app, need))) throw new Error(`${need} is missing: run npm run build`);

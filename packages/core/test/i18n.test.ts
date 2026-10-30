@@ -5,9 +5,12 @@ import { catalogProblems, createRpcPeer, memoryTransportPair, readPluginLayout }
 import { configureHubLocale, coreCatalog, LocalizedError, requestLocale, tFor } from "../src/i18n.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
-const pluginDirs = readdirSync(join(ROOT, "plugins"), { withFileTypes: true })
-  .filter((e) => e.isDirectory() && existsSync(join(ROOT, "plugins", e.name, ".owlbot-plugin", "plugin.json")))
-  .map((e) => join(ROOT, "plugins", e.name));
+// Built-in plugins and integrations, the integration template included.
+const pluginDirs = ["plugins", "integrations"].flatMap((group) =>
+  readdirSync(join(ROOT, group), { withFileTypes: true })
+    .filter((e) => e.isDirectory() && existsSync(join(ROOT, group, e.name, ".owlbot-plugin", "plugin.json")))
+    .map((e) => join(ROOT, group, e.name)),
+);
 
 /** "%key%" references anywhere in a manifest. */
 function manifestRefs(v: unknown, out = new Set<string>()): Set<string> {
