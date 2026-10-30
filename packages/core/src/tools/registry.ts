@@ -2,9 +2,13 @@ import type { ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared
 
 export type ToolInvoker = (input: any, ctx: ToolCallContext) => Promise<ToolResult>;
 
+/** The approval card's text, made by the core from the call's real input (core tools only). */
+export type ToolDescriber = (input: any) => string;
+
 interface Entry {
   descriptor: ToolDescriptor;
   invoke: ToolInvoker;
+  describe?: ToolDescriber;
 }
 
 const NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -17,13 +21,13 @@ export class ToolRegistry {
   private tools = new Map<string, Entry>();
   onChange?: () => void;
 
-  register(descriptor: ToolDescriptor, invoke: ToolInvoker): void {
+  register(descriptor: ToolDescriptor, invoke: ToolInvoker, describe?: ToolDescriber): void {
     if (!NAME_RE.test(descriptor.name)) throw new Error(`invalid tool name "${descriptor.name}" (allowed: a-z A-Z 0-9 _ -, up to 64)`);
     const existing = this.tools.get(descriptor.name);
     if (existing && existing.descriptor.owner !== descriptor.owner) {
       throw new Error(`tool ${descriptor.name} already registered by ${existing.descriptor.owner}`);
     }
-    this.tools.set(descriptor.name, { descriptor, invoke });
+    this.tools.set(descriptor.name, { descriptor, invoke, ...(describe ? { describe } : {}) });
     this.onChange?.();
   }
 

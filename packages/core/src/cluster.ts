@@ -27,6 +27,7 @@ import type { RpcPeer } from "@owlbot/shared";
 import { json } from "./db.ts";
 import { t } from "./i18n.ts";
 import type { Hub } from "./app.ts";
+import { ruleMatches } from "./policy/engine.ts";
 import { dialLink, linkPeer, serveLink, type LinkAnswer, type LinkCall } from "./replica-link.ts";
 
 /** owlbot.db tables every replica shares (the rest stays per replica: audit's hash chain, pairing codes). */
@@ -579,6 +580,16 @@ export class Cluster {
       this.asked.add(p.id);
       if (pending.some((a) => (a.input as any)?.replica === p.id)) continue;
       const agentId = this.hub.settings.get().defaultAgent;
+      // The person's "always allow" on an earlier card for this replica: no card, the key goes at once.
+      const rule = this.hub.rules.list().find((r) => r.decision === "allow" && ruleMatches(r, "replica_unlock", agentId, { replica: p.id }));
+      if (rule) {
+        this.hub.audit.append("core", "replica.unlock", p.id, { ruleId: rule.id });
+        void this.unlockPeer(p.id).catch((e: any) => {
+          this.asked.delete(p.id);
+          console.log(`[cluster] could not unlock ${p.name}: ${e?.message ?? e}`);
+        });
+        continue;
+      }
       const conv = this.hub.store.agentConversation(agentId);
       const a = this.hub.approvals.create({
         sessionId: "cluster",

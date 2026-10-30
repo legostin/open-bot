@@ -166,7 +166,7 @@ export class ToolGateway {
       return result;
     }
 
-    return this.execute(s, tool, input, ctx);
+    return this.execute(s, tool, input, policy.ruleId ? { ...ctx, approved: true } : ctx);
   }
 
   /** Run an approved action later (deferred approval). */
@@ -213,6 +213,14 @@ export class ToolGateway {
 
   summarize(tool: ToolDescriptor, input: unknown): string {
     const safe = this.d.redactor.value(input);
+    const describe = this.d.registry.get(tool.name)?.describe;
+    if (describe) {
+      try {
+        return truncate(describe(safe), 600);
+      } catch {
+        /* the template below */
+      }
+    }
     if (tool.approvalSummary) {
       const template = this.d.localize ? this.d.localize(tool.owner, tool.approvalSummary) : tool.approvalSummary;
       return truncate(renderTemplate(template, safe), 300);

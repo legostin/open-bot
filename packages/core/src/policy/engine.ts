@@ -93,23 +93,28 @@ export function decide(p: PolicyInput, rules: Rule[], isKnownTarget: (t: string)
     if (p.profile === "strict") return { decision: "ask", reason: t("policy.strictLocalWrite") };
     // Changes that outlive the session (tool.askWhenTainted) need the user's yes after outside content; a call with no input only reads.
     const changes = !!input && typeof input === "object" && Object.keys(input).length > 0;
-    if (p.tainted && changes && tool.askWhenTainted) return { decision: "ask", reason: t("policy.taintedLastingChange") };
+    if (p.tainted && changes && tool.askWhenTainted) return allowedByRule() ?? { decision: "ask", reason: t("policy.taintedLastingChange") };
     return { decision: "allow", reason: t("policy.localWrite") };
   }
 
   // external
-  for (const r of rules) {
-    if (r.decision === "allow" && ruleMatches(r, tool.name, agentId, input)) {
-      if (p.tainted) {
-        const unknown = extractTargets(input).filter((t) => !isKnownTarget(t));
-        if (unknown.length > 0) {
-          return { decision: "ask", reason: t("policy.taintedNewTargets", { targets: unknown.join(", ") }), ruleId: r.id };
+  return allowedByRule() ?? { decision: "ask", reason: t("policy.externalNeedsApproval") };
+
+  /** The person's "always allow" for this kind of call; after outside content it still asks for a target it never saw. */
+  function allowedByRule(): PolicyResult | undefined {
+    for (const r of rules) {
+      if (r.decision === "allow" && ruleMatches(r, tool.name, agentId, input)) {
+        if (p.tainted) {
+          const unknown = extractTargets(input).filter((t) => !isKnownTarget(t));
+          if (unknown.length > 0) {
+            return { decision: "ask", reason: t("policy.taintedNewTargets", { targets: unknown.join(", ") }), ruleId: r.id };
+          }
         }
+        return { decision: "allow", reason: r.note ? t("policy.allowedByRuleNote", { note: r.note }) : t("policy.allowedByRule"), ruleId: r.id };
       }
-      return { decision: "allow", reason: r.note ? t("policy.allowedByRuleNote", { note: r.note }) : t("policy.allowedByRule"), ruleId: r.id };
     }
+    return undefined;
   }
-  return { decision: "ask", reason: t("policy.externalNeedsApproval") };
 }
 
 /** Build a rule that would allow this exact kind of action next time ("always for this"). */
@@ -117,8 +122,8 @@ export function suggestRule(tool: string, input: unknown, agentId?: string): Omi
   const conditions: RuleCondition[] = [];
   const targets = extractTargets(input);
   // Prefer narrowing by recipients/domains found in well-known fields.
-  // The brains' own tools (native-permission.ts): the exact command or file.
-  const fields = ["to", "recipient", "email", "chat", "chatId", "channel", "url", "domain", "host", "command", "file_path", "notebook_path", "path"];
+  // The brains' own tools (native-permission.ts): the exact command or file. The hub's: the machine or replica it is for.
+  const fields = ["to", "recipient", "email", "chat", "chatId", "channel", "url", "domain", "host", "command", "file_path", "notebook_path", "path", "machine", "replica"];
   for (const f of fields) {
     const v = getField(input, f);
     if (typeof v === "string" && v) {

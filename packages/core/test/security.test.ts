@@ -45,6 +45,18 @@ describe("policy engine", () => {
     expect(decide(base({ tool: tool("fs_write", "local-write"), tainted: true }), [], unknownTargets).decision).toBe("allow");
   });
 
+  it("after outside content, the person's always-allow rule for a lasting change counts; one for another machine does not", () => {
+    const setup = { ...tool("hub_machine_setup_set", "local-write"), askWhenTainted: true };
+    const forVps = rule({ tool: "hub_machine_setup_set", conditions: [{ field: "machine", op: "eq", value: "vps" }] });
+    expect(decide(base({ tool: setup, input: { machine: "vps", brains: {} }, tainted: true }), [forVps], unknownTargets)).toMatchObject({ decision: "allow", ruleId: forVps.id });
+    expect(decide(base({ tool: setup, input: { machine: "pc", brains: {} }, tainted: true }), [forVps], unknownTargets).decision).toBe("ask");
+  });
+
+  it("an always-allow rule made from a hub card is for that machine or replica", () => {
+    expect(suggestRule("hub_machine_setup_set", { machine: "vps", brains: { codex: { auth: "key" } } }, "assistant").conditions).toEqual([{ field: "machine", op: "eq", value: "vps" }]);
+    expect(suggestRule("replica_unlock", { replica: "rep_1" }, "assistant").conditions).toEqual([{ field: "replica", op: "eq", value: "rep_1" }]);
+  });
+
   it("deny rules win over allow rules", () => {
     const rules = [rule({ id: "a", decision: "allow" }), rule({ id: "d", decision: "deny" })];
     expect(decide(base(), rules, unknownTargets)).toMatchObject({ decision: "deny", ruleId: "d" });

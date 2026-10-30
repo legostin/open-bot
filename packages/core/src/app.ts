@@ -679,6 +679,8 @@ export class Hub {
     for (const t of this.store.listTasks({ status: ["running", "waiting_approval", "interrupted"] })) this.store.updateTask(t.id, { status: "queued" });
     await this.plugins.stopAll();
     await this.mcpClients.closeAll();
+    // Machines that reached this replica while it led reconnect, and land on the leader (directly or over the link).
+    this.machines.closeAll();
   }
 
   async start(opts: { listen?: boolean } = {}): Promise<void> {

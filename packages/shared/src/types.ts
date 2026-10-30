@@ -80,7 +80,7 @@ export interface ToolCallContext {
   agentId: string;
   callId: string;
   tainted: boolean;
-  /** The user approved this exact call on its approval card. */
+  /** The user approved this call: on its approval card, or ahead of time with an "always allow" rule. */
   approved?: boolean;
   background: boolean;
   workspace: string;

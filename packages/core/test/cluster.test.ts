@@ -123,12 +123,17 @@ describe("a hub on two machines", () => {
     mac.hub = undefined;
     await until(() => b.cluster.leads(), "the standby taking the lead", 30_000);
     b.store.addMessage({ conversationId: dialog.id, role: "user", parts: [{ type: "text", text: "while the mac slept" }], status: "complete" });
+    // A machine reaches it while it leads (stands in for a node's connection).
+    let dropped = false;
+    (b.machines as any).peers.set("mach_while_leading", { closed: false, close: () => (dropped = true) });
 
     // It comes back: standby first, it catches up, then it gets the lead back.
     const a2 = await boot(mac);
     expect(a2.cluster.leads()).toBe(false);
     await until(() => a2.store.listMessages(dialog.id).some((m) => (m.parts[0] as any).text === "while the mac slept"), "the mac catching up");
     await until(() => a2.cluster.leads() && !b.cluster.leads(), "the lead back on the mac", 60_000);
+    // Giving the lead back drops that connection: the machine reconnects and lands on the leader.
+    expect(dropped).toBe(true);
   });
 });
 

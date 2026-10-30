@@ -3,17 +3,19 @@
 //
 // Guard rails:
 // - only the default agent sees them (ToolGateway.visible), and only in interactive sessions for anything that writes;
-// - a session that has read outside content (tainted) may look but not change anything, so injected text in a web page
-//   or an email cannot reconfigure the hub (cards that only ask the user, like secret requests, are still allowed);
+// - after outside content (a tainted session: and dialogs with agents last, so they all get there) every change needs
+//   the person's yes on its card, which says what exactly changes, or their "always allow" rule for it: injected text in
+//   a web page or an email can propose a change but not make it (cards that only ask the user, like secret requests,
+//   need no extra yes);
 // - security-relevant settings (egress allowlists, approval behaviour) stay with the user in the settings panel;
 // - revoking a machine is an external effect and needs the user's approval in the security console.
 //
 // The one exception is profile_update at the end: every agent may change its own profile when the user asks.
 
 import { isAbsolute, relative, resolve } from "node:path";
-import type { AgentDef, AgentDraft, JsonSchema, Locale, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import type { AgentDef, AgentDraft, JsonSchema, Locale, MachineSettings, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
 import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
-import { SetupError } from "../machine-setup.ts";
+import { normalizeSettings, SetupError } from "../machine-setup.ts";
 import type { Hub } from "../app.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
@@ -60,23 +62,61 @@ function profilePatch(i: Record<string, unknown>): Partial<AgentDef> | string {
   return patch;
 }
 
+const BRAIN_LABELS: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex" };
+
+/** The setup card: the machine, each brain with its sign-in or keys and models with prices, and the limit. */
+function describeSetup(machine: string, s: MachineSettings): string {
+  const t = tFor(hubLocale());
+  // $1, $0.10, $0.015: cents always show two digits.
+  const usd = (n: number) => `$${Number.isInteger(n) ? n : Number(n.toFixed(4)).toFixed(Math.max(2, String(Number(n.toFixed(4))).split(".")[1]?.length ?? 0))}`;
+  const brains = Object.entries(s.brains).map(([id, b]) => {
+    const brain = BRAIN_LABELS[id] ?? id;
+    if (b!.auth !== "key") return t("machines.setupBrainSubscription", { brain });
+    const providers = (b!.providers ?? []).map((p) => keyProvider(p)?.label ?? p).join(", ");
+    const models = (b!.models ?? [])
+      .map((m) => (m.price ? t("machines.setupModel", { id: m.id, input: usd(m.price.input), output: usd(m.price.output) }) : m.id))
+      .join("; ");
+    return t("machines.setupBrainKey", { brain, providers, models });
+  });
+  const limit = s.limit ? t(s.limit.period === "day" ? "machines.setupLimitDay" : "machines.setupLimitMonth", { usd: usd(s.limit.usd) }) : t("machines.setupNoLimit");
+  return t("machines.setupApprovalDetail", { machine, brains: brains.join(". ") || t("machines.setupNoBrains"), limit });
+}
+
 export function registerHubTools(hub: Hub): void {
-  const reg = (spec: Omit<ToolDescriptor, "owner" | "name"> & { name: string }, fn: (input: any, ctx: ToolCallContext) => Promise<ToolResult> | ToolResult) => {
+  /** `describe`: the approval card's text from the call's real input (what exactly changes), instead of the summary template. */
+  const reg = (
+    spec: Omit<ToolDescriptor, "owner" | "name"> & { name: string },
+    fn: (input: any, ctx: ToolCallContext) => Promise<ToolResult> | ToolResult,
+    describe?: (input: any) => string,
+  ) => {
     const writes = spec.effect !== "read";
-    hub.tools.register({ ...(writes ? { availability: "interactive" as const } : {}), ...spec, name: HUB_TOOL_PREFIX + spec.name, owner: "core" }, async (input, ctx) => {
-      if (writes && ctx.tainted && !CARDS.has(spec.name)) {
-        return text(
-          "Refused: this conversation has read outside content (web pages, emails, files), so hub settings cannot be changed from it. " +
-            "Ask the user to make the change in the settings panel (gear icon) or in a fresh chat.",
-          true,
-        );
-      }
-      try {
-        return await fn(input ?? {}, ctx);
-      } catch (e: any) {
-        return text(e?.message ?? String(e), true);
-      }
-    });
+    const guarded = writes && !CARDS.has(spec.name);
+    const descriptor: ToolDescriptor = {
+      ...(writes ? { availability: "interactive" as const } : {}),
+      ...(guarded ? { askWhenTainted: true } : {}),
+      ...spec,
+      name: HUB_TOOL_PREFIX + spec.name,
+      owner: "core",
+    };
+    hub.tools.register(
+      descriptor,
+      async (input, ctx) => {
+        // After outside content a change runs only with the person's yes: on its card, or their "always allow" rule.
+        if (guarded && ctx.tainted && !ctx.approved) {
+          return text(
+            "Refused: this conversation has read outside content, so each change of the hub needs the person's yes on its approval card, " +
+              "and this call had none. Tell the person what you want to change and why.",
+            true,
+          );
+        }
+        try {
+          return await fn(input ?? {}, ctx);
+        } catch (e: any) {
+          return text(e?.message ?? String(e), true);
+        }
+      },
+      describe,
+    );
   };
   const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema => ({ type: "object", properties, ...(required.length ? { required } : {}) });
 
@@ -512,6 +552,7 @@ export function registerHubTools(hub: Hub): void {
         .filter((p) => !hub.setups.view(m.id).keys.includes(p));
       return text(`${setupText(m.id)}${missing.length ? `\nNo key yet for: ${missing.join(", ")}. Ask for it with secret_request (vault id ${missing.map((p) => keyProvider(p)?.vaultId).join(", ")}).` : ""}`);
     },
+    (i) => describeSetup(String(i.machine ?? ""), normalizeSettings({ brains: i.brains, limit: i.limit })),
   );
 
   // ---------- the cluster: hub replicas ----------

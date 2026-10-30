@@ -518,9 +518,12 @@ describe("hub (integration)", () => {
     const other = (await web.req("POST", "/api/conversations", { title: "helper chat", agentId: "helper" })).id;
     expect(await say(other, "hub_settings_get", {})).toMatch(/not available to this agent/);
 
-    // A session that read outside content may look but not change anything.
+    // After outside content it looks freely, and a change waits for the person's yes on its card (hub-approval.test.ts).
     for (const s of hub.db.prepare("select id from sessions where conversation_id = ?").all(chat) as Array<{ id: string }>) hub.store.updateSession(s.id, { tainted: true });
-    expect(await say(chat, "hub_settings_update", { patch: { digestTimes: ["07:00"] } })).toMatch(/Refused: this conversation has read outside content/);
+    expect(await say(chat, "hub_settings_update", { patch: { digestTimes: ["07:00"] } })).toMatch(/waiting for the user's approval/);
+    const held = hub.approvals.list(["pending"]).find((a) => a.tool === "hub_settings_update")!;
+    hub.approvals.resolve(held.id, "deny", { via: "web" });
+    expect((await web.req("GET", "/api/settings")).digestTimes).toEqual(["08:30"]);
     expect(await say(chat, "hub_plugins_list", {})).toMatch(/fakebrain/);
 
     // The brain of this very conversation cannot be switched off from it.
