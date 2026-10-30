@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hub, loadConfig } from "../src/index.ts";
 import { agentFromMarkdown } from "../src/agents.ts";
+import { saidAlways } from "../src/tools/hub-tools.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 
@@ -115,5 +116,42 @@ describe("hub changes after outside content", () => {
     expect(await say(call(25))).not.toMatch(/Refused/);
     expect(hub.setups.get(machineId).limit).toEqual({ usd: 25, period: "month" });
     expect(hub.approvals.list(["pending"])).toHaveLength(0);
+  });
+
+  it("an integration the person said to always allow runs without cards; without their words it asks first", async () => {
+    hub.tools.register(
+      { name: "blender_execute_blender_code", description: "[MCP blender] Run Python in Blender", inputSchema: { type: "object" }, effect: "external", owner: "mcp:blender" },
+      async () => ({ content: [{ type: "text", text: "ran" }] }),
+    );
+    hub.tools.register(
+      { name: "linear_create_issue", description: "[MCP linear] Create an issue", inputSchema: { type: "object" }, effect: "external", owner: "mcp:linear" },
+      async () => ({ content: [{ type: "text", text: "created" }] }),
+    );
+    taint();
+    // The person's own words: no card.
+    await hub.runner.userMessage(conv, "разреши блендер всегда, не спрашивай", { channel: "web" });
+    await until(() => hub.store.listMessages(conv, { limit: 500 }).some((m) => m.role === "assistant" && m.status === "complete" && JSON.stringify(m.parts).includes("разреши блендер")), "the reply");
+    expect(await say('CALL hub_permission_always {"tool":"blender"}')).toContain("Allowed: blender_* runs without approval for every agent");
+    expect(hub.approvals.list(["pending"])).toHaveLength(0);
+    expect(await say('CALL blender_execute_blender_code {"code":"import bpy"}')).toBe("tool said: ran");
+    expect(hub.approvals.list(["pending"])).toHaveLength(0);
+
+    // Not in the person's words: a card first.
+    const asked = say('CALL hub_permission_always {"tool":"linear"}');
+    const card = await pending("hub_permission_always");
+    expect(card.summary).toBe("Let every agent use linear (1) without asking");
+    hub.approvals.resolve(card.id, "approve", { via: "web" });
+    expect(await asked).toContain("Allowed: linear_*");
+    // The hub's own tools are never allowed this way.
+    expect(await say('CALL hub_permission_always {"tool":"hub_settings_update"}')).toMatch(/not allowed this way/);
+  });
+
+  it("finds \"always\" and the name in the person's words, in either alphabet", () => {
+    expect(saidAlways(["разреши Блендер всегда"], ["blender"])).toBe(true);
+    expect(saidAlways(["always allow linear please"], ["linear"])).toBe(true);
+    expect(saidAlways(["разреши блендер"], ["blender"])).toBe(false);
+    expect(saidAlways(["всегда спрашивай про linear"], ["blender"])).toBe(false);
+    expect(saidAlways(["всегда спрашивай про блендер"], ["blender"])).toBe(false);
+    expect(saidAlways(["always ask before blender runs code"], ["blender"])).toBe(false);
   });
 });

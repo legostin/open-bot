@@ -104,7 +104,7 @@ export interface Rule {
   decision: "allow" | "deny";
   note?: string;
   createdAt: ISODate;
-  createdVia: "console" | "telegram" | "approval";
+  createdVia: "console" | "telegram" | "approval" | "chat";
 }
 
 export type ApprovalStatus = "pending" | "approved" | "denied" | "expired" | "executed" | "failed";

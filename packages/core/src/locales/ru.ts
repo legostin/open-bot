@@ -40,6 +40,8 @@ export default {
   "policy.deniedByRule": "запрещено правилом",
   "policy.deniedByRuleNote": "запрещено правилом: {note}",
   "policy.allowedByRule": "разрешено правилом",
+  "permissions.alwaysAll": "Разрешить всем агентам {tools} без вопросов",
+  "permissions.alwaysAgent": "Разрешить агенту {agent} {tools} без вопросов",
   "policy.allowedByRuleNote": "разрешено правилом: {note}",
   "policy.backgroundReadOnly": "фоновая задача с инициативой ниже 2 может только читать и уведомлять",
   "policy.read": "чтение",
