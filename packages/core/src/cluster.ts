@@ -78,6 +78,8 @@ const STARTUP_GRACE_MS = 6_000;
 /** How long a leader waits for its turns before it hands over. */
 const DRAIN_MS = 120_000;
 const FILES_EVERY_MS = 5_000;
+/** A file over a link goes in pieces this big. */
+const FILE_PIECE = 4 * 1024 * 1024;
 
 type Role = "leader" | "standby";
 type DbName = "main" | "vault";
@@ -164,6 +166,7 @@ export class Cluster {
   /** Lasting connections to peers (replica-link.ts), dialed by either side. */
   private links = new Map<string, RpcPeer>();
   private dialing = new Map<string, number>();
+  private lastRead: { key: string; bytes: Uint8Array } | undefined;
 
   constructor(hub: Hub) {
     this.hub = hub;
@@ -379,6 +382,21 @@ export class Cluster {
     return {
       changesSince: (cursor, limit) => this.callJson(p, "POST", "/api/replica/files/changes", { cursor, limit }, 30_000),
       read: async (root, path, sha) => {
+        const link = this.links.get(p.id);
+        if (link && !link.closed) {
+          const parts: Buffer[] = [];
+          let offset = 0;
+          for (;;) {
+            const a = await link.request<LinkAnswer>("replica.call", { method: "POST", path: "/api/replica/files/read", body: { root, path, sha, offset, length: FILE_PIECE } }, { timeoutMs: 120_000 });
+            if (a.status === 404) return undefined;
+            if (a.status !== 200) throw new Error(`${p.name} files/read: ${a.status}`);
+            const piece = Buffer.from(String(a.body), "base64");
+            parts.push(piece);
+            offset += piece.length;
+            if (!piece.length || offset >= (a.total ?? offset)) break;
+          }
+          return new Uint8Array(Buffer.concat(parts));
+        }
         const r = await this.call(p, "POST", "/api/replica/files/read", { root, path, sha }, 120_000);
         if (r.status === 404) return undefined;
         if (r.status !== 200) throw new Error(`${p.name} files/read: ${r.status}`);
@@ -461,8 +479,14 @@ export class Cluster {
       case "/api/replica/files/changes":
         return { status: 200, body: this.files.changesSince(Number(b.cursor) || 0, Math.min(Number(b.limit) || 500, 2_000)) };
       case "/api/replica/files/read": {
-        const bytes = await this.files.read(String(b.root ?? ""), String(b.path ?? ""), String(b.sha ?? ""));
-        return bytes ? { status: 200, body: Buffer.from(bytes).toString("base64"), binary: true } : { status: 404, body: { error: "gone" } };
+        // Over a link a file travels in pieces (offset, length); the last one read is kept for the next piece.
+        const key = `${b.root}\n${b.path}\n${b.sha}`;
+        let bytes = this.lastRead?.key === key ? this.lastRead.bytes : await this.files.read(String(b.root ?? ""), String(b.path ?? ""), String(b.sha ?? ""));
+        if (!bytes) return { status: 404, body: { error: "gone" } };
+        this.lastRead = { key, bytes };
+        const total = bytes.length;
+        if (b.length !== undefined) bytes = bytes.subarray(Number(b.offset) || 0, (Number(b.offset) || 0) + Number(b.length));
+        return { status: 200, body: Buffer.from(bytes).toString("base64"), binary: true, total };
       }
       case "/api/replica/vault-key":
         this.receiveKey(from, String(b.key ?? ""));
@@ -656,13 +680,21 @@ export class Cluster {
     if (!this.identity) throw new Error("This hub has no cluster yet");
     const pub = Buffer.from(String(p.publicKey ?? ""), "base64url");
     if (pub.length !== 32) throw new Error("bad public key");
-    const id = newId("rep_");
-    if (!this.hub.invites.consume(p.code, `replica:${id}`)) throw new Error("The invite has expired or was already used");
-    const max = (this.hub.db.prepare("select coalesce(max(priority), 0) as p from replicas").get() as { p: number }).p;
-    this.hub.db
-      .prepare("insert into replicas(id, name, public_key, urls, node_urls, priority, created_at) values (?,?,?,?,?,?,?)")
-      .run(id, String(p.name || "replica").slice(0, 40), p.publicKey, JSON.stringify(p.urls ?? []), JSON.stringify(p.nodeUrls ?? []), max + 1, nowIso());
-    this.hub.audit.append("user", "replica.join", id, { name: p.name });
+    let id = newId("rep_");
+    if (this.hub.invites.consume(p.code, `replica:${id}`)) {
+      const max = (this.hub.db.prepare("select coalesce(max(priority), 0) as p from replicas").get() as { p: number }).p;
+      this.hub.db
+        .prepare("insert into replicas(id, name, public_key, urls, node_urls, priority, created_at) values (?,?,?,?,?,?,?)")
+        .run(id, String(p.name || "replica").slice(0, 40), p.publicKey, JSON.stringify(p.urls ?? []), JSON.stringify(p.nodeUrls ?? []), max + 1, nowIso());
+      this.hub.audit.append("user", "replica.join", id, { name: p.name });
+    } else {
+      // The same machine again (its answer was lost on the way): the same key gets the snapshot once more.
+      const again = this.hub.db
+        .prepare("select id from replicas where public_key = ? and revoked = 0 and created_at > ?")
+        .get(p.publicKey, new Date(Date.now() - 15 * 60_000).toISOString()) as { id: string } | undefined;
+      if (!again) throw new Error("The invite has expired or was already used");
+      id = again.id;
+    }
     this.main!.drain();
     this.vaultRepl!.drain();
     const dir = join(tmpdir(), `owlbot-join-${id}`);
@@ -680,6 +712,20 @@ export class Cluster {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  }
+
+  /** A replica leaves the cluster for good (its key no longer signs anything here). */
+  remove(idOrName: string): string {
+    const r = this.hub.db.prepare("select id, name from replicas where (id = ? or name = ?) and revoked = 0").get(idOrName, idOrName) as { id: string; name: string } | undefined;
+    if (!r) throw new Error(`No replica ${idOrName}`);
+    if (r.id === this.identity?.id) throw new Error("This replica cannot remove itself");
+    this.hub.db.prepare("update replicas set revoked = 1 where id = ?").run(r.id);
+    this.links.get(r.id)?.close();
+    this.links.delete(r.id);
+    this.peers.delete(r.id);
+    this.hub.audit.append("user", "replica.remove", r.id, { name: r.name });
+    this.emitState(true);
+    return r.name;
   }
 
   // ---------- what the apps see ----------

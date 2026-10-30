@@ -551,6 +551,23 @@ export function registerHubTools(hub: Hub): void {
 
   reg(
     {
+      name: "replica_remove",
+      effect: "external",
+      approvalSummary: "%cluster.removeApproval%",
+      description: "Take a replica out of the hub's cluster for good (a machine that is gone, or a failed join). Needs the person's approval.",
+      inputSchema: obj({ replica: { type: "string", description: "Replica id or name" } }, ["replica"]),
+    },
+    (i) => {
+      try {
+        return text(`Replica ${hub.cluster.remove(String(i.replica))} removed.`);
+      } catch (e: any) {
+        return text(e?.message ?? String(e), true);
+      }
+    },
+  );
+
+  reg(
+    {
       name: "replica_unlock",
       effect: "external",
       approvalSummary: "%cluster.unlockApproval%",

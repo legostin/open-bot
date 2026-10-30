@@ -22,6 +22,8 @@ export interface LinkAnswer {
   /** JSON, or base64 of bytes when `binary`. */
   body: unknown;
   binary?: boolean;
+  /** A piece of a file: the whole file's size. */
+  total?: number;
 }
 
 export interface LinkServer {

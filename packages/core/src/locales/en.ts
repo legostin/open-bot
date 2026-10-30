@@ -145,6 +145,7 @@ export default {
   "machines.writeApproval": "Write a file on {machine}: {path}",
   "cluster.unlockAsk": "Unlock the vault on {name}: it takes over when this computer sleeps, and keys and tokens wait for this",
   "cluster.inviteApproval": "Make a link that turns another machine into a replica of this hub (it gets a copy of everything)",
+  "cluster.removeApproval": "Take the replica {replica} out of the hub for good",
   "cluster.unlockApproval": "Hand the vault's key to the hub replica {replica}",
   "cluster.standby": "The hub is moving to {leader}: try again in a moment",
   "machine.badPairingCode": "The invite has expired or was already used. Ask for a new link in the chat",

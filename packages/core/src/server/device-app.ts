@@ -38,7 +38,8 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls, opts: { remote?: 
     ? Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, trustProxy: "127.0.0.1", forceCloseConnections: true })
     : (Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, https: { key: tls.key, cert: tls.cert }, forceCloseConnections: true }) as unknown as FastifyInstance);
   await app.register(fastifyCookie);
-  await app.register(fastifyWebsocket, { options: { maxPayload: 4 * 1024 * 1024 } });
+  // Replica links (replica-link.ts) carry batches of rows and pieces of files: up to 64 MB a frame.
+  await app.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 * 1024 } });
 
   /** The page's own origin: phones reach the port by IP, so there is no fixed list of hosts. */
   const sameOrigin = (req: FastifyRequest) => !!req.headers.host && req.headers.origin === `https://${req.headers.host}`;
