@@ -1,0 +1,41 @@
+{
+  "id": "composio",
+  "name": "%name%",
+  "version": "0.1.0",
+  "author": "Owlbot",
+  "description": "%description%",
+  "builtin": true,
+  "defaultEnabled": false,
+  "server": "./server/index.ts",
+  "contributes": {
+    "tools": true,
+    "setup": {
+      "secrets": [
+        { "vault": "composio", "title": "%setup.key.title%", "hint": "%setup.key.hint%", "link": "https://platform.composio.dev", "required": true }
+      ]
+    }
+  },
+  "integration": {
+    "category": "other",
+    "icon": "plug",
+    "connect": "setup",
+    "summary": "%integration.summary%",
+    "example": "%integration.example%",
+    "via": { "name": "Composio", "about": "%via.about%", "link": "https://composio.dev" },
+    "entries": [
+      { "id": "slack", "name": "Slack", "summary": "%entry.slack%", "category": "work", "icon": "message-square", "example": "%example.slack%", "popular": 3 },
+      { "id": "github", "name": "GitHub", "summary": "%entry.github%", "category": "work", "icon": "git-pull-request", "example": "%example.github%", "popular": 4 },
+      { "id": "gmail", "name": "Gmail", "summary": "%entry.gmail%", "category": "communication", "icon": "mail", "example": "%example.gmail%", "popular": 5 },
+      { "id": "googledrive", "name": "Google Drive", "summary": "%entry.googledrive%", "category": "work", "icon": "hard-drive", "example": "%example.googledrive%" },
+      { "id": "googledocs", "name": "Google Docs", "summary": "%entry.googledocs%", "category": "work", "icon": "file-text", "example": "%example.googledocs%" },
+      { "id": "googlesheets", "name": "Google Sheets", "summary": "%entry.googlesheets%", "category": "work", "icon": "sheet", "example": "%example.googlesheets%" },
+      { "id": "hubspot", "name": "HubSpot", "summary": "%entry.hubspot%", "category": "work", "icon": "users", "example": "%example.hubspot%" },
+      { "id": "dropbox", "name": "Dropbox", "summary": "%entry.dropbox%", "category": "work", "icon": "package", "example": "%example.dropbox%" },
+      { "id": "box", "name": "Box", "summary": "%entry.box%", "category": "work", "icon": "archive", "example": "%example.box%" }
+    ]
+  },
+  "permissions": {
+    "network": ["backend.composio.dev"],
+    "vault": ["composio"]
+  }
+}
