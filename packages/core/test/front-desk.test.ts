@@ -117,6 +117,16 @@ describe("front desk (integration)", () => {
     expect(said.some((o: string) => /Task created: .*\(fake2, fast\)/.test(o))).toBe(true);
   });
 
+  it("keeps a dialog on the agent's own brain, even when another one's models look better; a chosen brain wins over a fallback", async () => {
+    hub.agents.save({ id: "home", name: "Home", description: "Stays", brains: ["fake2:a@local", "fake@local"], tools: ["*"], skills: ["*"], prompt: "Hi.", initiative: 1 } as any);
+    expect(await ask("home", "hi")).toBe("fake2 heard: hi");
+    const c = hub.store.agentConversation("home").id;
+    expect(hub.store.activeSession(c, "home")!.brainRef).toBe("fake2:a@local");
+    // The person picks the other brain for the dialog: it takes over at once.
+    hub.agents.save({ ...hub.agents.get("home")!, thinking: { chat: { preset: "auto", brain: "fake@local" } } });
+    expect(await ask("home", "THINKING?")).toBe("fake thinks: model=smart effort=low");
+  });
+
   it("shows a task's permission question in the dialog that started it, and its answer there", async () => {
     const dialog = hub.store.agentConversation("desk").id;
     const parent = hub.store.createTask({ agentId: "desk", title: "Check the disk", goal: "x", createdBy: "agent", background: false, parentConversationId: dialog });

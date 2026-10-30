@@ -74,14 +74,17 @@ const ROLE: Record<string, { tier: number; speed: number; cost: number }> = {
 
 /**
  * A brain's models as profiles: its catalog, else its model list with the known families' profiles. A model nobody
- * describes but that the brain names for its presets takes the presets' word for it: its strongest role's capability,
- * its quickest role's speed.
+ * describes but that the brain names for its presets takes the presets' word for it, when they name more than one
+ * model: its strongest role's capability, its quickest role's speed.
  */
 export function modelsOf(b: RouteBrain): ModelProfile[] {
   const p = b.probe;
   if (!p) return [];
   const roles = new Map<string, Array<(typeof ROLE)[string]>>();
   for (const [preset, mean] of Object.entries(p.presets ?? {})) if (mean?.model && ROLE[preset]) roles.set(mean.model, [...(roles.get(mean.model) ?? []), ROLE[preset]]);
+  // Presets that name one model for every role (only the effort differs) say nothing about it: that model would
+  // look the strongest, quickest and cheapest at once.
+  if (roles.size < 2) roles.clear();
   const own = p.catalog ?? [];
   return catalogOf([...(p.models ?? []), ...roles.keys()], p.modelNames ?? {}, own).map((m) => {
     const r = roles.get(m.id);

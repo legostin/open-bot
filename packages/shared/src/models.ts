@@ -34,7 +34,12 @@ export const KNOWN_MODELS: ReadonlyArray<readonly [RegExp, Traits]> = [
   [/opus/i, { tier: 5, speed: 1, cost: 3, good: ["reasoning", "writing", "code", "vision"] }],
   [/sonnet/i, { tier: 4, speed: 2, cost: 2, good: ["writing", "code", "vision"] }],
   [/haiku/i, { tier: 2, speed: 3, cost: 1, good: ["vision"] }],
-  // OpenAI
+  // OpenAI. GPT-6 Astra is the flagship; the GPT-5.6 line goes by size: Sol, Terra, then Luna, the small quick one.
+  [/gpt-?6[\w.]*-?(mini|nano|luna)/i, { tier: 3, speed: 3, cost: 1, good: ["code"] }],
+  [/gpt-?6/i, { tier: 5, speed: 1, cost: 3, good: ["reasoning", "code", "writing", "vision"] }],
+  [/gpt-?[\d.]*-?luna/i, { tier: 2, speed: 3, cost: 1 }],
+  [/gpt-?[\d.]*-?terra/i, { tier: 3, speed: 3, cost: 1, good: ["code"] }],
+  [/gpt-?[\d.]*-?sol\b/i, { tier: 4, speed: 2, cost: 2, good: ["code", "reasoning", "writing"] }],
   [/codex[-_.]?(mini|spark)/i, { tier: 3, speed: 3, cost: 1, good: ["code"] }],
   [/codex/i, { tier: 4, speed: 2, cost: 2, good: ["code", "reasoning"] }],
   [/gpt-?5[\w.]*-?nano/i, { tier: 2, speed: 3, cost: 1 }],

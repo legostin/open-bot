@@ -64,6 +64,13 @@ like a warm one.
   (code, analysis, writing, research, errand) or its goal's words; channel runs are light, other work standard. A
   preset the person chose for a kind is its need; an exact model and effort skip the router.
 - Code tasks need hands: brains without a shell of their own (API) are left out for them.
+- A dialog stays with the agent's own brain (the one chosen for its dialogs, else its first): the router picks the
+  model and effort on it, and another brain takes over only when that one cannot. Moving a dialog between brains
+  loses its native history, and the person's choice of brain is theirs. A brain chosen for the kind also comes
+  before the brain the conversation fell back to. Work on the side is routed across brains.
+- Presets that name one model for every role (Codex: its default model, only the effort changes) say nothing about
+  that model: found live, when Codex's unknown GPT-6 Astra looked the strongest, quickest and cheapest at once and
+  answered a weather question. The table knows GPT-6 Astra and the GPT-5.6 line (Sol, Terra, Luna).
 - Models switch per turn without starting over: Claude Code takes `set_model` and `apply_flag_settings
   {effortLevel}` control requests on stdin (checked live: Sonnet → Haiku → Opus, low → high in one process); Codex
   and the API brain take the turn's model and effort (`BrainTurn.model`, `effort`).

@@ -48,6 +48,21 @@ describe("routing a request", () => {
     expect(route([{ ref: "fake@local" }], { need: "deep" })[0]).toMatchObject({ ref: "fake@local" });
   });
 
+  it("reads Codex's own line-up, and learns nothing from presets that name one model for every role", () => {
+    // What the installed Codex lists (2026-10-30): its presets name the default model for every role.
+    const live: RouteBrain = {
+      ref: "codex@local",
+      probe: {
+        models: ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+        efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
+        presets: { fast: { model: "gpt-6-astra", effort: "low" }, balanced: { model: "gpt-6-astra", effort: "medium" }, deep: { model: "gpt-6-astra", effort: "xhigh" } },
+      },
+    };
+    expect(route([live], { need: "light" })[0]).toMatchObject({ model: "gpt-5.6-luna", effort: "low" });
+    expect(route([live], { need: "quick" })[0]).toMatchObject({ model: "gpt-5.6-sol", effort: "low" });
+    expect(route([live], { need: "deep" })[0]).toMatchObject({ model: "gpt-6-astra", effort: "xhigh" });
+  });
+
   it("tells what a request needs", () => {
     expect(needOfMessage("Спасибо!")).toBe("light");
     expect(needOfMessage("👍")).toBe("light");

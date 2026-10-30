@@ -1439,9 +1439,10 @@ export class SessionRunner {
       const changedAt = this.d.settings.getKey<Record<string, string>>(BRAINS_CHANGED_KEY, {})[agent.id];
       const stay = prior && !(changedAt && changedAt > prior.createdAt) ? prior.brainRef : undefined;
       // The brain the person's next message would most likely take: the front desk's.
-      const routes = await this.routeFor(agent, "chat", thinkingFor(agent, "chat"), "", undefined);
-      const order = routes.length ? routes.map((r) => r.ref) : expandBrains(brainsFor(agent, "chat"), this.d.brains.list().map((b) => b.ref));
-      const { usable } = await this.candidates({ ...agent, brains: order }, stay);
+      const choice = thinkingFor(agent, "chat");
+      const routes = await this.routeFor(agent, "chat", choice, "", undefined);
+      const order = expandBrains(brainsFor(agent, "chat", choice), this.d.brains.list().map((b) => b.ref));
+      const { usable } = await this.candidates({ ...agent, brains: order }, choice.brain ? undefined : stay);
       const ref = usable[0];
       if (!ref) return false;
       const key = formatBrainRef(parseBrainRef(ref));
@@ -1636,10 +1637,15 @@ export class SessionRunner {
     // (model-router.ts). An exact model and effort the person chose take the agent's own order instead.
     const choice = task ? taskThinking(agent, kind, task.thinking) : thinkingFor(agent, kind);
     const routes = await this.routeFor(agent, kind, choice, prompt, task);
-    const order = routes.length ? routes.map((r) => r.ref) : expandBrains(brainsFor(agent, kind, choice), this.d.brains.list().map((b) => b.ref));
+    // A dialog stays with the agent's own brain (its chosen one, else its first): the router picks the model and
+    // effort there, and other brains only take over when that one cannot. Work on the side goes where it fits best.
+    const own = expandBrains(brainsFor(agent, kind, choice), this.d.brains.list().map((b) => b.ref));
+    const order = routes.length && task ? routes.map((r) => r.ref) : own;
+    // The brain the person chose for this kind comes before the one the conversation fell back to.
+    const preferred = choice.brain ? undefined : stay;
     let waits = 0;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates({ ...agent, brains: order }, stay, pinned, !!task);
+      const { usable, earliestReset: reset, reasons, hard, busy, setupOnly } = await this.candidates({ ...agent, brains: order }, preferred, pinned, !!task);
       earliestReset = reset ?? earliestReset;
       const ref = usable.find((r) => !tried.has(formatBrainRef(parseBrainRef(r))));
       // The agent's brains are busy with other turns (a teammate wrote while it works): the turn waits in line.
