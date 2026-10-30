@@ -20,9 +20,23 @@ export interface ModelProfile {
   cost: number;
   /** Strongest first. */
   good?: ModelSkill[];
+  /** An older generation the provider has moved on from: chosen only when the brain has nothing current. */
+  legacy?: boolean;
 }
 
-type Traits = Omit<ModelProfile, "id" | "name">;
+type Traits = Omit<ModelProfile, "id" | "name" | "legacy">;
+
+/** What a provider's own model list says about a model (Codex's model/list, an API's /models). */
+export interface ModelMeta {
+  id: string;
+  name?: string;
+  /** The provider's words for it ("Frontier intelligence…", "Older fast and efficient model."). */
+  description?: string;
+  /** The provider marks it old: deprecated, or pointing to its successor. */
+  deprecated?: boolean;
+  /** USD per million tokens, input and output, when the provider says. */
+  price?: { input: number; output: number };
+}
 
 /**
  * Known model families by id, first match wins (more specific patterns first). Reasonable as of late 2026; a brain's
@@ -99,6 +113,64 @@ export function profileOf(id: string, name?: string): ModelProfile {
   const hit = KNOWN_MODELS.find(([re]) => re.test(id) || (!!name && re.test(name)));
   const traits = hit ? hit[1] : UNKNOWN;
   return { id, ...(name ? { name } : {}), tier: traits.tier, speed: traits.speed, cost: traits.cost, ...(traits.good ? { good: [...traits.good] } : {}) };
+}
+
+const OLD = /\b(older|legacy|previous[- ]generation|deprecated|outdated|superseded|retired)\b/i;
+const TOP = /\b(frontier|flagship|most (capable|intelligent|powerful|advanced|demanding)|smartest|state[- ]of[- ]the[- ]art)\b/i;
+const LIGHT = /\b(fast|efficient|affordable|lightweight|low[- ]latency|cheap|small|mini|budget)\b/i;
+const MIDDLE = /\b(workhorse|balanced|everyday|general[- ]purpose|straightforward)\b/i;
+
+/**
+ * A model's profile from what its provider says now, over the table: the description's words for how capable and
+ * quick it is, its price for cost, and whether it is an older generation. The table fills in what they leave out.
+ */
+export function profileFrom(m: ModelMeta): ModelProfile {
+  const p = profileOf(m.id, m.name);
+  const d = m.description ?? "";
+  if (TOP.test(d)) Object.assign(p, { tier: 5, speed: Math.min(p.speed, 2), cost: Math.max(p.cost, 2) });
+  else if (LIGHT.test(d)) Object.assign(p, { tier: Math.min(p.tier, /\bcod(e|ing)|agentic\b/i.test(d) ? 3 : 2), speed: 3, cost: 1 });
+  else if (MIDDLE.test(d)) Object.assign(p, { tier: Math.min(Math.max(p.tier, 3), 4), speed: Math.max(p.speed, 2) });
+  if (/\bcod(e|ing)\b/i.test(d) && !p.good?.includes("code")) p.good = ["code", ...(p.good ?? [])];
+  if (m.price) {
+    const blended = (m.price.input + 3 * m.price.output) / 4;
+    p.cost = blended < 1 ? 1 : blended < 8 ? 2 : 3;
+  }
+  if (m.deprecated || OLD.test(d)) p.legacy = true;
+  return p;
+}
+
+/** "gpt-5.6-luna" → { vendor: "gpt", family: "gpt-luna", version: 5.6 }; dates (2411, 20250514) are not versions. */
+export function modelVersion(id: string): { vendor: string; family: string; version?: number } {
+  const lower = id.toLowerCase().replace(/^.*\//, "");
+  const vendor = /^[a-z]+/.exec(lower)?.[0] ?? lower;
+  const v = /(?<![\d.])(\d{1,2})(?:[.-](\d{1,2}))?(?!\d)/.exec(lower);
+  const version = v ? Number(`${v[1]}.${v[2] ?? 0}`) : undefined;
+  const family = lower
+    .replace(v?.[0] ?? "\u0000", "")
+    .replace(/\d{4,}/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return { vendor, family, version };
+}
+
+/**
+ * A lineup with its older generations marked: a model whose maker has a newer major version in the same list
+ * (GPT-5.6 next to GPT-6), or whose own line has a newer version (Haiku 4.5 next to Haiku 5.5).
+ */
+export function markLegacy(models: ModelProfile[]): ModelProfile[] {
+  const v = models.map((m) => ({ m, ...modelVersion(m.id) }));
+  const newestMajor = new Map<string, number>();
+  const newestInFamily = new Map<string, number>();
+  for (const x of v) {
+    if (x.version === undefined) continue;
+    newestMajor.set(x.vendor, Math.max(newestMajor.get(x.vendor) ?? 0, Math.floor(x.version)));
+    newestInFamily.set(x.family, Math.max(newestInFamily.get(x.family) ?? 0, x.version));
+  }
+  return v.map(({ m, vendor, family, version }) => {
+    if (version === undefined || m.legacy) return m;
+    const older = Math.floor(version) < (newestMajor.get(vendor) ?? 0) || version < (newestInFamily.get(family) ?? 0);
+    return older ? { ...m, legacy: true } : m;
+  });
 }
 
 /** A brain's catalog: its own profiles where it gave them, the table's for the rest of its models. */

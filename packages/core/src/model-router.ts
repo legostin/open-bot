@@ -6,7 +6,7 @@
 // not busy). It knows profiles, not providers: a new provider counts as soon as its brain publishes a catalog.
 
 import type { ModelProfile, ModelSkill, ProbeResult, WorkKind } from "@owlbot/shared";
-import { catalogOf, fitEffort, isKnownModel, parseBrainRef } from "@owlbot/shared";
+import { catalogOf, fitEffort, isKnownModel, markLegacy, parseBrainRef } from "@owlbot/shared";
 
 /**
  * How much a request asks of the model:
@@ -86,11 +86,13 @@ export function modelsOf(b: RouteBrain): ModelProfile[] {
   // look the strongest, quickest and cheapest at once.
   if (roles.size < 2) roles.clear();
   const own = p.catalog ?? [];
-  return catalogOf([...(p.models ?? []), ...roles.keys()], p.modelNames ?? {}, own).map((m) => {
+  const lineup = catalogOf([...(p.models ?? []), ...roles.keys()], p.modelNames ?? {}, own).map((m) => {
     const r = roles.get(m.id);
     if (!r || own.some((o) => o.id === m.id) || isKnownModel(m.id, m.name)) return m;
     return { ...m, tier: Math.max(...r.map((x) => x.tier)), speed: Math.max(...r.map((x) => x.speed)), cost: Math.min(...r.map((x) => x.cost)) };
   });
+  // Older generations next to newer ones (GPT-5.6 beside GPT-6) are marked, also where the brain's list says nothing.
+  return markLegacy(lineup);
 }
 
 /**
@@ -110,7 +112,10 @@ export function route(brains: RouteBrain[], ask: RouteAsk): Route[] {
       out.push({ ref: b.ref, ...(effort ? { effort } : {}), score: scoreModel({ tier: 3, speed: 2, cost: 2 }, ask) + local, at });
       return;
     }
-    const best = models.map((m) => ({ m, s: scoreModel(m, ask) })).sort((a, z) => z.s - a.s)[0];
+    // An older generation only when the brain has nothing current.
+    const current = models.filter((m) => !m.legacy);
+    const pool = current.length ? current : models;
+    const best = pool.map((m) => ({ m, s: scoreModel(m, ask) })).sort((a, z) => z.s - a.s)[0];
     out.push({ ref: b.ref, model: best.m.id, ...(effort ? { effort } : {}), score: best.s + local, at });
   });
   return out.sort((a, z) => z.score - a.score || a.at - z.at).map(({ at: _, ...r }) => r);

@@ -10,6 +10,7 @@ import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
 import { isSafeSessionId, loadSession, type HistoryMessage } from "./history.ts";
 import { request, trimSlash } from "./http.ts";
 import { ApiBrainSession, readKey } from "./session.ts";
+import { ModelLists } from "./catalog.ts";
 import { ANTHROPIC_MODEL_NAMES, VARIANTS, extraModelsFor, resolveSettings, type ApiSettings } from "./settings.ts";
 
 const SESSION_TTL_MS = 30 * 24 * 3600_000;
@@ -65,6 +66,7 @@ const plugin: PluginModule = {
     pruneOldSessions(ctx);
 
     const variantOf = (id: string | undefined) => VARIANTS[id ?? settings.defaultVariant];
+    const lists = new ModelLists();
 
     async function probe(variantId?: string): Promise<ProbeResult> {
       const s = settings;
@@ -96,8 +98,13 @@ const plugin: PluginModule = {
           return { available: true, authenticated: false, models: listed, model: def, ...thinking, detail };
         }
         if (listed) models = listed;
+        return { available: true, authenticated: true, models, model: def, ...thinking, detail: v.baseUrl(s) };
       }
-      return { available: true, authenticated: true, models, model: def, ...thinking, ...(v.id === "custom" ? { detail: v.baseUrl(s) } : {}) };
+      // What the provider offers now (its /models), over the built-in list; the user's additions stay in.
+      const fresh = await lists.get(v, s, key.key);
+      if (!fresh?.length) return { available: true, authenticated: true, models, model: def, ...thinking };
+      const extra = extraModelsFor(v.id, s).filter((m) => !fresh.some((p) => p.id === m));
+      return { available: true, authenticated: true, models: [...fresh.map((p) => p.id), ...extra], catalog: fresh, model: def, ...thinking };
     }
 
     async function createSession(opts: BrainSessionOptions): Promise<ApiBrainSession> {

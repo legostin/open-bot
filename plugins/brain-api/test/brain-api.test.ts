@@ -357,7 +357,10 @@ describe("brain-api plugin", () => {
 
   it("probes variants by vault key presence", async () => {
     expect(await h.brainProbe("api", "anthropic")).toMatchObject({ available: true, authenticated: true, models: expect.arrayContaining(["claude-sonnet-5-5", "claude-opus-5-5"]) });
-    expect(await h.brainProbe("api", "openai")).toMatchObject({ available: true, authenticated: true, models: ["gpt-5-nano", "gpt-5-mini", "gpt-5"] });
+    // The provider's own list (here the mock's /models), with what it says of each model, over the built-in one.
+    const openai = await h.brainProbe("api", "openai");
+    expect(openai).toMatchObject({ available: true, authenticated: true, models: expect.arrayContaining(["gpt-mock"]) });
+    expect(openai.catalog?.map((m: { id: string }) => m.id)).toEqual(openai.models);
 
     const bare = await startPlugin({ dir: PLUGIN_DIR, settings, vault: {} });
     try {

@@ -96,6 +96,10 @@ export interface CodexModel {
   isDefault: boolean;
   efforts: string[];
   defaultEffort?: string;
+  /** Codex's own words for it ("Frontier intelligence…", "Older fast and efficient model."). */
+  description?: string;
+  /** Codex points it to a newer model. */
+  upgrade?: boolean;
 }
 
 /** The models this Codex offers (app-server `model/list`), or undefined when it cannot say (old Codex, not signed in). */
@@ -125,6 +129,8 @@ export async function listCodexModels(command: string, env: Record<string, strin
           isDefault: !!x.isDefault,
           efforts: (x.supportedReasoningEfforts ?? []).map((e: any) => String(e?.reasoningEffort ?? e)).filter(Boolean),
           ...(x.defaultReasoningEffort ? { defaultEffort: String(x.defaultReasoningEffort) } : {}),
+          ...(typeof x.description === "string" && x.description ? { description: x.description } : {}),
+          ...(x.upgrade ? { upgrade: true } : {}),
         }));
       return models.length ? models : undefined;
     }

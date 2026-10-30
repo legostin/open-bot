@@ -77,6 +77,14 @@ like a warm one.
 - Claude Code records a switch as a `/model` command whose output "goes straight to the user", and a light model
   then remarks on it ("model switched to Haiku"). The rules say what that trace is, and a turn whose model changed
   starts with a one-line note not to mention it (checked live: the remark is gone).
+- Fresh lineups (2026-10-30: "even 5.6-sol is outdated"): Codex's model/list (with its descriptions and hidden
+  models left out) and every API provider's own /models (kept six hours, through the plugin's egress proxy) are the
+  lineup; the built-in lists only stand in when a provider cannot be asked. Claude Code's aliases always name the
+  latest models. What the provider says wins over the table: "frontier" is the strongest, "fast / efficient /
+  affordable" light and cheap, a price gives the cost, and "older", "legacy" or a deprecation marks it old. A model
+  whose maker has a newer major version in the same lineup (GPT-5.6 next to GPT-6), or whose own line has a newer
+  version, is old too. Old models are chosen only when the brain has nothing current; effort is then the dial
+  (checked on the live Codex: every need goes to GPT-6 Astra, low to xhigh).
 - Providers: the API brain's OpenAI-compatible providers are one table (`plugins/brain-api/server/settings.ts`
   PROVIDERS): Kimi (Moonshot), DeepSeek, GLM (Z.ai), Qwen, Gemini, Grok (xAI), Mistral, Groq, besides Anthropic,
   OpenAI and OpenRouter. Each has its key in the vault (a setup card), its host, and its main models; `extraModels`

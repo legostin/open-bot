@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@owlbot/shared";
 import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
 import type { Locale } from "@owlbot/shared/i18n";
+import { markLegacy, profileFrom } from "@owlbot/shared/models";
 import { capture, childEnv, runLines } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseCodexDeviceLogin, runCliLogin } from "./login.ts";
@@ -268,7 +269,7 @@ const CODEX_EFFORTS = ["low", "medium", "high"];
  * What Codex offers to think with: its own model list (app-server `model/list`) with the default model's efforts, and
  * the presets on the default model: fast = low effort, balanced = its default effort, deep = extra-high (or high).
  */
-export function codexThinking(models: CodexModel[] | undefined): Pick<ProbeResult, "models" | "modelNames" | "model" | "efforts" | "presets"> {
+export function codexThinking(models: CodexModel[] | undefined): Pick<ProbeResult, "models" | "modelNames" | "model" | "efforts" | "presets" | "catalog"> {
   const def = models?.find((m) => m.isDefault) ?? models?.[0];
   if (!models || !def) return { efforts: CODEX_EFFORTS, presets: { fast: { effort: "low" }, balanced: { effort: "medium" }, deep: { effort: "high" } } };
   const efforts = def.efforts.length ? def.efforts : CODEX_EFFORTS;
@@ -277,6 +278,8 @@ export function codexThinking(models: CodexModel[] | undefined): Pick<ProbeResul
   return {
     models: models.map((m) => m.id),
     modelNames: Object.fromEntries(models.map((m) => [m.id, m.name])),
+    // What Codex says of each model now (its descriptions, the ones it calls older): the hub chooses by this.
+    catalog: markLegacy(models.map((m) => profileFrom({ id: m.id, name: m.name, ...(m.description ? { description: m.description } : {}), ...(m.upgrade ? { deprecated: true } : {}) }))),
     model: def.id,
     efforts,
     presets: {

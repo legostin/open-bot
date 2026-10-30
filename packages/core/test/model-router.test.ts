@@ -1,6 +1,6 @@
 // Choosing a brain, model and effort per request (model-router.ts) from what each brain's models are like.
 import { describe, expect, it } from "vitest";
-import { catalogOf, profileOf } from "@owlbot/shared";
+import { catalogOf, markLegacy, modelVersion, profileFrom, profileOf } from "@owlbot/shared";
 import { needOf, needOfMessage, route, skillOfGoal, type RouteBrain } from "../src/model-router.ts";
 
 const claude: RouteBrain = { ref: "claude-code@local", probe: { models: ["fable", "opus", "sonnet", "haiku"], efforts: ["low", "medium", "high", "xhigh", "max"] } };
@@ -58,9 +58,41 @@ describe("routing a request", () => {
         presets: { fast: { model: "gpt-6-astra", effort: "low" }, balanced: { model: "gpt-6-astra", effort: "medium" }, deep: { model: "gpt-6-astra", effort: "xhigh" } },
       },
     };
-    expect(route([live], { need: "light" })[0]).toMatchObject({ model: "gpt-5.6-luna", effort: "low" });
-    expect(route([live], { need: "quick" })[0]).toMatchObject({ model: "gpt-5.6-sol", effort: "low" });
+    // GPT-5.6 is an older generation next to GPT-6: every request goes to Astra, with the effort that fits.
+    expect(route([live], { need: "light" })[0]).toMatchObject({ model: "gpt-6-astra", effort: "low" });
+    expect(route([live], { need: "quick" })[0]).toMatchObject({ model: "gpt-6-astra", effort: "low" });
     expect(route([live], { need: "deep" })[0]).toMatchObject({ model: "gpt-6-astra", effort: "xhigh" });
+    // What Codex itself says of them (its model/list, 2026-10-30) gives the same answer.
+    const told: RouteBrain = {
+      ref: "codex@local",
+      probe: {
+        models: live.probe!.models,
+        efforts: live.probe!.efforts,
+        catalog: markLegacy([
+          profileFrom({ id: "gpt-6-astra", description: "Frontier intelligence for the most demanding work." }),
+          profileFrom({ id: "gpt-5.6-sol", description: "Older generation workhorse model." }),
+          profileFrom({ id: "gpt-5.6-terra", description: "Older balanced model for straightforward work." }),
+          profileFrom({ id: "gpt-5.6-luna", description: "Older fast and efficient model." }),
+        ]),
+      },
+    };
+    expect(route([told], { need: "light" })[0]).toMatchObject({ model: "gpt-6-astra", effort: "low" });
+    // With nothing current, an older model still works.
+    expect(route([{ ref: "x@local", probe: { catalog: [profileFrom({ id: "old-1", description: "Older fast model." })] } }], { need: "light" })[0]).toMatchObject({ model: "old-1" });
+  });
+
+  it("reads a provider's own words for its models, and marks older generations", () => {
+    expect(profileFrom({ id: "gpt-6-astra", description: "Frontier intelligence for the most demanding work." })).toMatchObject({ tier: 5 });
+    expect(profileFrom({ id: "zeta-1", description: "Fast and affordable agentic coding model." })).toMatchObject({ tier: 3, speed: 3, cost: 1, good: ["code"] });
+    expect(profileFrom({ id: "gpt-5.6-luna", description: "Older fast and efficient model." })).toMatchObject({ speed: 3, legacy: true });
+    expect(profileFrom({ id: "pricey", price: { input: 15, output: 75 } }).cost).toBe(3);
+    expect(profileFrom({ id: "cheap", price: { input: 0.1, output: 0.4 } }).cost).toBe(1);
+    expect(modelVersion("gpt-5.6-luna")).toEqual({ vendor: "gpt", family: "gpt-luna", version: 5.6 });
+    expect(modelVersion("claude-haiku-4-5-20251001")).toMatchObject({ family: "claude-haiku", version: 4.5 });
+    expect(modelVersion("mistral-large-2411")).toMatchObject({ version: undefined });
+    expect(modelVersion("deepseek/deepseek-v3.2")).toMatchObject({ vendor: "deepseek", version: 3.2 });
+    const marked = markLegacy(["gpt-6-astra", "gpt-5.6-sol", "claude-haiku-4-5", "claude-haiku-5-5", "claude-opus-5-5", "glm-4.6", "glm-4.5-air"].map((id) => profileOf(id)));
+    expect(marked.filter((m) => m.legacy).map((m) => m.id)).toEqual(["gpt-5.6-sol", "claude-haiku-4-5"]);
   });
 
   it("tells what a request needs", () => {

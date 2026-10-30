@@ -5,6 +5,7 @@ import { classifyHttpError, proxyEnvFrom, resetAtFromHeaders } from "../server/h
 import { toOpenAiMessages } from "../server/openai.ts";
 import { parseToolInput } from "../server/provider.ts";
 import { VARIANTS, resolveModel, resolveSettings } from "../server/settings.ts";
+import { catalogFrom, parseModels } from "../server/catalog.ts";
 import { parseSse } from "../server/sse.ts";
 
 async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {
@@ -279,5 +280,35 @@ describe("settings and models", () => {
     expect(resolveModel(VARIANTS.openai, "gpt-5-mini", s)).toBe("gpt-5-mini");
     expect(resolveModel(VARIANTS.openrouter, "anthropic/claude-sonnet-4.5", s)).toBe("anthropic/claude-sonnet-4.5");
     expect(resolveModel(VARIANTS.custom, undefined, s)).toBe("llama3.1");
+  });
+});
+
+describe("the providers' own model lists", () => {
+  it("keeps the models that chat, newest first, with what the provider says of them", () => {
+    const openai = parseModels("openai", {
+      data: [
+        { id: "gpt-5.6-luna", created: 100 },
+        { id: "text-embedding-3-large", created: 300 },
+        { id: "gpt-6-astra", created: 200 },
+        { id: "whisper-1", created: 50 },
+        { id: "gpt-image-2", created: 400 },
+      ],
+    });
+    expect(openai.map((l) => l.meta.id)).toEqual(["gpt-6-astra", "gpt-5.6-luna"]);
+    expect(catalogFrom(openai).map((p) => [p.id, !!p.legacy])).toEqual([["gpt-6-astra", false], ["gpt-5.6-luna", true]]);
+
+    const router = parseModels("openai", {
+      data: [
+        { id: "deepseek/deepseek-v4", name: "DeepSeek V4", description: "Fast and affordable.", pricing: { prompt: "0.0000003", completion: "0.0000012" }, architecture: { output_modalities: ["text"] }, created: 2 },
+        { id: "black-forest/flux", architecture: { output_modalities: ["image"] }, created: 3 },
+      ],
+    });
+    expect(router).toEqual([{ meta: { id: "deepseek/deepseek-v4", name: "DeepSeek V4", description: "Fast and affordable.", price: { input: 0.3, output: 1.2 } }, created: 2 }]);
+    expect(catalogFrom(router)[0]).toMatchObject({ cost: 1, speed: 3 });
+
+    const anthropic = parseModels("anthropic", { data: [{ id: "claude-opus-5-5", display_name: "Claude Opus 5.5", created_at: "2026-09-01T00:00:00Z" }] });
+    expect(anthropic[0].meta).toEqual({ id: "claude-opus-5-5", name: "Claude Opus 5.5" });
+    expect(parseModels("openai", { data: [{ id: "mistral-old", capabilities: { completion_chat: true }, deprecation: "2026-11-30" }] })[0].meta.deprecated).toBe(true);
+    expect(parseModels("openai", { nope: 1 })).toEqual([]);
   });
 });
