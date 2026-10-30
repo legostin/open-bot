@@ -298,6 +298,15 @@ const PRIVATE = [
  * What a sandboxed brain may not read: the person's credentials and private stores, and the hub's data folder (its
  * conversations, vault, memory and the other agents' folders), except the session's own workspace and `allow`.
  */
-export function confinement(dataDir: string, workspace: string, allow: string[] = [], home = homedir()): { denyRead: string[]; allowRead: string[] } {
-  return { denyRead: [...PRIVATE.map((p) => join(home, p)), dataDir], allowRead: [workspace, ...allow.filter((d) => within(d, dataDir))] };
+export function confinement(dataDir: string, workspace: string, allow: string[] = [], home = homedir()): { denyRead: string[]; allowRead: string[]; allowWrite: string[] } {
+  return { denyRead: [...PRIVATE.map((p) => join(home, p)), dataDir], allowRead: [workspace, ...allow.filter((d) => within(d, dataDir))], allowWrite: userTemp() };
+}
+
+/**
+ * The person's own temp folder (macOS: /var/folders/…/T, also seen as /private/var/…): system tools such as sips
+ * write their scratch files there whatever TMPDIR says, and fail in the sandbox without it.
+ */
+function userTemp(): string[] {
+  const t = tmpdir().replace(/\/+$/, "");
+  return t.startsWith("/var/") ? [t, `/private${t}`] : [t];
 }

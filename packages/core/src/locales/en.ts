@@ -41,6 +41,8 @@ export default {
   "policy.deniedByRule": "denied by a rule",
   "policy.deniedByRuleNote": "denied by a rule: {note}",
   "policy.allowedByRule": "allowed by a rule",
+  "permissions.alwaysAll": "Let every agent use {tools} without asking",
+  "permissions.alwaysAgent": "Let {agent} use {tools} without asking",
   "policy.allowedByRuleNote": "allowed by a rule: {note}",
   "policy.backgroundReadOnly": "background tasks with initiative below 2 may only read and notify",
   "policy.read": "read-only",

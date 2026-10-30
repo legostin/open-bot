@@ -333,6 +333,8 @@ export class Hub {
         teammate: (to, text, from) => this.runner.messageTeammate(to, text, from),
       },
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
+      showToPerson: (conversationId, part, taskId) => this.runner.showToPerson(conversationId, part, taskId),
+      startedWorkspaces: (conversationId) => this.runner.startedWorkspaces(conversationId),
       workspacesRoot: join(config.dataDir, "workspaces"),
       transcriber: this.transcriber,
       route: (mode, stops) => roadRoute(config.routerUrl, mode, stops),

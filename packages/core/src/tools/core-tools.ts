@@ -28,6 +28,10 @@ export interface CoreToolDeps {
   tasks: TaskLine;
   /** Add a card to the reply the agent is writing (SessionRunner.attachPart). */
   attachPart: (conversationId: string, part: MessagePart) => void;
+  /** Pictures for the person: here, and from a task also in the dialog that started it (SessionRunner.showToPerson). */
+  showToPerson?: (conversationId: string, part: MessagePart, taskId?: string) => void;
+  /** The folders of the tasks a conversation started: a dialog shows what its tasks made (SessionRunner.startedWorkspaces). */
+  startedWorkspaces?: (conversationId: string) => string[];
   /** <dataDir>/workspaces: `file:` image sources are relative to it. */
   workspacesRoot: string;
   /** Speech to text (transcribe.ts). */
@@ -85,21 +89,29 @@ function workspaceFile(path: string, workspace: string, root: string): string | 
   return statSync(real).isFile() ? real : { error: `${path}: not a file` };
 }
 
-/** `path` (relative to the agent's workspace) as a `file:` source under the workspaces root, or an error text. */
-function workspaceImage(path: string, workspace: string, root: string): string | { error: string } {
-  if (isAbsolute(path)) return { error: `${path}: give the path relative to your workspace` };
+/**
+ * `path` as a `file:` source under the workspaces root, or an error text: relative to the agent's workspace, or an
+ * absolute path in it or in `more` (the folders of the tasks this conversation started).
+ */
+function workspaceImage(path: string, workspace: string, root: string, more: string[] = []): string | { error: string } {
   let real: string;
   let realRoot: string;
-  let realWorkspace: string;
+  const folders: string[] = [];
   try {
     realRoot = realpathSync(root);
-    realWorkspace = realpathSync(workspace);
+    for (const dir of [workspace, ...more]) {
+      try {
+        folders.push(realpathSync(dir));
+      } catch {
+        /* a task's folder that was never made */
+      }
+    }
     real = realpathSync(resolve(workspace, path));
   } catch {
-    return { error: `${path}: no such file in your workspace` };
+    return { error: `${path}: no such file${isAbsolute(path) ? "" : ` in your workspace (${workspace})`}` };
   }
   const inside = (dir: string) => real === dir || real.startsWith(dir + sep);
-  if (!inside(realWorkspace) || !inside(realRoot)) return { error: `${path}: outside your workspace` };
+  if (!folders.some(inside) || !inside(realRoot)) return { error: `${path}: outside your workspace and your tasks' folders` };
   const st = statSync(real);
   if (!st.isFile()) return { error: `${path}: not a file` };
   if (!imageTypeOf(real)) return { error: `${path}: not an image (png, jpg, gif, webp, avif, bmp or svg)` };
@@ -398,7 +410,8 @@ export function registerCoreTools(d: CoreToolDeps): void {
         "Show the user pictures right in the chat: one image appears as a card, 2–10 as a swipeable carousel, and they open full screen on click. " +
         "When your reply also goes to the user's phone (Telegram), the images go with it. Use it whenever a picture says more than words: photos of a place or product, " +
         "charts and screenshots you made, search results with images. Each image is either `url` (a public http(s) image address) or `path` " +
-        "(an image file in your workspace, relative to it: png, jpg, gif, webp, avif, bmp or svg, up to 10 MB). Add a short `caption` in the user's language. " +
+        "(an image file: relative to your workspace, or an absolute path in it or in the folder of a task you started; png, jpg, gif, webp, avif, bmp or svg, " +
+        "up to 10 MB). Shown inside a task, the images also reach the dialog that started it. Add a short `caption` in the user's language. " +
         "Do not repeat the images as markdown in your text; refer to them in words.",
       effect: "read",
       inputSchema: {
@@ -412,7 +425,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
               type: "object",
               properties: {
                 url: { type: "string", description: "Public http(s) address of the image" },
-                path: { type: "string", description: "Image file in your workspace, relative to it" },
+                path: { type: "string", description: "Image file: relative to your workspace, or absolute in it or in a task's folder you started" },
                 caption: { type: "string", description: "Shown under the image (≤ 200 chars)" },
                 alt: { type: "string", description: "What the image shows, for screen readers" },
               },
@@ -437,7 +450,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
             problems.push(`${label}: files on ${ctx.machineId} cannot be shown; use a public url`);
             continue;
           }
-          const r = workspaceImage(it.path.trim(), ctx.workspace, d.workspacesRoot);
+          const r = workspaceImage(it.path.trim(), ctx.workspace, d.workspacesRoot, d.startedWorkspaces?.(ctx.conversationId));
           if (typeof r !== "string") {
             problems.push(`${label}: ${r.error}`);
             continue;
@@ -457,7 +470,9 @@ export function registerCoreTools(d: CoreToolDeps): void {
         items.push({ src, ...(clip(it.alt, 300) ? { alt: clip(it.alt, 300) } : {}), ...(clip(it.caption, 200) ? { caption: clip(it.caption, 200) } : {}) });
       }
       if (problems.length) return text(`Nothing shown. ${problems.join("; ")}.`, true);
-      d.attachPart(ctx.conversationId, { type: "images", items });
+      const part: MessagePart = { type: "images", items };
+      if (d.showToPerson) d.showToPerson(ctx.conversationId, part, ctx.taskId);
+      else d.attachPart(ctx.conversationId, part);
       return text(
         `The user now sees ${items.length === 1 ? "the image" : `a carousel of ${items.length} images`} in the chat (and in Telegram, if your reply goes there). ` +
           "Do not paste it again as markdown.",
