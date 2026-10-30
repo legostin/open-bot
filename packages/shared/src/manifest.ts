@@ -40,6 +40,33 @@ export const SetupSecretSchema = z.object({
 });
 export type SetupSecret = z.infer<typeof SetupSecretSchema>;
 
+/**
+ * The outside service an integration goes through (Composio): every card of the plugin carries its badge, and the
+ * badge's note says what that means.
+ */
+export const IntegrationViaSchema = z.object({
+  name: z.string().min(1),
+  /** The note ("%key%" of the plugin's locales); `{name}` is the card's own name. */
+  about: z.string().min(1),
+  link: z.string().url().optional(),
+});
+export type IntegrationVia = z.infer<typeof IntegrationViaSchema>;
+
+/** The id of one of a plugin's catalog entries ("slack"); the catalog shows it as "<plugin>:<entry>". */
+export const ENTRY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
+
+/** A catalog entry of its own that a plugin has besides its card (Slack, GitHub… of the Composio plugin). */
+export const IntegrationEntrySchema = z.object({
+  id: z.string().regex(ENTRY_ID_RE),
+  name: z.string().min(1),
+  summary: z.string().optional(),
+  category: z.string().default("other"),
+  icon: z.string().default("puzzle"),
+  example: z.string().optional(),
+  popular: z.number().int().positive().optional(),
+});
+export type IntegrationEntry = z.infer<typeof IntegrationEntrySchema>;
+
 /** A plugin shown in the catalog (and the integrations library): how it is connected and what it looks like. */
 export const IntegrationSchema = z.object({
   /** The catalog's group: a situation in life (everyday, travel, money, work, reading, communication, home) or assistant. */
@@ -59,6 +86,13 @@ export const IntegrationSchema = z.object({
   example: z.string().optional(),
   /** A built-in plugin's place among the catalog's popular ones (1 = first) until the person's own use ranks them. */
   popular: z.number().int().positive().optional(),
+  /** The outside service it goes through: a badge on its card and on every entry's. */
+  via: IntegrationViaSchema.optional(),
+  /**
+   * Entries of their own besides the plugin's card, shown even while it is off. The running plugin reports their
+   * state, and entries it adds, with ctx.catalog.update; sign-in goes to its ctx.catalog.onSignIn.
+   */
+  entries: z.array(IntegrationEntrySchema).default([]),
 });
 export type IntegrationInfo = z.infer<typeof IntegrationSchema>;
 

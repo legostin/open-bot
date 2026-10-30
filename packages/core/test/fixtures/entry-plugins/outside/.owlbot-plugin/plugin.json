@@ -1,0 +1,20 @@
+{
+  "id": "outside",
+  "name": "Outside",
+  "builtin": true,
+  "defaultEnabled": false,
+  "server": "./server/index.ts",
+  "contributes": {
+    "tools": true,
+    "setup": { "secrets": [{ "vault": "outside_key", "title": "Outside key", "required": true }] }
+  },
+  "integration": {
+    "category": "other",
+    "icon": "plug",
+    "connect": "setup",
+    "summary": "Apps through Outside",
+    "via": { "name": "Outside", "about": "%via.about%", "link": "https://outside.example" },
+    "entries": [{ "id": "chat", "name": "Chat", "summary": "%entry.chat%", "category": "communication", "icon": "message-square", "example": "%example.chat%", "popular": 2 }]
+  },
+  "permissions": { "vault": ["outside_key"] }
+}

@@ -31,6 +31,13 @@ export class ToolRegistry {
     this.onChange?.();
   }
 
+  /** Take back one tool, only if `owner` registered it. */
+  unregister(name: string, owner: string): void {
+    if (this.tools.get(name)?.descriptor.owner !== owner) return;
+    this.tools.delete(name);
+    this.onChange?.();
+  }
+
   unregisterOwner(owner: string): void {
     let changed = false;
     for (const [name, e] of this.tools) {

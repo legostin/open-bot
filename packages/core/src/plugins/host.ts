@@ -4,8 +4,8 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, cpSync, rmSync, renameSync, statSync, readFileSync } from "node:fs";
 import { join, dirname, basename, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { Catalog, CoreMethod, Locale, MessagePart, OwlbotManifest, PluginLayout, PluginPermissions, ToolCallContext, ToolDescriptor, ToolResult, ToolSpec } from "@owlbot/shared";
-import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, type RpcPeer } from "@owlbot/shared";
+import type { Catalog, CatalogEntryState, CoreMethod, Locale, MessagePart, OwlbotManifest, PluginLayout, PluginPermissions, ToolCallContext, ToolDescriptor, ToolResult, ToolSpec } from "@owlbot/shared";
+import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, ENTRY_ID_RE, type RpcPeer } from "@owlbot/shared";
 import { json, type Db } from "../db.ts";
 import { hubLocale, localizePluginValue, LocalizedError, tFor } from "../i18n.ts";
 import type { Config } from "../config.ts";
@@ -65,6 +65,32 @@ export interface HostDeps {
   cliBinDirs?: () => string[];
   /** Add a card to the reply the agent is writing (SessionRunner.attachPart): plugins' widgets go there. */
   attachPart?: (conversationId: string, part: MessagePart) => void;
+  /** A plugin reported its catalog entries (ctx.catalog.update): what they were before and are now. */
+  onCatalogUpdated?: (pluginId: string, before: CatalogEntryState[], after: CatalogEntryState[]) => void;
+}
+
+/** Entries one plugin may report, at most. */
+const MAX_CATALOG_ENTRIES = 200;
+const ENTRY_STATUSES = new Set(["connected", "needs-setup", "broken"]);
+
+/** A plugin's report of its catalog entries, kept to what the catalog can show: bad entries are dropped. */
+export function cleanCatalogReport(entries: unknown): CatalogEntryState[] {
+  const str = (v: unknown, max = 200) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : undefined);
+  const out: CatalogEntryState[] = [];
+  const seen = new Set<string>();
+  for (const e of Array.isArray(entries) ? entries : []) {
+    const id = typeof e?.id === "string" ? e.id : "";
+    if (!ENTRY_ID_RE.test(id) || seen.has(id) || !ENTRY_STATUSES.has(e.status) || (e.connect !== "setup" && e.connect !== "signin")) continue;
+    seen.add(id);
+    const entry: CatalogEntryState = { id, status: e.status, connect: e.connect };
+    for (const k of ["name", "summary", "category", "icon", "example", "account", "detail"] as const) {
+      const v = str(e[k], k === "summary" || k === "detail" || k === "example" ? 400 : 80);
+      if (v) entry[k] = v;
+    }
+    out.push(entry);
+    if (out.length >= MAX_CATALOG_ENTRIES) break;
+  }
+  return out;
 }
 
 /** A widget's data as stored in the conversation, at most. */
@@ -100,6 +126,8 @@ export class PluginHost {
   private httpPlugins = new Set<string>();
   private uiMessageTargets = new Set<string>();
   private staging = new Map<string, { dir: string; commitHash?: string; layout: PluginLayout; source: string }>();
+  /** What each running plugin last reported about its catalog entries. */
+  private catalogs = new Map<string, CatalogEntryState[]>();
 
   constructor(deps: HostDeps) {
     this.d = deps;
@@ -353,6 +381,9 @@ export class PluginHost {
     this.httpPlugins.delete(id);
     this.uiMessageTargets.delete(id);
     this.d.egress.revokeOwner(`plugin:${id}`);
+    const before = this.catalogs.get(id);
+    this.catalogs.delete(id);
+    if (before?.length) this.d.onCatalogUpdated?.(id, before, []);
   }
 
   private onExit(id: string, code: number | null, signal: string | null, child: ChildProcess): void {
@@ -410,6 +441,20 @@ export class PluginHost {
       this.d.tools.register(descriptor, async (input, ctx) =>
         this.showWidgets(rec, ctx, await peer.request<ToolResult>("tool.invoke", { name: short, input, context: ctx }, { timeoutMs: 15 * 60_000 })),
       );
+      return {};
+    });
+
+    peer.handle("unregister.tool", (p: { name: string }) => {
+      this.d.tools.unregister(`${prefix}_${String(p.name)}`, id);
+      return {};
+    });
+
+    peer.handle("catalog.update", (p: { entries: unknown }) => {
+      if (!m.integration) deny("catalog entries without an integration block");
+      const before = this.catalogs.get(id) ?? [];
+      const after = cleanCatalogReport(p.entries);
+      this.catalogs.set(id, after);
+      this.d.onCatalogUpdated?.(id, before, after);
       return {};
     });
 
@@ -513,6 +558,28 @@ export class PluginHost {
       if (ctx?.conversationId) this.d.attachPart?.(ctx.conversationId, { type: "widget", plugin: rec.id, kind, data });
     }
     return Object.keys(meta).length ? { ...result, _meta: meta } : { content: result.content, ...(result.isError ? { isError: true } : {}) };
+  }
+
+  // ---------- Catalog entries ----------
+
+  /** What a running plugin last reported about its catalog entries; undefined when it has not (or is not running). */
+  catalogOf(id: string): CatalogEntryState[] | undefined {
+    return this.catalogs.get(id);
+  }
+
+  /** The address that signs one of a plugin's entries in, from the plugin. */
+  async catalogSignIn(id: string, entryId: string): Promise<string> {
+    const r = this.running.get(id);
+    if (!r) throw new LocalizedError("catalog.notRunning", { name: id });
+    const { url } = await r.peer.request<{ url: string }>("catalog.signin", { entryId }, { timeoutMs: 60_000 });
+    if (!/^https:\/\//.test(String(url))) throw new LocalizedError("catalog.badSignin", { name: id });
+    return url;
+  }
+
+  async catalogSignOut(id: string, entryId: string): Promise<void> {
+    const r = this.running.get(id);
+    if (!r) throw new LocalizedError("catalog.notRunning", { name: id });
+    await r.peer.request("catalog.signout", { entryId }, { timeoutMs: 60_000 });
   }
 
   // ---------- HTTP and UI routing ----------

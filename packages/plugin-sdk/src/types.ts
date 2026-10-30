@@ -6,6 +6,7 @@ import type {
   BrainLoginUpdate,
   BrainSessionOptions,
   BrainTurn,
+  CatalogEntryState,
   CoreMethod,
   Locale,
   NotifyLevel,
@@ -159,7 +160,23 @@ export interface PluginContext {
     onChange(cb: (locale: Locale) => void): void;
   };
   log: PluginLogger;
-  tools: { register(tool: ToolRegistration): void };
+  tools: {
+    register(tool: ToolRegistration): void;
+    /** Take back one of this plugin's tools (an app signed out); registering it again brings it back. */
+    unregister(name: string): void;
+  };
+  /**
+   * The plugin's catalog entries (manifest `integration.entries`, plus any it adds): their state, and their sign-in.
+   * Report every entry each time something changes; added entries carry their name and look, and the plugin keeps
+   * them itself (storage) to report again when it starts.
+   */
+  catalog: {
+    update(entries: CatalogEntryState[]): void;
+    /** The person pressed an entry's Sign in: the address to open in their browser. Report the entry once it works. */
+    onSignIn(handler: (entryId: string) => Promise<{ url: string }> | { url: string }): void;
+    /** The person signed an entry out. */
+    onSignOut(handler: (entryId: string) => Promise<void> | void): void;
+  };
   brains: { register(provider: BrainProviderImpl): void };
   channels: { register(channel: ChannelImpl): void };
   events: { on(name: EventName, cb: (payload: any) => void): void };

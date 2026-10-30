@@ -694,13 +694,17 @@ export function registerHubTools(hub: Hub): void {
         "The catalog: services the user can connect and abilities they can turn on (access from anywhere, Google Calendar, Telegram, web search, the browser, " +
         "weather, currency rates, Wikipedia, holidays, crypto prices, world clock…) with their status (connected and as whom, needs-setup, off, broken, unavailable). " +
         "Check it before saying something cannot be done: an ability that is off can be turned on with hub_integration_connect. " +
+        "Entries marked \"through <service>\" (Slack, GitHub, Gmail… as composio:<app>) go through that outside service: it holds the account's keys and sees the calls; " +
+        "prefer a native entry for the same service when there is one, and say so when the user asks. " +
         "When nothing here does what the user wants, offer to build an integration for it: the make-integration skill, then hub_plugin_install.",
       inputSchema: obj({}),
     },
     async () => {
       const list = await listIntegrations(hub, hubLocale());
       return text(
-        list.map((i) => `${i.id} — ${i.name} [${i.category}]: ${i.status}${i.account ? ` (${i.account})` : ""}${i.detail ? `; ${i.detail}` : ""}`).join("\n") ||
+        list
+          .map((i) => `${i.id} — ${i.name} [${i.category}]${i.via ? ` (through ${i.via.name}, an outside service)` : ""}: ${i.status}${i.account ? ` (${i.account})` : ""}${i.detail ? `; ${i.detail}` : ""}`)
+          .join("\n") ||
           "No integrations are installed.",
       );
     },
@@ -712,7 +716,8 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         "Show an integration's card in this chat so the user can connect it (e.g. Google Calendar: a Connect button that signs in with Google; " +
-        "Telegram: its setup steps; Granola, Notion, Linear: a Sign in button that opens the service's own sign-in; remote-access: a permanent link to Owlbot from anywhere, through Tailscale). " +
+        "Telegram: its setup steps; Granola, Notion, Linear: a Sign in button that opens the service's own sign-in; remote-access: a permanent link to Owlbot from anywhere, through Tailscale; " +
+        "composio:<app> (Slack, GitHub, Gmail…): its key field first if Composio has no key yet, then a Sign in button on Composio's page). " +
         "Use it whenever the user wants to connect a service, or a tool says it is not connected. Ids: see hub_integrations_list.",
       inputSchema: obj({ id: { type: "string", description: "Integration id" } }, ["id"]),
     },
@@ -740,9 +745,12 @@ export function registerHubTools(hub: Hub): void {
                 : `it does not work: ${view.detail ?? "see the card"}`
               : view.connect === "signin"
                 ? "not signed in yet; the card has a Sign in button"
-                : "not connected yet";
+                : view.plugin
+                  ? `${view.via?.name ?? view.plugin} has no key yet: the card has its field and says where to get it, then the Sign in button appears`
+                  : "not connected yet";
     return text(
       `The ${view.name} card is shown in the chat: ${state}. ` +
+        (view.via ? `It goes through ${view.via.name}, an outside service (the card's badge explains it). ` : "") +
         (view.status === "connected" ? "" : "Tell the user in a sentence to press the button on it; you get a system note once it is connected."),
     );
   }

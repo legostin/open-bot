@@ -200,6 +200,8 @@ export default {
   "connections.failed": "Google sign-in failed: {error}",
   "connections.badState": "This sign-in link is old or was already used. Press Connect again.",
   "connections.notFound": "No such integration: {id}",
+  "catalog.notRunning": "{name} is not running: turn it on first",
+  "catalog.badSignin": "{name} gave a sign-in address that is not https",
   "catalog.section.everyday": "Everyday",
   "catalog.section.travel": "Travel & places",
   "catalog.section.money": "Money",

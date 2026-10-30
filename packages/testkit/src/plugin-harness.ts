@@ -6,7 +6,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@owlbot/shared";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, CatalogEntryState, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@owlbot/shared";
 import { createRpcPeer, ndjsonTransport, readPluginLayout, type RpcPeer } from "@owlbot/shared";
 
 const APP_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..", "..", "..");
@@ -39,6 +39,12 @@ export interface PluginHarness {
   coreCalls: Array<{ method: string; params: any }>;
   /** Ids of every vault.get that reached the "hub", in order. */
   vaultGets: string[];
+  /** The plugin's last report of its catalog entries (ctx.catalog.update), and every report in order. */
+  catalog: CatalogEntryState[];
+  catalogReports: CatalogEntryState[][];
+  /** The person pressed an entry's Sign in / Sign out. */
+  catalogSignIn(entryId: string): Promise<{ url: string }>;
+  catalogSignOut(entryId: string): Promise<void>;
   /**
    * Store (or with no fields, remove) a vault item, and tell the plugin like the hub does: a "vault.updated" event
    * when it subscribed to it.
@@ -106,6 +112,15 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
   peer.onNotification("brain.event", (p: { sessionId: string; event: BrainEvent }) => brainEvents.get(p.sessionId)?.push(p.event));
   peer.handle("register.tool", (p: { spec: ToolSpec }) => {
     tools.set(p.spec.name, p.spec);
+    return {};
+  });
+  peer.handle("unregister.tool", (p: { name: string }) => {
+    tools.delete(p.name);
+    return {};
+  });
+  const catalogReports: CatalogEntryState[][] = [];
+  peer.handle("catalog.update", (p: { entries: CatalogEntryState[] }) => {
+    catalogReports.push(p.entries);
     return {};
   });
   peer.handle("register.brain", (p: { id: string; label: string }) => {
@@ -193,6 +208,14 @@ export async function startPlugin(o: HarnessOptions): Promise<PluginHarness> {
     logs,
     coreCalls,
     vaultGets,
+    get catalog() {
+      return catalogReports.at(-1) ?? [];
+    },
+    catalogReports,
+    catalogSignIn: (entryId) => peer.request("catalog.signin", { entryId }, { timeoutMs: 60_000 }),
+    catalogSignOut: async (entryId) => {
+      await peer.request("catalog.signout", { entryId }, { timeoutMs: 60_000 });
+    },
     setVault(id, fields) {
       if (fields) vault[id] = fields;
       else delete vault[id];
