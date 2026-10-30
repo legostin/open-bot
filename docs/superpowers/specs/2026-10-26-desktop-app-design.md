@@ -163,9 +163,34 @@ Commands of the setup screens: `get_state`, `choose_hub`, `pair`, `use_existing_
 ## Tray (`tray.rs`)
 
 Status line (starting, running, restarting, keeps stopping, port busy, stopped; node: "Machine of <hub>" while the
-node process runs), Open Owlbot, Start at login (checkbox), Show log, Restart, Set up again…, Quit. On Windows a click
+node process runs), the update item (below), Open Owlbot, Start at login (checkbox), Show log, Restart, Set up
+again…, Quit. On Windows a click
 on the icon opens the window; on macOS it shows the menu. Texts come from `packaging/desktop/locales` (`tray.*` and
 `app.*` keys); the language follows the system, English as the fallback.
+
+## Updates (`update.rs`)
+
+The app updates itself from the project's GitHub releases with `tauri-plugin-updater`. It reads `latest.json` of the
+latest release (`https://github.com/legostin/open-bot/releases/latest/download/latest.json`) a minute after start
+and every six hours, and downloads a newer version in the background. Every file is checked against the project's
+minisign key: its public half is in `tauri.conf.json`, so only builds signed with it install. Installing is the
+person's choice: the tray item reads "Check for updates", "Checking…", then "Install update <version>". Picking it
+(or `Owlbot --update`) stops the hub cleanly (its tasks wait in the queue, a standby replica takes over meanwhile),
+installs, and restarts the app. On macOS the new `.app` replaces the old one in place. On Windows the NSIS installer
+runs in passive mode. A failed install starts the hub again.
+
+- Building: with the signing key (`TAURI_SIGNING_PRIVATE_KEY`, a GitHub secret for CI, or `~/.tauri/owlbot.key` on a
+  release machine) `build.mjs` turns on `createUpdaterArtifacts` and also writes `owlbot-<version>-mac.app.tar.gz` and
+  the Windows installer's `.sig`. Without the key the installers are built as before, without update files.
+- Releasing: `release.yml` passes the secret to `desktop.yml` and writes `latest.json` with
+  `packaging/desktop/latest-json.mjs` (the universal Mac app for both architectures, the Windows installer). Updates
+  need increasing versions: the tag is the root `package.json` version.
+- After an update the hub's leader sees a newer version than at its last start (`meta.app_version`, per replica). It
+  hands the default agent the release's notes from the GitHub API. The agent then tells the person, in their
+  language, which version they are on and what changed (`packages/core/src/updates.ts`). The note it leaves in the
+  dialog is replicated, so another replica on the same version stays quiet.
+- The test build and a dev run do not update. The test build takes a feed only when pointed at one
+  (`OWLBOT_UPDATE_URL`, plain http allowed), for a local end-to-end check.
 
 ## Start at login (`autostart.rs`)
 
@@ -224,5 +249,5 @@ runs next to an installed Owlbot. Window titles and the tray tooltip read "Owlbo
 
 ## Not covered
 
-System notifications, auto-update, code signing and notarization, Windows on ARM, Linux, a styled disk image window,
+System notifications, code signing and notarization, Windows on ARM, Linux, a styled disk image window,
 migrating the pre-rename open-bot 0.1.0 install.

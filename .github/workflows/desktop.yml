@@ -34,7 +34,11 @@ jobs:
       - run: npm ci
       - run: npm run build:ui -w @owlbot/desktop
       - run: cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml
+      # The update files are signed with the project's key; without the secret (a fork's PR) they are left out.
       - run: npm run package:desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       - name: Install, start, check, quit, uninstall
         shell: pwsh
         run: |
@@ -75,7 +79,9 @@ jobs:
         if: always()
         with:
           name: windows-installer
-          path: dist/desktop/owlbot-setup-*.exe
+          path: |
+            dist/desktop/owlbot-setup-*.exe
+            dist/desktop/owlbot-setup-*.exe.sig
           if-no-files-found: ignore
 
   macos:
@@ -101,7 +107,11 @@ jobs:
       - run: npm ci
       - run: npm run build:ui -w @owlbot/desktop
       - run: cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml
+      # The update files are signed with the project's key; without the secret (a fork's PR) they are left out.
       - run: npm run package:desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       - name: "Disk image: drag to Applications, run, quit"
         run: |
           set -eu
@@ -161,4 +171,6 @@ jobs:
           path: |
             dist/desktop/owlbot-*.dmg
             dist/desktop/owlbot-*.pkg
+            dist/desktop/owlbot-*-mac.app.tar.gz
+            dist/desktop/owlbot-*-mac.app.tar.gz.sig
           if-no-files-found: ignore

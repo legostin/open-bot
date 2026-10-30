@@ -16,6 +16,8 @@ import { loadCatalogs } from "../../../packaging/desktop/locales.mjs";
 // @ts-ignore
 import { distributionXml, installerPage } from "../../../packaging/macos/generate.mjs";
 // @ts-ignore
+import { latestJson } from "../../../packaging/desktop/latest-json.mjs";
+// @ts-ignore
 import { nsisHooks, nsisString } from "../../../packaging/windows/generate.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
@@ -132,5 +134,26 @@ describe("installer text", () => {
     const xml = distributionXml({ version: "1.2.3", componentPkg: "owlbot-app.pkg" });
     expect(xml).toContain('<pkg-ref id="ai.owlbot.pkg" version="1.2.3" onConclusion="none">owlbot-app.pkg</pkg-ref>');
     expect(xml).toContain('hostArchitectures="arm64,x86_64"');
+  });
+});
+
+describe("desktop updates", () => {
+  it("lists the signed update files of a release in latest.json", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "owlbot-0.2.0-mac.app.tar.gz"), "app");
+    writeFileSync(join(dir, "owlbot-0.2.0-mac.app.tar.gz.sig"), "mac-signature\n");
+    writeFileSync(join(dir, "owlbot-setup-0.2.0-x64.exe"), "exe");
+    writeFileSync(join(dir, "owlbot-setup-0.2.0-x64.exe.sig"), "win-signature\n");
+    const mac = { signature: "mac-signature", url: "https://github.com/legostin/open-bot/releases/download/v0.2.0/owlbot-0.2.0-mac.app.tar.gz" };
+    expect(latestJson(dir, "0.2.0", "legostin/open-bot", new Date("2026-10-30T12:00:00Z"))).toEqual({
+      version: "0.2.0",
+      pub_date: "2026-10-30T12:00:00.000Z",
+      platforms: {
+        "darwin-aarch64": mac,
+        "darwin-x86_64": mac,
+        "windows-x86_64": { signature: "win-signature", url: "https://github.com/legostin/open-bot/releases/download/v0.2.0/owlbot-setup-0.2.0-x64.exe" },
+      },
+    });
+    expect(() => latestJson(dir, "0.3.0", "legostin/open-bot")).toThrow(/missing owlbot-0.3.0-mac.app.tar.gz/);
   });
 });

@@ -16,6 +16,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import type { AgentDef, AgentDraft, IntegrationView, JsonSchema, Locale, MachineSettings, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
 import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
 import { normalizeSettings, SetupError } from "../machine-setup.ts";
+import { siteDomain } from "../secrets.ts";
 import type { Hub } from "../app.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
@@ -633,23 +634,36 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         "Ask the user for a secret (API key, token, password) with a secure input card in this chat. The value goes straight into the vault; " +
-        "you only ever get vault://<vault>. Use it whenever something needs a secret: never ask the user to paste secrets as a message, never send them to the vault or the security console themselves. " +
-        "For a plugin's own secrets prefer hub_plugin_setup. Waits a little for the user; if they take longer you get a system note once it is saved.",
+        "you only ever get vault://<vault>. Use it whenever something needs a secret: never ask the user to paste secrets as a message or to open another app for it. " +
+        "To sign in to a website, ask for its login: pass login { domain, username? }; the card takes the username and the password, keeps them for that site only, " +
+        "and browser_fill_secret types them there. For a plugin's own secrets prefer hub_plugin_setup. Waits a little for the user; if they take longer you get a system note once it is saved.",
       inputSchema: obj(
         {
-          vault: { type: "string", description: "Vault item id to store it under, e.g. github_token (letters, digits, _ . -)" },
+          vault: { type: "string", description: "Vault item id to store it under, e.g. github_token (letters, digits, _ . -); for a login it defaults to login-<domain>" },
           title: { type: "string", description: "What it is, in the user's language, e.g. “GitHub token”" },
           hint: { type: "string", description: "One or two sentences in the user's language: why it is needed and where to get it (markdown)" },
           link: { type: "string", description: "Page where the user creates the secret, if any" },
           plugin: { type: "string", description: "Plugin that will use it (must be allowed to read this vault item)" },
           setting: { type: "string", description: "That plugin's setting that should point at vault://<vault>" },
+          login: {
+            type: "object",
+            description: "A website's login instead of one value: the site's domain (e.g. x.com) and the username if you know it",
+            properties: { domain: { type: "string" }, username: { type: "string" } },
+            required: ["domain"],
+          },
         },
-        ["vault", "title"],
+        ["title"],
       ),
     },
     async (i, ctx) => {
+      const login = i.login && typeof i.login === "object" && i.login.domain ? { domain: String(i.login.domain), ...(i.login.username ? { username: String(i.login.username) } : {}) } : undefined;
+      const domain = login ? siteDomain(login.domain) : "";
+      if (login && !domain) return text(`"${login.domain}" is not a website's domain: pass one like x.com.`, true);
+      const vaultId = String(i.vault ?? "").trim() || (domain ? `login-${domain}` : "");
+      if (!vaultId) return text("Pass vault: the id to store the secret under.", true);
       const req = hub.secrets.create({
-        vaultId: String(i.vault ?? "").trim(),
+        vaultId,
+        login,
         title: String(i.title ?? "").trim() || String(i.vault),
         hint: i.hint ? String(i.hint) : undefined,
         link: i.link && /^https?:\/\//.test(String(i.link)) ? String(i.link) : undefined,
@@ -660,7 +674,10 @@ export function registerHubTools(hub: Hub): void {
       hub.runner.attachPart(ctx.conversationId, { type: "secret_request", requestId: req.id, vaultId: req.vaultId, title: req.title, status: req.status });
       const locked = hub.vault.state() !== "unlocked";
       const r = await hub.secrets.wait(req.id, hub.settings.get().approvalInlineWaitSec * 1000);
-      if (r.status === "saved") return text(`Saved as vault://${r.vaultId}${r.pluginId ? `; plugin ${r.pluginId} uses it now` : ""}. Refer to it by this reference; never ask for the value again.`);
+      if (r.status === "saved") {
+        const how = r.login ? `; browser_fill_secret types its username and password on ${r.login.domain}` : r.pluginId ? `; plugin ${r.pluginId} uses it now` : "";
+        return text(`Saved as vault://${r.vaultId}${how}. Refer to it by this reference; never ask for the value again.`);
+      }
       if (r.status === "cancelled") return text("The user dismissed the request.");
       return text(
         `A secure input card for ${r.title} is shown in the chat${locked ? " (the vault is locked: the card asks the user to unlock it first)" : ""}. ` +

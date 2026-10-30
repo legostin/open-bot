@@ -56,6 +56,14 @@ const PAGES: Record<string, string> = {
        <button type="button" id="noop">Показать пароль</button>
      </form>`,
   ),
+  "/signup": page(
+    "Регистрация",
+    `<form method="post" action="/signup">
+       <input type="email" name="email" aria-label="Почта">
+       <input type="password" name="password" autocomplete="new-password" aria-label="Пароль">
+       <button type="submit">Создать аккаунт</button>
+     </form>`,
+  ),
   "/long": page("Длинная", `<main><p>${LONG.replace(/\n/g, "<br>")}</p></main>`),
   "/confirm": page("Записи", `<button onclick="if (confirm('Точно удалить?')) document.title = 'Удалено'">Удалить запись</button>`),
   "/captcha": page("Проверка", `<p>Подтвердите действие</p><div class="g-recaptcha" style="width:304px;height:78px;border:1px solid #ccc"></div>`),
@@ -421,7 +429,9 @@ describe("browser plugin (headless Chromium)", () => {
     expect(after).toMatch(/textbox "Код" value="••••••"/);
     await ok("get_text");
     await ok("screenshot");
-    const r = await ok("submit", { ref: refOf(after, /button "Войти"/), label: "Войти", url: base + "/login", description: "Войти на тестовый сайт" });
+    // A sign-in step is not an action with consequences: a plain click, no approval.
+    expect(after).toMatch(/button "Войти"(?! \(needs browser_submit\))/);
+    const r = await ok("click", { ref: refOf(after, /button "Войти"/) });
     expect(r).toContain("Кабинет —");
     const login = posted.find((p) => p.path === "/login")!;
     expect(login.body.get("password")).toBe(SECRET);
@@ -429,6 +439,11 @@ describe("browser plugin (headless Chromium)", () => {
     expect(login.body.get("username")).toBe("alice");
     for (const o of outputs) expect(o).not.toContain(SECRET);
     expect(h.logs.join("\n")).not.toContain(SECRET);
+  });
+
+  it("still asks before creating an account", async () => {
+    await ok("open", { url: base + "/signup" });
+    expect(await ok("snapshot")).toMatch(/button "Создать аккаунт" \(needs browser_submit\)/);
   });
 
   it("returns a JPEG screenshot as an image part", async () => {

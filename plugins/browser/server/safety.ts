@@ -181,6 +181,44 @@ export const CHECK_RE = new RegExp(
   "iu",
 );
 
+/**
+ * A field of signing in, by its name, id, label or placeholder. Russian: login, mail, phone, password, code.
+ */
+export const CREDENTIAL_FIELD_RE = new RegExp(
+  [
+    "user(?:name)?",
+    "login",
+    "e-?mail",
+    "phone",
+    "account",
+    "otp",
+    "one-time",
+    "code",
+    "passw",
+    "pin",
+    "\\u043b\\u043e\\u0433\\u0438\\u043d",
+    "\\u043f\\u043e\\u0447\\u0442",
+    "\\u0442\\u0435\\u043b\\u0435\\u0444\\u043e\\u043d",
+    "\\u043f\\u0430\\u0440\\u043e\\u043b\\u044c",
+    "\\u043a\\u043e\\u0434",
+  ].join("|"),
+  "iu",
+);
+
+/** Creating an account rather than signing in. Russian: register, registration, create an account. */
+export const SIGN_UP_RE = new RegExp(
+  [
+    "sign\\s*up",
+    "register",
+    "create\\s+(?:an\\s+|your\\s+)?account",
+    "join\\s+(?:now|free|us)",
+    "\\u0437\\u0430\\u0440\\u0435\\u0433\\u0438\\u0441\\u0442\\u0440",
+    "\\u0440\\u0435\\u0433\\u0438\\u0441\\u0442\\u0440\\u0430\\u0446",
+    "\\u0441\\u043e\\u0437\\u0434\\u0430\\u0442\\u044c\\s+(?:\\u0430\\u043a\\u043a\\u0430\\u0443\\u043d\\u0442|\\u0443\\u0447\\u0451\\u0442\\u043d\\u0443\\u044e|\\u0443\\u0447\\u0435\\u0442\\u043d\\u0443\\u044e)",
+  ].join("|"),
+  "iu",
+);
+
 /** Everything the page script needs to classify elements (regex sources: RegExp objects do not cross into the page). */
 export const PAGE_RULES = {
   action: ACTION_LABEL_RE.source,
@@ -192,6 +230,8 @@ export const PAGE_RULES = {
   proceed: PROCEED_LABEL_RE.source,
   check: CHECK_RE.source,
   checkPassing: CHECK_PASSING_RE.source,
+  credential: CREDENTIAL_FIELD_RE.source,
+  signUp: SIGN_UP_RE.source,
 };
 
 /** Keys that activate the focused element: Enter (submits forms, sends chat messages) and Space (presses buttons). */

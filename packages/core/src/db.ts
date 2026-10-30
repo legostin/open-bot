@@ -107,6 +107,8 @@ const MIGRATIONS: string[] = [
   create table replicas(id text primary key, name text not null, public_key text not null, urls text not null default '[]', node_urls text not null default '[]',
     priority integer not null, created_at text not null, revoked integer not null default 0);
   `,
+  // A secret card may ask for a site's login (username and password, kept for that domain): { domain, username? }.
+  `alter table secret_requests add column login text;`,
 ];
 
 export function openDb(file: string): Db {

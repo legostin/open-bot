@@ -1,6 +1,7 @@
 # A version tag (v0.2.0, the root package.json's version) builds and checks the desktop installers (desktop.yml) and
 # publishes them as that version's release. Hubs of the version hand them out at /download/desktop/<os>
 # (packages/core/src/server/join-page.ts), so the asset names must stay what packaging/desktop/build.mjs makes.
+# Its latest.json is what installed apps check for updates (packages/desktop/src-tauri/src/update.rs).
 name: release
 
 on:
@@ -23,11 +24,18 @@ jobs:
   installers:
     needs: version
     uses: ./.github/workflows/desktop.yml
+    # The update signing key (TAURI_SIGNING_PRIVATE_KEY).
+    secrets: inherit
 
   publish:
     needs: installers
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      # latest-json.mjs runs as a script (import.meta.main): Node 24, as everywhere else.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -37,6 +45,7 @@ jobs:
           v="${GITHUB_REF_NAME#v}"
           test -f "dist/owlbot-setup-$v-x64.exe"
           test -f "dist/owlbot-$v.dmg"
+          node packaging/desktop/latest-json.mjs dist "$v" "$GITHUB_REPOSITORY"
           ls -l dist
       - name: Publish the release
         env:

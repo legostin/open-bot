@@ -71,14 +71,37 @@ export class SecretIntake {
 
   // ---------- requests ----------
 
-  /** A card in the chat asking the user for one secret. */
-  create(input: { vaultId: string; title: string; hint?: string; link?: string; pluginId?: string; setting?: string; conversationId?: string }): SecretRequest {
+  /** A card in the chat asking the user for one secret, or for a site's login (`login`). */
+  create(input: {
+    vaultId: string;
+    title: string;
+    hint?: string;
+    link?: string;
+    pluginId?: string;
+    setting?: string;
+    login?: { domain: string; username?: string };
+    conversationId?: string;
+  }): SecretRequest {
     if (!VAULT_ID.test(input.vaultId)) throw new LocalizedError("vault.badId", { id: input.vaultId.slice(0, 80) }, 400);
-    if (input.pluginId) this.checkPluginTarget(input.pluginId, input.vaultId, input.setting);
+    const login = input.login ? { domain: siteDomain(input.login.domain), ...(input.login.username?.trim() ? { username: input.login.username.trim().slice(0, 200) } : {}) } : undefined;
+    if (login && !login.domain) throw new LocalizedError("secrets.badDomain", undefined, 400);
+    if (input.pluginId && !login) this.checkPluginTarget(input.pluginId, input.vaultId, input.setting);
     const id = newId("sr_");
     this.d.db
-      .prepare("insert into secret_requests(id, vault_id, title, hint, link, plugin_id, setting, conversation_id, status, created_at) values (?,?,?,?,?,?,?,?,?,?)")
-      .run(id, input.vaultId, input.title, input.hint ?? null, input.link ?? null, input.pluginId ?? null, input.setting ?? null, input.conversationId ?? null, "pending", nowIso());
+      .prepare("insert into secret_requests(id, vault_id, title, hint, link, plugin_id, setting, login, conversation_id, status, created_at) values (?,?,?,?,?,?,?,?,?,?,?)")
+      .run(
+        id,
+        input.vaultId,
+        input.title,
+        input.hint ?? null,
+        input.link ?? null,
+        login ? null : (input.pluginId ?? null),
+        login ? null : (input.setting ?? null),
+        login ? JSON.stringify(login) : null,
+        input.conversationId ?? null,
+        "pending",
+        nowIso(),
+      );
     const r = this.get(id)!;
     this.d.bus.emit("secret.request", r);
     return r;
@@ -95,13 +118,30 @@ export class SecretIntake {
     );
   }
 
-  /** Store the value for a request. `waited` tells whether a tool call was still waiting for it. */
-  fulfil(id: string, value: string, actor: string): { request: SecretRequest; waited: boolean } {
+  /** Store the value for a request (a login's username and password). `waited` tells whether a tool call was still waiting for it. */
+  fulfil(id: string, value: string | { username?: string; password?: string }, actor: string): { request: SecretRequest; waited: boolean } {
     const req = this.get(id);
     if (!req) throw new LocalizedError("secrets.requestNotFound", undefined, 404);
     if (req.status !== "pending") throw new LocalizedError("secrets.requestClosed", undefined, 409);
-    this.store({ vaultId: req.vaultId, title: req.title, value, pluginId: req.pluginId, setting: req.setting, actor });
+    if (req.login) {
+      const v = typeof value === "string" ? { password: value } : value;
+      this.storeLogin({ vaultId: req.vaultId, title: req.title, domain: req.login.domain, username: String(v.username ?? req.login.username ?? ""), password: String(v.password ?? ""), actor });
+    } else this.store({ vaultId: req.vaultId, title: req.title, value: typeof value === "string" ? value : String(value.password ?? ""), pluginId: req.pluginId, setting: req.setting, actor });
     return this.resolve(req.id, "saved");
+  }
+
+  /** A site's login typed in the chat: a login item for that domain, which only the browser may type into its pages. */
+  storeLogin(input: { vaultId: string; title: string; domain: string; username: string; password: string; actor: string }): void {
+    const password = input.password;
+    const username = input.username.trim();
+    if (!password.trim() || password.length > MAX_SECRET || username.length > 200) throw new LocalizedError("secrets.badValue", undefined, 400);
+    if (!VAULT_ID.test(input.vaultId)) throw new LocalizedError("vault.badId", { id: input.vaultId.slice(0, 80) }, 400);
+    if (this.d.vault.state() !== "unlocked") throw new LocalizedError("secrets.vaultLocked", undefined, 409);
+    const prev = this.d.vault.getMeta(input.vaultId);
+    if (prev && prev.type !== "login") throw new LocalizedError("secrets.notALogin", { id: input.vaultId }, 409);
+    const domains = [...new Set([input.domain, ...(prev?.scope.domains ?? [])])];
+    this.d.vault.upsert({ id: input.vaultId, type: "login", name: prev?.name ?? input.title, fields: { ...(username ? { username } : {}), password }, scope: { ...(prev?.scope ?? {}), domains } });
+    this.d.audit.append(input.actor, "vault.upsert", input.vaultId, { via: "chat", login: input.domain, replaced: !!prev });
   }
 
   cancel(id: string, actor: string): SecretRequest {
@@ -294,6 +334,7 @@ export class SecretIntake {
       link: r.link ?? undefined,
       pluginId: r.plugin_id ?? undefined,
       setting: r.setting ?? undefined,
+      ...(r.login ? { login: JSON.parse(r.login) } : {}),
       conversationId: r.conversation_id ?? undefined,
       status: r.status,
       exists: !!this.d.vault.getMeta(r.vault_id),
@@ -304,6 +345,19 @@ export class SecretIntake {
 }
 
 /** Same rule as the plugin host's vault.get: manifest permissions plus console grants. */
+/** "https://www.x.com/login" or "X.com" → "x.com": the host a login is kept for; "" when it is not one. */
+export function siteDomain(input: string): string {
+  const s = String(input ?? "").trim().toLowerCase();
+  let host = s;
+  try {
+    host = new URL(/^[a-z][a-z0-9+.-]*:\/\//.test(s) ? s : `https://${s}`).hostname;
+  } catch {
+    return "";
+  }
+  host = host.replace(/^www\./, "");
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : "";
+}
+
 export function pluginMayRead(rec: PluginRecord | undefined, vaultId: string): boolean {
   if (!rec) return false;
   return [...rec.granted.vault, ...rec.extraVault].some((g) => g === vaultId || g === "*" || g === "secret:*");

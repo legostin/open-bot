@@ -143,6 +143,21 @@ describe("secrets in the chat", () => {
     expect((await req("POST", `/api/secret-requests/${card.requestId}`, { value: "again" })).status).toBe(409);
   });
 
+  it("asks for a website's login with a card: kept as a login item for that site, which the browser may type", async () => {
+    await say('CALL hub_secret_request {"title":"X","login":{"domain":"https://www.x.com/i/flow/login","username":"legostin"}}', /tool said: A secure input card/);
+    const card = (await messages()).flatMap((m) => m.parts).find((p: any) => p.type === "secret_request" && p.vaultId === "login-x.com");
+    expect(card).toMatchObject({ title: "X", status: "pending" });
+    expect(await ok("GET", `/api/secret-requests/${card.requestId}`)).toMatchObject({ login: { domain: "x.com", username: "legostin" } });
+    const saved = await ok("POST", `/api/secret-requests/${card.requestId}`, { username: "legostin", password: "pw-x-123456" });
+    expect(saved.status).toBe("saved");
+    const item = hub.vault.read("login-x.com");
+    expect(item).toMatchObject({ type: "login", fields: { username: "legostin", password: "pw-x-123456" } });
+    expect(item.scope.domains).toEqual(["x.com"]);
+    expect(item.scope.plugins).toContain("browser");
+    expect(await allText()).not.toContain("pw-x-123456");
+    await say('CALL hub_secret_request {"title":"Nope","login":{"domain":"not a site"}}', /tool said: "not a site" is not a website's domain/);
+  });
+
   it("takes a bare reply as the answer to the open card", async () => {
     await say('CALL hub_secret_request {"vault":"other_key","title":"Other key"}', /tool said: A secure input card/);
     await say("plain-token-value-xyz", /fake heard/);
