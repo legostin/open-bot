@@ -227,7 +227,7 @@ const FRONT_DESK_DENIED = ["Bash", "BashOutput", "KillShell", "Write", "Edit", "
 const CONFINED_ALLOWED = /^(WebFetch|WebSearch|TodoWrite|Task|Agent|Skill|ToolSearch|mcp__owlbot)$/;
 
 /**
- * Claude Code's sandbox for a confined session (macOS Seatbelt): commands write in the workspace and the temp folder,
+ * Claude Code's sandbox for a confined session (macOS Seatbelt): commands write in the workspace and the temp folders,
  * read anything but `denyRead` (except `allowRead`), and reach no network; one that needs more retries outside the
  * sandbox, which the permission tool decides. No sandbox, no session: it never falls back to running unsandboxed.
  */
@@ -238,7 +238,7 @@ export function sandboxSettings(confine: NonNullable<BrainSessionOptions["confin
       failIfUnavailable: true,
       autoAllowBashIfSandboxed: true,
       allowUnsandboxedCommands: true,
-      filesystem: { denyRead: confine.denyRead, allowRead: confine.allowRead },
+      filesystem: { denyRead: confine.denyRead, allowRead: confine.allowRead, ...(confine.allowWrite?.length ? { allowWrite: confine.allowWrite } : {}) },
       network: { allowedDomains: [] },
     },
   };

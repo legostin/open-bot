@@ -176,6 +176,30 @@ describe("agents show images and maps", () => {
     }
   });
 
+  it("a task's picture reaches the dialog that started it, and the dialog can show a file from its task's folder", async () => {
+    const task = hub.store.createTask({ agentId: "assistant", title: "Render", goal: "x", createdBy: "agent", background: false, parentConversationId: conv });
+    const taskWs = hub.runner.workspacePath({ agentId: "assistant", taskId: task.id, conversationId: task.conversationId });
+    mkdirSync(join(taskWs, "out"), { recursive: true });
+    writeFileSync(join(taskWs, "out", "render.png"), PNG);
+    const ctx = (over: Record<string, unknown>) => ({ sessionId: "s", agentId: "assistant", callId: "c", tainted: false, background: false, machineId: "local", ...over }) as any;
+    const show = (input: unknown, over: Record<string, unknown>) => hub.tools.get("show_images")!.invoke(input, ctx(over));
+
+    // Shown inside the task: in the task, and under the task's line in the dialog the person reads.
+    expect((await show({ images: [{ path: "out/render.png", caption: "Render" }] }, { conversationId: task.conversationId, taskId: task.id, workspace: taskWs })).isError).toBeFalsy();
+    const inDialog = hub.store.listMessages(conv, { limit: 500 }).find((m) => m.parts.some((p) => p.type === "task" && p.taskId === task.id) && m.parts.some((p) => p.type === "images"));
+    expect(inDialog?.parts.find((p) => p.type === "images")).toMatchObject({ items: [{ caption: "Render" }] });
+
+    // The dialog shows what its task made, by the file's full path; a folder that is not its own or its tasks' stays closed.
+    const dialogWs = hub.runner.workspacePath({ agentId: "assistant", conversationId: conv });
+    expect((await show({ images: [{ path: join(taskWs, "out", "render.png") }] }, { conversationId: conv, workspace: dialogWs })).isError).toBeFalsy();
+    const stranger = hub.runner.workspacePath({ agentId: "other", conversationId: "c_other" });
+    mkdirSync(stranger, { recursive: true });
+    writeFileSync(join(stranger, "x.png"), PNG);
+    const r = await show({ images: [{ path: join(stranger, "x.png") }] }, { conversationId: conv, workspace: dialogWs });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]).toMatchObject({ text: expect.stringMatching(/outside your workspace and your tasks' folders/) });
+  });
+
   it("show_map adds a map with markers and a location for the channels", async () => {
     sent.length = 0;
     const reply = await call("show_map", {

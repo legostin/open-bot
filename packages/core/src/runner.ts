@@ -518,6 +518,24 @@ export class SessionRunner {
   }
 
   /**
+   * Something for the person to see (pictures): in the conversation it was made in, and when that is a task, also in
+   * the dialog that started it, under the task's line, as its questions are: the person reads the dialog.
+   */
+  showToPerson(conversationId: string, part: MessagePart, taskId?: string): void {
+    this.attachPart(conversationId, part);
+    const dialog = this.starterDialog(taskId);
+    if (dialog && taskId) this.d.store.addMessage({ conversationId: dialog.id, role: "assistant", agentId: dialog.agentId, parts: [{ type: "task", taskId }, part], status: "complete" });
+  }
+
+  /** The folders of the tasks a conversation started (and theirs, in turn): what it may show the person from. */
+  startedWorkspaces(conversationId: string): string[] {
+    return this.d.store
+      .listTasks({ limit: 500 })
+      .filter((t) => t.parentConversationId === conversationId || this.starterDialog(t.id)?.id === conversationId)
+      .map((t) => this.workspacePath({ agentId: t.agentId, taskId: t.id, conversationId: t.conversationId }));
+  }
+
+  /**
    * The person tapped a quick reply: the buttons rest on that option, and its text is their next message (the same
    * way as typed). A second tap does nothing.
    */

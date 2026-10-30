@@ -96,7 +96,12 @@ describe("what a brain's own tools may do", () => {
     expect(d("Read", { file_path: "/data/workspaces/b/c9/secret.md" })).toBe("deny");
     expect(d("Write", { file_path: "/data/vault.db" })).toBe("deny");
     expect(d("Read", { file_path: "/data/workspaces/a/c1/ok.md" })).toBe("allow");
-    expect(confinement("/data", ws, ["/data/plugins/p", "/elsewhere"], home)).toEqual({ denyRead: expect.arrayContaining([join(home, ".ssh"), "/data"]), allowRead: [ws, "/data/plugins/p"] });
+    expect(confinement("/data", ws, ["/data/plugins/p", "/elsewhere"], home)).toEqual({
+      denyRead: expect.arrayContaining([join(home, ".ssh"), "/data"]),
+      allowRead: [ws, "/data/plugins/p"],
+      // System tools (sips) write their scratch files in the person's temp folder, whatever TMPDIR says.
+      allowWrite: expect.arrayContaining([tmpdir().replace(/\/+$/, "")]),
+    });
   });
 });
 
