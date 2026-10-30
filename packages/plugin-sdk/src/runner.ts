@@ -3,7 +3,7 @@
 
 import { pathToFileURL } from "node:url";
 import { createRpcPeer, ndjsonTransport, DEFAULT_LOCALE, isLocale, translator } from "@owlbot/shared";
-import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage, Catalog, Locale, Translate } from "@owlbot/shared";
+import type { ToolCallContext, ToolResult, BrainSessionOptions, BrainTurn, OutboundMessage, Catalog, CatalogEntryState, Locale, Translate } from "@owlbot/shared";
 import type {
   BrainLoginImpl,
   BrainProviderImpl,
@@ -62,6 +62,8 @@ const translate = (locale: Locale): Translate => {
   return t;
 };
 let httpHandler: ((req: PluginHttpRequest) => Promise<PluginHttpResponse> | PluginHttpResponse) | undefined;
+let signInHandler: ((entryId: string) => Promise<{ url: string }> | { url: string }) | undefined;
+let signOutHandler: ((entryId: string) => Promise<void> | void) | undefined;
 let mod: PluginModule | undefined;
 
 /** Hub events this process hears: one subscription per name, however many handlers (the hub sends each event once). */
@@ -139,6 +141,21 @@ peer.handle("plugin.activate", async (p: { pluginId: string; dataDir: string; pl
         const { handler, ...spec } = tool;
         toolHandlers.set(spec.name, handler);
         void peer.request("register.tool", { spec });
+      },
+      unregister(name) {
+        toolHandlers.delete(name);
+        void peer.request("unregister.tool", { name });
+      },
+    },
+    catalog: {
+      update(entries: CatalogEntryState[]) {
+        void peer.request("catalog.update", { entries: JSON.parse(JSON.stringify(entries ?? [])) }).catch((e) => toStderr("catalog.update failed", e));
+      },
+      onSignIn(handler) {
+        signInHandler = handler;
+      },
+      onSignOut(handler) {
+        signOutHandler = handler;
       },
     },
     brains: {
@@ -268,6 +285,19 @@ peer.handle("tool.invoke", async (p: { name: string; input: unknown; context: To
 peer.handle("hook.run", async (p: { hook: string; payload: unknown }) => {
   const h = hookHandlers.get(p.hook);
   return h ? ((await h(p.payload)) ?? null) : null;
+});
+
+peer.handle("catalog.signin", async (p: { entryId: string }) => {
+  if (!signInHandler) throw new Error("this plugin has no catalog sign-in");
+  const r = await signInHandler(String(p.entryId));
+  if (!r?.url) throw new Error("the plugin gave no sign-in address");
+  return { url: String(r.url) };
+});
+
+peer.handle("catalog.signout", async (p: { entryId: string }) => {
+  if (!signOutHandler) throw new Error("this plugin has no catalog sign-out");
+  await signOutHandler(String(p.entryId));
+  return {};
 });
 
 peer.handle("http.request", async (req: PluginHttpRequest) => {

@@ -17,6 +17,8 @@ describe("catalog entries", () => {
     expect(hasSwitch(v({ connect: "google", status: "needs-setup" }))).toBe(true);
     expect(hasSwitch(v({ connect: "remote", status: "off" }))).toBe(false);
     expect(hasSwitch(v({ status: "unavailable" }))).toBe(false);
+    // A plugin's entry (Composio's Slack): its plugin has the switch.
+    expect(hasSwitch(v({ id: "composio:slack", plugin: "composio", connect: "signin", status: "off" }))).toBe(false);
   });
 
   it("continues in the chat when something needs the person", () => {
@@ -28,6 +30,10 @@ describe("catalog entries", () => {
     expect(chatStep(v({ status: "off", connect: "remote" }))).toBe("connect");
     expect(chatStep(v({ status: "connected", connect: "remote" }))).toBe("settings");
     expect(chatStep(v({ status: "unavailable", connect: "remote" }))).toBeUndefined();
+    // A plugin's entry that is off is connected in the chat, which turns its plugin on.
+    expect(chatStep(v({ plugin: "composio", status: "off", connect: "signin" }))).toBe("connect");
+    expect(chatStep(v({ plugin: "composio", status: "needs-setup", connect: "setup" }))).toBe("connect");
+    expect(chatStep(v({ plugin: "composio", status: "connected", connect: "signin" }))).toBeUndefined();
   });
 
   it("searches names, lines and situations", () => {

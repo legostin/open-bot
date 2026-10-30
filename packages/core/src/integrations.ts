@@ -3,10 +3,15 @@
 // `none` ones only on being enabled. The core adds its own card first: access from anywhere (`remote`, remote.ts).
 // The catalog groups the same cards by the situation in life they help with; the Plugins panel's catalog (`all`) has
 // every plugin in it, those without an `integration` block as plain entries (a brain, or "other").
+// A plugin may have entries of its own besides its card (`integration.entries`, plus those it reports: the Composio
+// plugin's Slack, GitHub…), listed as "<plugin>:<entry>"; one going through an outside service (`integration.via`)
+// carries that service's badge.
 
-import type { CatalogView, IntegrationInfo, IntegrationView, Locale, OwlbotManifest } from "@owlbot/shared";
+import type { CatalogView, IntegrationInfo, IntegrationVia, IntegrationView, Locale, OwlbotManifest } from "@owlbot/shared";
+import { toolPrefixOf } from "@owlbot/shared";
 import type { Hub } from "./app.ts";
 import { localizePluginValue, tFor } from "./i18n.ts";
+import type { PluginRecord } from "./plugins/host.ts";
 
 /** The catalog's groups, in order: situations in life, the assistant's own abilities, brains. "other" collects the rest. */
 export const SITUATIONS = ["everyday", "travel", "money", "work", "reading", "communication", "home", "assistant", "brains", "other"] as const;
@@ -41,7 +46,60 @@ export function googleScopes(hub: Hub): string[] {
 /** How a plugin without an `integration` block shows in the catalog: as a brain, or as something else. */
 function plainIntegration(m: OwlbotManifest): IntegrationInfo {
   const brain = m.contributes.brains.length > 0;
-  return { category: brain ? "brains" : "other", icon: brain ? "brain" : "puzzle", connect: m.contributes.setup?.secrets.length ? "setup" : "none", scopes: [] };
+  return { category: brain ? "brains" : "other", icon: brain ? "brain" : "puzzle", connect: m.contributes.setup?.secrets.length ? "setup" : "none", scopes: [], entries: [] };
+}
+
+const ENTRY_REF = /^([a-z][a-z0-9-]{1,40}):([a-z0-9][a-z0-9_-]{0,47})$/;
+
+/** One of a plugin's entries ("composio:slack"): its plugin and its own id; undefined for anything else. */
+export function entryRef(id: string): { pluginId: string; entryId: string } | undefined {
+  const m = ENTRY_REF.exec(id);
+  return m ? { pluginId: m[1]!, entryId: m[2]! } : undefined;
+}
+
+/** The badge of the outside service a plugin goes through, its note about `name` in the reader's language. */
+function viaFor(r: PluginRecord, via: IntegrationVia | undefined, name: string, locale: Locale): IntegrationVia | undefined {
+  if (!via) return undefined;
+  const v = localizePluginValue(r.layout, via, locale);
+  return { name: v.name, about: v.about.replaceAll("{name}", name), ...(v.link ? { link: v.link } : {}) };
+}
+
+/**
+ * A plugin's entries as catalog cards: those of its manifest, then those it added (its last report). While the plugin
+ * is off, only the manifest's, off; while it is broken, all broken; before it reports, waiting for its key or a sign-in.
+ */
+function entryViews(hub: Hub, r: PluginRecord, integ: IntegrationInfo, own: IntegrationView, locale: Locale): IntegrationView[] {
+  const reported = r.enabled ? (hub.plugins.catalogOf(r.id) ?? []) : [];
+  const state = new Map(reported.map((e) => [e.id, e]));
+  const known = new Set(integ.entries.map((e) => e.id));
+  const entries = [
+    ...integ.entries,
+    ...reported.filter((e) => !known.has(e.id) && e.name).map((e) => ({ id: e.id, name: e.name!, summary: e.summary, category: e.category ?? "other", icon: e.icon ?? "puzzle", example: e.example })),
+  ];
+  const keyMissing = () => hub.secrets.setupView(r.id, locale).secrets.some((s) => s.required && !s.present);
+  return entries.map((e) => {
+    const s = state.get(e.id);
+    const name = localizePluginValue(r.layout, e.name, locale);
+    const via = viaFor(r, integ.via, name, locale);
+    const view: IntegrationView = {
+      id: `${r.id}:${e.id}`,
+      name,
+      summary: localizePluginValue(r.layout, e.summary ?? "", locale) || own.summary,
+      category: situationOf(e.category),
+      icon: e.icon,
+      connect: s?.connect ?? (r.enabled && keyMissing() ? "setup" : "signin"),
+      status: s?.status ?? "needs-setup",
+      plugin: r.id,
+      signinReturn: false,
+      ...(via ? { via } : {}),
+      ...(e.example ? { example: localizePluginValue(r.layout, e.example, locale) } : {}),
+      ...(s?.account ? { account: s.account } : {}),
+      ...(s?.detail ? { detail: localizePluginValue(r.layout, s.detail, locale) } : {}),
+    };
+    if (own.status === "off" || own.status === "unavailable") return { ...view, status: own.status, ...(own.detail ? { detail: own.detail } : {}) };
+    if (own.status === "broken") return { ...view, status: "broken", ...(own.detail ? { detail: own.detail } : {}) };
+    return view;
+  });
 }
 
 /** The library's cards; with `all`, every plugin (the Plugins panel's catalog), not only those with an `integration` block. */
@@ -87,7 +145,11 @@ export async function listIntegrations(hub: Hub, locale: Locale, opts: { all?: b
     // Its process fell over: broken, whatever its connection says.
     if (r.enabled && (r.status === "crashed" || r.status === "error") && view.status !== "unavailable")
       Object.assign(view, { status: "broken", ...(r.lastError ? { detail: r.lastError } : {}) });
+    // The outside service's own card (Composio) is the service itself: its badge is on the cards that go through it.
+    const via = viaFor(r, integ.via, view.name, locale);
+    if (via && via.name !== view.name) view.via = via;
     views.push(view);
+    if (integ.entries.length || r.enabled) views.push(...entryViews(hub, r, integ, view, locale));
   }
   const rank = (c: string) => SITUATIONS.indexOf(situationOf(c));
   return views.sort((a, b) => rank(a.category) - rank(b.category) || a.name.localeCompare(b.name, locale));
@@ -104,18 +166,31 @@ export function popularIds(hub: Hub, views: IntegrationView[], now = new Date())
   const since = new Date(now.getTime() - POPULAR_DAYS * 86_400_000).toISOString();
   const owners = new Map(hub.tools.list().map((d) => [d.name, d.owner]));
   // A plugin that is off has no tools registered: its earlier calls are matched by its tool prefix.
+  // An entry's tools are named after it (composio_slack_send_message): they count for the entry, not its plugin.
   const prefixes = hub.plugins
     .list()
-    .flatMap((r) => (r.layout ? [{ id: r.id, prefix: `${r.layout.manifest.toolPrefix ?? r.id.replace(/-/g, "_")}_` }] : []))
+    .flatMap((r) => {
+      if (!r.layout) return [];
+      const prefix = `${toolPrefixOf(r.layout.manifest)}_`;
+      const entries = new Set([...(r.layout.manifest.integration?.entries ?? []).map((e) => e.id), ...(hub.plugins.catalogOf(r.id) ?? []).map((e) => e.id)]);
+      return [{ id: r.id, prefix }, ...[...entries].map((e) => ({ id: `${r.id}:${e}`, prefix: `${prefix}${e.replace(/-/g, "_")}_` }))];
+    })
     .sort((a, b) => b.prefix.length - a.prefix.length);
   const uses = new Map<string, number>();
   for (const [tool, n] of hub.audit.countByTarget("policy.decision", since)) {
-    const id = owners.get(tool) ?? prefixes.find((p) => tool.startsWith(p.prefix))?.id;
+    // An entry's prefix counts only for its own plugin's tools (or tools no longer registered): another plugin cannot
+    // take a tool's uses by naming an entry after it.
+    const owner = owners.get(tool);
+    const entry = prefixes.find((p) => p.id.includes(":") && tool.startsWith(p.prefix) && (!owner || p.id.startsWith(`${owner}:`)))?.id;
+    const id = entry ?? owner ?? prefixes.find((p) => tool.startsWith(p.prefix))?.id;
     if (id) uses.set(id, (uses.get(id) ?? 0) + n);
   }
   const pick = (id: string) => {
-    const r = hub.plugins.get(id);
-    return (r?.source === "builtin" ? r.layout?.manifest.integration?.popular : undefined) ?? Infinity;
+    const ref = entryRef(id);
+    const r = hub.plugins.get(ref?.pluginId ?? id);
+    if (r?.source !== "builtin") return Infinity;
+    const integ = r.layout?.manifest.integration;
+    return (ref ? integ?.entries.find((e) => e.id === ref.entryId)?.popular : integ?.popular) ?? Infinity;
   };
   return views
     .filter((v) => v.status !== "unavailable" && ((uses.get(v.id) ?? 0) > 0 || pick(v.id) < Infinity))

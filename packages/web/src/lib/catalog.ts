@@ -3,16 +3,19 @@
 
 import type { CatalogSection, CatalogView, IntegrationView } from "@owlbot/shared";
 
-type Entry = Pick<IntegrationView, "connect" | "status">;
+type Entry = Pick<IntegrationView, "connect" | "status" | "plugin">;
 
 /** On: turned on, connected or not yet. */
 export function isOn(v: Entry): boolean {
   return v.status !== "off" && v.status !== "unavailable";
 }
 
-/** Has a switch: everything but access from anywhere (its own steps, in the chat) and what this build lacks. */
+/**
+ * Has a switch: everything but access from anywhere (its own steps, in the chat), what this build lacks, and a
+ * plugin's entries (Composio's Slack…): their state is whether they are signed in, and their plugin has the switch.
+ */
 export function hasSwitch(v: Entry): boolean {
-  return v.connect !== "remote" && v.status !== "unavailable";
+  return v.connect !== "remote" && v.status !== "unavailable" && !v.plugin;
 }
 
 /**
@@ -22,7 +25,8 @@ export function hasSwitch(v: Entry): boolean {
 export function chatStep(v: Entry): "connect" | "fix" | "settings" | undefined {
   if (v.status === "unavailable") return undefined;
   if (v.connect === "remote") return v.status === "connected" ? "settings" : "connect";
-  if (v.status === "off") return undefined;
+  // A plugin's entry has no switch: connecting it in the chat turns its plugin on too.
+  if (v.status === "off") return v.plugin ? "connect" : undefined;
   if (v.status === "broken") return "fix";
   if (v.status === "needs-setup") return "connect";
   return v.connect === "setup" ? "settings" : undefined;

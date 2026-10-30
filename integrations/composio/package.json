@@ -1,0 +1,7 @@
+{
+  "name": "@owlbot/integration-composio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Slack, GitHub, Google, HubSpot, Dropbox, Box and other apps through Composio, an outside service"
+}

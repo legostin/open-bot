@@ -15,7 +15,7 @@ import { applyThinking } from "../thinking.ts";
 import { pipeToLeader } from "./forward.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
-import { googleScopes, listCatalog, listIntegrations } from "../integrations.ts";
+import { entryRef, googleScopes, listCatalog, listIntegrations } from "../integrations.ts";
 import { callbackParams } from "../connections.ts";
 import { machineHubUrl, qrSvg } from "../pairing.ts";
 import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
@@ -534,14 +534,16 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   api.get("/api/catalog", async (req) => listCatalog(hub, requestLocale(req), { all: ["1", "true"].includes(String((req.query as any)?.all)) }));
   api.post("/api/integrations/:id/enabled", async (req) => {
     const id = (req.params as any).id as string;
-    if (!hub.plugins.get(id)?.layout?.manifest.integration) throw new HttpError(404, "connections.notFound", { id });
+    // One of a plugin's entries (composio:slack) turns its plugin on or off.
+    const pluginId = entryRef(id)?.pluginId ?? id;
+    if (!hub.plugins.get(pluginId)?.layout?.manifest.integration) throw new HttpError(404, "connections.notFound", { id });
     const b = (req.body ?? {}) as { enabled?: unknown; conversationId?: unknown };
-    await hub.plugins.setEnabled(id, !!b.enabled);
-    hub.bus.emit("connections.updated", { provider: id });
+    await hub.plugins.setEnabled(pluginId, !!b.enabled);
+    hub.bus.emit("connections.updated", { provider: pluginId });
     const view = (await listIntegrations(hub, requestLocale(req))).find((i) => i.id === id);
     // Turned on from its card in a chat (the agent offered it): the agent hears and carries on with what was asked.
     if (b.enabled && view?.status === "connected" && typeof b.conversationId === "string" && hub.store.getConversation(b.conversationId)) {
-      const tools = hub.tools.list().filter((d) => d.owner === id).map((d) => d.name);
+      const tools = hub.tools.list().filter((d) => d.owner === pluginId).map((d) => d.name);
       hub.runner.tellAgent(
         b.conversationId,
         `[System] The user turned on ${view.name} (${id}) from its card${tools.length ? `; its tools are available now: ${tools.join(", ")}` : ""}. Carry on with what the user asked.`,
@@ -556,14 +558,19 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     if (!s) throw new HttpError(409, "mcp.noSignin", { name: id });
     return s.name;
   };
+  // One of a plugin's entries (composio:slack) signs in and out through its plugin.
   api.post("/api/integrations/:id/signin", async (req) => {
+    const id = (req.params as any).id as string;
     const b = (req.body ?? {}) as { conversationId?: unknown };
-    return { url: await hub.mcpClients.signIn(signinServer((req.params as any).id), typeof b.conversationId === "string" ? b.conversationId : undefined) };
+    const conversationId = typeof b.conversationId === "string" ? b.conversationId : undefined;
+    if (entryRef(id)) return { url: await hub.entrySignIn(id, conversationId) };
+    return { url: await hub.mcpClients.signIn(signinServer(id), conversationId) };
   });
   api.delete("/api/integrations/:id/signin", async (req) => {
     const id = (req.params as any).id as string;
-    await hub.mcpClients.signOut(signinServer(id));
-    hub.bus.emit("connections.updated", { provider: id });
+    if (entryRef(id)) await hub.entrySignOut(id);
+    else await hub.mcpClients.signOut(signinServer(id));
+    hub.bus.emit("connections.updated", { provider: entryRef(id)?.pluginId ?? id });
     return { ok: true };
   });
   api.post("/api/mcp/signin/complete", async (req) => {

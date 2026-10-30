@@ -55,6 +55,8 @@ describe("policy engine", () => {
   it("an always-allow rule made from a hub card is for that machine or replica", () => {
     expect(suggestRule("hub_machine_setup_set", { machine: "vps", brains: { codex: { auth: "key" } } }, "assistant").conditions).toEqual([{ field: "machine", op: "eq", value: "vps" }]);
     expect(suggestRule("replica_unlock", { replica: "rep_1" }, "assistant").conditions).toEqual([{ field: "replica", op: "eq", value: "rep_1" }]);
+    // A tool that runs others by name: always-allow covers that one tool, not all it can run.
+    expect(suggestRule("composio_tool_run", { tool: "SLACK_LIST_REMINDERS", arguments: {} }, "assistant").conditions).toEqual([{ field: "tool", op: "eq", value: "SLACK_LIST_REMINDERS" }]);
   });
 
   it("deny rules win over allow rules", () => {

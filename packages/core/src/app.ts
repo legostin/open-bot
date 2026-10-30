@@ -2,8 +2,8 @@
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing, Invite, ThinkingView } from "@owlbot/shared";
-import { DEFAULT_LOCALE, catalogLookup, formatBrainRef, localizeValue, normalizeLocale, parseBrainRef } from "@owlbot/shared";
+import type { AgentDef, CatalogEntryState, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing, Invite, ThinkingView } from "@owlbot/shared";
+import { DEFAULT_LOCALE, catalogLookup, formatBrainRef, localizeValue, normalizeLocale, parseBrainRef, toolPrefixOf } from "@owlbot/shared";
 import type { Config } from "./config.ts";
 import { openDb, type Db } from "./db.ts";
 import { EventBus } from "./bus.ts";
@@ -61,12 +61,16 @@ import { UserPath } from "./user-path.ts";
 import { SetupGuide } from "./setup.ts";
 import { MediaService } from "./media.ts";
 import { Connections } from "./connections.ts";
+import { entryRef } from "./integrations.ts";
 import { cleanTranscription, Transcriber } from "./transcribe.ts";
 import { RemoteAccess } from "./remote.ts";
 import { buildMainApp } from "./server/main-app.ts";
 import { buildConsoleApp } from "./server/console-app.ts";
 import { buildDeviceApp } from "./server/device-app.ts";
 import type { FastifyInstance } from "fastify";
+
+/** How long a chat waits to hear about an entry's sign-in it started. */
+const ENTRY_SIGNIN_MS = 30 * 60_000;
 
 export class Hub {
   config: Config;
@@ -280,6 +284,7 @@ export class Hub {
       // The user's own CLIs first, then the ones the hub installed: a CLI the user installed wins.
       cliBinDirs: () => [...this.userPath.dirs(), ...this.cliTools.binDirs()],
       attachPart: (conversationId, part) => this.runner.attachPart(conversationId, part),
+      onCatalogUpdated: (pluginId, before, after) => this.catalogUpdated(pluginId, before, after),
     });
     this.mcp = new McpEndpoint(this.gateway, this.store, config.version);
     this.media = new MediaService({ dataDir: config.dataDir, version: config.version, resolve: (host) => this.egress.resolveTarget(host) });
@@ -623,6 +628,45 @@ export class Hub {
       conversationId,
       `[System] The user signed in to ${source}; it works now${tools.length ? ` and its tools are available: ${tools.map((d) => d.name).join(", ")}` : ""}. Carry on with what it was needed for.`,
     );
+  }
+
+  /** Sign-ins to plugins' catalog entries in progress, by entry id ("composio:slack"): the chat that asked for one. */
+  private entrySignins = new Map<string, { conversationId: string; at: number }>();
+
+  /** The address that signs one of a plugin's entries in; the chat it came from hears once the plugin reports it works. */
+  async entrySignIn(id: string, conversationId?: string): Promise<string> {
+    const ref = entryRef(id);
+    if (!ref) throw new LocalizedError("connections.notFound", { id }, 404);
+    const url = await this.plugins.catalogSignIn(ref.pluginId, ref.entryId);
+    if (conversationId && this.store.getConversation(conversationId)) this.entrySignins.set(id, { conversationId, at: Date.now() });
+    return url;
+  }
+
+  async entrySignOut(id: string): Promise<void> {
+    const ref = entryRef(id);
+    if (!ref) throw new LocalizedError("connections.notFound", { id }, 404);
+    await this.plugins.catalogSignOut(ref.pluginId, ref.entryId);
+  }
+
+  /** A plugin reported its entries: the catalogs redraw, and a chat waiting for an entry's sign-in carries on. */
+  private catalogUpdated(pluginId: string, before: CatalogEntryState[], after: CatalogEntryState[]): void {
+    this.bus.emit("connections.updated", { provider: pluginId });
+    const was = new Map(before.map((e) => [e.id, e.status]));
+    const layout = this.plugins.get(pluginId)?.layout;
+    for (const e of after) {
+      if (e.status !== "connected" || was.get(e.id) === "connected") continue;
+      const id = `${pluginId}:${e.id}`;
+      const waiting = this.entrySignins.get(id);
+      this.entrySignins.delete(id);
+      if (!waiting || Date.now() - waiting.at > ENTRY_SIGNIN_MS || !this.store.getConversation(waiting.conversationId)) continue;
+      const prefix = layout ? `${toolPrefixOf(layout.manifest)}_${e.id.replace(/-/g, "_")}_` : "";
+      const tools = prefix ? this.tools.list().filter((d) => d.owner === pluginId && d.name.startsWith(prefix)).map((d) => d.name) : [];
+      const name = (layout ? localizePluginValue(layout, layout.manifest.integration?.entries.find((x) => x.id === e.id)?.name, hubLocale()) : undefined) ?? e.name ?? e.id;
+      this.runner.tellAgent(
+        waiting.conversationId,
+        `[System] The user signed in to ${name} (${id}); it works now${tools.length ? ` and its tools are available: ${tools.join(", ")}` : ""}. Carry on with what it was needed for.`,
+      );
+    }
   }
 
   /** Approval cards also go to channels (Telegram) with signed buttons. */

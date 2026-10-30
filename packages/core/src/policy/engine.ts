@@ -124,7 +124,8 @@ export function suggestRule(tool: string, input: unknown, agentId?: string): Omi
   const targets = extractTargets(input);
   // Prefer narrowing by recipients/domains found in well-known fields.
   // The brains' own tools (native-permission.ts): the exact command or file. The hub's: the machine or replica it is for.
-  const fields = ["to", "recipient", "email", "chat", "chatId", "channel", "url", "domain", "host", "command", "file_path", "notebook_path", "path", "machine", "replica"];
+  // A tool that runs other tools by name (composio_tool_run): that tool only, never all it can run.
+  const fields = ["to", "recipient", "email", "chat", "chatId", "channel", "url", "domain", "host", "command", "file_path", "notebook_path", "path", "machine", "replica", "tool"];
   for (const f of fields) {
     const v = getField(input, f);
     if (typeof v !== "string" || !v) continue;

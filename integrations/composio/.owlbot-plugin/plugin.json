@@ -1,0 +1,56 @@
+{
+  "id": "composio",
+  "name": "%name%",
+  "version": "0.1.0",
+  "author": "Owlbot",
+  "description": "%description%",
+  "builtin": true,
+  "defaultEnabled": false,
+  "server": "./server/index.ts",
+  "contributes": {
+    "tools": true,
+    "setup": {
+      "secrets": [
+        { "vault": "composio", "title": "%setup.key.title%", "hint": "%setup.key.hint%", "link": "https://platform.composio.dev", "required": true }
+      ]
+    }
+  },
+  "integration": {
+    "category": "other",
+    "icon": "plug",
+    "connect": "setup",
+    "summary": "%integration.summary%",
+    "example": "%integration.example%",
+    "via": { "name": "Composio", "about": "%via.about%", "link": "https://composio.dev" },
+    "entries": [
+      { "id": "slack", "name": "Slack", "summary": "%entry.slack%", "category": "work", "icon": "message-square", "example": "%example.slack%", "popular": 3 },
+      { "id": "github", "name": "GitHub", "summary": "%entry.github%", "category": "work", "icon": "git-pull-request", "example": "%example.github%", "popular": 4 },
+      { "id": "gmail", "name": "Gmail", "summary": "%entry.gmail%", "category": "communication", "icon": "mail", "example": "%example.gmail%", "popular": 5 },
+      { "id": "googledrive", "name": "Google Drive", "summary": "%entry.googledrive%", "category": "work", "icon": "hard-drive", "example": "%example.googledrive%" },
+      { "id": "googledocs", "name": "Google Docs", "summary": "%entry.googledocs%", "category": "work", "icon": "file-text", "example": "%example.googledocs%" },
+      { "id": "googlesheets", "name": "Google Sheets", "summary": "%entry.googlesheets%", "category": "work", "icon": "sheet", "example": "%example.googlesheets%" },
+      { "id": "hubspot", "name": "HubSpot", "summary": "%entry.hubspot%", "category": "work", "icon": "users", "example": "%example.hubspot%" },
+      { "id": "dropbox", "name": "Dropbox", "summary": "%entry.dropbox%", "category": "work", "icon": "package", "example": "%example.dropbox%" },
+      { "id": "box", "name": "Box", "summary": "%entry.box%", "category": "work", "icon": "archive", "example": "%example.box%" },
+      { "id": "googlecalendar", "name": "Google Calendar", "summary": "%entry.googlecalendar%", "category": "work", "icon": "calendar-days", "example": "%example.googlecalendar%", "popular": 6 },
+      { "id": "googletasks", "name": "Google Tasks", "summary": "%entry.googletasks%", "category": "everyday", "icon": "list-checks", "example": "%example.googletasks%" },
+      { "id": "googlemeet", "name": "Google Meet", "summary": "%entry.googlemeet%", "category": "work", "icon": "video", "example": "%example.googlemeet%" },
+      { "id": "outlook", "name": "Outlook", "summary": "%entry.outlook%", "category": "communication", "icon": "inbox", "example": "%example.outlook%", "popular": 7 },
+      { "id": "microsoft_teams", "name": "Microsoft Teams", "summary": "%entry.microsoft_teams%", "category": "communication", "icon": "messages-square", "example": "%example.microsoft_teams%" },
+      { "id": "one_drive", "name": "OneDrive", "summary": "%entry.one_drive%", "category": "work", "icon": "cloud", "example": "%example.one_drive%" },
+      { "id": "trello", "name": "Trello", "summary": "%entry.trello%", "category": "work", "icon": "square-kanban", "example": "%example.trello%" },
+      { "id": "jira", "name": "Jira", "summary": "%entry.jira%", "category": "work", "icon": "ticket", "example": "%example.jira%" },
+      { "id": "zoom", "name": "Zoom", "summary": "%entry.zoom%", "category": "work", "icon": "webcam", "example": "%example.zoom%" },
+      { "id": "calendly", "name": "Calendly", "summary": "%entry.calendly%", "category": "work", "icon": "calendar-clock", "example": "%example.calendly%" },
+      { "id": "figma", "name": "Figma", "summary": "%entry.figma%", "category": "work", "icon": "pen-tool", "example": "%example.figma%" },
+      { "id": "salesforce", "name": "Salesforce", "summary": "%entry.salesforce%", "category": "work", "icon": "building-2", "example": "%example.salesforce%" },
+      { "id": "linkedin", "name": "LinkedIn", "summary": "%entry.linkedin%", "category": "communication", "icon": "briefcase", "example": "%example.linkedin%" },
+      { "id": "youtube", "name": "YouTube", "summary": "%entry.youtube%", "category": "reading", "icon": "tv", "example": "%example.youtube%" },
+      { "id": "reddit", "name": "Reddit", "summary": "%entry.reddit%", "category": "reading", "icon": "newspaper", "example": "%example.reddit%" }
+    ]
+  },
+  "permissions": {
+    "network": ["backend.composio.dev"],
+    "vault": ["composio"]
+  }
+}

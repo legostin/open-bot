@@ -201,6 +201,8 @@ export default {
   "connections.failed": "Не удалось войти в Google: {error}",
   "connections.badState": "Эта ссылка для входа устарела или уже использована. Нажмите «Подключить» ещё раз.",
   "connections.notFound": "Нет такой интеграции: {id}",
+  "catalog.notRunning": "{name} не запущен: сначала включите его",
+  "catalog.badSignin": "{name} дал адрес входа не по https",
   "catalog.section.everyday": "На каждый день",
   "catalog.section.travel": "Поездки и места",
   "catalog.section.money": "Деньги",

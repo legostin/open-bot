@@ -1104,6 +1104,13 @@ export type UiEvent =
 
 export type IntegrationStatus = "connected" | "needs-setup" | "off" | "unavailable" | "broken";
 
+/** The outside service an integration goes through (Composio): its badge, and the note about it in the reader's language. */
+export interface IntegrationVia {
+  name: string;
+  about: string;
+  link?: string;
+}
+
 /** A card of the integrations library (GET /api/integrations) and an entry of the catalog (GET /api/catalog). */
 export interface IntegrationView {
   /** The plugin's id, or a core entry's ("remote-access"). */
@@ -1121,6 +1128,33 @@ export interface IntegrationView {
   detail?: string;
   /** Something to ask once it is on, in the person's words (the catalog's "Try"). */
   example?: string;
+  /** One of a plugin's entries ("composio:slack"): the plugin it belongs to, which holds its setup and its switch. */
+  plugin?: string;
+  /** The outside service it goes through (Composio), with the badge's note in the reader's language. */
+  via?: IntegrationVia;
+  /** False: its sign-in finishes by itself, nothing is pasted back (an entry whose plugin watches for it). */
+  signinReturn?: false;
+}
+
+/**
+ * What a plugin reports about one of its catalog entries (ctx.catalog.update): the entries of its manifest and those
+ * it added (which also carry their name and look). Each report replaces the last.
+ */
+export interface CatalogEntryState {
+  /** The entry's own id ("slack"), as in the manifest. */
+  id: string;
+  name?: string;
+  summary?: string;
+  category?: string;
+  icon?: string;
+  example?: string;
+  status: "connected" | "needs-setup" | "broken";
+  /** "setup": the plugin's own secrets are missing (its setup card); "signin": the entry's Sign in button. */
+  connect: "setup" | "signin";
+  /** The connected account, when the service says. */
+  account?: string;
+  /** Why it is broken or what it waits for: plain text or a "%key%" of the plugin's locales. */
+  detail?: string;
 }
 
 /** A group of the catalog: a situation in life (everyday, travel, money…) and what helps in it. */

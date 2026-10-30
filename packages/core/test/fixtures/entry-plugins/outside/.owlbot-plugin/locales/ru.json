@@ -1,0 +1,7 @@
+{
+  "via.about": "{name} работает через Outside, внешний сервис.",
+  "entry.chat": "Сообщения в Chat",
+  "example.chat": "Что нового в Chat?",
+  "entry.added": "Приложение через Outside",
+  "detail.revoked": "Вход отозван"
+}
