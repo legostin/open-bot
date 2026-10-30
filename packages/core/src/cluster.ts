@@ -432,6 +432,7 @@ export class Cluster {
     serveLink(rpc, peerId, {
       call: (from, c) => this.serveCall(from, c),
       deviceUrl: () => `https://127.0.0.1:${this.hub.config.devicePort}`,
+      mainUrl: () => `http://127.0.0.1:${this.hub.config.port}`,
       fingerprint: () => this.hub.deviceTls().fingerprint,
     });
     const old = this.links.get(peerId);

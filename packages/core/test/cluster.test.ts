@@ -161,5 +161,19 @@ describe("a leader nobody can reach", () => {
     const { pinnedRequest } = await import("@owlbot/replica");
     const r = await pinnedRequest(`${vps.deviceUrl}/api/devices/me`, { fingerprint: b.deviceTls().fingerprint });
     expect(r.status).toBe(401);
+    // A machine connected to the standby talks to the leader: its challenge, and its MCP calls.
+    const { default: WebSocket } = await import("ws");
+    const main = `ws://127.0.0.1:${vps.env.OWLBOT_PORT}/node/ws`;
+    const first = await new Promise<string>((resolve, reject) => {
+      const ws = new WebSocket(main);
+      ws.once("message", (d) => {
+        resolve(String(d));
+        ws.close();
+      });
+      ws.once("error", reject);
+    });
+    expect(JSON.parse(first)).toMatchObject({ type: "challenge" });
+    const mcp = await fetch(`http://127.0.0.1:${vps.env.OWLBOT_PORT}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect(mcp.status).toBe(401);
   });
 });

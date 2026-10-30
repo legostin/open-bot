@@ -29,6 +29,8 @@ export interface LinkServer {
   call(from: string, c: LinkCall): Promise<LinkAnswer>;
   /** The device app on this replica, for requests a standby forwards here. */
   deviceUrl(): string;
+  /** The main app (machines' /node/ws and /mcp), on loopback. */
+  mainUrl(): string;
   fingerprint(): string;
 }
 
@@ -37,12 +39,13 @@ const pinOk = (der: Uint8Array | undefined, fingerprint: string) => !!der && cre
 /** Serves a link: the peer's calls, and its forwarded HTTP requests and WebSockets to this replica's device app. */
 export function serveLink(rpc: RpcPeer, from: string, server: LinkServer): void {
   rpc.handle("replica.call", (c: LinkCall) => server.call(from, c));
-  rpc.handle("replica.http", async (r: { method: string; path: string; headers: Record<string, string>; body?: string }) => {
-    const res = await pinnedRequest(`${server.deviceUrl()}${r.path}`, {
+  rpc.handle("replica.http", async (r: { app?: "main" | "device"; method: string; path: string; headers: Record<string, string>; body?: string }) => {
+    const main = r.app === "main";
+    const res = await pinnedRequest(`${main ? server.mainUrl() : server.deviceUrl()}${r.path}`, {
       method: r.method,
-      headers: r.headers,
+      headers: main ? { ...r.headers, host: new URL(server.mainUrl()).host } : r.headers,
       body: r.body ? Buffer.from(r.body, "base64") : "",
-      fingerprint: server.fingerprint(),
+      ...(main ? {} : { fingerprint: server.fingerprint() }),
       timeoutMs: 6 * 3600_000,
     });
     const headers: Record<string, string | string[]> = {};
@@ -50,9 +53,11 @@ export function serveLink(rpc: RpcPeer, from: string, server: LinkServer): void 
     return { status: res.status, headers, body: res.body.toString("base64") };
   });
   const sockets = new Map<string, WebSocket>();
-  rpc.handle("replica.ws.open", (r: { id: string; path: string; headers: Record<string, string> }) => {
-    const ws = new WebSocket(`${server.deviceUrl().replace(/^http/, "ws")}${r.path}`, { headers: r.headers, rejectUnauthorized: false, handshakeTimeout: 10_000 });
-    ws.on("upgrade", (res) => !pinOk((res.socket as TLSSocket).getPeerCertificate?.()?.raw, server.fingerprint()) && ws.terminate());
+  rpc.handle("replica.ws.open", (r: { app?: "main" | "device"; id: string; path: string; headers: Record<string, string> }) => {
+    const main = r.app === "main";
+    const base = (main ? server.mainUrl() : server.deviceUrl()).replace(/^http/, "ws");
+    const ws = new WebSocket(`${base}${r.path}`, { headers: r.headers, ...(main ? {} : { rejectUnauthorized: false }), handshakeTimeout: 10_000 });
+    if (!main) ws.on("upgrade", (res) => !pinOk((res.socket as TLSSocket).getPeerCertificate?.()?.raw, server.fingerprint()) && ws.terminate());
     sockets.set(r.id, ws);
     ws.on("message", (d, binary) => rpc.notify("replica.ws.msg", { id: r.id, data: binary ? Buffer.from(d as Buffer).toString("base64") : String(d), binary }));
     const gone = () => {
@@ -121,10 +126,13 @@ export function linkPeer(ws: WebSocket): RpcPeer {
 }
 
 /** A forwarded HTTP request over a link: the leader's device app answers it. */
-export async function linkHttp(rpc: RpcPeer, r: { method: string; path: string; headers: Record<string, string>; body: Buffer }): Promise<{ status: number; headers: Record<string, string | string[]>; body: Buffer }> {
+export async function linkHttp(
+  rpc: RpcPeer,
+  r: { app?: "main" | "device"; method: string; path: string; headers: Record<string, string>; body: Buffer },
+): Promise<{ status: number; headers: Record<string, string | string[]>; body: Buffer }> {
   const res = await rpc.request<{ status: number; headers: Record<string, string | string[]>; body: string }>(
     "replica.http",
-    { method: r.method, path: r.path, headers: r.headers, ...(r.body.length ? { body: r.body.toString("base64") } : {}) },
+    { app: r.app ?? "device", method: r.method, path: r.path, headers: r.headers, ...(r.body.length ? { body: r.body.toString("base64") } : {}) },
     { timeoutMs: 6 * 3600_000 },
   );
   return { status: res.status, headers: res.headers, body: Buffer.from(res.body, "base64") };

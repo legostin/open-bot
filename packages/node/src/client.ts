@@ -106,9 +106,8 @@ export class NodeClient {
         this.peer = undefined;
       }
       clearInterval(this.pingTimer);
-      if (this.o.secondary) {
-        if (peerOf) void this.o.service.detach(peerOf);
-      } else void this.o.service.abortAll();
+      // Only what this connection opened stops: the machine may be serving the hub over another one.
+      if (peerOf) void this.o.service.detach(peerOf);
       if (this.state === "stopped") return;
       if (code === CLOSE_UNAUTHORIZED && !this.o.secondary) {
         const message = t("client.rejected", { reason: reason || "unauthorized", hub: this.o.hubUrl });

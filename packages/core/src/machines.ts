@@ -37,6 +37,8 @@ export class MachineHub {
   cluster?: Cluster;
   private peers = new Map<string, RpcPeer>();
   private fileTimers = new Map<string, NodeJS.Timeout>();
+  /** When each machine's connection was last heard from (pings, hellos). */
+  private heard = new Map<string, number>();
 
   constructor(d: { db: Db; bus: EventBus; brains: BrainRegistry; audit: AuditLog; invites?: InviteRegistry; setups?: MachineSetups }) {
     this.db = d.db;
@@ -158,7 +160,15 @@ export class MachineHub {
   }
 
   private online(id: string, ws: WsLike): void {
-    this.peers.get(id)?.close();
+    // A machine may reach this hub twice (directly and through another replica): a live connection stays, the new
+    // one is refused and retries later; a quiet one (half-open after a network change) is replaced.
+    const prev = this.peers.get(id);
+    if (prev && !prev.closed && Date.now() - (this.heard.get(id) ?? 0) < 45_000) {
+      ws.close(4409, "already connected");
+      return;
+    }
+    prev?.close();
+    this.heard.set(id, Date.now());
     // The auth message handler stays attached but ignores frames after auth; RPC gets its own listener.
     const peer = createRpcPeer(wsTransport(ws));
     this.peers.set(id, peer);
@@ -213,6 +223,7 @@ export class MachineHub {
       if (over && !before) void this.pushSetup(id);
     });
     peer.handle("node.ping", () => {
+      this.heard.set(id, Date.now());
       this.db.prepare("update machines set last_seen_at = ? where id = ?").run(nowIso(), id);
       return { ts: nowIso() };
     });

@@ -10,6 +10,8 @@ import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
 import { LOCALES, localeFromEnv } from "@owlbot/shared";
 import { errorText, hubLocale, localizePluginValue, LocalizedError, requestLocale, t, tFor } from "../i18n.ts";
+import { forwardToLeader, pipeToLeader } from "./forward.ts";
+import type { WebSocket } from "ws";
 import type { Hub } from "../app.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
 import { clientIp, FailureBudget, hostAllowed, HttpError, originAllowed, originsFor, sendFile } from "./http.ts";
@@ -62,6 +64,11 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   app.addHook("onRequest", async (req, reply) => {
     if (!hostAllowed(req, hosts())) {
       reply.code(421).send({ error: "Host not allowed. Add it to OWLBOT_ALLOWED_HOSTS." });
+      return reply;
+    }
+    // A machine's MCP calls on a standby belong to the leader that opened its session.
+    if (req.url.startsWith("/mcp") && hub.cluster.leaderTarget()?.link) {
+      forwardToLeader(hub, req, reply, () => {}, "main");
       return reply;
     }
     // A standby replica shows what it has (it is seconds behind) but takes no changes: they go to the leader.
@@ -199,6 +206,8 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   });
 
   app.get("/node/ws", { websocket: true }, (socket, req) => {
+    // A standby hands the machine to the leader over the link (the machine may not reach the leader itself).
+    if (pipeToLeader(hub, socket as unknown as WebSocket, req, "main")) return;
     hub.machines.attach(socket as any, clientIp(req));
   });
 

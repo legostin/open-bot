@@ -1,6 +1,7 @@
 // A standby replica sends the phones on to the leader (cluster.ts): device-app requests and the app's WebSocket go
 // through as they are (the phone's token is the same on every replica), so a phone may reach the hub at any
-// replica's address. The replicas' own routes stay here.
+// replica's address. Machines connected here (/node/ws, /mcp) reach the leader the same way over the link. The
+// replicas' own routes stay here.
 
 import { createHash } from "node:crypto";
 import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
@@ -26,10 +27,11 @@ function headersFor(h: IncomingHttpHeaders, ip: string): Record<string, string |
   return out;
 }
 
-/** onRequest hook of the device app. */
-export function forwardToLeader(hub: Hub, req: FastifyRequest, reply: FastifyReply, done: HookHandlerDoneFunction): void {
+/** onRequest hook of the device app (and, for /mcp, of the main app: `app: "main"`, over the link only). */
+export function forwardToLeader(hub: Hub, req: FastifyRequest, reply: FastifyReply, done: HookHandlerDoneFunction, app: "device" | "main" = "device"): void {
   const target = hub.cluster.leaderTarget();
   if (!target || HERE.test(req.url) || req.headers.upgrade) return done();
+  if (app === "main" && !target.link) return done();
   if (target.link) {
     // Over the link to the leader (it may have no address we can reach).
     reply.hijack();
@@ -40,7 +42,7 @@ export function forwardToLeader(hub: Hub, req: FastifyRequest, reply: FastifyRep
       const headers: Record<string, string> = {};
       for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string" && !HOP.has(k) && k !== "content-length") headers[k] = v;
       headers["x-forwarded-for"] = req.ip;
-      linkHttp(link, { method: req.method, path: req.url, headers, body: Buffer.concat(chunks) }).then(
+      linkHttp(link, { app, method: req.method, path: req.url, headers, body: Buffer.concat(chunks) }).then(
         (r) => {
           reply.raw.writeHead(r.status, r.headers);
           reply.raw.end(r.body);
@@ -76,10 +78,10 @@ export function forwardToLeader(hub: Hub, req: FastifyRequest, reply: FastifyRep
   req.raw.pipe(up);
 }
 
-/** The app's WebSocket on a standby: one to the leader, messages both ways. True when it took the socket. */
-export function pipeToLeader(hub: Hub, socket: WebSocket, req: FastifyRequest): boolean {
+/** The app's WebSocket (or a machine's /node/ws: `app: "main"`) on a standby: one to the leader, messages both ways. True when it took the socket. */
+export function pipeToLeader(hub: Hub, socket: WebSocket, req: FastifyRequest, app: "device" | "main" = "device"): boolean {
   const target = hub.cluster.leaderTarget();
-  if (!target) return false;
+  if (!target || (app === "main" && !target.link)) return false;
   const headers0: Record<string, string> = {};
   for (const k of ["authorization", "cookie", "user-agent", "accept-language"]) if (typeof req.headers[k] === "string") headers0[k] = req.headers[k] as string;
   if (target.link) {
@@ -102,7 +104,8 @@ export function pipeToLeader(hub: Hub, socket: WebSocket, req: FastifyRequest): 
       else queue.push(JSON.stringify({ data, binary }));
     });
     socket.on("close", close);
-    link.request("replica.ws.open", { id, path: req.url, headers: { ...headers0, origin: `https://127.0.0.1:${hub.config.devicePort}` } }, { timeoutMs: 15_000 }).then(
+    const origin = app === "device" ? { origin: `https://127.0.0.1:${hub.config.devicePort}` } : {};
+    link.request("replica.ws.open", { app, id, path: req.url, headers: { ...headers0, ...origin } }, { timeoutMs: 15_000 }).then(
       () => {
         open = true;
         for (const q of queue.splice(0)) link.notify("replica.ws.msg", { id, ...JSON.parse(q) });
