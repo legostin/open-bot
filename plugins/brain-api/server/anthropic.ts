@@ -59,7 +59,7 @@ function assistantBlocks(m: HistoryMessage): Block[] {
       if (p.text) out.push({ type: "text", text: p.text });
     } else if (p.type === "tool_call") {
       out.push({ type: "tool_use", id: p.id, name: p.name, input: p.input ?? {} });
-    } else if (p.type === "raw") {
+    } else if (p.type === "raw" && p.provider === "anthropic") {
       out.push({ ...p.block });
     }
   }

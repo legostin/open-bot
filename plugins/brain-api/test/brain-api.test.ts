@@ -164,7 +164,7 @@ describe("brain-api plugin", () => {
     expect(JSON.stringify(third.messages)).not.toContain("thinking");
   });
 
-  it("runs the same loop over the OpenAI variant", async () => {
+  it("runs the same loop over OpenAI's Responses API", async () => {
     llm.script([{ toolCalls: [{ name: "echo", input: { text: "pong" } }] }, { text: "Ответ: pong" }]);
     await h.brainCreate("api", opts("s-openai", { variant: "openai" }));
     const events = await h.brainSend("s-openai", { text: "Скажи pong" });
@@ -172,22 +172,70 @@ describe("brain-api plugin", () => {
     expect(events.find((e) => e.type === "tool_call")).toEqual({ type: "tool_call", id: "call_mock_1_0", name: "echo", input: { text: "pong" } });
     expect(events.find((e) => e.type === "tool_result")).toEqual({ type: "tool_result", id: "call_mock_1_0", output: "echo: pong" });
     expect(text(events)).toBe("Ответ: pong");
+    expect(events.filter((e) => e.type === "usage").every((e) => (e as { outputTokens: number }).outputTokens > 0)).toBe(true);
     expect(events.at(-1)).toEqual({ type: "done", resumeToken: "s-openai" });
 
-    expect(llm.requests.map((r) => r.path)).toEqual(["/v1/chat/completions", "/v1/chat/completions"]);
+    expect(llm.requests.map((r) => r.path)).toEqual(["/v1/responses", "/v1/responses"]);
     const [first, second] = llm.requests;
     expect(first.headers.authorization).toBe("Bearer sk-openai-test");
-    // Claude aliases do not apply to OpenAI: the variant default is used.
-    expect(first.body).toMatchObject({ model: "gpt-5", stream: true, stream_options: { include_usage: true }, max_completion_tokens: 16000 });
+    // Claude aliases do not apply to OpenAI: the variant default is used. Nothing is stored on OpenAI's side.
+    expect(first.body).toMatchObject({ model: "gpt-5", stream: true, store: false, max_output_tokens: 16000, instructions: "You are a test assistant." });
+    // No effort for the session: none is sent.
+    expect(first.body.reasoning).toBeUndefined();
+    expect(first.body.include).toBeUndefined();
     expect(first.body.tools).toEqual([
-      { type: "function", function: { name: "echo", description: "Echo the text back", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } } },
+      { type: "function", name: "echo", description: "Echo the text back", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, strict: false },
     ]);
-    expect(second.body.messages).toEqual([
-      { role: "system", content: "You are a test assistant." },
+    expect(second.body.input).toEqual([
       { role: "user", content: "Скажи pong" },
-      { role: "assistant", content: null, tool_calls: [{ id: "call_mock_1_0", type: "function", function: { name: "echo", arguments: '{"text":"pong"}' } }] },
-      { role: "tool", tool_call_id: "call_mock_1_0", content: "echo: pong" },
+      { type: "function_call", call_id: "call_mock_1_0", name: "echo", arguments: '{"text":"pong"}' },
+      { type: "function_call_output", call_id: "call_mock_1_0", output: "echo: pong" },
     ]);
+  });
+
+  it("calls tools with a reasoning effort on OpenAI and passes the turn's reasoning back", async () => {
+    llm.script([
+      { thinking: "plan", text: "Проверю.", toolCalls: [{ name: "echo", input: { text: "a" } }, { name: "echo", input: { text: "b" } }], usage: { inputTokens: 50, outputTokens: 30 } },
+      { thinking: "more", text: "Готово." },
+      { text: "Ещё." },
+    ]);
+    await h.brainCreate("api", opts("s-openai-effort", { variant: "openai", model: "gpt-6.1-sol", effort: "high" }));
+    const events = await h.brainSend("s-openai-effort", { text: "Два эха" });
+
+    expect(events.filter((e) => e.type === "tool_result").map((e) => (e as { output: string }).output)).toEqual(["echo: a", "echo: b"]);
+    expect(text(events)).toBe("Проверю.Готово.");
+    expect(events.find((e) => e.type === "usage")).toEqual({ type: "usage", inputTokens: 50, outputTokens: 30 });
+    expect(events.some((e) => e.type === "error")).toBe(false);
+
+    const [first, second] = llm.requests;
+    expect(first.body).toMatchObject({ model: "gpt-6.1-sol", reasoning: { effort: "high" }, include: ["reasoning.encrypted_content"] });
+    expect(first.body.tools).toHaveLength(1);
+    // The reasoning goes back in place, before the text and the calls it led to; no item ids (nothing is stored).
+    expect(second.body.input).toEqual([
+      { role: "user", content: "Два эха" },
+      { type: "reasoning", summary: [], encrypted_content: "enc_mock_1" },
+      { role: "assistant", content: "Проверю." },
+      { type: "function_call", call_id: "call_mock_1_0", name: "echo", arguments: '{"text":"a"}' },
+      { type: "function_call", call_id: "call_mock_1_1", name: "echo", arguments: '{"text":"b"}' },
+      { type: "function_call_output", call_id: "call_mock_1_0", output: "echo: a" },
+      { type: "function_call_output", call_id: "call_mock_1_1", output: "echo: b" },
+    ]);
+    expect(second.body.reasoning).toEqual({ effort: "high" });
+
+    // A new turn: the finished turn's reasoning stays behind.
+    await h.brainSend("s-openai-effort", { text: "Ещё раз" });
+    const third = llm.requests[2].body;
+    expect(JSON.stringify(third.input)).not.toContain("enc_mock");
+    expect(third.input.at(-2)).toEqual({ role: "assistant", content: "Готово." });
+    expect(third.input.at(-1)).toEqual({ role: "user", content: "Ещё раз" });
+  });
+
+  it("says when an OpenAI answer ran out of output tokens", async () => {
+    llm.script([{ text: "Начало", stopReason: "max_output_tokens" }]);
+    await h.brainCreate("api", opts("s-openai-max", { variant: "openai" }));
+    const events = await h.brainSend("s-openai-max", { text: "Длинно" });
+    expect(text(events)).toMatch(/^Начало\n\n\S/);
+    expect(events.some((e) => e.type === "error")).toBe(false);
   });
 
   it("talks to a custom OpenAI-compatible server without a key", async () => {

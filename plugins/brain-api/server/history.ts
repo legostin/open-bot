@@ -16,8 +16,8 @@ export type ToolCallPart = {
   invalidJson?: string;
 };
 export type ToolResultPart = { type: "tool_result"; id: string; content: Array<TextPart | ImagePart>; isError?: boolean };
-/** Provider-specific block kept verbatim for replay (Anthropic thinking / redacted_thinking / fallback ...). */
-export type RawPart = { type: "raw"; provider: "anthropic"; block: Record<string, unknown> };
+/** Provider-specific block kept verbatim for replay (Anthropic thinking / redacted_thinking / fallback, OpenAI encrypted reasoning). */
+export type RawPart = { type: "raw"; provider: "anthropic" | "openai"; block: Record<string, unknown> };
 export type Part = TextPart | ImagePart | ToolCallPart | ToolResultPart | RawPart;
 
 export interface HistoryMessage {

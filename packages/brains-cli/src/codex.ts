@@ -279,7 +279,7 @@ export function codexThinking(models: CodexModel[] | undefined): Pick<ProbeResul
     models: models.map((m) => m.id),
     modelNames: Object.fromEntries(models.map((m) => [m.id, m.name])),
     // What Codex says of each model now (its descriptions, the ones it calls older): the hub chooses by this.
-    catalog: markLegacy(models.map((m) => profileFrom({ id: m.id, name: m.name, ...(m.description ? { description: m.description } : {}), ...(m.upgrade ? { deprecated: true } : {}) }))),
+    catalog: markLegacy(models.map((m) => profileFrom({ id: m.id, name: m.name, ...(m.description ? { description: m.description } : {}), ...(m.upgrade ? { deprecated: true } : {}), ...(m.images ? { images: true } : {}) }))),
     model: def.id,
     efforts,
     presets: {

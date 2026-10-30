@@ -6,7 +6,7 @@ import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, ProbeResult } from "@owlbot/shared";
 import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
-import { createClaudeCodeProvider, createCodexProvider } from "@owlbot/brains-cli";
+import { codexChooser, createClaudeCodeProvider, createCodexProvider } from "@owlbot/brains-cli";
 import type { PolicyStore } from "./policy.ts";
 import { resolveWorkspace } from "./guard.ts";
 import { hubLocale, tHub } from "./messages.ts";
@@ -107,6 +107,7 @@ export class BrainHost {
     const policy = () => o.policy.get();
     const stateDir = (id: string) => join(o.home, "brains", id);
     const log = (m: string) => o.log?.(m);
+    const codex = codexChooser();
     this.providers.set(
       "claude-code",
       createClaudeCodeProvider({
@@ -120,7 +121,8 @@ export class BrainHost {
     this.providers.set(
       "codex",
       createCodexProvider({
-        command: () => resolveCli(policy().brains.codex.command ?? DEFAULT_COMMANDS.codex),
+        // The Codex policy names, else the newest on this machine (Codex offers newer models only to newer clients).
+        command: () => resolveCli(codex(policy().brains.codex.command)),
         sandbox: () => policy().brains.codex.sandbox,
         stateDir: stateDir("codex"),
         log,

@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { applyFallbackBoundary, buildAnthropicRequest } from "../server/anthropic.ts";
 import { SUMMARY_HEAD, TRIM_NOTE, compacted, compactionCut, digest, estimateTokens, transcriptOf, trimHistory, type HistoryMessage } from "../server/history.ts";
 import { classifyHttpError, proxyEnvFrom, resetAtFromHeaders } from "../server/http.ts";
 import { toOpenAiMessages } from "../server/openai.ts";
+import { LlmError } from "../server/http.ts";
+import { buildResponsesRequest, responsesStream, toResponsesInput } from "../server/responses.ts";
 import { parseToolInput } from "../server/provider.ts";
 import { VARIANTS, resolveModel, resolveSettings } from "../server/settings.ts";
 import { catalogFrom, parseModels } from "../server/catalog.ts";
@@ -238,6 +242,64 @@ describe("request building", () => {
     expect(noVision[2]).toEqual({ role: "tool", tool_call_id: "c1", content: "taken\n[image omitted: the model has no vision support]" });
   });
 
+  it("builds Responses input with tool images as a follow-up user message and the turn's reasoning only", () => {
+    const reasoning = (n: number) => ({ type: "raw" as const, provider: "openai" as const, block: { type: "reasoning", summary: [], encrypted_content: `enc${n}` } });
+    const history: HistoryMessage[] = [
+      { role: "user", parts: [{ type: "text", text: "shot" }, { type: "image", mimeType: "image/jpeg", data: "BBBB" }] },
+      { role: "assistant", parts: [reasoning(1), { type: "text", text: "ok" }, { type: "tool_call", id: "c1", name: "snap", input: { a: 1 } }] },
+      { role: "user", parts: [{ type: "tool_result", id: "c1", content: [{ type: "text", text: "taken" }, { type: "image", mimeType: "image/png", data: "AAAA" }] }] },
+      { role: "assistant", parts: [{ type: "text", text: "done" }] },
+      { role: "user", parts: [{ type: "text", text: "again" }] },
+      { role: "assistant", parts: [reasoning(2), { type: "raw", provider: "anthropic", block: { type: "thinking", thinking: "", signature: "s" } }, { type: "tool_call", id: "c2", name: "snap", input: {} }] },
+      { role: "user", parts: [{ type: "tool_result", id: "c2", content: [], isError: true }] },
+    ];
+    expect(toResponsesInput(history, true)).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "shot" },
+          { type: "input_image", image_url: "data:image/jpeg;base64,BBBB", detail: "auto" },
+        ],
+      },
+      // The first turn's reasoning is over: only the current turn's goes back.
+      { role: "assistant", content: "ok" },
+      { type: "function_call", call_id: "c1", name: "snap", arguments: '{"a":1}' },
+      { type: "function_call_output", call_id: "c1", output: "taken\n[image: see the next message]" },
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "Images returned by the tool calls above:" },
+          { type: "input_image", image_url: "data:image/png;base64,AAAA", detail: "auto" },
+        ],
+      },
+      { role: "assistant", content: "done" },
+      { role: "user", content: "again" },
+      { type: "reasoning", summary: [], encrypted_content: "enc2" },
+      { type: "function_call", call_id: "c2", name: "snap", arguments: "{}" },
+      { type: "function_call_output", call_id: "c2", output: "Error: (empty result)" },
+    ]);
+    // No vision: placeholders instead of pictures, no follow-up message. That turn is in progress here: its reasoning goes back.
+    const noVision = toResponsesInput(history.slice(0, 3), false);
+    expect(noVision[0]).toEqual({ role: "user", content: "shot\n\n[image omitted: the model has no vision support]" });
+    expect(noVision[1]).toEqual({ type: "reasoning", summary: [], encrypted_content: "enc1" });
+    expect(noVision).toHaveLength(5);
+    expect(noVision[4]).toEqual({ type: "function_call_output", call_id: "c1", output: "taken\n[image omitted: the model has no vision support]" });
+  });
+
+  it("builds a Responses request: instructions, effort with encrypted reasoning, loose tool schemas", () => {
+    const { body, headers } = buildResponsesRequest({ ...call([{ role: "user", parts: [{ type: "text", text: "hi" }] }]), system: "sys", effort: "medium" }, { baseUrl: "x", apiKey: "k", label: "OpenAI", vision: true });
+    expect(body).toMatchObject({ instructions: "sys", max_output_tokens: 1000, store: false, stream: true, reasoning: { effort: "medium" }, include: ["reasoning.encrypted_content"] });
+    expect(body.tools).toEqual([
+      { type: "function", name: "alpha", description: "a", parameters: { type: "object", properties: {} }, strict: false },
+      { type: "function", name: "zeta", description: "", parameters: { type: "object", properties: {} }, strict: false },
+    ]);
+    expect(headers.authorization).toBe("Bearer k");
+    const plain = buildResponsesRequest({ ...call([]), tools: [] }, { baseUrl: "x", label: "OpenAI", vision: true }).body;
+    expect(plain.instructions).toBeUndefined();
+    expect(plain.tools).toBeUndefined();
+    expect(plain.reasoning).toBeUndefined();
+  });
+
   it("echoes only text before a server-side fallback boundary", () => {
     const parts = applyFallbackBoundary([
       { type: "raw", provider: "anthropic", block: { type: "thinking", thinking: "", signature: "a" } },
@@ -310,5 +372,66 @@ describe("the providers' own model lists", () => {
     expect(anthropic[0].meta).toEqual({ id: "claude-opus-5-5", name: "Claude Opus 5.5" });
     expect(parseModels("openai", { data: [{ id: "mistral-old", capabilities: { completion_chat: true }, deprecation: "2026-11-30" }] })[0].meta.deprecated).toBe(true);
     expect(parseModels("openai", { nope: 1 })).toEqual([]);
+  });
+});
+
+describe("Responses stream", () => {
+  /** A server answering every request with this SSE body (a list of [event, data] pairs; strings are sent as-is). */
+  async function serve(events: Array<[string, unknown] | string>): Promise<{ url: string; close: () => Promise<void> }> {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      for (const e of events) res.write(typeof e === "string" ? e : `event: ${e[0]}\ndata: ${JSON.stringify({ type: e[0], ...(e[1] as object) })}\n\n`);
+      res.end();
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((r) => server.close(() => r())) };
+  }
+
+  async function run(events: Array<[string, unknown] | string>) {
+    const srv = await serve(events);
+    const deltas: string[] = [];
+    try {
+      const it = responsesStream({ baseUrl: srv.url, label: "OpenAI", vision: true }, { model: "m", system: "", tools: [], messages: [], maxTokens: 10, signal: new AbortController().signal });
+      for (;;) {
+        const r = await it.next();
+        if (r.done) return { result: r.value, deltas };
+        if (r.value.type === "text") deltas.push(r.value.delta);
+      }
+    } finally {
+      await srv.close();
+    }
+  }
+
+  it("takes text the finished message has but no delta brought, and usage with cached tokens", async () => {
+    const { result, deltas } = await run([
+      ["response.output_item.added", { output_index: 0, item: { type: "message", content: [] } }],
+      ["response.output_text.delta", { output_index: 0, delta: "Hel" }],
+      ["response.output_item.done", { output_index: 0, item: { type: "message", content: [{ type: "output_text", text: "Hello" }] } }],
+      ["response.output_item.done", { output_index: 1, item: { type: "reasoning", summary: [] } }],
+      ["response.completed", { response: { model: "gpt-x", usage: { input_tokens: 9, output_tokens: 4, input_tokens_details: { cached_tokens: 5 } } } }],
+    ]);
+    expect(deltas).toEqual(["Hel", "lo"]);
+    // Reasoning without its encrypted content cannot be passed back: it is not kept.
+    expect(result).toEqual({ parts: [{ type: "text", text: "Hello" }], stop: "end", stopDetail: undefined, usage: { input: 9, output: 4, cacheRead: 5 }, model: "gpt-x" });
+  });
+
+  it("reports in-stream errors and failed responses like HTTP errors", async () => {
+    const limit = await run([["error", { code: "rate_limit_exceeded", message: "slow down" }]]).catch((e) => e);
+    expect(limit).toBeInstanceOf(LlmError);
+    expect(limit.kind).toBe("limit");
+    const context = await run([
+      ["response.output_text.delta", { output_index: 0, delta: "par" }],
+      ["response.failed", { response: { status: "failed", error: { code: "context_length_exceeded", message: "Your input exceeds the context window of this model." } } }],
+    ]).catch((e) => e);
+    expect(context.kind).toBe("context");
+    expect(context.partial).toEqual([{ type: "text", text: "par" }]);
+  });
+
+  it("says a stream that ends before the response is complete broke off, and a filtered one was refused", async () => {
+    const cut = await run([["response.output_text.delta", { output_index: 0, delta: "half" }]]).catch((e) => e);
+    expect(cut.key).toBe("error.streamEnded");
+    expect(cut.partial).toEqual([{ type: "text", text: "half" }]);
+    const { result } = await run([["response.incomplete", { response: { incomplete_details: { reason: "content_filter" } } }]]);
+    expect(result).toMatchObject({ stop: "refusal", stopDetail: "content_filter" });
   });
 });

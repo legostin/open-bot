@@ -1,7 +1,8 @@
-// OpenAI Chat Completions adapter (OpenAI, OpenRouter and OpenAI-compatible servers: Ollama, LM Studio, vLLM).
+// OpenAI Chat Completions adapter (OpenRouter, the OpenAI-compatible providers and servers: Ollama, LM Studio, vLLM).
+// OpenAI itself goes through the Responses API (responses.ts).
 
 import { randomBytes } from "node:crypto";
-import type { HistoryMessage, ImagePart, Part } from "./history.ts";
+import type { HistoryMessage, ImagePart, Part, ToolResultPart } from "./history.ts";
 import { LlmError, classifyHttpError, networkError, request, trimSlash } from "./http.ts";
 import { parseSse } from "./sse.ts";
 import { parseToolInput, sortedTools, toolSchema, zeroUsage, type ModelCall, type ModelStream, type StopKind, type Usage } from "./provider.ts";
@@ -26,6 +27,17 @@ export interface OpenAiConfig {
 type Msg = Record<string, unknown>;
 
 const dataUrl = (p: ImagePart) => ({ type: "image_url", image_url: { url: `data:${p.mimeType};base64,${p.data}` } });
+
+/** Model-facing line before the images that tool results returned (sent as a user message after the results). */
+export const TOOL_IMAGES_NOTE = "Images returned by the tool calls above:";
+
+/** A tool result as text for the model; its images follow in a user message (or are left out without vision). */
+export function toolResultText(p: ToolResultPart, vision: boolean): string {
+  const text =
+    p.content.map((c) => (c.type === "text" ? c.text : vision ? "[image: see the next message]" : "[image omitted: the model has no vision support]")).join("\n") ||
+    "(empty result)";
+  return p.isError ? `Error: ${text}` : text;
+}
 
 function userContent(items: Array<Record<string, unknown>>): unknown {
   return items.every((i) => i.type === "text") ? items.map((i) => i.text).join("\n\n") : items;
@@ -52,15 +64,12 @@ export function toOpenAiMessages(system: string, history: HistoryMessage[], visi
     const images: ImagePart[] = [];
     for (const p of m.parts) {
       if (p.type !== "tool_result") continue;
-      const text =
-        p.content.map((c) => (c.type === "text" ? c.text : vision ? "[image: see the next message]" : "[image omitted: the model has no vision support]")).join("\n") ||
-        "(empty result)";
-      out.push({ role: "tool", tool_call_id: p.id, content: p.isError ? `Error: ${text}` : text });
+      out.push({ role: "tool", tool_call_id: p.id, content: toolResultText(p, vision) });
       if (vision) images.push(...p.content.filter((c): c is ImagePart => c.type === "image"));
     }
     const items: Array<Record<string, unknown>> = [];
     if (images.length) {
-      items.push({ type: "text", text: "Images returned by the tool calls above:" });
+      items.push({ type: "text", text: TOOL_IMAGES_NOTE });
       for (const img of images) items.push(dataUrl(img));
     }
     for (const p of m.parts) {

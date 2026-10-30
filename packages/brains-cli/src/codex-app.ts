@@ -100,6 +100,8 @@ export interface CodexModel {
   description?: string;
   /** Codex points it to a newer model. */
   upgrade?: boolean;
+  /** It takes images. */
+  images?: boolean;
 }
 
 /** The models this Codex offers (app-server `model/list`), or undefined when it cannot say (old Codex, not signed in). */
@@ -131,6 +133,7 @@ export async function listCodexModels(command: string, env: Record<string, strin
           ...(x.defaultReasoningEffort ? { defaultEffort: String(x.defaultReasoningEffort) } : {}),
           ...(typeof x.description === "string" && x.description ? { description: x.description } : {}),
           ...(x.upgrade ? { upgrade: true } : {}),
+          ...(Array.isArray(x.inputModalities) && x.inputModalities.includes("image") ? { images: true } : {}),
         }));
       return models.length ? models : undefined;
     }

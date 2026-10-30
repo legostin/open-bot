@@ -1,7 +1,7 @@
 // Registers the "codex" brain (OpenAI Codex CLI on the user's ChatGPT subscription or an API key).
 
 import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import { createCodexProvider } from "@owlbot/brains-cli";
+import { codexChooser, createCodexProvider } from "@owlbot/brains-cli";
 
 const plugin: PluginModule = {
   activate(ctx: PluginContext) {
@@ -19,9 +19,11 @@ const plugin: PluginModule = {
       }
     };
 
+    // The Codex the settings name, else the newest on this machine (Codex offers newer models only to newer clients).
+    const codex = codexChooser();
     ctx.brains.register(
       createCodexProvider({
-        command: () => String(settings.command || "codex"),
+        command: () => codex(String(settings.command || "")),
         authEnv,
         sandbox: () => settings.sandbox || "danger-full-access",
         stateDir: ctx.dataDir,

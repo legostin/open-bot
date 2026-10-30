@@ -30,6 +30,7 @@ import {
 import { LlmError, proxyEnvFrom } from "./http.ts";
 import { McpClient, type McpContent, type McpTool } from "./mcp.ts";
 import { openAiStream } from "./openai.ts";
+import { responsesStream } from "./responses.ts";
 import { sortedTools, type CallResult, type ModelCall, type ModelStream } from "./provider.ts";
 import { resolveModel, vaultId, type ApiSettings, type VariantInfo } from "./settings.ts";
 
@@ -243,6 +244,7 @@ export class ApiBrainSession implements BrainSessionImpl {
       proxyEnv,
       effortField: v.id === "openai" ? ("reasoning_effort" as const) : v.id === "openrouter" ? ("reasoning" as const) : undefined,
     };
+    if (v.responses) return (call) => responsesStream(cfg, call);
     return (call) => openAiStream(cfg, call);
   }
 

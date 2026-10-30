@@ -85,6 +85,13 @@ like a warm one.
   whose maker has a newer major version in the same lineup (GPT-5.6 next to GPT-6), or whose own line has a newer
   version, is old too. Old models are chosen only when the brain has nothing current; effort is then the dial
   (checked on the live Codex: every need goes to GPT-6 Astra, low to xhigh).
+- The newest Codex (2026-10-30: "Codex has more than Astra"): Codex's servers offer newer models only to newer
+  clients. The npm Codex on this Mac (0.153.4) was offered GPT-6 Astra and GPT-5.6; the copy ChatGPT.app carries
+  (0.165) also GPT-6.1 Sol (its default), GPT-6.1 Terra and GPT-6 Luna. Unless the machine's policy names a Codex,
+  the node runs the newest of the one on PATH and the ChatGPT / Codex apps' copies (`codex-package.json`), asked
+  again every ten minutes. With that lineup: a word in passing → GPT-6 Luna low, the front desk → GPT-6.1 Sol low,
+  standard work and code → GPT-6.1 Sol medium, hard thinking → GPT-6 Astra xhigh (checked live: a turn on GPT-6
+  Luna through the hub's code, 3.1 s).
 - Providers: the API brain's OpenAI-compatible providers are one table (`plugins/brain-api/server/settings.ts`
   PROVIDERS): Kimi (Moonshot), DeepSeek, GLM (Z.ai), Qwen, Gemini, Grok (xAI), Mistral, Groq, besides Anthropic,
   OpenAI and OpenRouter. Each has its key in the vault (a setup card), its host, and its main models; `extraModels`
