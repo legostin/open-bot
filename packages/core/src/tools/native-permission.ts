@@ -15,7 +15,7 @@ import type { Redactor } from "../vault/redact.ts";
 import type { AgentRegistry } from "../agents.ts";
 import { ruleMatches } from "../policy/engine.ts";
 import { t } from "../i18n.ts";
-import { classifyClaudeTool, confinement, decideNative, shownPath, type NativeAction } from "../native-permissions.ts";
+import { classifyClaudeTool, confinement, decideNative, shownPath, simpleCommand, type NativeAction } from "../native-permissions.ts";
 
 export const NATIVE_PERMISSION_TOOL = "native_permission";
 /** How long a brain's question waits for the person: the CLI holds its turn meanwhile. */
@@ -97,7 +97,14 @@ export function registerNativePermission(d: NativePermissionDeps): void {
 
       // The person's own rules: "deny" always wins; "always allow" (from an approval card) answers for them.
       if (decided.decision !== "deny") {
-        const rules = d.rules.list().filter((r) => ruleMatches(r, tool, ctx.agentId, input));
+        // A rule for a program ("git push *") covers that program alone, never a script that starts with it; it is
+        // matched with a space after the command, so the program without arguments is covered too.
+        const command = typeof input.command === "string" ? input.command : "";
+        const spaced = { ...input, command: `${command.trim()} ` };
+        const rules = d.rules.list().filter((r) => {
+          if (!r.conditions.some((c) => c.field === "command" && c.op === "glob")) return ruleMatches(r, tool, ctx.agentId, input);
+          return simpleCommand(command) && ruleMatches(r, tool, ctx.agentId, spaced);
+        });
         if (rules.some((r) => r.decision === "deny")) decided = { decision: "deny", reason: "denied by the person's rule" };
         else if (decided.decision === "ask" && rules.some((r) => r.decision === "allow")) decided = { decision: "allow", reason: "allowed by the person's rule" };
       }

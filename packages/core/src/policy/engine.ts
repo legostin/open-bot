@@ -3,6 +3,7 @@
 import type { PolicyDecision, Rule, RuleCondition, ToolDescriptor } from "@owlbot/shared";
 import { globToRegExp, hostMatches, hostOf } from "@owlbot/shared";
 import { t } from "../i18n.ts";
+import { commandRule } from "../native-permissions.ts";
 
 export interface PolicyInput {
   tool: ToolDescriptor;
@@ -126,10 +127,9 @@ export function suggestRule(tool: string, input: unknown, agentId?: string): Omi
   const fields = ["to", "recipient", "email", "chat", "chatId", "channel", "url", "domain", "host", "command", "file_path", "notebook_path", "path", "machine", "replica"];
   for (const f of fields) {
     const v = getField(input, f);
-    if (typeof v === "string" && v) {
-      const isUrl = v.includes("://");
-      conditions.push(isUrl ? { field: f, op: "domain", value: hostOf(v) } : { field: f, op: "eq", value: v });
-    }
+    if (typeof v !== "string" || !v) continue;
+    if (f === "command") conditions.push({ field: f, ...commandRule(v) });
+    else conditions.push(v.includes("://") ? { field: f, op: "domain", value: hostOf(v) } : { field: f, op: "eq", value: v });
   }
   if (conditions.length === 0 && targets.length === 1) {
     // Fall back to nothing specific: allow the tool for this agent only.

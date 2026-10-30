@@ -1,7 +1,8 @@
 // What a CLI brain's own tools may do without asking: Claude Code's Read/Write/Edit/Bash/…, Codex's commands and
 // file changes. The brains run them in their own processes, outside the hub's tool gateway; the CLI asks the hub here
 // (Claude Code through its permission prompt tool, Codex through its approval requests: tools/native-permission.ts).
-// Inside the agent's own folder (and the temp folders) they just work; reading or writing elsewhere in the person's
+// Inside the agent's own folder (and the temp folders, and the CLI's own folder for the session's saved tool output)
+// they just work, and so does a command that runs inside the sandbox; reading or writing elsewhere in the person's
 // home, a command outside the sandbox, network from a command, and anything unknown wait for the person's yes on an
 // approval card, like an external action. Outside the home (system files, tools) reading is fine. The person's
 // credentials and the hub's own data (conversations, the vault, other agents' folders) are never theirs to read.
@@ -11,8 +12,13 @@ import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 export type NativeAction =
   | { kind: "read"; tool: string; path: string }
   | { kind: "write"; tool: string; path: string }
-  /** A shell command the CLI wants to run outside its sandbox (a sandboxed one never comes here). */
+  /** A shell command the CLI wants to run outside its sandbox. */
   | { kind: "command"; tool: string; command: string; cwd?: string; reason?: string; network?: string }
+  /**
+   * A shell command that runs inside the sandbox: no network, writes only in the agent's folders and temp, the
+   * person's credentials unreadable. Claude Code still asks about some (paths outside its folder); they need no yes.
+   */
+  | { kind: "sandboxed"; tool: string; command: string }
   | { kind: "fetch"; tool: string; url?: string }
   | { kind: "free"; tool: string }
   | { kind: "other"; tool: string; input: unknown };
@@ -50,7 +56,10 @@ export function classifyClaudeTool(tool: string, input: unknown, cwd: string): N
   if (FETCH.has(tool)) return { kind: "fetch", tool, url: str(i.url) };
   if (READ.has(tool)) return { kind: "read", tool, path: at(str(i.file_path) ?? str(i.notebook_path) ?? str(i.path)) };
   if (WRITE.has(tool)) return { kind: "write", tool, path: at(str(i.file_path) ?? str(i.notebook_path)) };
-  if (tool === "Bash") return { kind: "command", tool, command: str(i.command) ?? "", cwd, reason: str(i.description) };
+  if (tool === "Bash") {
+    if (i.dangerouslyDisableSandbox !== true) return { kind: "sandboxed", tool, command: str(i.command) ?? "" };
+    return { kind: "command", tool, command: str(i.command) ?? "", cwd, reason: str(i.description) };
+  }
   return { kind: "other", tool, input };
 }
 
@@ -64,6 +73,41 @@ export function within(p: string, dir: string): boolean {
   return rel === "" || (!!rel && !rel.startsWith("..") && !isAbsolute(rel));
 }
 
+/**
+ * Claude Code's own folder for a session started in `workspace` (~/.claude/projects/<the path, non-alphanumerics as
+ * "-">): it keeps the session's long tool outputs there and reads them back, which is the agent's own work.
+ */
+export function claudeProjectDir(workspace: string, home = homedir()): string {
+  return join(home, ".claude", "projects", resolve(workspace).replace(/[^A-Za-z0-9]/g, "-"));
+}
+
+/** One program with its arguments: no `;`, `&&`, `|`, redirection, substitution or second line. */
+export function simpleCommand(command: string): boolean {
+  return !!command.trim() && !/[;&|`$<>\n\\]|\(\s*\)/.test(command);
+}
+
+/** Programs whose first argument is what runs: the rule is for that script. */
+const INTERPRETERS = new Set(["python", "python3", "node", "bash", "sh", "zsh", "ruby", "perl", "deno", "bun", "npx", "uv", "uvx"]);
+
+/**
+ * What an "always allow" from a command's card covers: the same program and subcommand ("git push *" for
+ * "git push origin main"; "python3 make.py *" for a script), for simple commands only (simpleCommand); code given
+ * inline (-c, -e) or a script with several commands stays this exact command. The rule matches the command with a
+ * space after it (native-permission.ts), so "git push" alone is covered too.
+ */
+export function commandRule(command: string): { op: "eq" | "glob"; value: string } {
+  const words = command.trim().split(/\s+/);
+  const exact = { op: "eq" as const, value: command };
+  if (!simpleCommand(command) || !/^[\w./-]+$/.test(words[0]) || words[0].includes("=")) return exact;
+  const program = words[0].split("/").pop()!;
+  if (INTERPRETERS.has(program)) {
+    if (!words[1] || words[1].startsWith("-")) return exact;
+    return { op: "glob", value: `${words[0]} ${words[1]} *` };
+  }
+  const sub = words[1] && /^[a-z][\w-]*$/.test(words[1]) ? ` ${words[1]}` : "";
+  return { op: "glob", value: `${words[0]}${sub} *` };
+}
+
 /** The temp folders a command may use (macOS keeps them under /private). */
 function temps(): string[] {
   const t = tmpdir();
@@ -72,7 +116,7 @@ function temps(): string[] {
 
 export function decideNative(a: NativeAction, scope: NativeScope): NativeDecision {
   const home = scope.home ?? homedir();
-  const own = [scope.workspace, ...(scope.roots ?? []), ...temps()];
+  const own = [scope.workspace, claudeProjectDir(scope.workspace, home), ...(scope.roots ?? []), ...temps()];
   const mine = (p: string) => own.some((d) => within(p, d));
   // Only the agent's own folders open a denied one (the hub's data may well sit in a temp folder).
   const exempt = [scope.workspace, ...(scope.roots ?? [])];
@@ -81,6 +125,8 @@ export function decideNative(a: NativeAction, scope: NativeScope): NativeDecisio
   switch (a.kind) {
     case "free":
       return { decision: "allow", reason: "no reach of its own" };
+    case "sandboxed":
+      return { decision: "allow", reason: "runs inside the sandbox" };
     case "fetch":
       return { decision: "allow", reason: "the web, through the hub's egress rules" };
     case "read":
