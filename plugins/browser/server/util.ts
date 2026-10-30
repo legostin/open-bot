@@ -4,6 +4,7 @@ import { createHmac } from "node:crypto";
 import { isIPv4, isIPv6 } from "node:net";
 import { existsSync } from "node:fs";
 import { join, extname, basename } from "node:path";
+import { addressKind, isSearchEngine, searchUrl, type SearchEngine } from "./address.ts";
 
 /**
  * An error whose message is meant for the model as is (English). Errors that can also reach the browser pane carry
@@ -29,6 +30,8 @@ export interface BrowserSettings {
   /** How long agent tools wait for the user to hand control back. */
   takeoverWaitSec: number;
   maxDownloadMb: number;
+  /** Where the address bar sends words that are not an address. */
+  searchEngine: SearchEngine;
 }
 
 const clampNum = (v: unknown, def: number, min: number, max: number): number => {
@@ -47,6 +50,7 @@ export function readSettings(raw: Record<string, any> | undefined): BrowserSetti
     allowLocalNetwork: s.allowLocalNetwork === true,
     takeoverWaitSec: clampNum(s.takeoverWaitSec, 10, 0, 600),
     maxDownloadMb: clampNum(s.maxDownloadMb, 200, 1, 10_000),
+    searchEngine: isSearchEngine(s.searchEngine) ? s.searchEngine : "duckduckgo",
   };
 }
 
@@ -181,6 +185,11 @@ export function normalizeUrl(input: string): URL {
     throw new ToolError(`Only http(s) URLs can be opened, not ${u.protocol}`, "urlProtocol", { protocol: u.protocol });
   }
   return u;
+}
+
+/** The address bar's text: an address (checked like any other) or words searched for in `engine`. */
+export function resolveAddress(text: string, engine: SearchEngine): URL {
+  return addressKind(text) === "search" ? new URL(searchUrl(engine, text)) : normalizeUrl(text);
 }
 
 const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;

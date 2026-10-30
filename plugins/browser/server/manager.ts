@@ -9,6 +9,7 @@ import { mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolResult } from "@owlbot/shared";
 import type { PluginContext } from "@owlbot/plugin-sdk";
+import { HistoryStore } from "./history.ts";
 import { createChromiumInstaller, INSTALL_WAIT_MS, isMissingExecutableError, type ChromiumInstaller } from "./install.ts";
 import { pageCall } from "./page-script.ts";
 import { CHECK_PASSING_RE, PAGE_RULES, type FocusInfo } from "./safety.ts";
@@ -19,9 +20,9 @@ import {
   formatSize,
   isPrivateHost,
   launchArgs,
-  normalizeUrl,
   proxyFromEnv,
   readSettings,
+  resolveAddress,
   sanitizeFilename,
   sleep,
   ToolError,
@@ -110,6 +111,23 @@ export class BrowserManager {
   /** The agent whose tool call is running (or ran last): tools.ts runs each handler inside `caller.run(agentId)`. */
   readonly caller = new AsyncLocalStorage<string>();
   private agentId: string | null = null;
+  /** Every page the tabs land on (history.json in the data folder). */
+  readonly history: HistoryStore;
+  private tabIds = new WeakMap<Page, string>();
+  private tabSeq = 0;
+  /** Pages still loading, with the number of the navigation that loads them (a newer one takes over). */
+  private loads = new WeakMap<Page, number>();
+  private loadSeq = 0;
+  private icons = new WeakMap<Page, { origin: string; icon: string }>();
+  /** Main-frame navigation requests per tab, and how many the history has seen: none new means the same document. */
+  private docRequests = new WeakMap<Page, { sent: number; seen: number }>();
+  /** The person sent this tab somewhere from the live view (address bar, back, reload): where it lands is theirs. */
+  private userAsked: { page: Page; at: number } | null = null;
+  /** "user" or the agent that acted last: a page that moves by itself (a redirect, a script) counts for them. */
+  private lastActor = "user";
+  /** Our own isolated world in the active tab's main frame, for the touch checks (the page's scripts can not see it). */
+  private touchWorld: { page: Page; contextId: number } | null = null;
+  private focusTimer: NodeJS.Timeout | null = null;
   /** The last open/snapshot found a captcha: the live view asks the user to take over. */
   private captcha = false;
   private lastActivity = "";
@@ -124,6 +142,7 @@ export class BrowserManager {
       log: ctx.log,
       onChange: () => this.scheduleState(),
     });
+    this.history = new HistoryStore({ file: join(ctx.dataDir, "history.json") });
     this.downloadsDir = join(ctx.dataDir, "downloads");
     this.profileDir = join(ctx.dataDir, "profile");
     this.timers.push(setInterval(() => void this.tick(), 5_000));
@@ -299,6 +318,7 @@ export class BrowserManager {
     if (this.userControl) this.setControl(false);
     await this.stopCastNow();
     this.inputCdp = null;
+    this.touchWorld = null;
     if (c) await withTimeout(c.close(), 10_000).catch(() => {});
     this.scheduleState();
   }
@@ -306,8 +326,10 @@ export class BrowserManager {
   async dispose(): Promise<void> {
     for (const t of this.timers) clearInterval(t);
     if (this.stateTimer) clearTimeout(this.stateTimer);
+    if (this.focusTimer) clearTimeout(this.focusTimer);
     this.installer.dispose();
     await this.close();
+    this.history.flush();
   }
 
   private onContextClosed(c: BrowserContext): void {
@@ -316,6 +338,7 @@ export class BrowserManager {
     this.active = null;
     this.cast = null;
     this.inputCdp = null;
+    this.touchWorld = null;
     this.captcha = false;
     if (this.userControl) this.setControl(false);
     this.scheduleState();
@@ -326,9 +349,99 @@ export class BrowserManager {
     p.on("download", (d) => this.onDownload(d));
     p.on("close", () => this.onPageClosed(p));
     p.on("framenavigated", (f) => {
-      if (f === p.mainFrame()) this.scheduleState();
+      if (f === p.mainFrame()) this.onNavigated(p);
     });
-    p.on("load", () => this.scheduleState());
+    p.on("load", () => void this.onLoaded(p));
+    p.on("request", (r) => {
+      if (!r.isNavigationRequest() || r.frame() !== p.mainFrame()) return;
+      const d = this.docRequests.get(p) ?? { sent: 0, seen: 0 };
+      d.sent++;
+      this.docRequests.set(p, d);
+    });
+  }
+
+  private tabId(p: Page): string {
+    let id = this.tabIds.get(p);
+    if (!id) this.tabIds.set(p, (id = String(++this.tabSeq)));
+    return id;
+  }
+
+  /** Who sent the tab where it landed. */
+  private actor(p: Page): string {
+    if (this.userAsked?.page === p && Date.now() - this.userAsked.at < 30_000) return "user";
+    if (this.userControl) return "user";
+    if (this.busy) return this.agentId ?? "agent";
+    return this.lastActor;
+  }
+
+  /** A tab landed on a page: a visit in the history, and the tab loads until the page has. */
+  private onNavigated(p: Page): void {
+    const url = p.url();
+    const known = this.icons.get(p);
+    if (known && known.origin !== originOf(url)) this.icons.delete(p);
+    // No request since the last landing: the page rewrote its address itself (history.pushState / replaceState).
+    const d = this.docRequests.get(p);
+    const sameDocument = !!d && d.sent === d.seen;
+    if (d) d.seen = d.sent;
+    this.history.record({ url, by: this.actor(p), tab: this.tabId(p), icon: this.icons.get(p)?.icon, sameDocument });
+    const n = this.beginLoad(p);
+    // Resolves at once for a page that changed only its address (history.pushState).
+    void p
+      .waitForLoadState("load", { timeout: 60_000 })
+      .catch(() => {})
+      .finally(() => this.endLoad(p, n));
+    this.scheduleState();
+  }
+
+  private beginLoad(p: Page): number {
+    const n = ++this.loadSeq;
+    this.loads.set(p, n);
+    this.scheduleState();
+    return n;
+  }
+
+  private endLoad(p: Page, n: number): void {
+    if (this.loads.get(p) !== n) return;
+    this.loads.delete(p);
+    this.scheduleState();
+  }
+
+  /** The page has loaded: its title (titleOf gives it to the history) and the site's icon. */
+  private async onLoaded(p: Page): Promise<void> {
+    this.scheduleState();
+    // A page that puts the cursor into a field by itself (a search page) opens the phone's keyboard too.
+    if (this.userControl && p === this.activePage()) this.checkFocus();
+    const url = p.url();
+    await this.titleOf(p);
+    if (!/^https?:/i.test(url)) return;
+    const origin = originOf(url);
+    const known = this.icons.get(p);
+    const icon = known?.origin === origin ? known.icon : await this.iconOf(p, url);
+    // The page may have rewritten its address meanwhile; the icon is still its site's.
+    if (!icon || p.isClosed() || originOf(p.url()) !== origin) return;
+    this.icons.set(p, { origin, icon });
+    this.history.setIcon(p.url(), icon);
+    this.scheduleState();
+  }
+
+  /**
+   * The site's icon: the page's <link rel="icon"> (a locator, read in Playwright's isolated world, not the page's
+   * own), else /favicon.ico. The live view shows it through the hub's image proxy.
+   */
+  private async iconOf(p: Page, url: string): Promise<string | undefined> {
+    const href = await p
+      .locator('link[rel~="icon" i]')
+      .first()
+      .getAttribute("href", { timeout: 1000 })
+      .catch(() => null);
+    try {
+      const u = new URL(href?.trim() || "/favicon.ico", url);
+      if (u.protocol === "data:" && /^data:image\//i.test(u.href) && u.href.length < 8000) return u.href;
+      if ((u.protocol === "https:" || u.protocol === "http:") && u.href.length < 2000) return u.href;
+      return new URL("/favicon.ico", url).href;
+    } catch {
+      return undefined;
+    }
   }
 
   private onPageClosed(p: Page): void {
@@ -482,6 +595,8 @@ export class BrowserManager {
     }
     this.touch();
     if (agentId) this.agentId = agentId;
+    this.userAsked = null;
+    this.lastActor = this.agentId ?? "agent";
     this.busy = name;
     this.scheduleState();
     let result: ToolResult;
@@ -528,6 +643,8 @@ export class BrowserManager {
   async titleOf(p: Page): Promise<string> {
     const t = await withTimeout(p.title(), 1000).catch(() => this.titles.get(p) ?? "");
     this.titles.set(p, t);
+    // Pages name themselves late (single-page apps): the history keeps the latest name.
+    if (t) this.history.setTitle(p.url(), t);
     return t;
   }
 
@@ -666,10 +783,11 @@ export class BrowserManager {
       case "navigate":
         this.touch();
         return run(async () => {
-          // The user is trusted: no local-network guard here, only the http(s) scheme check.
-          const u = normalizeUrl(String(m.url ?? ""));
-          const page = await this.ensurePage();
-          await page.goto(u.href, { waitUntil: "domcontentloaded", timeout: 30_000 });
+          // The user is trusted: no local-network guard here, only the http(s) scheme check. Words are searched for.
+          const u = resolveAddress(String(m.text ?? m.url ?? ""), this.settings.searchEngine);
+          const page = m.newTab ? await (await this.ensureContext()).newPage() : await this.ensurePage();
+          this.setActive(page);
+          await this.userGoto(page, () => page.goto(u.href, { waitUntil: "domcontentloaded", timeout: 30_000 }));
         });
       case "back":
       case "forward":
@@ -678,9 +796,17 @@ export class BrowserManager {
         return run(async () => {
           const page = this.activePage();
           if (!page) return;
-          if (m.type === "back") await page.goBack({ timeout: 15_000 });
-          else if (m.type === "forward") await page.goForward({ timeout: 15_000 });
-          else await page.reload({ timeout: 30_000 });
+          await this.userGoto(page, () =>
+            m.type === "back" ? page.goBack({ timeout: 15_000 }) : m.type === "forward" ? page.goForward({ timeout: 15_000 }) : page.reload({ timeout: 30_000 }),
+          );
+        });
+      case "stop":
+        return run(async () => {
+          const page = this.activePage();
+          if (!page) return;
+          await (await this.inputSession())?.send("Page.stopLoading");
+          this.loads.delete(page);
+          this.scheduleState();
         });
       case "tab":
         this.touch();
@@ -697,7 +823,20 @@ export class BrowserManager {
       case "input":
         if (!this.userControl) return;
         this.touch();
-        return run(() => this.dispatchInput(m));
+        return run(async () => {
+          await this.dispatchInput(m);
+          // A click or Tab may have moved the focus into (or out of) a text field: the phone's keyboard follows it.
+          if ((m.event === "mouse" && m.action === "up") || (m.event === "key" && m.action === "up" && (m.key === "Tab" || m.key === "Enter"))) this.checkFocus();
+        });
+      case "probe":
+        // A finger is down on the picture: is it on a text field? The answer has to come before it lifts, because
+        // iOS shows the keyboard only inside the touch.
+        if (!this.userControl) return;
+        return run(async () => {
+          const { w, h } = this.viewport();
+          const editable = await this.isolatedEval<boolean | null>(probeScript(clamp01(m.x) * w, clamp01(m.y) * h));
+          this.ctx.ui.emit("probe", { id: m.id, seq: m.seq, editable: editable ?? null });
+        });
       case "state":
         void this.emitState();
         return;
@@ -707,9 +846,29 @@ export class BrowserManager {
     }
   }
 
+  /** A navigation the person asked for in the live view: theirs in the history, the tab loading until it lands. */
+  private async userGoto(page: Page, go: () => Promise<unknown>): Promise<void> {
+    this.userAsked = { page, at: Date.now() };
+    this.lastActor = "user";
+    const n = this.beginLoad(page);
+    try {
+      await go();
+    } catch (e: any) {
+      // Stopped, or another navigation took over: nothing went wrong.
+      if (/net::ERR_ABORTED|interrupted by another navigation/i.test(String(e?.message ?? e))) return;
+      throw e;
+    } finally {
+      this.endLoad(page, n);
+    }
+  }
+
   setControl(on: boolean): void {
     if (this.userControl === on) return;
     this.userControl = on;
+    if (on) {
+      this.lastActor = "user";
+      this.checkFocus();
+    }
     // The user is on it: the request to take over is answered.
     if (on) this.captcha = false;
     this.ctx.log.info(on ? "user took control of the browser" : "user returned control to the agent");
@@ -723,6 +882,41 @@ export class BrowserManager {
     if (this.captcha === on) return;
     this.captcha = on;
     this.emitActivity();
+  }
+
+  /** Tell the live view whether a text field has the focus now (null: inside a frame of another site). */
+  private checkFocus(): void {
+    if (this.focusTimer) clearTimeout(this.focusTimer);
+    this.focusTimer = setTimeout(() => {
+      this.focusTimer = null;
+      if (!this.userControl) return;
+      void this.isolatedEval<boolean | null>(FOCUS_SCRIPT)
+        .then((editable) => this.ctx.ui.emit("focus", { editable: editable ?? null }))
+        .catch(() => {});
+    }, 150);
+  }
+
+  /** Evaluate in our isolated world of the active tab (created again after the page navigates). */
+  private async isolatedEval<T>(expression: string): Promise<T | null> {
+    const page = this.activePage();
+    const cdp = await this.inputSession();
+    if (!page || !cdp) return null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let world = this.touchWorld;
+      if (world?.page !== page) {
+        const { frameTree } = await cdp.send("Page.getFrameTree");
+        const { executionContextId } = await cdp.send("Page.createIsolatedWorld", { frameId: frameTree.frame.id, worldName: "owlbot-touch" });
+        world = this.touchWorld = { page, contextId: executionContextId };
+      }
+      try {
+        const r = await withTimeout(cdp.send("Runtime.evaluate", { expression, contextId: world.contextId, returnByValue: true }), 2000);
+        return r.exceptionDetails ? null : (r.result.value as T);
+      } catch {
+        // The page navigated and took the world with it.
+        this.touchWorld = null;
+      }
+    }
+    return null;
   }
 
   private viewport(): { w: number; h: number } {
@@ -891,7 +1085,18 @@ export class BrowserManager {
     const pages = this.pages();
     const active = this.activePage();
     const tabs = await Promise.all(
-      pages.map(async (p, i) => ({ index: i + 1, title: cut(await this.titleOf(p), 80), url: p.url(), active: p === active })),
+      pages.map(async (p, i) => {
+        const url = p.url();
+        const icon = this.icons.get(p);
+        return {
+          index: i + 1,
+          title: cut(await this.titleOf(p), 80),
+          url,
+          active: p === active,
+          loading: this.loads.has(p),
+          icon: icon?.origin === originOf(url) ? icon.icon : undefined,
+        };
+      }),
     );
     this.ctx.ui.emit("state", {
       running: !!this.context,
@@ -901,12 +1106,94 @@ export class BrowserManager {
       tabs,
       url: active?.url() ?? "",
       title: active ? (this.titles.get(active) ?? "") : "",
+      loading: !!active && this.loads.has(active),
+      ...(active ? await this.navState() : { canGoBack: false, canGoForward: false }),
+      searchEngine: this.settings.searchEngine,
       install: this.installer.status(),
     });
+  }
+
+  /** Whether the active tab has pages to go back and forward to. */
+  private async navState(): Promise<{ canGoBack: boolean; canGoForward: boolean }> {
+    try {
+      const cdp = await this.inputSession();
+      if (!cdp) throw new Error("no page");
+      const h = await withTimeout(cdp.send("Page.getNavigationHistory"), 1000);
+      // A tab opened for a page starts on about:blank: going back there is not going back anywhere.
+      const first = h.entries[0]?.url === "about:blank" ? 1 : 0;
+      return { canGoBack: h.currentIndex > first, canGoForward: h.currentIndex < h.entries.length - 1 };
+    } catch {
+      return { canGoBack: true, canGoForward: true };
+    }
   }
 }
 
 // ---------- helpers ----------
+
+/** Is this element one the keyboard types into? (Source text for the isolated world.) */
+const EDITABLE = `(el) => {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  if (el.tagName === "TEXTAREA") return !el.disabled && !el.readOnly;
+  if (el.tagName !== "INPUT" || el.disabled || el.readOnly) return false;
+  return /^(text|search|email|url|tel|password|number)$/i.test(el.type || "text");
+}`;
+
+/** What is under the point (CSS px): a text field (true), something else (false), a frame of another site (null). */
+function probeScript(x: number, y: number): string {
+  return `(() => {
+  const editable = ${EDITABLE};
+  let doc = document, x = ${x.toFixed(1)}, y = ${y.toFixed(1)};
+  for (let depth = 0; depth < 8; depth++) {
+    let el = doc.elementFromPoint(x, y);
+    while (el && el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
+    }
+    if (!el) return false;
+    if (el.tagName === "IFRAME" || el.tagName === "FRAME") {
+      let inner = null;
+      try { inner = el.contentDocument; } catch {}
+      if (!inner) return null;
+      const r = el.getBoundingClientRect();
+      x -= r.left + el.clientLeft;
+      y -= r.top + el.clientTop;
+      doc = inner;
+      continue;
+    }
+    const label = el.closest("label");
+    return editable(el) || (!!label && editable(label.control));
+  }
+  return null;
+})()`;
+}
+
+/** Does a text field have the focus (null: a frame of another site has it)? */
+const FOCUS_SCRIPT = `(() => {
+  const editable = ${EDITABLE};
+  let el = document.activeElement;
+  for (let depth = 0; depth < 8 && el; depth++) {
+    if (el.shadowRoot && el.shadowRoot.activeElement) { el = el.shadowRoot.activeElement; continue; }
+    if (el.tagName === "IFRAME" || el.tagName === "FRAME") {
+      let inner = null;
+      try { inner = el.contentDocument; } catch {}
+      if (!inner) return null;
+      el = inner.activeElement;
+      continue;
+    }
+    break;
+  }
+  return editable(el);
+})()`;
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
 
 function clamp01(v: unknown): number {
   const n = Number(v);

@@ -4,7 +4,9 @@ import { createReadStream, writeFileSync, mkdirSync } from "node:fs";
 import type { Page, Response } from "playwright";
 import type { ToolCallContext, ToolEffect, ToolResult } from "@owlbot/shared";
 import type { PluginContext, ToolHandler } from "@owlbot/plugin-sdk";
+import type { Visit } from "./history.ts";
 import { BrowserManager, ToolError, type Classified, type DownloadRecord } from "./manager.ts";
+import { SEARCH_ENGINES } from "./address.ts";
 import { activationKey, keyNeedsSubmit, sameLabel, splitTrailingNewline, submitCall, SUBMIT_HINT } from "./safety.ts";
 import { cut, filenameFromDisposition, filenameFromUrl, formatSize, normalizeUrl, sanitizeFilename, sleep, totpCode, uniquePath } from "./util.ts";
 
@@ -25,10 +27,10 @@ const CHECK_WAIT_MS = 12_000;
  */
 const ENGINES: Record<string, { url: (q: string) => string; own: RegExp }> = {
   // DuckDuckGo and Bing link results directly; Google hides them behind its own /goto links.
-  duckduckgo: { url: (q) => `https://duckduckgo.com/?q=${q}`, own: /^([a-z0-9-]+\.)*duckduckgo\.com\// },
-  bing: { url: (q) => `https://www.bing.com/search?q=${q}`, own: /^([a-z0-9-]+\.)*bing\.com\// },
-  google: { url: (q) => `https://www.google.com/search?q=${q}`, own: /^([a-z0-9-]+\.)*google\.[a-z.]+\// },
-  yandex: { url: (q) => `https://yandex.ru/search/?text=${q}`, own: /^(yabs|an|[a-z0-9-]*test[a-z0-9-]*)\.yandex\.[a-z.]+\/|^(www\.)?(yandex\.[a-z.]+|ya\.ru)\/(an|images|video|search|news|q)\b/ },
+  duckduckgo: { url: SEARCH_ENGINES.duckduckgo, own: /^([a-z0-9-]+\.)*duckduckgo\.com\// },
+  bing: { url: SEARCH_ENGINES.bing, own: /^([a-z0-9-]+\.)*bing\.com\// },
+  google: { url: SEARCH_ENGINES.google, own: /^([a-z0-9-]+\.)*google\.[a-z.]+\// },
+  yandex: { url: SEARCH_ENGINES.yandex, own: /^(yabs|an|[a-z0-9-]*test[a-z0-9-]*)\.yandex\.[a-z.]+\/|^(www\.)?(yandex\.[a-z.]+|ya\.ru)\/(an|images|video|search|news|q)\b/ },
 };
 
 /**
@@ -683,6 +685,61 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
     },
   );
 
+  // ---------- history ----------
+
+  const DAY = 86_400_000;
+  const days = (v: unknown, fallback: number | undefined) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.min(n, 3650) : fallback;
+  };
+  const visitLine = (v: Visit) =>
+    `${localTime(v.at)} · ${v.by === "user" ? "the user" : `agent ${v.by}`} · ${cut(v.title.replace(/\s+/g, " "), 120) || "(untitled)"} — ${cut(v.url, 300)}`;
+
+  reg(
+    "history",
+    "read",
+    "Find pages in the browser's history: what the user and the agents opened in it, when and who (kept 90 days). " +
+      "Use it for \"that site I had open yesterday\" or to see what was already looked at. `query`: words from the page title or address " +
+      "(leave it out for everything); `days`: how far back (default 7).",
+    {
+      query: { type: "string", description: "Words to find in the page title or address." },
+      days: { type: "number", description: "How many days back (default 7; 1/24 is the last hour)." },
+      limit: { type: "number", description: "At most this many pages (default 30, at most 100)." },
+    },
+    [],
+    async (input) => {
+      const query = typeof input.query === "string" ? input.query.slice(0, 200) : "";
+      const back = days(input.days, 7)!;
+      const limit = Math.max(1, Math.min(Number(input.limit) || 30, 100));
+      const { visits, more } = mgr.history.search({ q: query, since: Date.now() - back * DAY, limit });
+      if (!visits.length) return `No pages in the browser history${query ? ` matching "${query}"` : ""} in the last ${back} day(s).`;
+      const head = `${visits.length}${more ? "+" : ""} page(s) from the browser history, newest first (hub's local time):`;
+      return [head, ...visits.map(visitLine), more ? "There are more: narrow the query or the days." : "", UNTRUSTED].filter(Boolean).join("\n");
+    },
+  );
+
+  reg(
+    "history_clear",
+    "external",
+    "Delete pages from the browser's history after the user approves it on a card: all of it, the pages matching `query`, " +
+      "or those of the last `days` days (both: the matching pages of those days). `description` says what will be deleted, in the user's " +
+      "language, e.g. \"All pages of the last hour\".",
+    {
+      query: { type: "string", description: "Only pages with these words in the title or address." },
+      days: { type: "number", description: "Only pages of the last this many days (1/24 is the last hour)." },
+      description: { type: "string", description: "What will be deleted, for the approval card." },
+    },
+    ["description"],
+    async (input) => {
+      const description = str(input.description, "description", 300);
+      const back = days(input.days, undefined);
+      const query = typeof input.query === "string" ? input.query.slice(0, 200) : "";
+      const n = mgr.history.clear({ q: query, since: back === undefined ? undefined : Date.now() - back * DAY });
+      return `Deleted ${n} visit(s) from the browser history: ${description}.`;
+    },
+    { approvalSummary: "%approval.historyClear%" },
+  );
+
   // ---------- external ----------
 
   reg(
@@ -733,6 +790,13 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
     },
     { approvalSummary: "%approval.submit%" },
   );
+}
+
+/** "2026-10-30 14:02" in the hub's time zone. */
+function localTime(at: number): string {
+  const d = new Date(at);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 function originOf(url: string): string {

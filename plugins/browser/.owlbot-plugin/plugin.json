@@ -8,6 +8,7 @@
   "ui": "./ui/dist/index.js",
   "contributes": {
     "tools": true,
+    "http": true,
     "settings": {
       "type": "object",
       "properties": {
@@ -46,6 +47,18 @@
           "default": 200,
           "minimum": 1,
           "title": "%settings.maxDownloadMb.title%"
+        },
+        "searchEngine": {
+          "type": "string",
+          "enum": [
+            "duckduckgo",
+            "google",
+            "yandex",
+            "bing"
+          ],
+          "default": "duckduckgo",
+          "title": "%settings.searchEngine.title%",
+          "description": "%settings.searchEngine.description%"
         }
       }
     }

@@ -1,6 +1,7 @@
 // Builtin browser plugin: Google Chrome (or Playwright's Chromium) with a persistent profile, agent tools, live view and user takeover.
 
 import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
+import { historyHttp } from "./history.ts";
 import { BrowserManager } from "./manager.ts";
 import { registerTools } from "./tools.ts";
 
@@ -16,6 +17,7 @@ const plugin: PluginModule = {
     mgr.installer.check();
     registerTools(ctx, mgr);
     ctx.ui.onMessage((m) => mgr.onUiMessage(m));
+    ctx.http.handle((req) => historyHttp(mgr.history, req));
     ctx.onSettingsChange((s) => mgr.updateSettings(s));
   },
   async deactivate() {

@@ -124,10 +124,10 @@ function refOf(snapshot: string, re: RegExp): string {
   return /^\[(e\d+)\]/.exec(line)![1];
 }
 
-async function until<T>(fn: () => T | undefined | false, ms = 10_000): Promise<T> {
+async function until<T>(fn: () => T | undefined | false | Promise<T | undefined | false>, ms = 10_000): Promise<T> {
   const end = Date.now() + ms;
   for (;;) {
-    const v = fn();
+    const v = await fn();
     if (v) return v;
     if (Date.now() > end) throw new Error("condition not met in time");
     await new Promise((r) => setTimeout(r, 100));
@@ -230,13 +230,17 @@ describe("browser plugin (headless Chromium)", () => {
       fill_secret: "local-write",
       download: "local-write",
       submit: "external",
+      history: "read",
+      history_clear: "external",
     });
     expect([...h.tools.values()].every((t) => t.source === true)).toBe(true);
     // The approval summary is a catalog reference: the hub resolves it in the hub language, then fills {field}s.
     // The card names the site and the control as the page shows it, not only the agent's own description.
     const summary = h.tools.get("submit")!.approvalSummary!;
     expect(summary).toBe("%approval.submit%");
-    const { messages } = readPluginLayout(PLUGIN_DIR);
+    const { messages, manifest } = readPluginLayout(PLUGIN_DIR);
+    // The live view's history routes: the hub answers 404 for a plugin that does not declare them.
+    expect(manifest.contributes.http).toBe(true);
     const input = { ref: "e7", label: "Pay $34.00", url: "https://shop.example/checkout?step=3", description: "Pay for 2 items, $34.00" };
     expect(renderTemplate(localizeValue(summary, catalogLookup(messages, "en")), input)).toBe("Browser, shop.example, “Pay $34.00”: Pay for 2 items, $34.00");
     expect(renderTemplate(localizeValue(summary, catalogLookup(messages, "ru")), input)).toBe("Браузер, shop.example, «Pay $34.00»: Pay for 2 items, $34.00");
@@ -581,6 +585,72 @@ describe("browser plugin (headless Chromium)", () => {
     expect(snap).toContain('textbox "Поле" value="abвг"');
     h.uiMessage({ type: "watch", on: false });
   });
+
+  it("opens a text field's keyboard on a phone: what is under the finger, and where the focus is", async () => {
+    await ok("open", { url: base + "/counter" });
+    const all = () => h.coreCalls.filter((c) => c.method === "ui.emit").map((c) => c.params as { channel: string; payload: any });
+    // Earlier tests streamed this page and took control too: only what this one makes counts.
+    const from = all().length;
+    const emits = () => all().slice(from);
+    h.uiMessage({ type: "watch", on: true, id: "phone" });
+    const frame = await until(() => emits().find((e) => e.channel === "frame" && e.payload.url === base + "/counter"));
+    const height: number = frame.payload.height;
+    h.uiMessage({ type: "control", on: true });
+    await until(() => emits().find((e) => e.channel === "control" && e.payload.user === true));
+    const answer = async (seq: number, y: number) => {
+      h.uiMessage({ type: "probe", id: "phone", seq, x: 0.1, y });
+      return (await until(() => emits().find((e) => e.channel === "probe" && e.payload.seq === seq))).payload;
+    };
+    expect(await answer(1, 520 / height)).toEqual({ id: "phone", seq: 1, editable: true });
+    expect(await answer(2, 0.1)).toEqual({ id: "phone", seq: 2, editable: false });
+    // Tapping the field focuses it: the live view hears so after the click.
+    const before = emits().filter((e) => e.channel === "focus").length;
+    for (const action of ["down", "up"]) h.uiMessage({ type: "input", event: "mouse", action, x: 0.1, y: 520 / height, button: "left", clickCount: 1 });
+    const focus = await until(() => emits().filter((e) => e.channel === "focus").slice(before).find((e) => e.payload.editable === true));
+    expect(focus.payload).toEqual({ editable: true });
+    h.uiMessage({ type: "control", on: false });
+    await until(() => emits().find((e) => e.channel === "control" && e.payload.user === false));
+    h.uiMessage({ type: "watch", on: false, id: "phone" });
+  });
+
+  it("keeps a history of the pages the person and the agents open, and shows each tab's state", async () => {
+    await h.http({ method: "DELETE", path: "/history" });
+    await ok("open", { url: base + "/about" });
+    const emits = () => h.coreCalls.filter((c) => c.method === "ui.emit").map((c) => c.params as { channel: string; payload: any });
+    // Earlier tests showed /long too: only what this one makes counts.
+    const from = emits().length;
+    h.uiMessage({ type: "watch", on: true, id: "history" });
+    h.uiMessage({ type: "navigate", text: base + "/long" });
+    const state = await until(() =>
+      emits()
+        .slice(from)
+        .find((e) => e.channel === "state" && e.payload.url === base + "/long" && !e.payload.loading && e.payload.tabs.some((t: any) => t.icon)),
+    );
+    expect(state.payload).toMatchObject({ canGoBack: true, canGoForward: false, searchEngine: "duckduckgo" });
+    expect(state.payload.tabs.find((t: any) => t.active)).toMatchObject({ url: base + "/long", loading: false, icon: base + "/favicon.ico" });
+    h.uiMessage({ type: "watch", on: false, id: "history" });
+
+    const list = await until(async () => {
+      const r = (await h.http({ path: "/history" })).body as { visits: Array<{ url: string; title: string; by: string }> };
+      return r.visits.length >= 2 && r.visits[0].title ? r : undefined;
+    });
+    expect(list.visits.slice(0, 2).map((v) => [v.url, v.title, v.by])).toEqual([
+      [base + "/long", "Длинная", "user"],
+      [base + "/about", "О нас", "assistant"],
+    ]);
+    const found = (await h.http({ path: "/history", query: { q: "нас" } })).body as { visits: Array<{ url: string }> };
+    expect(found.visits.map((v) => v.url)).toEqual([base + "/about"]);
+    expect(((await h.http({ path: "/suggest", query: { q: "127.0" } })).body as { visits: unknown[] }).visits.length).toBeGreaterThan(0);
+    expect(((await h.http({ path: "/top" })).body as { sites: Array<{ url: string }> }).sites[0].url).toBe(base + "/");
+
+    const history = await ok("history", { query: "Длинная" });
+    expect(history).toContain(`the user · Длинная — ${base}/long`);
+    expect(history).not.toContain("/about");
+    const cleared = await ok("history_clear", { query: "нас", description: "Страница «О нас»" });
+    expect(cleared).toContain("Deleted 1 visit");
+    expect(((await h.http({ path: "/history", query: { q: "нас" } })).body as { visits: unknown[] }).visits).toEqual([]);
+    expect(((await h.http({ method: "DELETE", path: "/history" })).body as { removed: number }).removed).toBeGreaterThan(0);
+  });
 });
 
 describe("reading a search engine's results", () => {
@@ -698,6 +768,14 @@ describe("browser plugin behind the hub egress proxy", () => {
     expect(d.isError, text(d)).toBeFalsy();
     expect(readFileSync(join(h.dataDir, "downloads", "data.csv"), "utf8")).toBe("a,b\n1,2\n");
     expect(seen.filter((s) => s.url.includes("proxied.example")).every((s) => !s.auth || authorizedSeen(s.auth))).toBe(true);
+  });
+
+  it("searches for words typed into the address bar", async () => {
+    h.uiMessage({ type: "navigate", text: "сова птица" });
+    await until(() => seen.find((s) => s.method === "CONNECT" && s.url === "duckduckgo.com:443"));
+    h.setSettings({ headless: "always", searchEngine: "bing" });
+    h.uiMessage({ type: "navigate", text: "сова птица" });
+    await until(() => seen.find((s) => s.method === "CONNECT" && s.url === "www.bing.com:443"));
   });
 
   it("does not let links or redirects from public pages take the agent to local addresses", async () => {

@@ -9,9 +9,11 @@ import {
   normalizeUrl,
   proxyFromEnv,
   readSettings,
+  resolveAddress,
   sanitizeFilename,
   totpCode,
 } from "../server/util.ts";
+import { addressKind, searchUrl } from "../server/address.ts";
 import {
   ACTION_HINT_RE,
   ACTION_LABEL_RE,
@@ -30,7 +32,9 @@ import { keyEventParams } from "../server/manager.ts";
 
 describe("settings", () => {
   it("applies defaults and accepts booleans for headless", () => {
-    expect(readSettings({})).toEqual({ headless: "auto", idleMinutes: 30, allowLocalNetwork: false, takeoverWaitSec: 10, maxDownloadMb: 200 });
+    expect(readSettings({})).toEqual({ headless: "auto", idleMinutes: 30, allowLocalNetwork: false, takeoverWaitSec: 10, maxDownloadMb: 200, searchEngine: "duckduckgo" });
+    expect(readSettings({ searchEngine: "yandex" }).searchEngine).toBe("yandex");
+    expect(readSettings({ searchEngine: "altavista" }).searchEngine).toBe("duckduckgo");
     expect(readSettings({ headless: false }).headless).toBe("never");
     expect(readSettings({ headless: true }).headless).toBe("always");
     expect(readSettings({ idleMinutes: "5" }).idleMinutes).toBe(5);
@@ -101,6 +105,27 @@ describe("urls", () => {
     expect(normalizeUrl("http://x.test/").href).toBe("http://x.test/");
     expect(() => normalizeUrl("file:///etc/passwd")).toThrow(/http/);
     expect(() => normalizeUrl("javascript:alert(1)")).toThrow();
+  });
+
+  it("tells an address from words to search for", () => {
+    for (const a of ["example.com", "https://example.com/a b", "ru.wikipedia.org/wiki/Сова", "localhost:3000", "192.168.0.1", "[::1]:8080", "nas:8080/x", "кц.рф", "about:blank", "ftp://example.com/", "xn--d1acufc.xn--p1ai"]) {
+      expect(addressKind(a), a).toBe("url");
+    }
+    for (const w of ["пробки алматы", "weather", "1.5", "v1.2", "what is example.com", "javascript:alert(1)", "mailto:a@b.c", "C++"]) {
+      expect(addressKind(w), w).toBe("search");
+    }
+    expect(addressKind("   ")).toBe("empty");
+  });
+
+  it("searches the chosen engine for words and opens addresses", () => {
+    expect(searchUrl("duckduckgo", "пробки алматы")).toBe("https://duckduckgo.com/?q=%D0%BF%D1%80%D0%BE%D0%B1%D0%BA%D0%B8%20%D0%B0%D0%BB%D0%BC%D0%B0%D1%82%D1%8B");
+    expect(searchUrl("google", "a&b")).toBe("https://www.google.com/search?q=a%26b");
+    expect(searchUrl("yandex", "x")).toBe("https://yandex.ru/search/?text=x");
+    expect(searchUrl("bing", "x")).toBe("https://www.bing.com/search?q=x");
+    expect(resolveAddress(" example.com ", "google").href).toBe("https://example.com/");
+    expect(resolveAddress("C++ tutorial", "bing").href).toBe("https://www.bing.com/search?q=C%2B%2B%20tutorial");
+    expect(() => resolveAddress("ftp://example.com/", "google")).toThrow(/http/);
+    expect(() => resolveAddress("", "google")).toThrow(/Empty/);
   });
 });
 
