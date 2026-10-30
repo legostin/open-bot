@@ -1,0 +1,11 @@
+{
+  "name": "Sunrise and sunset",
+  "description": "Sunrise, sunset and day length for any place and date, from sunrise-sunset.org, as a card in the chat.",
+  "integration.summary": "When the sun rises and sets anywhere, as a card",
+  "integration.example": "When is sunset in Lisbon today?",
+  "card.label": "Sunrise and sunset: {place}",
+  "card.sunrise": "Sunrise",
+  "card.sunset": "Sunset",
+  "card.day": "Day {length}",
+  "card.hours": "{h} h {m} min"
+}

@@ -76,7 +76,7 @@ describe("an agent edits its own profile", () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
       { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-self-profile-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents") },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-self-profile-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
     await hub.start();

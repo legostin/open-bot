@@ -17,6 +17,7 @@ import type { AuditLog } from "../audit.ts";
 import type { EgressProxy } from "../egress.ts";
 import { npmEnv, npmInvocation, withPath } from "../cli-tools.ts";
 import { linkUserKeychains } from "./keychains.ts";
+import { compilePluginUi } from "./ui-compile.ts";
 
 export type PluginStatus = "stopped" | "starting" | "running" | "crashed" | "disabled" | "no-server" | "error";
 
@@ -164,13 +165,14 @@ export class PluginHost {
     const scan = (root: string, source: "builtin" | "installed") => {
       if (!existsSync(root)) return;
       for (const d of readdirSync(root)) {
-        if (d.startsWith(".")) continue;
+        // "_template" and the like are not plugins.
+        if (d.startsWith(".") || d.startsWith("_")) continue;
         const dir = join(root, d);
         if (!statSync(dir).isDirectory()) continue;
         consider(dir, source);
       }
     };
-    scan(this.d.config.builtinPluginsDir, "builtin");
+    for (const root of this.d.config.builtinPluginsDirs) scan(root, "builtin");
     mkdirSync(this.installedDir, { recursive: true });
     scan(this.installedDir, "installed");
     this.d.onLayoutsChanged();
@@ -614,6 +616,8 @@ export class PluginHost {
     }
     const layout = readPluginLayout(dir);
     if (this.records.get(layout.manifest.id)?.source === "builtin") throw new LocalizedError("plugin.builtinCannotReplace", { id: layout.manifest.id });
+    // A card's source without its build (an integration an agent made): the hub compiles it.
+    compilePluginUi(dir, layout.uiEntry);
     this.staging.set(stagingId, { dir, commitHash, layout, source });
     const perms = layout.manifest.permissions;
     const t = tFor(locale);
@@ -634,6 +638,14 @@ export class PluginHost {
       hasServer: !!layout.serverEntry,
       hasUi: !!layout.uiEntry,
     };
+  }
+
+  /** Drops a staged installation the person declined. */
+  discardInstall(stagingId: string): void {
+    const st = this.staging.get(stagingId);
+    if (!st) return;
+    this.staging.delete(stagingId);
+    rmSync(st.dir, { recursive: true, force: true });
   }
 
   async confirmInstall(stagingId: string): Promise<PluginRecord> {

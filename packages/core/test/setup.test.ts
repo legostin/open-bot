@@ -40,7 +40,7 @@ async function startHub() {
   const dataDir = mkdtempSync(join(tmpdir(), "ob-setup-"));
   const config = loadConfig(
     { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
-    { dataDir, builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "setup-agents") },
+    { dataDir, builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "setup-agents") },
   );
   const agentHome = join(dataDir, "home", "agent");
   mkdirSync(agentHome, { recursive: true });

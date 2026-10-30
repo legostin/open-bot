@@ -12,7 +12,7 @@
     "tools": true,
     "widgets": ["rates"]
   },
-  "integration": {"category": "money", "icon": "banknote", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%"},
+  "integration": {"category": "money", "icon": "banknote", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%", "popular": 5},
   "permissions": {
     "network": ["api.frankfurter.dev", "open.er-api.com"]
   }

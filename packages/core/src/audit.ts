@@ -36,6 +36,14 @@ export class AuditLog {
     return { seq: Number(r.lastInsertRowid), ts, actor, action, target, data, prevHash, hash };
   }
 
+  /** How many of the latest `window` records with `action` since `since` each target has (e.g. calls per tool). */
+  countByTarget(action: string, since: string, window = 20_000): Map<string, number> {
+    const rows = this.db
+      .prepare("select target, count(*) n from audit where seq > (select coalesce(max(seq), 0) from audit) - ? and action = ? and ts >= ? and target is not null group by target")
+      .all(window, action, since) as Array<{ target: string; n: number }>;
+    return new Map(rows.map((r) => [r.target, Number(r.n)]));
+  }
+
   list(opts: { limit?: number; before?: number; action?: string } = {}): AuditEntry[] {
     const limit = Math.min(opts.limit ?? 100, 1000);
     const where: string[] = [];

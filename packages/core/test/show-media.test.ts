@@ -102,7 +102,7 @@ describe("agents show images and maps", () => {
         OWLBOT_ROUTER_URL: `http://127.0.0.1:${routerPort}`,
         TZ: "UTC",
       },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-media-hub-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents") },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-media-hub-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
     await hub.start();

@@ -1,5 +1,7 @@
 {
   "name": "Memory",
+  "integration.summary": "The team remembers what matters about you, and you see all of it",
+  "integration.example": "What do you remember about me?",
   "description": "The team's long-term memory about you: facts with where they came from and their history, recalled when they matter, tidied every night. You see and control all of it; after untrusted content, agents change memory only with your approval in the chat",
   "settings.promptMaxChars.title": "Memory at the start of a session",
   "settings.promptMaxChars.description": "How many characters of the most important facts about you every session starts with",

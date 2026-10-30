@@ -131,7 +131,7 @@ describe("device port", () => {
     devicePort = await freePort();
     const config = loadConfig(
       { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_DEVICE_PORT: String(devicePort), OWLBOT_DEVICE_HOST: "127.0.0.1", OWLBOT_DEVICE_URLS: `https://127.0.0.1:${devicePort}`, TZ: "UTC" },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-dev-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-dev-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
     );
     hub = new Hub(config);
     await hub.start();
@@ -277,7 +277,7 @@ describe("device port closed by OWLBOT_DEVICES=0", () => {
     const [port, consolePort, egressPort, devicePort] = [await freePort(), await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
       { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_DEVICE_PORT: String(devicePort), OWLBOT_DEVICE_HOST: "127.0.0.1", OWLBOT_DEVICES: "0", TZ: "UTC" },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-dev-off-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-dev-off-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
     );
     const hub = new Hub(config);
     await hub.start();

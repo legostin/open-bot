@@ -45,6 +45,7 @@
       }
     }
   },
+  "integration": {"category": "assistant", "icon": "notebook-pen", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%"},
   "permissions": {
     "core": ["ui.emit", "tasks.create"],
     "ui": ["route"]

@@ -1110,8 +1110,8 @@ export interface IntegrationView {
   summary: string;
   category: string;
   icon: string;
-  /** "remote": the core's access from anywhere (RemoteView). */
-  connect: "google" | "setup" | "none" | "remote";
+  /** "remote": the core's access from anywhere (RemoteView); "signin": its MCP server's own sign-in (Granola). */
+  connect: "google" | "setup" | "signin" | "none" | "remote";
   status: IntegrationStatus;
   /** The connected account (e.g. an email), when there is one. */
   account?: string;
@@ -1129,8 +1129,13 @@ export interface CatalogSection {
   items: IntegrationView[];
 }
 
-/** Everything the person can turn on (GET /api/catalog): integrations, widgets and abilities, by situation. */
+/**
+ * Everything the person can turn on (GET /api/catalog): integrations, widgets and abilities, by situation.
+ * With `?all=1` (the Plugins panel) every plugin is in it, those without a catalog card too.
+ */
 export interface CatalogView {
+  /** Ids of the popular entries, most popular first: the ones the person uses most, then the hub's own picks. */
+  popular: string[];
   sections: CatalogSection[];
 }
 

@@ -30,6 +30,7 @@
       }
     }
   },
+  "integration": {"category": "assistant", "icon": "alarm-clock", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%"},
   "permissions": {
     "network": ["*"],
     "core": ["tasks.create", "tasks.list", "agents.list", "machines.list", "settings.get", "notify", "ui.emit"],

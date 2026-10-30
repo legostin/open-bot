@@ -9,7 +9,8 @@
     "packages/node/src",
     "packages/replica/src",
     "packages/testkit/src",
-    "plugins/*/server"
+    "plugins/*/server",
+    "integrations/*/server"
   ],
   "exclude": ["**/node_modules", "**/dist"]
 }

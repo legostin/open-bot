@@ -9,7 +9,7 @@ import { api, errorText } from "../lib/api";
 import { countdown } from "../lib/format";
 import { onAnotherComputer, pairLink } from "../lib/desktop";
 import { hubEvents } from "../state/app";
-import { openPanel } from "../state/panel";
+import { openPanelItem } from "../state/panel";
 import { toast } from "../state/toast";
 import { Badge, Button, CopyButton, ErrorNote, Spinner, cx } from "./ui";
 import { t } from "../i18n";
@@ -103,7 +103,7 @@ export function InviteBlock({ onJoined, onClose }: { onJoined?: (who: InviteUsed
       ) : (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <p className="min-w-0 flex-1 text-sm text-warning">{t("invite.unreachable")}</p>
-          <Button size="sm" onClick={() => openPanel("integrations")}>
+          <Button size="sm" onClick={() => openPanelItem("plugins", "remote-access")}>
             {t("remote.devicesSetUp")}
           </Button>
         </div>

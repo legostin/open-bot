@@ -1,9 +1,12 @@
 // External MCP servers (user's mcp.json and plugins' .mcp.json). Their tools are registered in the ToolRegistry
 // as `<server>_<tool>` and therefore go through the same policy/approval/audit path as everything else.
+// A remote server that asks the person to sign in (OAuth, as Granola's does) waits in "signin" until they do
+// (signIn → their browser → completeSignIn); its tokens live in the vault (oauth.ts).
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { ToolResult } from "@owlbot/shared";
@@ -14,7 +17,8 @@ import type { VaultService } from "../vault/service.ts";
 import type { AuditLog } from "../audit.ts";
 import type { EgressProxy } from "../egress.ts";
 import { passEnv, scrubEnv, sudoSpawn } from "../plugins/host.ts";
-import { t } from "../i18n.ts";
+import { LocalizedError, t } from "../i18n.ts";
+import { McpOAuth } from "./oauth.ts";
 
 export interface McpServerConfig {
   type?: "stdio" | "http" | "streamable-http" | "sse";
@@ -27,12 +31,18 @@ export interface McpServerConfig {
   disabled?: boolean;
   /** Hosts the server may reach (stdio servers). Default for user servers: any. */
   network?: string[];
+  /**
+   * Tools that only read, for a server that does not annotate them (they need no approval). Honoured for built-in
+   * plugins only: an installed plugin cannot vouch for its own server.
+   */
+  readTools?: string[];
 }
 
 export interface McpServerStatus {
   name: string;
   source: string; // "user" or plugin id
-  status: "connecting" | "connected" | "error" | "disabled";
+  /** signin: the server wants the person to sign in (signIn). */
+  status: "connecting" | "connected" | "signin" | "error" | "disabled";
   error?: string;
   tools: string[];
   config: McpServerConfig;
@@ -42,7 +52,13 @@ interface Conn {
   name: string;
   source: string;
   config: McpServerConfig;
+  /** Built-in plugin's server: its readTools count. */
+  trusted: boolean;
   client?: Client;
+  transport?: StreamableHTTPClientTransport;
+  oauth?: McpOAuth;
+  /** The chat whose card started the sign-in in progress. */
+  conversationId?: string;
   status: McpServerStatus["status"];
   error?: string;
   tools: string[];
@@ -52,6 +68,7 @@ const TOOL_TIMEOUT = 10 * 60_000;
 
 export class McpClientManager {
   private conns = new Map<string, Conn>();
+  private oauths = new Map<string, McpOAuth>();
   config: Config;
   registry: ToolRegistry;
   vault: VaultService;
@@ -87,16 +104,17 @@ export class McpClientManager {
   }
 
   /** Reconcile running connections with the desired set. */
-  async sync(pluginMcpFiles: Array<{ pluginId: string; file: string; dir: string; network: string[] }>): Promise<void> {
-    const desired = new Map<string, { source: string; config: McpServerConfig }>();
-    for (const [name, cfg] of Object.entries(this.readUserServers())) desired.set(sanitizeToolName(name), { source: "user", config: cfg });
+  async sync(pluginMcpFiles: Array<{ pluginId: string; file: string; dir: string; network: string[]; builtin?: boolean }>): Promise<void> {
+    const desired = new Map<string, { source: string; config: McpServerConfig; trusted: boolean }>();
+    for (const [name, cfg] of Object.entries(this.readUserServers())) desired.set(sanitizeToolName(name), { source: "user", config: cfg, trusted: false });
     for (const p of pluginMcpFiles) {
       try {
         const j = JSON.parse(readFileSync(p.file, "utf8"));
         for (const [name, cfg] of Object.entries((j.mcpServers ?? j) as Record<string, McpServerConfig>)) {
           const expanded = expandPluginRoot(cfg, p.dir);
           expanded.network = expanded.network ?? p.network;
-          desired.set(sanitizeToolName(`${p.pluginId}-${name}`), { source: p.pluginId, config: expanded });
+          // A server named like its plugin is the plugin itself (integrations/granola: granola_<tool>).
+          desired.set(sanitizeToolName(name === p.pluginId ? name : `${p.pluginId}-${name}`), { source: p.pluginId, config: expanded, trusted: !!p.builtin });
         }
       } catch (e) {
         console.error(`[mcp] cannot read ${p.file}:`, (e as Error).message);
@@ -107,9 +125,48 @@ export class McpClientManager {
       if (!want || JSON.stringify(want.config) !== JSON.stringify(c.config)) await this.disconnect(name);
     }
     await Promise.all(
-      [...desired].filter(([name]) => !this.conns.has(name)).map(([name, d]) => this.connect(name, d.source, d.config)),
+      [...desired].filter(([name]) => !this.conns.has(name)).map(([name, d]) => this.connect(name, d.source, d.config, d.trusted)),
     );
     this.onChange?.();
+  }
+
+  /**
+   * The address the person's browser opens to sign in to `name`; a new sign-in each time. `conversationId`: the chat
+   * whose card started it, told when it is done.
+   */
+  async signIn(name: string, conversationId?: string): Promise<string> {
+    const c = this.conns.get(name);
+    if (!c?.oauth) throw new LocalizedError("mcp.noSignin", { name }, 404);
+    if (this.vault.state() !== "unlocked") throw new LocalizedError("connections.vaultLocked", undefined, 409);
+    await this.reconnect(name);
+    const now = this.conns.get(name)!;
+    if (now.status === "connected") throw new LocalizedError("mcp.signedIn", { name }, 409);
+    if (!now.oauth?.authUrl) throw new LocalizedError("mcp.signinFailed", { name, error: now.error ?? "no sign-in address" }, 502);
+    now.conversationId = conversationId;
+    return now.oauth.authUrl.toString();
+  }
+
+  /** The browser came back (or the person pasted the address): finish the sign-in and connect. */
+  async completeSignIn(input: URLSearchParams): Promise<{ name: string; source: string; conversationId?: string }> {
+    const error = input.get("error");
+    const c = [...this.conns.values()].find((x) => x.oauth && x.oauth.stateValue === input.get("state"));
+    if (!c?.transport) throw new LocalizedError("mcp.signinExpired", undefined, 400);
+    if (error) throw new LocalizedError(error === "access_denied" ? "connections.denied" : "connections.failed", { error }, 400);
+    const code = input.get("code");
+    if (!code) throw new LocalizedError("mcp.signinExpired", undefined, 400);
+    await c.transport.finishAuth(code);
+    this.audit.append("user", "mcp.signin", c.name, { source: c.source });
+    await this.reconnect(c.name);
+    return { name: c.name, source: c.source, conversationId: c.conversationId };
+  }
+
+  /** Forget the sign-in: the tokens leave the vault and the server waits for a new one. */
+  async signOut(name: string): Promise<void> {
+    const c = this.conns.get(name);
+    if (!c?.oauth) throw new LocalizedError("mcp.noSignin", { name }, 404);
+    c.oauth.invalidateCredentials("tokens");
+    this.audit.append("user", "mcp.signout", name, { source: c.source });
+    await this.reconnect(name);
   }
 
   list(): McpServerStatus[] {
@@ -131,8 +188,22 @@ export class McpClientManager {
     return out;
   }
 
-  private async connect(name: string, source: string, config: McpServerConfig): Promise<void> {
-    const conn: Conn = { name, source, config, status: config.disabled ? "disabled" : "connecting", tools: [] };
+  /** A server's sign-in, kept across reconnects (the client it registered stays while the vault is locked). */
+  private oauthFor(name: string): McpOAuth {
+    let o = this.oauths.get(name);
+    if (!o) this.oauths.set(name, (o = new McpOAuth({ server: name, vault: this.vault, redirectUri: this.redirectUri() })));
+    return o;
+  }
+
+  /** Where a sign-in comes back to: the hub on this computer (localhost, the address OAuth servers allow for apps). */
+  private redirectUri(): string {
+    const u = new URL("/oauth/mcp", this.config.internalUrl);
+    u.hostname = "localhost";
+    return u.toString();
+  }
+
+  private async connect(name: string, source: string, config: McpServerConfig, trusted = false): Promise<void> {
+    const conn: Conn = { name, source, config, trusted, status: config.disabled ? "disabled" : "connecting", tools: [] };
     this.conns.set(name, conn);
     if (config.disabled) return;
     try {
@@ -165,25 +236,47 @@ export class McpClientManager {
         await client.connect(new StdioClientTransport({ command, args, env: childEnv, cwd: config.cwd, stderr: "pipe" }));
       } else {
         if (!config.url) throw new Error("url is required");
-        await client.connect(new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: this.resolveSecrets(name, config.headers) } }));
+        const headers = this.resolveSecrets(name, config.headers);
+        // A server with its own Authorization header needs no sign-in; any other may ask for one.
+        const oauth = Object.keys(headers).some((h) => h.toLowerCase() === "authorization") ? undefined : this.oauthFor(name);
+        oauth?.begin();
+        const transport = new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers }, ...(oauth ? { authProvider: oauth } : {}) });
+        Object.assign(conn, { transport, oauth });
+        try {
+          await client.connect(transport);
+        } catch (e) {
+          if (!(e instanceof UnauthorizedError) || !oauth) throw e;
+          conn.status = "signin";
+          conn.error = t("mcp.needsSignin");
+          return;
+        }
       }
       conn.client = client;
       const { tools } = await client.listTools();
-      for (const t of tools) {
-        const full = sanitizeToolName(`${name}_${t.name}`).slice(0, 64);
-        const readOnly = !!t.annotations?.readOnlyHint;
+      for (const tool of tools) {
+        const full = sanitizeToolName(`${name}_${tool.name}`).slice(0, 64);
+        const readOnly = !!tool.annotations?.readOnlyHint || (trusted && !!config.readTools?.includes(tool.name));
         this.registry.register(
           {
             name: full,
-            description: `[MCP ${name}] ${t.description ?? ""}`.trim(),
-            inputSchema: (t.inputSchema as any) ?? { type: "object" },
+            description: `[MCP ${name}] ${tool.description ?? ""}`.trim(),
+            inputSchema: (tool.inputSchema as any) ?? { type: "object" },
             effect: readOnly ? "read" : "external",
             source: true,
             owner: `mcp:${name}`,
           },
           async (input) => {
-            const r = await client.callTool({ name: t.name, arguments: input ?? {} }, undefined, { timeout: TOOL_TIMEOUT });
-            return normalizeResult(r);
+            try {
+              const r = await client.callTool({ name: tool.name, arguments: input ?? {} }, undefined, { timeout: TOOL_TIMEOUT });
+              return normalizeResult(r);
+            } catch (e) {
+              if (!(e instanceof UnauthorizedError)) throw e;
+              // The sign-in ran out and could not be renewed: the server waits for the person again.
+              this.registry.unregisterOwner(`mcp:${name}`);
+              Object.assign(conn, { status: "signin", error: t("mcp.needsSignin"), tools: [] });
+              this.onChange?.();
+              return { content: [{ type: "text", text: `The sign-in to ${name} expired. Ask the user to sign in again (hub_integration_connect shows the button).` }], isError: true };
+            }
           },
         );
         conn.tools.push(full);
@@ -218,7 +311,7 @@ export class McpClientManager {
     const c = this.conns.get(name);
     if (!c) return;
     await this.disconnect(name);
-    await this.connect(name, c.source, c.config);
+    await this.connect(name, c.source, c.config, c.trusted);
     this.onChange?.();
   }
 

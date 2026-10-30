@@ -2,7 +2,9 @@
 
 [Русский](plugins.ru.md)
 
-Almost everything in Owlbot is a plugin: brains (Claude Code, Codex, APIs), channels (Telegram), the browser, memory, web search, triggers. The core only wires them together and enforces security. A plugin can add:
+Almost everything in Owlbot is a plugin: brains (Claude Code, Codex, APIs), channels (Telegram), the browser, memory, web search, triggers. The core only wires them together and enforces security. Integrations (services and abilities: the weather, calendars, maps…) are plugins too and live in [`integrations/`](../integrations/README.md), each in its own folder, started from a template with `npm run new:integration -- <id>`.
+
+A plugin can add:
 
 | What | Where |
 |---|---|

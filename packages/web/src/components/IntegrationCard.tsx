@@ -79,9 +79,134 @@ function GoogleSignIn({ view, conversationId }: { view: IntegrationView; convers
   );
 }
 
+/**
+ * An integration whose service has its own sign-in (Granola's MCP server): sign in in the browser, which comes back
+ * by itself on this computer or as a pasted address from another device; once signed in, sign out.
+ */
+export function ServiceSignIn({ view, conversationId }: { view: IntegrationView; conversationId?: string }) {
+  const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  if (view.status === "off" || view.status === "unavailable") return null;
+  const id = encodeURIComponent(view.id);
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await fn();
+      await loadIntegrations();
+    } catch (e) {
+      toast(errorText(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (view.status === "connected")
+    return confirming ? (
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted">{t("integrations.disconnectConfirm", { name: view.name })}</span>
+        <Button size="sm" variant="danger" loading={busy} onClick={() => void run(() => api.del(`/api/integrations/${id}/signin`)).then(() => setConfirming(false))}>
+          {t("integrations.disconnect")}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+          {t("common.cancel")}
+        </Button>
+      </div>
+    ) : (
+      <div>
+        <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+          {t("integrations.disconnect")}
+        </Button>
+      </div>
+    );
+  return (
+    <VaultGate>
+      <div className="flex flex-col gap-2">
+        <div>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={busy && !waiting}
+            icon={<ExternalLink className="size-4" />}
+            onClick={() =>
+              void run(async () => {
+                const { url } = await api.post<{ url: string }>(`/api/integrations/${id}/signin`, conversationId ? { conversationId } : {});
+                openExternal(url);
+                setWaiting(true);
+              })
+            }
+          >
+            {t("integrations.signIn", { name: view.name })}
+          </Button>
+        </div>
+        {waiting && (
+          <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm">
+            <span>{t("integrations.waiting")}</span>
+            <span className="text-xs text-muted">{t("integrations.pasteHint")}</span>
+            <div className="flex gap-2">
+              <Input value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="http://localhost:…/oauth/mcp?…" aria-label={t("integrations.pasteLabel")} className="min-w-0 flex-1" />
+              <Button
+                size="sm"
+                disabled={!pasted.includes("code=")}
+                loading={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await api.post("/api/mcp/signin/complete", { url: pasted });
+                    setPasted("");
+                    setWaiting(false);
+                  })
+                }
+              >
+                {t("integrations.pasteDone")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </VaultGate>
+  );
+}
+
+/** A Google integration's sign-in: connect, reconnect, or disconnect the hub's Google account. */
+export function GoogleConnection({ view, conversationId }: { view: IntegrationView; conversationId?: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const action = primaryAction(view);
+  if (action === "connect" || action === "reconnect") return <GoogleSignIn view={view} conversationId={conversationId} />;
+  if (action !== "disconnect") return null;
+  const disconnect = async () => {
+    setBusy(true);
+    try {
+      await api.del("/api/connections/google");
+      await loadIntegrations();
+    } catch (e) {
+      toast(errorText(e), "error");
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  };
+  return confirming ? (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-muted">{t("integrations.disconnectConfirm", { name: view.name })}</span>
+      <Button size="sm" variant="danger" loading={busy} onClick={() => void disconnect()}>
+        {t("integrations.disconnect")}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+        {t("common.cancel")}
+      </Button>
+    </div>
+  ) : (
+    <div>
+      <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+        {t("integrations.disconnect")}
+      </Button>
+    </div>
+  );
+}
+
 export function IntegrationCard({ view, conversationId, className }: { view: IntegrationView; conversationId?: string; className?: string }) {
   const [setupOpen, setSetupOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const action = primaryAction(view);
   const run = async (fn: () => Promise<unknown>) => {
@@ -93,7 +218,6 @@ export function IntegrationCard({ view, conversationId, className }: { view: Int
       toast(errorText(e), "error");
     } finally {
       setBusy(false);
-      setConfirming(false);
     }
   };
   return (
@@ -129,25 +253,8 @@ export function IntegrationCard({ view, conversationId, className }: { view: Int
           </Button>
         </div>
       )}
-      {(action === "connect" || action === "reconnect") && <GoogleSignIn view={view} conversationId={conversationId} />}
-      {action === "disconnect" &&
-        (confirming ? (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted">{t("integrations.disconnectConfirm", { name: view.name })}</span>
-            <Button size="sm" variant="danger" loading={busy} onClick={() => void run(() => api.del("/api/connections/google"))}>
-              {t("integrations.disconnect")}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-              {t("common.cancel")}
-            </Button>
-          </div>
-        ) : (
-          <div>
-            <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
-              {t("integrations.disconnect")}
-            </Button>
-          </div>
-        ))}
+      {view.connect === "google" && <GoogleConnection view={view} conversationId={conversationId} />}
+      {view.connect === "signin" && <ServiceSignIn view={view} conversationId={conversationId} />}
       {action === "setup" && (
         <>
           <div>

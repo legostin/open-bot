@@ -1,4 +1,5 @@
-// The settings panel beside the chat: open or closed, and which section it shows ("home" = the section list).
+// The settings panel beside the chat: open or closed, which section it shows ("home" = the section list), and the
+// item of that section opened on a page of its own (a plugin of the Plugins catalog).
 
 import { navigate } from "wouter/use-browser-location";
 import { createStore } from "../lib/store";
@@ -16,12 +17,24 @@ export interface PanelState {
   open: boolean;
   section: PanelSection | "home";
   intent?: PanelIntent;
+  /** The section's item open on its own page; Back returns to the section. */
+  item?: string;
 }
 
 export const panel = createStore<PanelState>({ open: false, section: "home" });
 
 export function openPanel(section: PanelSection | "home" = "home", intent?: PanelIntent): void {
   panel.set({ open: true, section, intent });
+}
+
+/** One item of a section on its own page (a plugin: `openPanelItem("plugins", "weather")`). */
+export function openPanelItem(section: PanelSection, item: string): void {
+  panel.set({ open: true, section, item });
+}
+
+/** Back: from an item to its section, from a section to the list of sections. */
+export function panelBack(): void {
+  panel.set((p) => (p.item ? { open: true, section: p.section } : { open: true, section: "home" }));
 }
 
 export function closePanel(): void {

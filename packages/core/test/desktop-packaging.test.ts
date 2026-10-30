@@ -32,6 +32,12 @@ describe("desktop launcher", () => {
     expect(wanted(join(ROOT, "packages", "tailnet"))).toBe(true);
     expect(wanted(join(ROOT, "packages", "tailnet", "main.go"))).toBe(false);
     expect(wanted(join(ROOT, "packages", "tailnet", "bin", "linux-x64", "owlbot-tailnet"))).toBe(false);
+    // Integrations ship built, like plugins; their template is the agents' skill and ships whole.
+    expect(wanted(join(ROOT, "integrations", "weather", "ui", "dist", "index.js"))).toBe(true);
+    expect(wanted(join(ROOT, "integrations", "weather", "ui", "src", "index.tsx"))).toBe(false);
+    expect(wanted(join(ROOT, "integrations", "weather", "test", "weather.test.ts"))).toBe(false);
+    expect(wanted(join(ROOT, "integrations", "_template", "ui", "src", "index.tsx"))).toBe(true);
+    expect(wanted(join(ROOT, "integrations", "_template", "test", "sun.test.ts"))).toBe(true);
   });
 
   it("keeps data in the user's profile", () => {

@@ -37,11 +37,11 @@ describe("the catalog and plugin widgets", () => {
 
   beforeAll(async () => {
     const plugins = mkdtempSync(join(tmpdir(), "owl-catalog-plugins-"));
-    for (const id of ["cardy", "legacy"]) cpSync(join(fixtures, "catalog-plugins", id), join(plugins, id), { recursive: true });
+    for (const id of ["cardy", "legacy", "plain"]) cpSync(join(fixtures, "catalog-plugins", id), join(plugins, id), { recursive: true });
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
       { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-catalog-")), builtinPluginsDir: plugins, builtinAgentsDir: join(fixtures, "agents") },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-catalog-")), builtinPluginsDirs: [plugins], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
     await hub.start();
@@ -74,6 +74,21 @@ describe("the catalog and plugin widgets", () => {
     expect(ru.sections[0]).toMatchObject({ title: "На каждый день", items: [{ example: "Покажи карточку" }] });
     // The library has the same cards, with the situation as their category.
     expect((await listIntegrations(hub, "en")).find((i) => i.id === "legacy")).toMatchObject({ category: "work", status: "connected" });
+  });
+
+  it("has every plugin in the Plugins panel's catalog, those without a card under More", async () => {
+    const all = await listCatalog(hub, "en", { all: true });
+    expect(all.sections.map((s) => s.id)).toEqual(["everyday", "work", "communication", "other"]);
+    expect(all.sections.at(-1)).toMatchObject({ title: "More", items: [{ id: "plain", name: "Plain", summary: "A plugin without a catalog card", icon: "puzzle", connect: "none", status: "connected" }] });
+    expect((await listCatalog(hub, "en")).sections.flatMap((s) => s.items).map((i) => i.id)).not.toContain("plain");
+  });
+
+  it("puts the hub's picks first among the popular, then what the agents use most", async () => {
+    // Nothing used yet: the built-in pick (cardy, even while off).
+    expect((await listCatalog(hub, "en", { all: true })).popular).toEqual(["cardy"]);
+    // Calls of a plugin's tools, by its prefix (legacy has no tools registered), rank it above the picks.
+    for (let i = 0; i < 3; i++) hub.audit.append("agent:assistant", "policy.decision", "legacy_lookup", { decision: "allow" });
+    expect((await listCatalog(hub, "en", { all: true })).popular).toEqual(["legacy", "cardy"]);
   });
 
   it("puts a tool's declared widgets into the reply, redacted, and keeps them from the model", async () => {

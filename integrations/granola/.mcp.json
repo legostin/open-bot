@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "granola": {
+      "type": "http",
+      "url": "https://mcp.granola.ai/mcp",
+      "readTools": ["query_granola_meetings", "list_meeting_folders", "list_meetings", "get_meetings", "get_meeting_attachment", "get_meeting_transcript", "get_account_info"]
+    }
+  }
+}

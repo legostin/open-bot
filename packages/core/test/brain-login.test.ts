@@ -78,7 +78,7 @@ describe("signing CLI brains in from the chat", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "owl-brainlogin-"));
     const config = loadConfig(
       { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
-      { dataDir, builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents") },
+      { dataDir, builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents") },
     );
     agentHome = join(dataDir, "home", "agent");
     mkdirSync(agentHome, { recursive: true });

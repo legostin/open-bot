@@ -42,18 +42,23 @@ export type SetupSecret = z.infer<typeof SetupSecretSchema>;
 
 /** A plugin shown in the catalog (and the integrations library): how it is connected and what it looks like. */
 export const IntegrationSchema = z.object({
-  /** The situation in life it helps with, the catalog's group: everyday, travel, money, work, reading, communication, home. */
+  /** The catalog's group: a situation in life (everyday, travel, money, work, reading, communication, home) or assistant. */
   category: z.string().default("other"),
   /** A lucide icon name. */
   icon: z.string().default("puzzle"),
-  /** google: the hub's Google sign-in; setup: the plugin's setup card; none: works as it is. */
-  connect: z.enum(["google", "setup", "none"]).default("none"),
+  /**
+   * google: the hub's Google sign-in; setup: the plugin's setup card; signin: its MCP server's own sign-in in the
+   * browser (OAuth, e.g. Granola); none: works as it is.
+   */
+  connect: z.enum(["google", "setup", "signin", "none"]).default("none"),
   /** OAuth scopes the plugin needs from the provider (connect: google). */
   scopes: z.array(z.string()).default([]),
   /** One line under the name in the library ("%key%" for a translation). */
   summary: z.string().optional(),
   /** Something to ask once it is on, in the person's words ("%key%"): the catalog's "Try" sends it to the assistant. */
   example: z.string().optional(),
+  /** A built-in plugin's place among the catalog's popular ones (1 = first) until the person's own use ranks them. */
+  popular: z.number().int().positive().optional(),
 });
 export type IntegrationInfo = z.infer<typeof IntegrationSchema>;
 

@@ -1,5 +1,5 @@
-// The catalog (GET /api/catalog): everything the person can turn on, by situation; refreshed live like the
-// integrations library, whose cards it shares.
+// The Plugins catalog (GET /api/catalog?all=1): every plugin and what the person can turn on, by situation, with the
+// popular ones; refreshed live like the integrations library, whose cards it shares.
 
 import type { CatalogView } from "@owlbot/shared";
 import { api } from "../lib/api";
@@ -12,7 +12,7 @@ let wired = false;
 
 export function loadCatalog(): Promise<void> {
   loading ??= api
-    .get<CatalogView>("/api/catalog")
+    .get<CatalogView>("/api/catalog?all=1")
     .then((c) => catalog.set(c))
     .finally(() => (loading = undefined));
   return loading;

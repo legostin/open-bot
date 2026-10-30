@@ -5,7 +5,7 @@
   "author": "Owlbot",
   "builtin": true,
   "ui": "./ui/dist/index.js",
-  "integration": {"category": "travel", "icon": "map", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%"},
+  "integration": {"category": "travel", "icon": "map", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%", "popular": 6},
   "permissions": {
     "ui": ["map.apps"]
   }

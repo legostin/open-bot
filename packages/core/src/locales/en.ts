@@ -112,6 +112,11 @@ export default {
   "chat.error": "error",
   "channel.notConnected": "not connected",
   "mcp.connectionClosed": "connection closed",
+  "mcp.needsSignin": "waiting for you to sign in",
+  "mcp.noSignin": "{name} has no sign-in",
+  "mcp.signedIn": "Already signed in to {name}",
+  "mcp.signinFailed": "Could not start signing in to {name}: {error}",
+  "mcp.signinExpired": "This sign-in has expired: start it again",
 
   // plugins
   "plugin.notFound": "Plugin not found",
@@ -127,6 +132,11 @@ export default {
   "plugin.warn.approvals": "The plugin can answer approvals on your behalf.",
   "plugin.warn.skills": "The plugin's skills, commands and MCP servers become available to agents.",
   "plugin.warn.mcp": "The plugin adds MCP servers; they will run as processes.",
+  "plugin.ask.install": "Install the plugin “{name}” ({id})",
+  "plugin.ask.network": "internet: {hosts}",
+  "plugin.ask.offline": "no internet",
+  "plugin.ask.vault": "secrets: {items}",
+  "plugin.ask.core": "hub actions: {methods}",
 
   // machines
   "machines.execApproval": "Run on {machine}: {command}",
@@ -188,6 +198,8 @@ export default {
   "catalog.section.reading": "News & reading",
   "catalog.section.communication": "Communication",
   "catalog.section.home": "Home",
+  "catalog.section.assistant": "The assistant",
+  "catalog.section.brains": "Brains",
   "catalog.section.other": "More",
   "oauth.doneTitle": "Google is connected",
   "oauth.doneText": "You can close this tab and go back to Owlbot.",

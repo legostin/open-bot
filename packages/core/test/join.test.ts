@@ -45,7 +45,7 @@ describe("one link to connect a device", () => {
     const [port, consolePort, egressPort, devicePort] = [await freePort(), await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
       { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_DEVICE_PORT: String(devicePort), OWLBOT_DEVICE_HOST: "127.0.0.1", OWLBOT_DEVICE_URLS: `https://192.168.1.2:${devicePort}`, TZ: "UTC" },
-      { dataDir: mkdtempSync(join(tmpdir(), "owl-join-")), builtinPluginsDir: join(fixtures, "plugins"), builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
+      { dataDir: mkdtempSync(join(tmpdir(), "owl-join-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
     );
     hub = new Hub(config);
     await hub.start();

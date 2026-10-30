@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CatalogSection, IntegrationView } from "@owlbot/shared";
-import { chatStep, filterCatalog, hasSwitch, hueOf, isOn } from "./catalog";
+import type { CatalogSection, CatalogView, IntegrationView } from "@owlbot/shared";
+import { chatStep, filterCatalog, findEntry, hasSwitch, hueOf, isOn, popularEntries, rowState } from "./catalog";
 
 const v = (over: Partial<IntegrationView>): IntegrationView => ({ id: "x", name: "X", summary: "", category: "everyday", icon: "puzzle", connect: "none", status: "connected", ...over });
 
@@ -45,5 +45,29 @@ describe("catalog entries", () => {
   it("colours unknown situations like the others group", () => {
     expect(hueOf("money")).not.toBe(hueOf("travel"));
     expect(hueOf("whatever")).toBe(hueOf("other"));
+  });
+
+  it("marks a row on, waiting for the person or broken, and leaves an off one bare", () => {
+    expect(rowState(v({}))).toBe("on");
+    expect(rowState(v({ status: "needs-setup" }))).toBe("attention");
+    expect(rowState(v({ status: "broken" }))).toBe("broken");
+    expect(rowState(v({ status: "off" }))).toBeUndefined();
+    expect(rowState(v({ status: "unavailable" }))).toBeUndefined();
+  });
+
+  it("finds the popular entries in their order, with the situation each is listed under", () => {
+    const c: CatalogView = {
+      popular: ["currency", "gone", "weather"],
+      sections: [
+        { id: "everyday", title: "Everyday", items: [v({ id: "weather" })] },
+        { id: "money", title: "Money", items: [v({ id: "currency" })] },
+      ],
+    };
+    expect(popularEntries(c).map((p) => [p.entry.id, p.situation])).toEqual([
+      ["currency", "money"],
+      ["weather", "everyday"],
+    ]);
+    expect(findEntry(c, "weather")?.situation).toBe("everyday");
+    expect(findEntry(c, "gone")).toBeUndefined();
   });
 });
