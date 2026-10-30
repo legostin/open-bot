@@ -11,6 +11,8 @@ import type { ToolResult } from "@owlbot/shared";
 import { catalogLookup, localizeValue, readPluginLayout, renderTemplate } from "@owlbot/shared";
 import { startPlugin, type PluginHarness } from "@owlbot/testkit";
 import { chromium } from "playwright";
+import { pageCall } from "../server/page-script.ts";
+import { PAGE_RULES } from "../server/safety.ts";
 
 const PLUGIN_DIR = join(import.meta.dirname, "..");
 
@@ -206,6 +208,7 @@ describe("browser plugin (headless Chromium)", () => {
     const effects = Object.fromEntries([...h.tools.values()].map((t) => [t.name, t.effect]));
     expect(effects).toEqual({
       open: "read",
+      search: "read",
       snapshot: "read",
       get_text: "read",
       screenshot: "read",
@@ -562,6 +565,41 @@ describe("browser plugin (headless Chromium)", () => {
     expect(snap).toContain('button "нажато 1"');
     expect(snap).toContain('textbox "Поле" value="abвг"');
     h.uiMessage({ type: "watch", on: false });
+  });
+});
+
+describe("reading a search engine's results", () => {
+  const SERP = page(
+    "Results",
+    `<div class="g"><a href="/url?q=https%3A%2F%2Fgoogle-target.example%2Fa&amp;sa=U"><h3>Google, wrapped</h3></a><span>Google snippet text that is long enough</span></div>
+     <div class="g"><a href="https://www.google.com/goto?url=OPAQUE" ping="/url?url=OPAQUE2"><h3>Google, opaque</h3></a><span>Opaque snippet</span></div>
+     <li class="b_algo"><h2><a href="https://www.bing.com/ck/a?!&amp;&amp;p=x&amp;u=a1aHR0cHM6Ly9iaW5nLXRhcmdldC5leGFtcGxlL3BhZ2U_eD0x&amp;ntb=1">Bing, wrapped</a></h2><p>Bing snippet</p></li>
+     <article><h2><a href="https://ddg-target.example/">DuckDuckGo, direct</a></h2><div>DDG snippet</div></article>
+     <div data-text-ad="1"><a href="https://ad.example/"><h3>An ad</h3></a></div>
+     <li><a href="https://yandex.ru/images/search?text=x"><h2>Картинки</h2></a></li>
+     <li><a href="https://yandex.ru/maps/213/moscow/probki/"><h2>Пробки в Москве — Яндекс Карты</h2></a><div>Пробки в режиме онлайн</div></li>
+     <h2>A heading without a link</h2>`,
+  );
+
+  it("unwraps the engines' links and leaves out ads and the engine's own pages", async () => {
+    const browser = await chromium.launch();
+    try {
+      const p = await browser.newPage();
+      // Served as Google's own page (relative /url links resolve there); nothing leaves this machine.
+      await p.route("**/*", (r) => r.fulfill({ contentType: "text/html; charset=utf-8", body: SERP }));
+      await p.goto("https://www.google.com/search?q=x");
+      const own = /^([a-z0-9-]+\.)*google\.[a-z.]+\/|^(www\.)?(yandex\.[a-z.]+|ya\.ru)\/(an|images|video|search|news|q)\b/.source;
+      const results = await p.evaluate(pageCall("results", { rules: PAGE_RULES, max: 10, own }));
+      expect(results).toEqual([
+        { title: "Google, wrapped", url: "https://google-target.example/a", snippet: "Google snippet text that is long enough" },
+        { title: "Google, opaque", url: "https://www.google.com/goto?url=OPAQUE", snippet: "Opaque snippet" },
+        { title: "Bing, wrapped", url: "https://bing-target.example/page?x=1", snippet: "Bing snippet" },
+        { title: "DuckDuckGo, direct", url: "https://ddg-target.example/", snippet: "DDG snippet" },
+        { title: "Пробки в Москве — Яндекс Карты", url: "https://yandex.ru/maps/213/moscow/probki/", snippet: "Пробки в режиме онлайн" },
+      ]);
+    } finally {
+      await browser.close();
+    }
   });
 });
 

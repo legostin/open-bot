@@ -2,7 +2,7 @@
   "name": "Веб",
   "description": "Чтение веб-страниц (web_fetch), лент RSS и Atom (web_rss) и поиск в интернете (web_search): Brave, Tavily, SearXNG или DuckDuckGo",
   "settings.provider.title": "Поисковик",
-  "settings.provider.description": "auto — первый настроенный: Brave → Tavily → SearXNG → DuckDuckGo. Ключи Brave и Tavily хранятся в vault (brave_api_key, tavily_api_key, поле value).",
+  "settings.provider.description": "auto — первый настроенный: Brave → Tavily → SearXNG; если нет ни одного, поиск идёт через браузер. DuckDuckGo — его HTML-страница, которая часто не пускает автоматические запросы. Ключи Brave и Tavily хранятся в vault (brave_api_key, tavily_api_key, поле value).",
   "settings.searxngUrl.title": "Адрес SearXNG",
   "settings.searxngUrl.description": "Например, http://searxng:8080 (в настройках инстанса должен быть включён формат json)",
   "settings.allowPrivate.title": "Разрешить локальные адреса",

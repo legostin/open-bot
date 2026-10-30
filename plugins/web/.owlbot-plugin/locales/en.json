@@ -2,7 +2,7 @@
   "name": "Web",
   "description": "Reading web pages (web_fetch), RSS and Atom feeds (web_rss), and web search (web_search): Brave, Tavily, SearXNG or DuckDuckGo",
   "settings.provider.title": "Search engine",
-  "settings.provider.description": "auto: the first one configured, Brave → Tavily → SearXNG → DuckDuckGo. Brave and Tavily keys are kept in the vault (brave_api_key, tavily_api_key, field value).",
+  "settings.provider.description": "auto: the first one configured, Brave → Tavily → SearXNG; without any, the search goes through the browser. DuckDuckGo: its HTML page, which often turns automated requests away. Brave and Tavily keys are kept in the vault (brave_api_key, tavily_api_key, field value).",
   "settings.searxngUrl.title": "SearXNG address",
   "settings.searxngUrl.description": "For example, http://searxng:8080 (the json format must be enabled in the instance settings)",
   "settings.allowPrivate.title": "Allow local addresses",

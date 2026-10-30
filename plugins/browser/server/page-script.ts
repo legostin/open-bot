@@ -411,6 +411,49 @@ export function pageScript(op: string, a: any): any {
     return { text: text.slice(0, a.maxChars), total: text.length };
   }
 
+  if (op === "results") {
+    // A search engine's result list: each result's title is a heading with its link (Google <a><h3>, Bing and
+    // DuckDuckGo <h2><a>, Yandex <a><h2>). The engine's own links (`own`, tested on host + path: ads, its images and
+    // related searches) are left out.
+    const own = new RegExp(a.own || "$^", "i");
+    const out: Array<{ title: string; url: string; snippet: string }> = [];
+    const seen = new Set<string>();
+    for (const h of document.querySelectorAll("h2, h3")) {
+      if (out.length >= a.max) break;
+      const link = h.closest("a[href]") || h.querySelector("a[href]");
+      if (!link || !visible(h)) continue;
+      if (link.closest('[data-text-ad], .b_ad, [data-testid="ad"], [data-fast-name="ad"]')) continue;
+      let url = "";
+      try {
+        const u = new URL(String(link.href || ""));
+        let target = u.href;
+        // Bing wraps results in bing.com/ck/a?…&u=a1<base64url>; Google in /url?q=<target>, or in /goto?url=<opaque>,
+        // which only Google can resolve: that link is the result then (opening it leads to the page).
+        const wrapped = u.searchParams.get("u") || "";
+        let opaque = false;
+        if (/(^|\.)bing\.com$/.test(u.hostname) && u.pathname === "/ck/a" && wrapped.startsWith("a1")) target = atob(wrapped.slice(2).replace(/-/g, "+").replace(/_/g, "/"));
+        else if (/(^|\.)google\.[a-z.]+$/.test(u.hostname) && u.pathname === "/url" && /^https?:/.test(u.searchParams.get("q") || "")) target = String(u.searchParams.get("q"));
+        else if (/(^|\.)google\.[a-z.]+$/.test(u.hostname) && u.pathname === "/goto") opaque = true;
+        const t = new URL(target);
+        if ((t.protocol !== "http:" && t.protocol !== "https:") || (!opaque && own.test(t.hostname + t.pathname))) continue;
+        url = t.href;
+      } catch {
+        continue;
+      }
+      const title = cut(norm(h.innerText), 200);
+      if (!title || seen.has(url)) continue;
+      seen.add(url);
+      // The result's block: the widest ancestor that still holds only this heading.
+      let block = "";
+      for (let el = h.parentElement, i = 0; el && el !== document.body && i < 10; el = el.parentElement, i++) {
+        if (el.querySelectorAll("h2, h3").length > 1) break;
+        block = norm(el.innerText);
+      }
+      out.push({ title, url, snippet: cut(norm(block.replace(title, " ")), 300) });
+    }
+    return out;
+  }
+
   if (op === "classify") {
     const el = byRef(a.ref);
     if (!el) return null;

@@ -327,20 +327,18 @@ describe("web_search", () => {
     }
   });
 
-  it("auto skips providers without keys (missing vault items) and falls back to DuckDuckGo", async () => {
+  it("auto without a connected search API hands the search to the browser", async () => {
     const h = await startPlugin({ dir: DIR, settings: { duckduckgoUrl: `${base}/html/`, braveBaseUrl: base, tavilyBaseUrl: base } });
+    const before = seen.length;
     try {
-      const t = await h.invokeText("search", { query: "Owlbot test query", count: 2 });
-      expect(t).toContain("(provider: duckduckgo)");
-      expect(t).toContain("1. Example Docs & Intro\n   https://example.org/docs/intro?a=1&b=2");
-      expect(t).toContain("2. Second result");
-      expect(t).not.toContain("3.");
-      const req = seen.filter((s) => s.url === "/html/").at(-1)!;
-      expect(req.method).toBe("POST");
-      expect(new URLSearchParams(req.body).get("q")).toBe("Owlbot test query");
-      expect(seen.some((s) => s.url.startsWith("/res/v1/web/search") && !s.headers["x-subscription-token"])).toBe(false);
+      const r = await h.invoke("search", { query: "пробки москва" });
+      expect(r.isError).toBeFalsy();
+      expect((r.content[0] as any).text).toBe(
+        'No search API is connected to the web plugin, so web search goes through the browser: call browser_search with {"query":"пробки москва"}. It returns the same kind of results.',
+      );
+      expect(seen.slice(before).some((s) => s.url === "/html/" || s.url.startsWith("/res/v1/web/search"))).toBe(false);
       // Every search looks for both keys; the hub (and its audit log) hears about each missing one only once.
-      for (let i = 0; i < 3; i++) expect(await h.invokeText("search", { query: `again ${i}`, count: 1 })).toContain("(provider: duckduckgo)");
+      for (let i = 0; i < 3; i++) expect(await h.invokeText("search", { query: `again ${i}`, count: 1 })).toContain("browser_search");
       expect(h.vaultGets.filter((id) => id === "tavily_api_key")).toHaveLength(1);
       expect(h.vaultGets.filter((id) => id === "brave_api_key").length).toBeLessThanOrEqual(2);
       // A key stored later is used on the next search.
@@ -351,15 +349,31 @@ describe("web_search", () => {
     }
   });
 
-  it("when DuckDuckGo refuses, points to the browser and to a Brave key", async () => {
-    const h = await startPlugin({ dir: DIR, settings: { duckduckgoUrl: `${base}/refused/`, braveBaseUrl: base, tavilyBaseUrl: base } });
+  it("uses DuckDuckGo's HTML page when it is chosen", async () => {
+    const h = await startPlugin({ dir: DIR, settings: { provider: "duckduckgo", duckduckgoUrl: `${base}/html/` } });
+    try {
+      const t = await h.invokeText("search", { query: "Owlbot test query", count: 2 });
+      expect(t).toContain("(provider: duckduckgo)");
+      expect(t).toContain("1. Example Docs & Intro\n   https://example.org/docs/intro?a=1&b=2");
+      expect(t).toContain("2. Second result");
+      expect(t).not.toContain("3.");
+      const req = seen.filter((s) => s.url === "/html/").at(-1)!;
+      expect(req.method).toBe("POST");
+      expect(new URLSearchParams(req.body).get("q")).toBe("Owlbot test query");
+    } finally {
+      await h.stop();
+    }
+  });
+
+  it("when DuckDuckGo refuses, hands the search to the browser", async () => {
+    const h = await startPlugin({ dir: DIR, settings: { provider: "duckduckgo", duckduckgoUrl: `${base}/refused/` } });
     try {
       const r = await h.invoke("search", { query: "пробки москва" });
       expect(r.isError).toBe(true);
       const t = (r.content[0] as any).text as string;
       expect(t).toContain("duckduckgo: it refused the request with a bot check");
-      expect(t).toContain("browser_open https://duckduckgo.com/?q=%D0%BF%D1%80%D0%BE%D0%B1%D0%BA%D0%B8%20%D0%BC%D0%BE%D1%81%D0%BA%D0%B2%D0%B0");
-      expect(t).toContain('hub_plugin_setup with id "web"');
+      expect(t).toContain('call browser_search with {"query":"пробки москва"}');
+      expect(t).not.toContain("Brave");
     } finally {
       await h.stop();
     }

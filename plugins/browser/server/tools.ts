@@ -19,6 +19,44 @@ const CAPTCHA_HINT =
 /** Many checks (Cloudflare's "Just a moment", "Проверяем браузер") pass by themselves within seconds. */
 const CHECK_WAIT_MS = 12_000;
 
+/**
+ * Search engines browser_search tries in turn. `own` (tested on a link's host + path) is the engine's own links: ads,
+ * its images, videos and related searches. Yandex's other services (Maps, Weather) are real results there.
+ */
+const ENGINES: Record<string, { url: (q: string) => string; own: RegExp }> = {
+  // DuckDuckGo and Bing link results directly; Google hides them behind its own /goto links.
+  duckduckgo: { url: (q) => `https://duckduckgo.com/?q=${q}`, own: /^([a-z0-9-]+\.)*duckduckgo\.com\// },
+  bing: { url: (q) => `https://www.bing.com/search?q=${q}`, own: /^([a-z0-9-]+\.)*bing\.com\// },
+  google: { url: (q) => `https://www.google.com/search?q=${q}`, own: /^([a-z0-9-]+\.)*google\.[a-z.]+\// },
+  yandex: { url: (q) => `https://yandex.ru/search/?text=${q}`, own: /^(yabs|an|[a-z0-9-]*test[a-z0-9-]*)\.yandex\.[a-z.]+\/|^(www\.)?(yandex\.[a-z.]+|ya\.ru)\/(an|images|video|search|news|q)\b/ },
+};
+
+/**
+ * Open `href` and wait for it as a person would: past a check that passes by itself. `onLoaded` runs as soon as the
+ * page itself has loaded. Returns the status of the page last loaded (a check that passed reloads into the page).
+ */
+async function visit(mgr: BrowserManager, page: Page, href: string, onLoaded?: () => void): Promise<number | undefined> {
+  let status: number | undefined;
+  // The site refused a load (403/429/498/503): an empty page after it may be its check getting ready.
+  let refused = false;
+  const onResponse = (r: Response) => {
+    if (!r.request().isNavigationRequest() || r.frame() !== page.mainFrame()) return;
+    status = r.status();
+    if ([403, 429, 498, 503].includes(status)) refused = true;
+  };
+  page.on("response", onResponse);
+  try {
+    await page.goto(href, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    onLoaded?.();
+    await mgr.settle(2000);
+    for (const until = Date.now() + CHECK_WAIT_MS; Date.now() < until && (await mgr.passingCheck(page, refused)); ) await sleep(1000);
+    await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+  } finally {
+    page.off("response", onResponse);
+  }
+  return status;
+}
+
 const SNAPSHOT_MAX_CHARS = 12_000;
 const TEXT_INPUT_TYPES = new Set(["text", "email", "password", "search", "tel", "url", "number", ""]);
 
@@ -178,40 +216,71 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
       mgr.guardUrl(u);
       return mgr.tool("open", async (page) => {
         const dl = mgr.waitDownloadStart(60_000);
-        // The status of the page last loaded: a check that passed reloads into the page with another one.
         let status: number | undefined;
-        // The site refused a load (403/429/498/503): an empty page after it may be its check getting ready.
-        let refused = false;
-        const onResponse = (r: Response) => {
-          if (!r.request().isNavigationRequest() || r.frame() !== page.mainFrame()) return;
-          status = r.status();
-          if ([403, 429, 498, 503].includes(status)) refused = true;
-        };
-        page.on("response", onResponse);
         try {
-          try {
-            await page.goto(u.href, { waitUntil: "domcontentloaded", timeout: 30_000 });
-            dl.cancel();
-          } catch (e: any) {
-            if (/Download is starting/i.test(String(e?.message))) {
-              const rec = await (await dl.started).done;
-              return `The URL turned out to be a file; it was downloaded. ${await deliverDownload(ctx, call, rec.path, rec.name, rec.size)}`;
-            }
-            dl.cancel();
-            throw e;
+          status = await visit(mgr, page, u.href, () => dl.cancel());
+        } catch (e: any) {
+          if (/Download is starting/i.test(String(e?.message))) {
+            const rec = await (await dl.started).done;
+            return `The URL turned out to be a file; it was downloaded. ${await deliverDownload(ctx, call, rec.path, rec.name, rec.size)}`;
           }
-          await mgr.settle(2000);
-          // Leave a check that passes by itself alone until it has.
-          for (const until = Date.now() + CHECK_WAIT_MS; Date.now() < until && (await mgr.passingCheck(page, refused)); ) await sleep(1000);
-          await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-        } finally {
-          page.off("response", onResponse);
+          dl.cancel();
+          throw e;
         }
         const info = await mgr.evalIn<any>(page.mainFrame(), "info").catch(() => null);
         if (info) mgr.setCaptcha(!!info.captcha);
         const parts = [`Opened${status && status >= 400 ? ` (HTTP ${status})` : ""}.`];
         if (info?.captcha) parts.push(CAPTCHA_NOTE);
         return parts.join("\n");
+      });
+    },
+  );
+
+  reg(
+    "search",
+    "read",
+    "Search the web in the browser, as the user would: DuckDuckGo, and if it shows a captcha or nothing, Bing, Google, then Yandex. " +
+      "Returns numbered results (title, URL, snippet) like web_search. The results page stays open: browser_get_text reads its answer boxes " +
+      `(weather, traffic, facts); browser_open a result to read it. ${UNTRUSTED}`,
+    {
+      query: { type: "string", description: "Search query." },
+      count: { type: "integer", minimum: 1, maximum: 20, description: "Number of results (default 8)." },
+      engine: { type: "string", enum: Object.keys(ENGINES), description: "Only this search engine (default: the first one that answers)." },
+    },
+    ["query"],
+    async (input) => {
+      const query = str(input.query, "query", 500).trim();
+      const count = Math.min(20, Math.max(1, Math.round(Number(input.count) || 8)));
+      const order = typeof input.engine === "string" && ENGINES[input.engine] ? [input.engine] : Object.keys(ENGINES);
+      return mgr.tool("search", async (page) => {
+        const tried: string[] = [];
+        let check = false;
+        for (const name of order) {
+          const engine = ENGINES[name];
+          try {
+            await visit(mgr, page, engine.url(encodeURIComponent(query)));
+          } catch (e: any) {
+            tried.push(`${name}: ${cut(String(e?.message ?? e).split("\n")[0], 120)}`);
+            continue;
+          }
+          const info = await mgr.evalIn<any>(page.mainFrame(), "info").catch(() => null);
+          // Another engine answers as well: a captcha on one is not the user's to pass.
+          if (info?.captcha) {
+            check = true;
+            tried.push(`${name}: a captcha`);
+            continue;
+          }
+          const results = await mgr.evalIn<Array<{ title: string; url: string; snippet: string }>>(page.mainFrame(), "results", { max: count, own: engine.own.source }).catch(() => []);
+          if (!results.length) {
+            tried.push(`${name}: no results`);
+            continue;
+          }
+          mgr.setCaptcha(false);
+          const body = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}${r.snippet ? `\n   ${r.snippet}` : ""}`).join("\n\n");
+          return `Search results for "${query}" (${name}, in the browser${tried.length ? `; ${tried.join(", ")}` : ""}):\n\n${body}`;
+        }
+        mgr.setCaptcha(check);
+        return [`No search results for "${query}" (${tried.join("; ")}).`, ...(check ? [CAPTCHA_NOTE] : [])].join("\n");
       });
     },
   );

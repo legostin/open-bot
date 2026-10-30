@@ -1,4 +1,4 @@
-// Web search providers: Brave Search API, Tavily, SearXNG (JSON) and DuckDuckGo HTML (no key).
+// Web search providers: Brave Search API, Tavily, SearXNG (JSON) and DuckDuckGo HTML (no key, only when chosen).
 
 import { parse } from "node-html-parser";
 
@@ -149,24 +149,25 @@ async function duckduckgo(deps: SearchDeps, query: string, count: number): Promi
 }
 
 /**
- * What the model gets when no provider answered (without a key that is DuckDuckGo, which often refuses automated
- * requests): the same search in the browser, and how the person gets reliable search.
+ * Where the search goes when no search API answers: the browser (browser_search), which searches as the person
+ * would. `reason` is why the connected API failed; without one, none is connected.
  */
-export function searchUnavailable(query: string, reason: string): string {
-  const q = encodeURIComponent(query);
-  return [
-    `Web search failed: ${reason}`,
-    `Search in the browser instead, if you have its tools: browser_open https://duckduckgo.com/?q=${q} ` +
-      `(or https://www.google.com/search?q=${q}, https://yandex.ru/search/?text=${q}), then browser_get_text.`,
-    'For reliable web search, offer the user a free Brave Search API key: show the web plugin\'s setup card (hub_plugin_setup with id "web").',
-  ].join("\n");
+export function searchInBrowser(query: string, reason?: string): string {
+  const call = `browser_search with ${JSON.stringify({ query })}`;
+  return reason
+    ? `Web search failed (${reason}). Search in the browser instead: call ${call}.`
+    : `No search API is connected to the web plugin, so web search goes through the browser: call ${call}. It returns the same kind of results.`;
 }
 
-/** Run a search with the configured provider ("auto": first configured of brave → tavily → searxng → duckduckgo). */
-export async function webSearch(query: string, count: number, deps: SearchDeps): Promise<{ provider: ProviderId; results: SearchResult[]; skipped: string[] }> {
+/**
+ * Run a search with the configured provider. "auto" takes the first connected API (brave → tavily → searxng) and,
+ * with none (or none answering), returns no provider: the search then goes to the browser. DuckDuckGo's HTML page
+ * only when chosen, since it often refuses automated requests.
+ */
+export async function webSearch(query: string, count: number, deps: SearchDeps): Promise<{ provider: ProviderId | null; results: SearchResult[]; skipped: string[] }> {
   const chosen = deps.settings.provider ?? "auto";
   const explicit = chosen !== "auto";
-  const order: ProviderId[] = explicit ? [chosen as ProviderId] : PROVIDERS;
+  const order: ProviderId[] = explicit ? [chosen as ProviderId] : ["brave", "tavily", "searxng"];
   const skipped: string[] = [];
   for (const p of order) {
     try {
@@ -191,5 +192,5 @@ export async function webSearch(query: string, count: number, deps: SearchDeps):
       skipped.push(e?.name === "TimeoutError" ? `${p}: timed out` : String(e?.message ?? e));
     }
   }
-  throw new Error(`All search providers failed: ${skipped.join("; ")}`);
+  return { provider: null, results: [], skipped };
 }
