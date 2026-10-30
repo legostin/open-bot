@@ -8,8 +8,8 @@ MCP servers with open registration) stay as they are and are preferred where the
 
 ## What the person sees
 
-- **Catalog.** Ten ready cards in their situations: Slack, GitHub, HubSpot (work), Discord, Gmail (communication),
-  Google Drive, Google Docs, Google Sheets, Dropbox, Box (work). They look like any other card, with a small
+- **Catalog.** Nine ready cards in their situations: Slack, GitHub, HubSpot (work), Gmail (communication), Google
+  Drive, Google Docs, Google Sheets, Dropbox, Box (work); Discord is not among them (see the plugin below). They look like any other card, with a small
   **Composio** badge next to the name. Apps an agent connects from the chat show up the same way, with the badge.
   One more card, **Composio**, holds the key (group "other").
 - **The badge** opens a short note (a popover on the web, a sheet on iOS):
@@ -97,11 +97,16 @@ Two general abilities, for any integration of this kind.
   - Only tools tagged `readOnlyHint` are `read`. Everything else, untagged too, is `external`: the approval cards ask
     as they do today. Composio tags on a best-effort basis, so the default is "it writes".
   - Every tool is `source: true`: the result came from outside, so later writes ask after it.
-  - The approval card reads "Slack: Send message" and the arguments (the action's name is Composio's, in English).
-- **Storage**: the Composio user id, auth config and connected account ids per app, entries added from the chat.
-- **Discord**: Composio's user OAuth for Discord gives little (profile, servers). The Discord card uses Composio's
-  bot toolkit (`discordbot`): Composio's own sign-in page asks for the bot token and keeps it with the connection;
-  the agent helps make the bot in the chat. If Composio cannot sign in to it by itself, Discord leaves the first ten.
+  - The approval card reads "Slack: Send message — channel: {channel}, text: {text}" (the tool's fields, required
+    first, at most five; the action's name is Composio's, in English); composio_tool_run's card names the tool and
+    its arguments, and "always allow" on it covers that one tool only.
+  - A read needs `readOnlyHint` and none of `createHint`, `updateHint`, `destructiveHint`.
+- **Storage**: the Composio user id, auth config and connected account ids per app, a sign-in in progress (picked up
+  again after a restart), entries added from the chat. Composio keeps no account the hub stops waiting for: one a
+  newer sign-in replaces, one whose link ran out (after a grace of two minutes), one signed out.
+- **Discord** is not among the ready cards: Composio's user OAuth for Discord gives only the profile and servers, and
+  its bot toolkit (`discordbot`) needs the person's own bot token, which Composio's own sign-in does not cover. The
+  agent can still add a Discord app from the chat when Composio signs in to it by itself.
 
 ## Errors
 
