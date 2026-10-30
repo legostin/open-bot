@@ -18,7 +18,7 @@ const kits: Record<string, any> = {
   github: { slug: "github", name: "GitHub", meta: { description: "Code hosting" }, composio_managed_auth_schemes: ["OAUTH2"] },
   dropbox: { slug: "dropbox", name: "Dropbox", meta: { description: "Files" }, composio_managed_auth_schemes: ["OAUTH2"] },
   box: { slug: "box", name: "Box", meta: { description: "Files" }, composio_managed_auth_schemes: ["OAUTH2"] },
-  trello: { slug: "trello", name: "Trello", meta: { description: "Boards and cards" }, composio_managed_auth_schemes: ["OAUTH1"] },
+  asana: { slug: "asana", name: "Asana", meta: { description: "Tasks and projects" }, composio_managed_auth_schemes: ["OAUTH2"] },
   custom: { slug: "custom", name: "Custom CRM", meta: { description: "Needs your own client" }, composio_managed_auth_schemes: [] },
   hackernews: { slug: "hackernews", name: "Hacker News", meta: { description: "No sign-in" }, no_auth: true },
 };
@@ -173,7 +173,10 @@ describe("the Composio integration", () => {
 
   it("lists its apps waiting for the Composio key", async () => {
     await until(() => h.catalog.length, "the first report");
-    expect(h.catalog.map((e) => e.id)).toEqual(["slack", "github", "gmail", "googledrive", "googledocs", "googlesheets", "hubspot", "dropbox", "box"]);
+    expect(h.catalog.map((e) => e.id)).toEqual([
+      "slack", "github", "gmail", "googledrive", "googledocs", "googlesheets", "hubspot", "dropbox", "box",
+      "googlecalendar", "googletasks", "googlemeet", "outlook", "microsoft_teams", "one_drive", "trello", "jira", "zoom", "calendly", "figma", "salesforce", "linkedin", "youtube", "reddit",
+    ]);
     expect(h.catalog.every((e) => e.status === "needs-setup" && e.connect === "setup")).toBe(true);
     const r = await h.invoke("apps_search", { query: "trello" });
     expect(r.isError).toBe(true);
@@ -244,16 +247,16 @@ describe("the Composio integration", () => {
 
   it("adds apps from the chat when Composio can sign in to them, and drops them on sign-out", async () => {
     const found = await h.invokeText("apps_search", { query: "" });
-    expect(found).toContain("trello — Trello: Boards and cards [Composio signs in by itself]");
+    expect(found).toContain("asana — Asana: Tasks and projects [Composio signs in by itself]");
     expect(found).toContain("custom — Custom CRM: Needs your own client [Composio cannot sign in by itself: cannot be added]");
     expect(found).toContain("hackernews — Hacker News: No sign-in [Composio cannot sign in by itself: cannot be added]");
     expect(found).toContain("In the catalog as composio:slack, connected.");
     expect((await h.invoke("app_add", { app: "custom" })).isError).toBe(true);
     expect(await h.invokeText("app_add", { app: "slack" })).toContain("in the catalog already as composio:slack");
-    expect(await h.invokeText("app_add", { app: "Trello" })).toContain("Added Trello to the catalog as composio:trello");
-    expect(entry("trello")).toEqual({ id: "trello", name: "Trello", summary: "%entry.added%", category: "other", icon: "plug", status: "needs-setup", connect: "signin" });
-    await h.catalogSignOut("trello");
-    expect(entry("trello")).toBeUndefined();
+    expect(await h.invokeText("app_add", { app: "Asana" })).toContain("Added Asana to the catalog as composio:asana");
+    expect(entry("asana")).toEqual({ id: "asana", name: "Asana", summary: "%entry.added%", category: "other", icon: "plug", status: "needs-setup", connect: "signin" });
+    await h.catalogSignOut("asana");
+    expect(entry("asana")).toBeUndefined();
   });
 
   it("deletes at Composio an account a newer sign-in replaces, and one whose link ran out", async () => {
