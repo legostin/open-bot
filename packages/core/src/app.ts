@@ -662,6 +662,8 @@ export class Hub {
     this.feeds.stop();
     this.setup.stop();
     await this.runner.stop();
+    // Its tasks go back to the queue: the leader carries them on from where they stopped.
+    for (const t of this.store.listTasks({ status: ["running", "waiting_approval", "interrupted"] })) this.store.updateTask(t.id, { status: "queued" });
     await this.plugins.stopAll();
     await this.mcpClients.closeAll();
   }
