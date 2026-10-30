@@ -4,12 +4,14 @@
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, ProbeResult } from "@owlbot/shared";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, MachineModel, NodeSetup, ProbeResult } from "@owlbot/shared";
+import { brainWire, cheapestModel, keyProvider, profileFrom } from "@owlbot/shared";
 import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
 import { codexChooser, createClaudeCodeProvider, createCodexProvider } from "@owlbot/brains-cli";
 import type { PolicyStore } from "./policy.ts";
 import { resolveWorkspace } from "./guard.ts";
 import { hubLocale, tHub } from "./messages.ts";
+import type { ModelGateway } from "./gateway.ts";
 
 export const BRAIN_IDS = ["claude-code", "codex"] as const;
 export type NodeBrainId = (typeof BRAIN_IDS)[number];
@@ -90,6 +92,8 @@ function safeArg(v: unknown, field: string): string | undefined {
 export interface BrainHostOptions {
   home: string;
   policy: PolicyStore;
+  /** The loopback gateway key-mode brains reach their providers through (gateway.ts). */
+  gateway?: ModelGateway;
   /** The hub URL this node paired with; the MCP bridge talks to `${hubUrl}/mcp`. */
   hubUrl?: string;
   bridgeCommand?: string[];
@@ -99,8 +103,10 @@ export interface BrainHostOptions {
 export class BrainHost {
   private o: BrainHostOptions;
   private providers = new Map<NodeBrainId, BrainProviderImpl>();
-  private sessions = new Map<string, { brainId: NodeBrainId; session: BrainSessionImpl; workspace: string }>();
+  private sessions = new Map<string, { brainId: NodeBrainId; session: BrainSessionImpl; workspace: string; owner?: unknown }>();
   private lastProbe = new Map<NodeBrainId, ProbeResult>();
+  /** What the hub set for this machine (node.setup): sign-in per brain, allowed models, keys (memory only). */
+  private setup: NodeSetup | undefined;
 
   constructor(o: BrainHostOptions) {
     this.o = o;
@@ -124,11 +130,66 @@ export class BrainHost {
         // The Codex policy names, else the newest on this machine (Codex offers newer models only to newer clients).
         command: () => resolveCli(codex(policy().brains.codex.command)),
         sandbox: () => policy().brains.codex.sandbox,
+        extraConfig: () => this.codexProviderConfig(),
         stateDir: stateDir("codex"),
         log,
         locale: hubLocale,
       }),
     );
+  }
+
+  /** The hub's setup for this machine; the gateway takes the keys, models and limit at once. */
+  applySetup(setup: NodeSetup): void {
+    this.setup = setup;
+    const wires: Parameters<ModelGateway["configure"]>[0]["wires"] = {};
+    for (const id of BRAIN_IDS) {
+      const b = setup.brains[id];
+      if (b?.auth === "key") wires[brainWire(id)] = { models: b.models, providers: b.providers ?? [] };
+    }
+    this.o.gateway?.configure({ wires, ...(setup.limit ? { limit: { usd: setup.limit.usd, spent: setup.limit.spent } } : {}) });
+    this.lastProbe.clear();
+  }
+
+  /** Key mode: the hub gives this brain provider keys, through the gateway. */
+  private keyMode(id: NodeBrainId): boolean {
+    return this.setup?.brains[id]?.auth === "key" && !!this.o.gateway?.port;
+  }
+
+  private allowed(id: NodeBrainId): MachineModel[] {
+    return this.setup?.brains[id]?.models ?? [];
+  }
+
+  /** Codex in key mode talks to the gateway as a model provider of its own; the session token comes in its env. */
+  private codexProviderConfig(): string[] {
+    if (!this.keyMode("codex")) return [];
+    return [
+      `model_provider="owlbot"`,
+      `model_providers.owlbot.name="Owlbot"`,
+      `model_providers.owlbot.base_url="http://127.0.0.1:${this.o.gateway!.port}/v1"`,
+      `model_providers.owlbot.env_key="OWLBOT_GATEWAY_KEY"`,
+      `model_providers.owlbot.wire_api="responses"`,
+    ];
+  }
+
+  /** What the hub's setup changes in a probe: who signs in, and which models the router may pick. */
+  private shaped(id: NodeBrainId, r: ProbeResult): ProbeResult {
+    const allowed = this.allowed(id);
+    if (!this.setup?.brains[id]) return r;
+    if (this.keyMode(id)) {
+      const b = this.setup.brains[id]!;
+      const keyed = (b.providers ?? []).map((p) => keyProvider(p.id)?.label ?? p.id);
+      const authenticated = r.available && keyed.length > 0 && allowed.length > 0 && !this.setup.sealed;
+      const detail = !r.available
+        ? r.detail
+        : this.setup.sealed
+          ? tHub("brains.keyWaitsVault")
+          : keyed.length
+            ? tHub("brains.keyVia", { providers: keyed.join(", ") })
+            : tHub("brains.keyMissing");
+      return { ...r, authenticated, detail, ...modelsOf(allowed) };
+    }
+    if (!allowed.length) return r;
+    return { ...r, ...modelsOf(allowed) };
   }
 
   private enabled(id: string): id is NodeBrainId {
@@ -152,7 +213,7 @@ export class BrainHost {
         }
         let r: ProbeResult;
         try {
-          r = await this.providers.get(id)!.probe();
+          r = this.shaped(id, await this.providers.get(id)!.probe());
         } catch (e: any) {
           r = { available: false, authenticated: false, detail: e?.message ?? String(e) };
         }
@@ -168,12 +229,12 @@ export class BrainHost {
   }
 
   async probe(p: { brainId: string; variant?: string }): Promise<ProbeResult> {
-    const r = await this.provider(p.brainId).probe(p.variant);
+    const r = this.shaped(p.brainId as NodeBrainId, await this.provider(p.brainId).probe(p.variant));
     this.lastProbe.set(p.brainId as NodeBrainId, r);
     return r;
   }
 
-  async create(p: { brainId: string; opts: BrainSessionOptions }): Promise<{ workspace: string }> {
+  async create(p: { brainId: string; opts: BrainSessionOptions }, owner?: unknown, hubUrl?: string): Promise<{ workspace: string }> {
     const provider = this.provider(p.brainId);
     const opts = p.opts;
     if (!opts?.sessionId || typeof opts.sessionId !== "string") throw new Error("sessionId is required");
@@ -181,15 +242,22 @@ export class BrainHost {
     const workspace = resolveWorkspace(opts.workspace, policy.workspacesRoot);
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(opts.env ?? {})) if (SAFE_ENV.test(k) && typeof v === "string") env[k] = v;
+    const brainId = p.brainId as NodeBrainId;
+    // The router picks among the allowed models; anything else (an older hub, the person's exact pick) takes the cheapest.
+    const allowed = this.allowed(brainId);
+    let model = safeArg(opts.model, "model");
+    if (allowed.length && !allowed.some((m) => m.id === model)) model = cheapestModel(allowed)?.id;
+    if (this.keyMode(brainId)) Object.assign(env, this.keyEnv(brainId, opts.sessionId, model));
     const local: BrainSessionOptions = {
       ...opts,
-      model: safeArg(opts.model, "model"),
+      model,
       effort: safeArg(opts.effort, "effort"),
       variant: safeArg(opts.variant, "variant"),
       resume: safeArg(opts.resume, "resume"),
       workspace,
       mcp: {
-        url: this.o.hubUrl ? `${this.o.hubUrl}/mcp` : String(opts.mcp?.url ?? ""),
+        // The MCP of the replica that opened the session (the daemon's own config otherwise).
+        url: (hubUrl ?? this.o.hubUrl) ? `${(hubUrl ?? this.o.hubUrl)!.replace(/\/$/, "")}/mcp` : String(opts.mcp?.url ?? ""),
         token: String(opts.mcp?.token ?? ""),
         bridgeCommand: this.o.bridgeCommand ?? defaultBridgeCommand(),
       },
@@ -201,8 +269,31 @@ export class BrainHost {
     const old = this.sessions.get(opts.sessionId);
     if (old) await Promise.resolve(old.session.close()).catch(() => {});
     const session = await provider.createSession(local);
-    this.sessions.set(opts.sessionId, { brainId: p.brainId as NodeBrainId, session, workspace });
+    this.sessions.set(opts.sessionId, { brainId, session, workspace, owner });
     return { workspace };
+  }
+
+  /** The env a key-mode session gets: the gateway and its own token, never a key. */
+  private keyEnv(id: NodeBrainId, sessionId: string, model: string | undefined): Record<string, string> {
+    const token = this.o.gateway!.open(sessionId, id);
+    if (id === "codex") return { OWLBOT_GATEWAY_KEY: token, OPENAI_API_KEY: "", CODEX_API_KEY: "" };
+    const allowed = this.allowed(id);
+    const cheap = cheapestModel(allowed)?.id ?? model ?? "";
+    const main = model ?? cheap;
+    return {
+      ANTHROPIC_BASE_URL: `http://127.0.0.1:${this.o.gateway!.port}`,
+      ANTHROPIC_AUTH_TOKEN: token,
+      ANTHROPIC_API_KEY: "",
+      CLAUDE_CODE_OAUTH_TOKEN: "",
+      // Claude Code's own aliases and helpers name models of their own: they stay on the allowed ones.
+      ANTHROPIC_MODEL: main,
+      ANTHROPIC_DEFAULT_OPUS_MODEL: main,
+      ANTHROPIC_DEFAULT_SONNET_MODEL: main,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: cheap,
+      ANTHROPIC_SMALL_FAST_MODEL: cheap,
+      CLAUDE_CODE_SUBAGENT_MODEL: main,
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    };
   }
 
   async send(p: { sessionId: string; turn: BrainTurn }, emit: (event: BrainEvent) => void): Promise<void> {
@@ -233,6 +324,7 @@ export class BrainHost {
   async close(p: { sessionId: string }): Promise<void> {
     const s = this.sessions.get(p.sessionId);
     this.sessions.delete(p.sessionId);
+    this.o.gateway?.close(p.sessionId);
     if (!s) return;
     await s.session.close();
     // Per-session private files (MCP token, prompt) live under the brain's state dir.
@@ -243,11 +335,22 @@ export class BrainHost {
     }
   }
 
-  async closeAll(): Promise<void> {
-    await Promise.all([...this.sessions.keys()].map((sessionId) => this.close({ sessionId }).catch(() => {})));
+  async closeAll(owner?: unknown): Promise<void> {
+    const ids = [...this.sessions].filter(([, s]) => owner === undefined || s.owner === owner).map(([id]) => id);
+    await Promise.all(ids.map((sessionId) => this.close({ sessionId }).catch(() => {})));
   }
 
   get sessionCount(): number {
     return this.sessions.size;
   }
+}
+
+/** A probe's models from the allowed list: ids, and profiles with their prices for the router. */
+function modelsOf(allowed: MachineModel[]): Pick<ProbeResult, "models" | "catalog" | "model"> {
+  const cheap = cheapestModel(allowed);
+  return {
+    models: allowed.map((m) => m.id),
+    ...(cheap ? { model: cheap.id } : {}),
+    catalog: allowed.map((m) => profileFrom({ id: m.id, ...(m.price ? { price: m.price } : {}) })),
+  };
 }

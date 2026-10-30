@@ -5,6 +5,8 @@
 // console stay on their own host. In remote mode the same app is the link's phone gateway (remote.ts): plain HTTP on
 // loopback behind the hub's Tailscale node, which presents this port's certificate to the phones itself.
 
+import { registerReplicaRoutes } from "./replica-routes.ts";
+import { forwardToLeader } from "./forward.ts";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
@@ -31,9 +33,10 @@ declare module "fastify" {
 
 export async function buildDeviceApp(hub: Hub, tls: DeviceTls, opts: { remote?: boolean } = {}): Promise<FastifyInstance> {
   const cfg = hub.config;
+  // Replicas keep connections to each other open (long polls, keep-alive): closing does not wait for them.
   const app: FastifyInstance = opts.remote
-    ? Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, trustProxy: "127.0.0.1" })
-    : (Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, https: { key: tls.key, cert: tls.cert } }) as unknown as FastifyInstance);
+    ? Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, trustProxy: "127.0.0.1", forceCloseConnections: true })
+    : (Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, https: { key: tls.key, cert: tls.cert }, forceCloseConnections: true }) as unknown as FastifyInstance);
   await app.register(fastifyCookie);
   await app.register(fastifyWebsocket, { options: { maxPayload: 4 * 1024 * 1024 } });
 
@@ -95,6 +98,10 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls, opts: { remote?: 
   });
   app.addHook("onClose", async () => offRevoke());
 
+  // Replicas of this hub talk here (cluster.ts); a standby sends the apps on to the leader.
+  await registerReplicaRoutes(app, hub);
+  app.addHook("onRequest", (req, reply, done) => forwardToLeader(hub, req, reply, done));
+
   await app.register(async (api) => {
     const authenticate = async (req: FastifyRequest) => {
       const device = hub.devices.authenticate(req.headers.authorization);
@@ -130,7 +137,7 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls, opts: { remote?: 
 
     api.get("/api/devices/me", async (req) => req.device);
     // Where the app can find the hub now (the link may have come after the pairing): it keeps the list.
-    api.get("/api/devices/addresses", async () => ({ urls: hub.phoneUrls() }));
+    api.get("/api/devices/addresses", async () => ({ urls: hub.cluster.phoneUrls(hub.phoneUrls()) }));
     // Only the app (its token) gets tickets for its chat page; the page cannot mint more.
     api.post("/api/devices/web-ticket", async (req) => {
       if (req.webCsrf) throw new HttpError(403, "auth.required");

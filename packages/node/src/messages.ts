@@ -108,6 +108,11 @@ const en = {
   "policy.summary.noCommands": "not allowed",
   // brains (shown in the hub's brain list, in the hub's language)
   "brains.disabled": "disabled in policy.json",
+  "brains.keyVia": "API key from the hub ({providers})",
+  "brains.keyMissing": "API key mode, but the hub has no key for it yet",
+  "brains.keyWaitsVault": "API key mode: waiting for the hub's vault to be unlocked",
+  "gateway.ready": "model gateway on 127.0.0.1:{port}",
+  "gateway.setup": "setup from the hub: {brains}",
 };
 
 const ru: Record<keyof typeof en, string> = {
@@ -209,6 +214,11 @@ const ru: Record<keyof typeof en, string> = {
   "policy.summary.onlyCommands": "только {list}",
   "policy.summary.noCommands": "запрещены",
   "brains.disabled": "отключён в policy.json",
+  "brains.keyVia": "ключ API от хаба ({providers})",
+  "brains.keyMissing": "режим ключа API, но у хаба ещё нет ключа",
+  "brains.keyWaitsVault": "режим ключа API: ждёт, пока хранилище хаба разблокируют",
+  "gateway.ready": "шлюз моделей на 127.0.0.1:{port}",
+  "gateway.setup": "настройка от хаба: {brains}",
 };
 
 export const nodeCatalog: Catalog = { en, ru };

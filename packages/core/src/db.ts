@@ -104,7 +104,7 @@ const MIGRATIONS: string[] = [
   create table machine_spend(day text not null, machine_id text not null, brain_id text not null, provider text not null, model text not null,
     input_tokens integer not null default 0, output_tokens integer not null default 0, usd real not null default 0,
     primary key(day, machine_id, brain_id, provider, model));
-  create table replicas(id text primary key, name text not null, public_key text not null, urls text not null default '[]',
+  create table replicas(id text primary key, name text not null, public_key text not null, urls text not null default '[]', node_urls text not null default '[]',
     priority integer not null, created_at text not null, revoked integer not null default 0);
   `,
 ];

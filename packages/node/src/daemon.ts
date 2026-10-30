@@ -1,11 +1,15 @@
 // Composition root for `owlbot-node run` (also used by tests).
 
-import { loadConfig, loadKey, type NodeConfig } from "./home.ts";
+import { join } from "node:path";
+import { FileSync } from "@owlbot/replica";
+import { loadConfig, loadKey, saveHubUrls, type NodeConfig } from "./home.ts";
 import { PolicyStore } from "./policy.ts";
 import { BrainHost } from "./brains.ts";
 import { NodeService } from "./service.ts";
 import { NodeClient } from "./client.ts";
 import type { Logger } from "./info.ts";
+import { ModelGateway } from "./gateway.ts";
+import { t } from "./messages.ts";
 
 export interface NodeDaemonOptions {
   home: string;
@@ -25,6 +29,7 @@ export interface NodeDaemon {
   brains: BrainHost;
   service: NodeService;
   client: NodeClient;
+  gateway: ModelGateway;
   stop(): Promise<void>;
 }
 
@@ -32,19 +37,100 @@ export function createNodeDaemon(o: NodeDaemonOptions): NodeDaemon {
   const config = loadConfig(o.home);
   const key = loadKey(o.home);
   const policy = new PolicyStore(o.home, { userHome: o.userHome, log: o.log });
-  const brains = new BrainHost({ home: o.home, policy, hubUrl: config.hubUrl, bridgeCommand: o.bridgeCommand, log: o.log });
+  // Brains signed in with a key from the hub reach their providers through this (the key never leaves the daemon).
+  let service: NodeService | undefined;
+  const gateway = new ModelGateway({ onUsage: (u) => service?.usage(u), log: o.log });
+  void gateway.start().then(
+    (port) => o.log(t("gateway.ready", { port })),
+    (e) => o.log(`gateway: ${e?.message ?? e}`),
+  );
+  const brains = new BrainHost({ home: o.home, policy, gateway, hubUrl: config.hubUrl, bridgeCommand: o.bridgeCommand, log: o.log });
   // The daemon's own home (key, policy) is never reachable through fs.*/exec, even if an allowed dir contains it.
-  const service = new NodeService({ policy, brains, log: o.log, guard: { deny: [o.home] } });
-  const client = new NodeClient({
-    hubUrl: config.hubUrl,
-    machineId: config.machineId,
-    secretKey: key.secretKey,
-    service,
-    log: o.log,
-    pingIntervalMs: o.pingIntervalMs,
-    minBackoffMs: o.minBackoffMs,
-    maxBackoffMs: o.maxBackoffMs,
-    onFatal: o.onFatal,
+  service = new NodeService({ policy, brains, log: o.log, guard: { deny: [o.home] } });
+  const clientFor = (hubUrl: string, secondary: boolean) =>
+    new NodeClient({
+      hubUrl,
+      machineId: config.machineId,
+      secretKey: key.secretKey,
+      service: service!,
+      log: o.log,
+      pingIntervalMs: o.pingIntervalMs,
+      minBackoffMs: o.minBackoffMs,
+      maxBackoffMs: o.maxBackoffMs,
+      ...(secondary ? { secondary: true } : { onFatal: o.onFatal }),
+    });
+  const client = clientFor(config.hubUrl, false);
+  // The hub's other replicas: a connection to each, so whichever leads finds this machine at once.
+  const norm = (u: string) => u.replace(/\/$/, "");
+  const others = new Map<string, NodeClient>();
+  const connectHubs = (urls: string[]) => {
+    for (const u of urls.map(norm)) {
+      if (u === norm(config.hubUrl) || others.has(u)) continue;
+      const c = clientFor(u, true);
+      others.set(u, c);
+      c.start();
+    }
+  };
+  const origStart = client.start.bind(client);
+  client.start = () => {
+    origStart();
+    connectHubs(config.hubUrls ?? []);
+  };
+
+  // The workspaces folder is the leader's own `workspaces`: each side pulls what the other changed.
+  const files = new FileSync({
+    roots: [{ name: "workspaces", dir: policy.get().workspacesRoot }],
+    stateFile: join(o.home, "files.db"),
+    self: config.name || "machine",
+    log: (m) => o.log(`files: ${m}`),
   });
-  return { config, policy, brains, service, client, stop: () => client.stop() };
+  service.files = files;
+  let filesOn = false;
+  let pulling = false;
+  let hubName = "hub";
+  const filesTimer = setInterval(() => {
+    const peer = service!.leaderPeer();
+    if (!filesOn || !peer || pulling) return;
+    pulling = true;
+    void files
+      .syncFrom(hubName, {
+        changesSince: (cursor, limit) => peer.request("files.changes", { cursor, limit }, { timeoutMs: 60_000 }),
+        read: async (root, path, sha) => {
+          const b = await peer.request<string | null>("files.read", { root, path, sha }, { timeoutMs: 300_000 });
+          return b ? new Uint8Array(Buffer.from(b, "base64")) : undefined;
+        },
+      })
+      .catch((e) => o.log(`files: ${e?.message ?? e}`))
+      .finally(() => (pulling = false));
+  }, 5_000);
+  filesTimer.unref();
+  service.onSetup = (setup) => {
+    if (setup.hubs?.length) {
+      try {
+        saveHubUrls(o.home, setup.hubs);
+      } catch {
+        /* read-only home: keep them in memory */
+      }
+      connectHubs(setup.hubs);
+    }
+    if (setup.filesName) hubName = setup.filesName;
+    if (setup.files && !filesOn) {
+      filesOn = true;
+      files.start(4_000);
+    }
+  };
+  return {
+    config,
+    policy,
+    brains,
+    service,
+    client,
+    gateway,
+    stop: async () => {
+      clearInterval(filesTimer);
+      files.stop();
+      await Promise.all([client.stop(), ...[...others.values()].map((c) => c.stop())]);
+      await gateway.stop();
+    },
+  };
 }

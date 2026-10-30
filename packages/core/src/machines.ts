@@ -12,6 +12,7 @@ import type { ToolRegistry } from "./tools/registry.ts";
 import { hubLocale, LocalizedError } from "./i18n.ts";
 import { InviteRegistry } from "./invites.ts";
 import type { MachineSetups } from "./machine-setup.ts";
+import type { Cluster } from "./cluster.ts";
 
 export const NODE_AUTH_PREFIX = "owlbot-node-auth:";
 
@@ -32,7 +33,10 @@ export class MachineHub {
   audit: AuditLog;
   invites: InviteRegistry;
   setups?: MachineSetups;
+  /** Only the leading replica sets machines up and shares their workspaces (cluster.ts). */
+  cluster?: Cluster;
   private peers = new Map<string, RpcPeer>();
+  private fileTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(d: { db: Db; bus: EventBus; brains: BrainRegistry; audit: AuditLog; invites?: InviteRegistry; setups?: MachineSetups }) {
     this.db = d.db;
@@ -51,8 +55,9 @@ export class MachineHub {
   /** Sends a machine its setup (node.setup); a daemon from before setups ignores it. */
   async pushSetup(machineId: string): Promise<void> {
     const peer = this.peers.get(machineId);
-    if (!peer || peer.closed || !this.setups) return;
-    const setup = this.setups.nodeSetup(machineId);
+    if (!peer || peer.closed || !this.setups || (this.cluster && !this.cluster.leads())) return;
+    const hubs = this.cluster?.nodeUrls() ?? [];
+    const setup = { ...this.setups.nodeSetup(machineId), ...(hubs.length ? { hubs } : {}), ...(this.cluster ? { files: true, filesName: this.cluster.filesName } : {}) };
     try {
       await peer.request("node.setup", setup, { timeoutMs: 20_000 });
       this.brains.invalidateMachine(machineId);
@@ -171,6 +176,35 @@ export class MachineHub {
       setTimeout(() => void this.pushSetup(id), 0);
       return { machineId: id, name: m.name, language: hubLocale() };
     });
+    // The machine's workspaces folder and the hub's are one: each side pulls what the other changed.
+    const files = () => this.cluster?.files;
+    peer.handle("files.changes", (p: { cursor?: number; limit?: number }) => {
+      const r = files()!.changesSince(Number(p?.cursor) || 0, Math.min(Number(p?.limit) || 500, 2_000));
+      return { ...r, changes: r.changes.filter((c) => c.root === "workspaces") };
+    });
+    peer.handle("files.read", async (p: { root?: string; path?: string; sha?: string }) => {
+      if (p?.root !== "workspaces") return null;
+      const bytes = await files()!.read("workspaces", String(p.path ?? ""), String(p.sha ?? ""));
+      return bytes ? Buffer.from(bytes).toString("base64") : null;
+    });
+    clearInterval(this.fileTimers.get(id));
+    let busy = false;
+    const timer = setInterval(() => {
+      if (busy || peer.closed || !files() || (this.cluster && !this.cluster.leads())) return;
+      busy = true;
+      void files()!
+        .syncFrom(this.name(id) ?? id, {
+          changesSince: (cursor, limit) => peer.request("files.changes", { cursor, limit }, { timeoutMs: 60_000 }),
+          read: async (root, path, sha) => {
+            const b = await peer.request<string | null>("files.read", { root, path, sha }, { timeoutMs: 300_000 });
+            return b ? new Uint8Array(Buffer.from(b, "base64")) : undefined;
+          },
+        })
+        .catch(() => {})
+        .finally(() => (busy = false));
+    }, 5_000);
+    timer.unref();
+    this.fileTimers.set(id, timer);
     peer.onNotification("node.usage", (u: MachineUsage) => {
       if (!this.setups || !u || typeof u !== "object") return;
       const before = this.setups.checkLimit(id);
@@ -183,6 +217,10 @@ export class MachineHub {
       return { ts: nowIso() };
     });
     peer.onClose(() => {
+      if (this.fileTimers.get(id) === timer) {
+        clearInterval(timer);
+        this.fileTimers.delete(id);
+      }
       if (this.peers.get(id) === peer) {
         this.peers.delete(id);
         this.brains.unregisterMachine(id);

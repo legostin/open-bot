@@ -235,6 +235,11 @@ export class SessionRunner {
     this.kickoff = setTimeout(() => this.scheduleTasks(), 1000).unref();
   }
 
+  /** Turns running now (a replica hands the lead over once they are done). */
+  busyTurns(): number {
+    return this.activeTurns.size;
+  }
+
   async stop(): Promise<void> {
     // Both timers go before the hub closes the database: a hub stopped within a second of starting would otherwise query a closed db.
     clearInterval(this.timer);

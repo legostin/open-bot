@@ -84,3 +84,63 @@ describe("BrainHost", () => {
     await expect(host.create({ brainId: "codex", opts: { sessionId: "s2", workspace: "a/b" } as any })).rejects.toThrow(/disabled/);
   });
 });
+
+describe("BrainHost with the hub's setup", () => {
+  const home = join(root, "home-key");
+  const userHome = join(root, "user-key");
+  const policy = new PolicyStore(home, { userHome });
+  const raw = JSON.parse(readFileSync(policy.file, "utf8"));
+  raw.brains["claude-code"].command = ENV_CLAUDE;
+  raw.brains.codex.enabled = false;
+  writeFileSync(policy.file, JSON.stringify(raw));
+  const opened: string[] = [];
+  const gateway = {
+    port: 45123,
+    configured: undefined as any,
+    configure(s: any) {
+      this.configured = s;
+    },
+    open(sessionId: string) {
+      opened.push(sessionId);
+      return `owlgw-${sessionId}`;
+    },
+    close() {},
+  };
+  const host = new BrainHost({ home, policy, gateway: gateway as any, hubUrl: "http://hub.test:8080", bridgeCommand: ["bridge-cmd"] });
+  const models = [
+    { id: "claude-sonnet-5-5", provider: "anthropic", price: { input: 3, output: 15 } },
+    { id: "claude-haiku-5-5", provider: "anthropic", price: { input: 1, output: 5 } },
+  ];
+
+  it("lists only the allowed models, signed in once the hub sent a key", async () => {
+    host.applySetup({ brains: { "claude-code": { auth: "key", models, providers: [] } } });
+    expect(gateway.configured.wires.anthropic.models).toEqual(models);
+    const waiting = await host.probe({ brainId: "claude-code" });
+    expect(waiting).toMatchObject({ available: true, authenticated: false, models: ["claude-sonnet-5-5", "claude-haiku-5-5"], model: "claude-haiku-5-5" });
+    host.applySetup({ brains: { "claude-code": { auth: "key", models, providers: [{ id: "anthropic", key: "sk-ant-x" }] } }, limit: { usd: 5, period: "month", spent: 1, resetsAt: "2026-11-01T00:00:00.000Z" } });
+    expect(gateway.configured.limit).toEqual({ usd: 5, spent: 1 });
+    const ready = await host.probe({ brainId: "claude-code" });
+    expect(ready).toMatchObject({ authenticated: true, detail: "API key from the hub (Anthropic)" });
+    expect(ready.catalog?.map((c) => c.id)).toEqual(["claude-sonnet-5-5", "claude-haiku-5-5"]);
+    host.applySetup({ sealed: true, brains: { "claude-code": { auth: "key", models, providers: [] } } });
+    expect(await host.probe({ brainId: "claude-code" })).toMatchObject({ authenticated: false, detail: "API key mode: waiting for the hub's vault to be unlocked" });
+  });
+
+  it("points a key-mode session at the gateway with its own token and keeps it on the allowed models", async () => {
+    host.applySetup({ brains: { "claude-code": { auth: "key", models, providers: [{ id: "anthropic", key: "sk-ant-x" }] } } });
+    await host.create({
+      brainId: "claude-code",
+      opts: { sessionId: "k1", agent, workspace: "a/k1", mcp: { url: "", token: "t", bridgeCommand: [] }, systemPrompt: "", env: {}, background: false, model: "claude-opus-5-5" },
+    });
+    await host.send({ sessionId: "k1", turn: { text: "hi" } }, () => {});
+    const seen = JSON.parse(readFileSync(join(userHome, "owlbot-workspace", "a", "k1", "env.json"), "utf8"));
+    expect(seen.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:45123");
+    expect(seen.ANTHROPIC_AUTH_TOKEN).toBe("owlgw-k1");
+    expect(seen.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("claude-haiku-5-5");
+    // The opus it asked for is not allowed: the cheapest allowed one runs.
+    expect(seen.args[seen.args.indexOf("--model") + 1]).toBe("claude-haiku-5-5");
+    expect(seen.CLAUDE_CODE_SUBAGENT_MODEL).toBe("claude-haiku-5-5");
+    expect(opened).toEqual(["k1"]);
+    await host.closeAll();
+  });
+});

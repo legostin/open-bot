@@ -883,6 +883,12 @@ export interface NodeSetup {
   limit?: { usd: number; period: "day" | "month"; spent: number; resetsAt: ISODate };
   /** The hub's vault is locked: key-mode brains wait for it. */
   sealed?: boolean;
+  /** Every replica of the hub, for /node/ws and /mcp (the daemon keeps a connection to each). */
+  hubs?: string[];
+  /** The daemon shares its workspaces folder with this hub (files.* both ways). */
+  files?: boolean;
+  /** What the hub calls itself in file conflicts. */
+  filesName?: string;
 }
 
 /** One model call a machine's gateway made (node.usage). */

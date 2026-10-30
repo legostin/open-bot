@@ -21,6 +21,8 @@ export interface CodexOptions {
   authEnv?: () => Promise<Record<string, string>>;
   /** "danger-full-access" inside the container (isolation comes from unix users + egress proxy). */
   sandbox?: () => "read-only" | "workspace-write" | "danger-full-access";
+  /** More `-c` overrides for every turn (a machine in key mode: its gateway as the model provider). */
+  extraConfig?: () => string[];
   stateDir: string;
   log?: (msg: string) => void;
   /** Language for messages people read (probe details, failures); English by default. */
@@ -144,6 +146,7 @@ class CodexSession implements BrainSessionImpl {
       `sandbox_mode=${tomlString(this.sandbox())}`,
       ...(this.o.confine && !this.o.frontDesk ? ["sandbox_workspace_write.network_access=false"] : []),
       ...(this.o.effort ? [`model_reasoning_effort=${tomlString(this.o.effort)}`] : []),
+      ...(this.p.extraConfig?.() ?? []),
     ];
   }
 

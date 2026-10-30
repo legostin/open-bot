@@ -21,7 +21,8 @@ process.stdin.on("data", (c) => {
   const pick = (k) => process.env[k] ?? null;
   writeFileSync(
     "env.json",
-    JSON.stringify({ cwd: process.cwd(), args, TZ: pick("TZ"), NODE_OPTIONS: pick("NODE_OPTIONS"), ANTHROPIC_BASE_URL: pick("ANTHROPIC_BASE_URL"), OWLBOT_NODE_HOME: pick("OWLBOT_NODE_HOME") }),
+    JSON.stringify({ cwd: process.cwd(), args, TZ: pick("TZ"), NODE_OPTIONS: pick("NODE_OPTIONS"), ANTHROPIC_BASE_URL: pick("ANTHROPIC_BASE_URL"), OWLBOT_NODE_HOME: pick("OWLBOT_NODE_HOME"),
+      ANTHROPIC_AUTH_TOKEN: pick("ANTHROPIC_AUTH_TOKEN"), ANTHROPIC_DEFAULT_HAIKU_MODEL: pick("ANTHROPIC_DEFAULT_HAIKU_MODEL"), CLAUDE_CODE_SUBAGENT_MODEL: pick("CLAUDE_CODE_SUBAGENT_MODEL") }),
   );
   out({ type: "system", subtype: "init", session_id: "s-env", mcp_servers: [{ name: "owlbot", status: "connected" }] });
   out({ type: "user", message: JSON.parse(buf.slice(0, buf.indexOf("\n"))).message, session_id: "s-env", isReplay: true });

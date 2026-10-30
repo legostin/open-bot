@@ -2,13 +2,15 @@
 // local policy and logged as one line (never with file contents).
 
 import type { ChildProcess } from "node:child_process";
-import type { RpcPeer } from "@owlbot/shared";
+import type { MachineUsage, NodeSetup, RpcPeer } from "@owlbot/shared";
+import type { FileSync } from "@owlbot/replica";
 import type { PolicyStore } from "./policy.ts";
 import type { BrainHost } from "./brains.ts";
 import type { GuardOptions } from "./guard.ts";
 import type { Logger } from "./info.ts";
 import { execRun, killTree } from "./exec.ts";
 import { fsList, fsRead, fsWrite } from "./fsops.ts";
+import { t as tLocal } from "./messages.ts";
 
 const short = (s: unknown, max = 160): string => {
   const t = typeof s === "string" ? s : JSON.stringify(s ?? "");
@@ -57,6 +59,17 @@ export class NodeService {
   readonly guard: GuardOptions;
   private log: Logger;
   private children = new Set<ChildProcess>();
+  /** The hub connection the setup came from (the cluster's leader): spend goes back there. */
+  private setupFrom: RpcPeer | undefined;
+  /** The daemon learns the hub's replicas and starts sharing the workspaces. */
+  onSetup?: (setup: NodeSetup, peer: RpcPeer) => void;
+  /** The workspaces folder shared with the leader (files.*). */
+  files?: FileSync;
+
+  /** The leader's connection, while it is open. */
+  leaderPeer(): RpcPeer | undefined {
+    return this.setupFrom && !this.setupFrom.closed ? this.setupFrom : undefined;
+  }
 
   constructor(o: { policy: PolicyStore; brains: BrainHost; log: Logger; guard?: GuardOptions }) {
     this.policy = o.policy;
@@ -80,9 +93,34 @@ export class NodeService {
     };
   }
 
+  /** A call the gateway made: the hub that set this machine up counts it. */
+  usage(u: MachineUsage): void {
+    if (this.setupFrom && !this.setupFrom.closed) this.setupFrom.notify("node.usage", u);
+  }
+
   /** Register all request handlers on a freshly authenticated hub connection. */
-  attach(peer: RpcPeer): void {
+  attach(peer: RpcPeer, hubUrl?: string): void {
     const policy = () => this.policy.get();
+    peer.handle("node.setup", (p: NodeSetup) => {
+      if (!p || typeof p !== "object" || typeof p.brains !== "object") throw new Error("bad setup");
+      this.brains.applySetup(p);
+      this.setupFrom = peer;
+      this.onSetup?.(p, peer);
+      const brains = Object.entries(p.brains)
+        .map(([id, b]) => `${id} ${b!.auth}${b!.models.length ? ` (${b!.models.map((m) => m.id).join(", ")})` : ""}`)
+        .join("; ");
+      this.log(tLocal("gateway.setup", { brains: brains || "—" }));
+      return {};
+    });
+    peer.handle("files.changes", (p: { cursor?: number; limit?: number }) => {
+      if (!this.files) return { changes: [], cursor: Number(p?.cursor) || 0, more: false };
+      return this.files.changesSince(Number(p?.cursor) || 0, Math.min(Number(p?.limit) || 500, 2_000));
+    });
+    peer.handle("files.read", async (p: { root?: string; path?: string; sha?: string }) => {
+      if (!this.files || p?.root !== "workspaces") return null;
+      const b = await this.files.read("workspaces", String(p.path ?? ""), String(p.sha ?? ""));
+      return b ? Buffer.from(b).toString("base64") : null;
+    });
     peer.handle("exec.run", this.wrap("exec.run", (p: any) => execRun(p ?? {}, policy(), this.guard, this.children)));
     peer.handle("fs.read", this.wrap("fs.read", (p: any) => fsRead(p ?? {}, policy(), this.guard)));
     peer.handle("fs.write", this.wrap("fs.write", (p: any) => fsWrite(p ?? {}, policy(), this.guard)));
@@ -91,7 +129,7 @@ export class NodeService {
     peer.handle(
       "brain.create",
       this.wrap("brain.create", async (p: any) => {
-        await this.brains.create(p ?? {});
+        await this.brains.create(p ?? {}, peer, hubUrl);
         return {};
       }),
     );
@@ -134,5 +172,11 @@ export class NodeService {
     for (const c of this.children) killTree(c);
     this.children.clear();
     await this.brains.closeAll();
+  }
+
+  /** One of several hub connections went away: only the sessions it opened stop. */
+  async detach(peer: RpcPeer): Promise<void> {
+    if (this.setupFrom === peer) this.setupFrom = undefined;
+    await this.brains.closeAll(peer);
   }
 }

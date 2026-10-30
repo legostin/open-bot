@@ -16,6 +16,9 @@ import { EventBus } from "./bus.ts";
 import { DeviceRegistry } from "./devices.ts";
 import { deviceTls } from "./devices-tls.ts";
 import { deviceUrls, hubName, pairingLink, qrText } from "./pairing.ts";
+import { joinCluster, localInvite } from "./cluster.ts";
+import { InviteRegistry } from "./invites.ts";
+import { hostname } from "node:os";
 
 const [cmd = "start", ...args] = process.argv.slice(2);
 const config = loadConfig();
@@ -96,6 +99,35 @@ async function main(): Promise<void> {
       console.log(cliT()("cli.backupDone", { path: target }));
       return;
     }
+    case "replica": {
+      // owlbot replica invite [--name mac] --url https://… [--node-url …]  |  owlbot replica join <link> --name vps --url https://… [--node-url …] [--force]
+      const sub = args[0];
+      const flag = (k: string) => args.flatMap((a, i) => (a === k && args[i + 1] ? [args[i + 1]] : []));
+      const name = flag("--name")[0] ?? (hostname().split(".")[0] || "hub");
+      const urls = flag("--url");
+      const nodeUrls = flag("--node-url");
+      if (sub === "invite") {
+        const db = openDb(join(config.dataDir, "owlbot.db"));
+        const r = localInvite({
+          dataDir: config.dataDir,
+          db,
+          invites: new InviteRegistry({ db, bus: new EventBus(), audit: new AuditLog(db) }),
+          name,
+          urls: urls.length ? urls : deviceUrls(config.devicePort, config.deviceUrls),
+          nodeUrls,
+          fingerprint: deviceTls(config.dataDir).fingerprint,
+        });
+        console.log(cliT(db)(r.created ? "cli.replicaInviteNew" : "cli.replicaInvite", { link: r.link }));
+        return;
+      }
+      if (sub === "join" && args[1]) {
+        if (!urls.length) throw new Error("usage: owlbot replica join <link> --name <name> --url https://<this machine>:<device port> [--node-url <url>] [--force]");
+        const r = await joinCluster({ dataDir: config.dataDir, link: args[1], name, urls, nodeUrls, force: args.includes("--force") });
+        console.log(cliT()("cli.replicaJoined", { id: r.id, dir: config.dataDir }));
+        return;
+      }
+      throw new Error("usage: owlbot replica invite|join …");
+    }
     case "audit-verify": {
       const db = openDb(join(config.dataDir, "owlbot.db"));
       const r = new AuditLog(db).verify();
@@ -104,7 +136,7 @@ async function main(): Promise<void> {
       return;
     }
     default:
-      console.log("usage: owlbot [start|reset-password <pass>|pairing-code [name]|devices pair|backup [dir]|audit-verify]");
+      console.log("usage: owlbot [start|reset-password <pass>|pairing-code [name]|devices pair|replica invite|join|backup [dir]|audit-verify]");
       process.exitCode = 1;
   }
 }

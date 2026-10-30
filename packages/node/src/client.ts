@@ -22,6 +22,8 @@ export interface NodeClientOptions {
   maxBackoffMs?: number;
   /** Called once when the hub refuses this machine for good (close code 4401). */
   onFatal?: (message: string) => void;
+  /** One of several connections (another replica of the hub): losing it stops only what it opened. */
+  secondary?: boolean;
 }
 
 export type ClientState = "idle" | "connecting" | "online" | "stopped";
@@ -76,6 +78,7 @@ export class NodeClient {
     this.ws = ws;
     let authed = false;
     let lastError: string | undefined;
+    let peerOf: RpcPeer | undefined;
 
     ws.on("message", (data) => {
       if (authed) return;
@@ -89,7 +92,7 @@ export class NodeClient {
         ws.send(JSON.stringify({ type: "auth", machineId: this.o.machineId, signature: signChallenge(msg.nonce, this.o.secretKey) }));
       } else if (msg?.type === "ok") {
         authed = true;
-        this.onAuthed(ws);
+        peerOf = this.onAuthed(ws);
       }
     });
     ws.on("error", (e: any) => {
@@ -103,9 +106,11 @@ export class NodeClient {
         this.peer = undefined;
       }
       clearInterval(this.pingTimer);
-      void this.o.service.abortAll();
+      if (this.o.secondary) {
+        if (peerOf) void this.o.service.detach(peerOf);
+      } else void this.o.service.abortAll();
       if (this.state === "stopped") return;
-      if (code === CLOSE_UNAUTHORIZED) {
+      if (code === CLOSE_UNAUTHORIZED && !this.o.secondary) {
         const message = t("client.rejected", { reason: reason || "unauthorized", hub: this.o.hubUrl });
         this.o.log(message);
         void this.stop();
@@ -130,12 +135,12 @@ export class NodeClient {
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }
 
-  private onAuthed(ws: WebSocket): void {
+  private onAuthed(ws: WebSocket): RpcPeer {
     // From here on every text frame is JSON-RPC. The listener is added while the "ok" frame is being
     // dispatched, so it only sees later frames.
     const peer = createRpcPeer(wsTransport(ws as unknown as WsLike));
     this.peer = peer;
-    this.o.service.attach(peer);
+    this.o.service.attach(peer, this.o.hubUrl);
     peer.onNotification("node.locale", (p: { language?: string }) => setHubLocale(normalizeLocale(p?.language)));
     void (async () => {
       try {
@@ -161,6 +166,7 @@ export class NodeClient {
         ws.terminate();
       }
     })();
+    return peer;
   }
 
   /** Probe the CLIs and announce this machine (info + installed brains) to the hub. */

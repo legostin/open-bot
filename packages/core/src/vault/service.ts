@@ -149,6 +149,27 @@ export class VaultService {
     this.onState("unlocked");
   }
 
+  /** The data key, for another replica of this hub (cluster.ts): only while unlocked, never written anywhere. */
+  exportKey(): string {
+    return Buffer.from(this.requireKey()).toString("base64url");
+  }
+
+  /** Unlock with the data key another replica handed over; a key that does not open the items is refused. */
+  unlockWithKey(b64: string): void {
+    if (!this.meta("wrapped_key")) throw new VaultError("uninitialized", "vault.uninitialized");
+    const key = new Uint8Array(Buffer.from(b64, "base64url"));
+    const r = this.db.prepare("select id, secret from vault_items limit 1").get() as { id: string; secret: string } | undefined;
+    try {
+      if (key.length !== 32) throw new Error("length");
+      if (r) openJson(key, JSON.parse(r.secret) as Sealed, `item:${r.id}`);
+    } catch {
+      throw new VaultError("bad_passphrase", "vault.badPassphrase");
+    }
+    this.key = key;
+    this.refreshRedactor();
+    this.onState("unlocked");
+  }
+
   unlockFromFile(file: string): boolean {
     try {
       const pass = readFileSync(file, "utf8").trim();

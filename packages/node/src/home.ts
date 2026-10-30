@@ -11,6 +11,8 @@ export interface NodeConfig {
   machineId: string;
   name: string;
   pairedAt?: string;
+  /** Every replica of the hub (node.setup): the daemon keeps a connection to each. */
+  hubUrls?: string[];
 }
 
 export interface NodeKey {
@@ -51,7 +53,15 @@ export function loadConfig(home: string): NodeConfig {
     throw new Error(t("home.readFailed", { file, error: e.message }));
   }
   if (!c?.hubUrl || !c?.machineId) throw new Error(t("home.configCorrupt", { file }));
-  return { hubUrl: String(c.hubUrl), machineId: String(c.machineId), name: String(c.name ?? ""), pairedAt: c.pairedAt };
+  const hubUrls = Array.isArray(c.hubUrls) ? c.hubUrls.map(String) : undefined;
+  return { hubUrl: String(c.hubUrl), machineId: String(c.machineId), name: String(c.name ?? ""), pairedAt: c.pairedAt, ...(hubUrls ? { hubUrls } : {}) };
+}
+
+/** Remembers the hub's replicas, so a restart finds the others when the first one is away. */
+export function saveHubUrls(home: string, hubUrls: string[]): void {
+  const c = JSON.parse(readFileSync(configFile(home), "utf8"));
+  if (JSON.stringify(c.hubUrls ?? []) === JSON.stringify(hubUrls)) return;
+  writePrivate(configFile(home), JSON.stringify({ ...c, hubUrls }, null, 2) + "\n");
 }
 
 export function loadKey(home: string): NodeKey {

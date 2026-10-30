@@ -43,6 +43,7 @@ import { AuthService } from "./auth.ts";
 import { DesktopTickets } from "./desktop-login.ts";
 import { MachineHub } from "./machines.ts";
 import { MachineSetups } from "./machine-setup.ts";
+import { Cluster } from "./cluster.ts";
 import { MachineActivityFeed } from "./activity.ts";
 import { DeviceRegistry } from "./devices.ts";
 import { InviteRegistry } from "./invites.ts";
@@ -103,6 +104,8 @@ export class Hub {
   invites: InviteRegistry;
   machines: MachineHub;
   setups: MachineSetups;
+  /** This hub's place among its replicas (cluster.ts); a hub of one always leads. */
+  cluster: Cluster;
   /** What every machine is doing now, for the machines block (activity.ts). */
   activity: MachineActivityFeed;
   /** Phones paired with the hub (the Owlbot app) and the device port they talk to. */
@@ -184,6 +187,8 @@ export class Hub {
     this.invites = new InviteRegistry({ db: this.db, bus: this.bus, audit: this.audit });
     this.setups = new MachineSetups({ db: this.db, bus: this.bus, audit: this.audit, vault: () => this.vault });
     this.machines = new MachineHub({ db: this.db, bus: this.bus, brains: this.brains, audit: this.audit, invites: this.invites, setups: this.setups });
+    this.cluster = new Cluster(this);
+    this.machines.cluster = this.cluster;
     this.activity = new MachineActivityFeed(this.bus, this.machines);
     this.devices = new DeviceRegistry({ db: this.db, bus: this.bus, audit: this.audit, invites: this.invites });
     this.locations = new UserLocations(this.settings, (id) => !!this.devices.get(id));
@@ -622,7 +627,44 @@ export class Hub {
     });
   }
 
+  /** Where machines reach this hub (/node/ws, /mcp): the link when this hub runs on localhost. */
+  machineHubUrl(): string {
+    return machineHubUrl(this.config.publicUrl, this.remote.link());
+  }
+
   private started = false;
+  private leading = false;
+
+  /** Main-only work: tasks, channels, digests, setup checks, plugins and MCP servers (cluster.ts: on the leader only). */
+  async lead(): Promise<void> {
+    if (this.leading) return;
+    this.leading = true;
+    const cfg = this.config;
+    // What other replicas wrote meanwhile: settings and agents are read again.
+    this.agents.reload();
+    this.store.agentConversation(this.settings.get().defaultAgent);
+    if (cfg.plugins !== "none") await this.plugins.startAll(cfg.plugins);
+    await this.mcpClients.sync(this.pluginMcpFiles());
+    this.mcpClients.onChange = () => this.bus.emit("plugins.updated", {});
+    this.runner.start();
+    this.feeds.start();
+    this.setupChats.sweep();
+    this.setup.start();
+    this.notifier.startDigestTimer();
+    for (const m of this.machines.list()) if (m.status === "online") void this.machines.pushSetup(m.id);
+  }
+
+  /** Another replica leads: this one stops its main-only work and keeps its data current. */
+  async standby(): Promise<void> {
+    if (!this.leading) return;
+    this.leading = false;
+    this.notifier.stop();
+    this.feeds.stop();
+    this.setup.stop();
+    await this.runner.stop();
+    await this.plugins.stopAll();
+    await this.mcpClients.closeAll();
+  }
 
   async start(opts: { listen?: boolean } = {}): Promise<void> {
     const cfg = this.config;
@@ -635,7 +677,6 @@ export class Hub {
     await this.egress.listen(cfg.egressPort);
     this.plugins.discover();
     this.started = true;
-    this.store.agentConversation(this.settings.get().defaultAgent);
 
     if (opts.listen !== false) {
       this.mainApp = await buildMainApp(this);
@@ -648,14 +689,8 @@ export class Hub {
 
     // Desktop installs run from launchd or a tray app; a terminal's `npm start` already has the user's PATH.
     if (cfg.installClis) await this.userPath.refresh();
-    if (cfg.plugins !== "none") await this.plugins.startAll(cfg.plugins);
-    await this.mcpClients.sync(this.pluginMcpFiles());
-    this.mcpClients.onChange = () => this.bus.emit("plugins.updated", {});
-    this.runner.start();
-    this.feeds.start();
-    this.setupChats.sweep();
-    this.setup.start();
-    this.notifier.startDigestTimer();
+    await this.cluster.start();
+    if (this.cluster.leads()) await this.lead();
     const sweep = setInterval(() => this.auth.sweep(), 3600_000);
     sweep.unref();
     this.timers.push(sweep);
@@ -673,6 +708,7 @@ export class Hub {
 
   async stop(): Promise<void> {
     for (const t of this.timers) clearInterval(t);
+    await this.cluster.stop();
     this.notifier.stop();
     this.feeds.stop();
     this.setup.stop();

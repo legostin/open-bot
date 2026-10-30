@@ -1,8 +1,10 @@
 // Machines: connected owlbot-node daemons, pairing, rename, revoke.
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Laptop, Link2, Pencil, Trash2, X } from "lucide-react";
-import type { Machine } from "@owlbot/shared";
+import { useLocation } from "wouter";
+import { Check, Laptop, Link2, Pencil, Server, SlidersHorizontal, Trash2, X } from "lucide-react";
+import type { Machine, MachineSetupView, ReplicaState } from "@owlbot/shared";
+import { askInChat } from "../state/ask";
 import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";
 import { hubEvents } from "../state/app";
@@ -16,11 +18,16 @@ export function MachinesPage() {
   const [error, setError] = useState<string>();
   const [pairOpen, setPairOpen] = useState(false);
   const [revoking, setRevoking] = useState<Machine | null>(null);
+  const [setups, setSetups] = useState<Record<string, MachineSetupView>>({});
+  const [replicas, setReplicas] = useState<ReplicaState[]>([]);
 
   const load = useCallback(async () => {
     setError(undefined);
     try {
       setList(await api.get<Machine[]>("/api/machines"));
+      const views = await api.get<MachineSetupView[]>("/api/machines/setups").catch(() => []);
+      setSetups(Object.fromEntries(views.map((v) => [v.machineId, v])));
+      setReplicas(await api.get<ReplicaState[]>("/api/cluster").catch(() => []));
     } catch (e) {
       setError(errorText(e));
     }
@@ -29,7 +36,7 @@ export function MachinesPage() {
   useEffect(() => {
     void load();
     return hubEvents.on((e) => {
-      if (e.type === "machine.updated") void load();
+      if (e.type === "machine.updated" || e.type === "machine.setup" || e.type === "machine.spend" || e.type === "cluster.updated") void load();
     });
   }, [load]);
 
@@ -45,10 +52,11 @@ export function MachinesPage() {
     >
       {error && <ErrorNote onRetry={() => void load()}>{error}</ErrorNote>}
       {!list && !error && <Loading />}
+      {replicas.length > 1 && <ClusterLine replicas={replicas} />}
       {list && list.length === 0 && <EmptyState icon="laptop" title={t("machines.empty")} hint={t("machines.emptyHint")} />}
       <div className="grid gap-3 md:grid-cols-2">
         {list?.map((m) => (
-          <MachineCard key={m.id} m={m} onChanged={load} onRevoke={() => setRevoking(m)} />
+          <MachineCard key={m.id} m={m} setup={setups[m.id]} onChanged={load} onRevoke={() => setRevoking(m)} />
         ))}
       </div>
 
@@ -85,7 +93,42 @@ export function MachinesPage() {
   );
 }
 
-function MachineCard({ m, onChanged, onRevoke }: { m: Machine; onChanged: () => Promise<void>; onRevoke: () => void }) {
+/** Where the hub itself lives: one quiet line, who leads now. */
+function ClusterLine({ replicas }: { replicas: ReplicaState[] }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm shadow-card">
+      <Server className="size-4 text-muted" />
+      <span className="text-muted">{t("cluster.title")}</span>
+      {replicas.map((r) => (
+        <Badge key={r.id} tone={!r.online ? "neutral" : r.role === "leader" ? "success" : "info"} dot>
+          {r.name} · {!r.online ? t("cluster.offline") : r.role === "leader" ? t("cluster.leader") : t("cluster.standby")}
+          {r.online && r.sealed ? ` · ${t("cluster.sealed")}` : ""}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+/** What the machine's brains may use, in one line: sign-in, models, the limit and the spend. */
+function setupLine(v: MachineSetupView | undefined): string | undefined {
+  if (!v) return undefined;
+  const brains = Object.entries(v.settings.brains).map(([id, b]) => {
+    const how = b!.auth === "key" ? t("machines.setup.key", { providers: (b!.providers ?? []).join(", ") }) : t("machines.setup.subscription");
+    const models = b!.models?.length ? ` · ${b!.models.map((m) => m.id).join(", ")}` : "";
+    return `${id}: ${how}${models}`;
+  });
+  const limit = v.settings.limit
+    ? t(v.settings.limit.period === "day" ? "machines.setup.limitDay" : "machines.setup.limitMonth", { spent: v.spent.usd.toFixed(2), usd: v.settings.limit.usd })
+    : v.spent.usd > 0
+      ? t("machines.setup.spent", { spent: v.spent.usd.toFixed(2) })
+      : "";
+  const parts = [...brains, limit].filter(Boolean);
+  return parts.length ? parts.join(" — ") : undefined;
+}
+
+function MachineCard({ m, setup, onChanged, onRevoke }: { m: Machine; setup?: MachineSetupView; onChanged: () => Promise<void>; onRevoke: () => void }) {
+  const [, navigate] = useLocation();
+  const line = setupLine(setup);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(m.name);
   const online = m.status === "online";
@@ -166,7 +209,11 @@ function MachineCard({ m, onChanged, onRevoke }: { m: Machine; onChanged: () => 
           {tRich("machines.folders", { list: <span className="font-mono">{m.info.allowedDirs.join(", ")}</span> })}
         </div>
       )}
-      <div className="mt-3 flex justify-end">
+      {line && <div className="mt-2 text-xs text-muted">{line}</div>}
+      <div className="mt-3 flex justify-end gap-1">
+        <Button size="sm" variant="ghost" icon={<SlidersHorizontal className="size-3.5" />} onClick={() => void askInChat(undefined, t("machines.setupAsk", { name: m.name }), navigate)}>
+          {t("machines.setup.open")}
+        </Button>
         <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={onRevoke}>
           {t("machines.revoke")}
         </Button>

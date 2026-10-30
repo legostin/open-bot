@@ -9,7 +9,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
 import { LOCALES, localeFromEnv } from "@owlbot/shared";
-import { errorText, hubLocale, LocalizedError, requestLocale, tFor } from "../i18n.ts";
+import { errorText, hubLocale, LocalizedError, requestLocale, t, tFor } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { AuthError, type AuthSession } from "../auth.ts";
 import { clientIp, FailureBudget, hostAllowed, HttpError, originAllowed, originsFor, sendFile } from "./http.ts";
@@ -62,6 +62,12 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   app.addHook("onRequest", async (req, reply) => {
     if (!hostAllowed(req, hosts())) {
       reply.code(421).send({ error: "Host not allowed. Add it to OWLBOT_ALLOWED_HOSTS." });
+      return reply;
+    }
+    // A standby replica shows what it has (it is seconds behind) but takes no changes: they go to the leader.
+    const leader = hub.cluster.leaderTarget();
+    if (leader && req.method !== "GET" && req.method !== "HEAD" && req.url.startsWith("/api/") && !req.url.startsWith("/api/auth/")) {
+      reply.code(503).send({ error: t("cluster.standby", { leader: leader.name }) });
       return reply;
     }
   });

@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
@@ -17,6 +18,10 @@ export interface Config {
   deviceHost: string;
   /** OWLBOT_DEVICES=0 closes the device port: phones then reach the hub only through the link. */
   devicesOff: boolean;
+  /** OWLBOT_REPLICA_NAME: what this machine is called among the hub's replicas (cluster.ts). */
+  replicaName: string;
+  /** OWLBOT_NODE_URLS: where machines reach this replica (/node/ws, /mcp); unset: its machine address. */
+  nodeUrls: string[];
   /** OWLBOT_DEVICE_URLS: addresses for the pairing QR ahead of the detected ones (Docker, reverse proxies). */
   deviceUrls: string[];
   /** URL users and nodes use to reach the main UI / API. */
@@ -93,6 +98,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     devicePort,
     deviceHost: env.OWLBOT_DEVICE_HOST ?? "0.0.0.0",
     devicesOff: env.OWLBOT_DEVICES === "0",
+    replicaName: (env.OWLBOT_REPLICA_NAME || hostname().split(".")[0] || "hub").slice(0, 40),
+    nodeUrls: (env.OWLBOT_NODE_URLS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
     deviceUrls: (env.OWLBOT_DEVICE_URLS ?? "")
       .split(",")
       .map((u) => u.trim().replace(/\/$/, ""))

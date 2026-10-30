@@ -12,6 +12,7 @@ import { toUiEvent } from "../bus.ts";
 import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { applyThinking } from "../thinking.ts";
+import { pipeToLeader } from "./forward.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
 import { googleScopes, listCatalog, listIntegrations } from "../integrations.ts";
@@ -431,6 +432,7 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   // The hub's computer and the paired machines with the turns running there now; "machines.activity" keeps it current.
   api.get("/api/machines/activity", async () => hub.activity.view());
   api.get("/api/machines/setups", async () => hub.machines.list().map((m) => hub.setups.view(m.id)));
+  api.get("/api/cluster", async () => hub.cluster.states());
   api.get("/api/machines/:id/setup", async (req) => {
     const m = hub.machines.find((req.params as any).id);
     if (!m) throw new HttpError(404, "machine.notFound");
@@ -661,6 +663,8 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
       socket.close(4403, "origin");
       return;
     }
+    // A phone on a standby replica: its events come from the leader.
+    if ((req as any).device && pipeToLeader(hub, socket as unknown as WebSocket, req)) return;
     const send = (ev: unknown) => {
       if (socket.readyState === 1) socket.send(JSON.stringify(ev));
     };

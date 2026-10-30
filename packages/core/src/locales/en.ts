@@ -133,6 +133,10 @@ export default {
   "machines.revokeApproval": "Disconnect the computer {machine} from Owlbot",
   "machines.setupApproval": "Change what the computer {machine} may use: brains, keys, models and spend limit",
   "machines.writeApproval": "Write a file on {machine}: {path}",
+  "cluster.unlockAsk": "Unlock the vault on {name}: it takes over when this computer sleeps, and keys and tokens wait for this",
+  "cluster.inviteApproval": "Make a link that turns another machine into a replica of this hub (it gets a copy of everything)",
+  "cluster.unlockApproval": "Hand the vault's key to the hub replica {replica}",
+  "cluster.standby": "The hub is moving to {leader}: try again in a moment",
   "machine.badPairingCode": "The invite has expired or was already used. Ask for a new link in the chat",
   "machine.badPublicKey": "Invalid public key",
   "machine.notFound": "No such computer",
@@ -269,6 +273,9 @@ export default {
 
   // admin CLI and logs
   "cli.firstRun": "Owlbot: first run. Open {url}\n  and enter the setup code: {code}",
+  "cli.replicaInvite": "Invite for a new replica (valid 10 minutes):\n{link}",
+  "cli.replicaInviteNew": "This hub is now a replica of its own cluster; restart it so it starts acting as one.\nInvite for a new replica (valid 10 minutes):\n{link}",
+  "cli.replicaJoined": "Joined as replica {id}. Its data is in {dir}; start the hub there: it catches up and takes over when the leader is away.",
   "cli.passwordChanged": "Password changed; all sessions were signed out.",
   "cli.pairingCode": "Pairing code (valid 10 minutes): {code}\nOn the machine: node owlbot-node.mjs pair {url} {code}",
   "cli.devicePair": "Scan the QR code with the Owlbot app on your phone, or open this link on the phone (valid 10 minutes):\n{link}\nCode: {code}",

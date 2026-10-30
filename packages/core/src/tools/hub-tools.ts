@@ -442,6 +442,59 @@ export function registerHubTools(hub: Hub): void {
     },
   );
 
+  // ---------- the cluster: hub replicas ----------
+
+  reg(
+    {
+      name: "cluster_status",
+      effect: "read",
+      description: "The hub's replicas (the machines that each hold the whole hub and take over when the leader goes away): who leads, who is online, whose vault is locked.",
+      inputSchema: obj({}),
+    },
+    () => {
+      const s = hub.cluster.states();
+      if (!s.length) return text("This hub runs on one machine (no replicas). cluster_invite makes a link for a new replica.");
+      return text(
+        s
+          .map((r) => `- ${r.name} (${r.id}) priority ${r.priority}: ${r.online ? r.role : "offline"}${r.sealed ? ", vault locked" : ""}${r.self ? " — this one" : ""}${r.lastSeenAt && !r.online ? `, last seen ${r.lastSeenAt}` : ""}`)
+          .join("\n"),
+      );
+    },
+  );
+
+  reg(
+    {
+      name: "cluster_invite",
+      effect: "external",
+      approvalSummary: "%cluster.inviteApproval%",
+      description:
+        "A one-time link (10 minutes) that makes another machine a replica of this hub: on that machine run `owlbot replica join <link> --name <name> --url https://<its address>:<device port>`. Needs the person's approval.",
+      inputSchema: obj({}),
+    },
+    () => {
+      const { link } = hub.cluster.invite();
+      return text(`Replica invite (valid 10 minutes):\n${link}`);
+    },
+  );
+
+  reg(
+    {
+      name: "replica_unlock",
+      effect: "external",
+      approvalSummary: "%cluster.unlockApproval%",
+      description: "Hand the vault's data key to a hub replica whose vault is locked (it keeps it in memory until it restarts). Needs the person's approval.",
+      inputSchema: obj({ replica: { type: "string", description: "Replica id or name" } }, ["replica"]),
+    },
+    async (i) => {
+      try {
+        const name = await hub.cluster.unlockPeer(String(i.replica));
+        return text(`The vault on ${name} is unlocked.`);
+      } catch (e: any) {
+        return text(e?.message ?? String(e), true);
+      }
+    },
+  );
+
   // ---------- secrets and setup cards ----------
 
   reg(
