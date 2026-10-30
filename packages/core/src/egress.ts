@@ -199,6 +199,11 @@ export class EgressProxy {
   }
 
   close(): Promise<void> {
-    return new Promise((r) => (this.server ? this.server.close(() => r()) : r()));
+    // The plugins and brains that held connections are gone by now: kept-alive ones would hold the close forever.
+    return new Promise((r) => {
+      if (!this.server) return r();
+      this.server.close(() => r());
+      this.server.closeAllConnections?.();
+    });
   }
 }

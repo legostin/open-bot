@@ -224,6 +224,8 @@ export class Cluster {
   async stop(): Promise<void> {
     this.running = false;
     for (const t of this.timers) clearInterval(t);
+    // A switch in progress (taking or handing over the lead) finishes before the hub closes.
+    await this.switching;
     this.files.stop();
     this.main?.stop();
     this.vaultRepl?.stop();
@@ -430,7 +432,7 @@ export class Cluster {
 
   private switchTo(role: Role, why: string): Promise<void> {
     const next = this.switching.then(async () => {
-      if (this.role === role) return;
+      if (this.role === role || !this.running) return;
       console.log(`[cluster] ${this.identity?.name}: ${role} (${why})`);
       this.role = role;
       this.wantLead = false;

@@ -650,7 +650,7 @@ export class Hub {
 
   /** Main-only work: tasks, channels, digests, setup checks, plugins and MCP servers (cluster.ts: on the leader only). */
   async lead(): Promise<void> {
-    if (this.leading) return;
+    if (this.leading || this.stopping) return;
     this.leading = true;
     const cfg = this.config;
     // What other replicas wrote meanwhile: settings and agents are read again.
@@ -721,7 +721,10 @@ export class Hub {
     }
   }
 
+  private stopping = false;
+
   async stop(): Promise<void> {
+    this.stopping = true;
     for (const t of this.timers) clearInterval(t);
     await this.cluster.stop();
     this.notifier.stop();
