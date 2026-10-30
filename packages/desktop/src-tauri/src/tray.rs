@@ -8,17 +8,24 @@ use crate::flavor::Flavor;
 use crate::i18n::{texts, Texts};
 use crate::settings::Mode;
 use crate::supervisor::Status;
+use crate::update::Item;
 
 pub struct Tray {
   pub status: MenuItem<Wry>,
   pub autostart: CheckMenuItem<Wry>,
+  /// Updates: check now, or install the one that is ready (none in the test build or a dev run).
+  pub update: Option<MenuItem<Wry>>,
 }
 
-pub fn build(app: &AppHandle, flavor: &Flavor, autostart: bool) -> tauri::Result<Tray> {
+pub fn build(app: &AppHandle, flavor: &Flavor, autostart: bool, updates: bool) -> tauri::Result<Tray> {
   let t = texts();
   let status = MenuItem::with_id(app, "status", t.t("tray.status.stopped"), false, None::<&str>)?;
   let autostart = CheckMenuItem::with_id(app, "autostart", t.t("tray.autostart"), true, autostart, None::<&str>)?;
+  let update = if updates { Some(MenuItem::with_id(app, "update", update_text(t, &Item::Check), true, None::<&str>)?) } else { None };
   let menu = Menu::with_items(app, &[&status])?;
+  if let Some(update) = &update {
+    menu.append(update)?;
+  }
   // The test build says so first: its own data and ports, next to the app.
   if flavor.test {
     let port = flavor.port.to_string();
@@ -60,7 +67,17 @@ pub fn build(app: &AppHandle, flavor: &Flavor, autostart: bool) -> tauri::Result
     builder = builder.icon(icon.clone());
   }
   builder.build(app)?;
-  Ok(Tray { status, autostart })
+  Ok(Tray { status, autostart, update })
+}
+
+pub fn update_text(t: &Texts, item: &Item) -> String {
+  match item {
+    Item::Check => t.t("tray.update.check"),
+    Item::Checking => t.t("tray.update.checking"),
+    Item::Install(version) => t.f("tray.update.install", &[("version", version)]),
+    Item::Installing => t.t("tray.update.installing"),
+    Item::Failed => t.t("tray.update.failed"),
+  }
 }
 
 pub fn status_text(t: &Texts, status: &Status, mode: Option<Mode>, hub: Option<&str>) -> String {

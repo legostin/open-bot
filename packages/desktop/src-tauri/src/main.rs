@@ -17,6 +17,7 @@ mod settings;
 mod shellpath;
 mod supervisor;
 mod tray;
+mod update;
 mod window;
 
 fn main() {
@@ -29,6 +30,7 @@ fn main() {
   }
   builder
     .plugin(tauri_plugin_deep_link::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
     // Without its click script: that script sends target=_blank links over IPC, which the hub's page may not use, so
     // they did nothing. The main window's own new-window handler opens them in the browser (window.rs).
     .plugin(tauri_plugin_opener::Builder::new().open_js_links_on_click(false).build())

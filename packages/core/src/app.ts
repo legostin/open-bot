@@ -27,6 +27,7 @@ import { SessionRunner } from "./runner.ts";
 import { Team } from "./team.ts";
 import { roadRoute } from "./routing.ts";
 import { UserLocations } from "./user-location.ts";
+import { announceUpdate } from "./updates.ts";
 import { FEED_RUN_TOOLS, Feeds } from "./feeds.ts";
 import { SetupChats } from "./setup-chats.ts";
 import { registerFeedTools } from "./tools/feed-tools.ts";
@@ -665,6 +666,8 @@ export class Hub {
     this.setup.start();
     this.notifier.startDigestTimer();
     for (const m of this.machines.list()) if (m.status === "online") void this.machines.pushSetup(m.id);
+    // A new version since the last start: the default agent tells the person what changed.
+    void announceUpdate(this).catch((e) => console.log(`[owlbot] update note: ${e?.message ?? e}`));
   }
 
   /** Another replica leads: this one stops its main-only work and keeps its data current. */

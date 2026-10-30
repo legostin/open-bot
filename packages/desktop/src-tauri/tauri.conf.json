@@ -45,6 +45,11 @@
   "plugins": {
     "deep-link": {
       "desktop": { "schemes": ["owlbot"] }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI3NTJCNDM2RjNDOTMyQzYKUldUR01zbnpOclJTSjQvaWhSbDRGOXdYZURoVU8rUWFUblhMQlM3RDY2TmVLa0p6emo5Umt4VVoK",
+      "endpoints": ["https://github.com/legostin/open-bot/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
     }
   }
 }

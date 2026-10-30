@@ -24,6 +24,8 @@ pub struct Args {
   pub background: bool,
   pub mode: Option<Mode>,
   pub quit: bool,
+  /// `--update`: the menu's update item from a script (install the downloaded update, or check now).
+  pub update: bool,
 }
 
 impl Args {
@@ -34,6 +36,7 @@ impl Args {
       match a.as_str() {
         "--background" => out.background = true,
         "--quit" => out.quit = true,
+        "--update" => out.update = true,
         "--mode" => out.mode = it.next().and_then(|m| Mode::parse(&m)),
         _ => {}
       }
@@ -132,6 +135,7 @@ pub struct AppState {
   /// "Reset Owlbot…" was chosen: the setup window asks to confirm.
   pub reset: Mutex<bool>,
   pub tray: Mutex<Option<tray::Tray>>,
+  pub updates: crate::update::Updates,
   /// macOS: the login shell's PATH for owlbot-node (a GUI app gets a bare one; the hub reads it itself).
   pub path_env: Option<String>,
 }
@@ -167,10 +171,12 @@ pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error:
     starting: Mutex::new(false),
     reset: Mutex::new(false),
     tray: Mutex::new(None),
+    updates: Default::default(),
     path_env,
   });
   let state = handle.state::<AppState>();
-  *state.tray.lock().unwrap() = Some(tray::build(&handle, &state.paths.flavor, settings.autostart)?);
+  *state.tray.lock().unwrap() = Some(tray::build(&handle, &state.paths.flavor, settings.autostart, crate::update::enabled(&state))?);
+  crate::update::start(&handle);
   if !state.paths.dev {
     #[cfg(target_os = "macos")]
     if !state.paths.flavor.test {
@@ -410,6 +416,10 @@ pub fn second_instance(app: &AppHandle, argv: Vec<String>) {
     app.exit(0);
     return;
   }
+  if args.update {
+    crate::update::on_menu(app);
+    return;
+  }
   let unset = app.state::<AppState>().settings.lock().unwrap().mode.is_none();
   match args.mode {
     Some(mode) if unset => {
@@ -491,6 +501,7 @@ pub fn on_menu(app: &AppHandle, id: &str) {
       }
     }
     "logs" => open_log(app),
+    "update" => crate::update::on_menu(app),
     "restart" => {
       let app = app.clone();
       std::thread::spawn(move || restart(&app));
@@ -544,8 +555,9 @@ mod tests {
 
   #[test]
   fn parses_flags() {
-    assert_eq!(args(&["--mode", "hub", "--background"]), Args { background: true, mode: Some(Mode::Hub), quit: false });
+    assert_eq!(args(&["--mode", "hub", "--background"]), Args { background: true, mode: Some(Mode::Hub), quit: false, update: false });
     assert!(args(&["--quit"]).quit);
+    assert!(args(&["--update"]).update);
     assert_eq!(args(&["--mode", "x"]).mode, None);
     assert_eq!(args(&["owlbot://pair?hub=x&code=y"]), Args::default());
   }
