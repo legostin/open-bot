@@ -131,3 +131,35 @@ describe("a hub on two machines", () => {
     await until(() => a2.cluster.leads() && !b.cluster.leads(), "the lead back on the mac", 60_000);
   });
 });
+
+describe("a leader nobody can reach", () => {
+  const all: Machine[] = [];
+  afterAll(async () => {
+    for (const m of all) await m.hub?.stop().catch(() => {});
+  }, 60_000);
+
+  it("works over the link it dials itself", { timeout: 180_000 }, async () => {
+    const mac = await machine("mac");
+    const vps = await machine("vps");
+    all.push(mac, vps);
+    // The Mac's only published address leads nowhere (a Funnel some networks cannot reach): only it can dial.
+    const real = mac.deviceUrl;
+    mac.env.OWLBOT_DEVICE_URLS = "https://127.0.0.1:1";
+    const a = await boot(mac);
+    a.vault.init("cluster-vault-pass");
+    const dialog = a.store.agentConversation(a.settings.get().defaultAgent);
+    const { link } = a.cluster.invite();
+    await joinCluster({ dataDir: vps.dir, link: link.replace(encodeURIComponent("https://127.0.0.1:1"), encodeURIComponent(real)), name: "vps", urls: [vps.deviceUrl], nodeUrls: [] });
+    const b = await boot(vps);
+    a.store.addMessage({ conversationId: dialog.id, role: "user", parts: [{ type: "text", text: "over the link" }], status: "complete" });
+    await until(() => b.store.listMessages(dialog.id).some((m) => (m.parts[0] as any).text === "over the link"), "the message on the standby over the link");
+    await until(() => b.cluster.states().find((s) => s.name === "mac")?.role === "leader", "the standby seeing the leader");
+    expect(b.cluster.leads()).toBe(false);
+    // A phone at the standby's address gets the leader's answer, through the link.
+    const res = await fetch(`${vps.deviceUrl}/api/device/hello`).catch(() => undefined);
+    expect(res).toBeUndefined(); // self-signed: plain fetch refuses; the forwarding is checked with the pinned client
+    const { pinnedRequest } = await import("@owlbot/replica");
+    const r = await pinnedRequest(`${vps.deviceUrl}/api/devices/me`, { fingerprint: b.deviceTls().fingerprint });
+    expect(r.status).toBe(401);
+  });
+});

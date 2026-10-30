@@ -22,9 +22,12 @@ import {
   type ReplicaKey,
   type ReplTable,
 } from "@owlbot/replica";
+import type WebSocket from "ws";
+import type { RpcPeer } from "@owlbot/shared";
 import { json } from "./db.ts";
 import { t } from "./i18n.ts";
 import type { Hub } from "./app.ts";
+import { dialLink, linkPeer, serveLink, type LinkAnswer, type LinkCall } from "./replica-link.ts";
 
 /** owlbot.db tables every replica shares (the rest stays per replica: audit's hash chain, pairing codes). */
 export const MAIN_TABLES: ReplTable[] = [
@@ -158,6 +161,9 @@ export class Cluster {
   private lastState = "";
   private synced = new Set<string>();
   private syncedTimer: NodeJS.Timeout | undefined;
+  /** Lasting connections to peers (replica-link.ts), dialed by either side. */
+  private links = new Map<string, RpcPeer>();
+  private dialing = new Map<string, number>();
 
   constructor(hub: Hub) {
     this.hub = hub;
@@ -226,6 +232,8 @@ export class Cluster {
     for (const t of this.timers) clearInterval(t);
     // A switch in progress (taking or handing over the lead) finishes before the hub closes.
     await this.switching;
+    for (const l of this.links.values()) l.close();
+    this.links.clear();
     this.files.stop();
     this.main?.stop();
     this.vaultRepl?.stop();
@@ -292,6 +300,11 @@ export class Cluster {
   // ---------- talking to peers ----------
 
   private async call(p: Peer, method: string, path: string, body?: unknown, timeoutMs = 5_000): Promise<{ status: number; body: Buffer }> {
+    const link = this.links.get(p.id);
+    if (link && !link.closed) {
+      const a = await link.request<LinkAnswer>("replica.call", { method, path, body } satisfies LinkCall, { timeoutMs });
+      return { status: a.status, body: a.binary ? Buffer.from(String(a.body), "base64") : Buffer.from(JSON.stringify(a.body ?? null)) };
+    }
     const text = body === undefined ? "" : JSON.stringify(body);
     const urls = p.url ? [p.url, ...p.urls.filter((u) => u !== p.url)] : p.urls;
     let last: unknown;
@@ -323,6 +336,7 @@ export class Cluster {
     if (!this.running || !this.identity) return;
     this.refreshSelf();
     this.loadPeers();
+    for (const p of this.peers.values()) this.dial(p);
     await Promise.all(
       [...this.peers.values()].map(async (p) => {
         try {
@@ -387,6 +401,76 @@ export class Cluster {
     }
   }
 
+  // ---------- links ----------
+
+  /** Keeps a link to a peer: dials its addresses now and then while there is none (its own dial may come first). */
+  private dial(p: Peer): void {
+    const l = this.links.get(p.id);
+    if ((l && !l.closed) || Date.now() - (this.dialing.get(p.id) ?? 0) < 5_000) return;
+    this.dialing.set(p.id, Date.now());
+    void (async () => {
+      for (const url of p.url ? [p.url, ...p.urls.filter((u) => u !== p.url)] : p.urls) {
+        try {
+          const ws = await dialLink({ url, key: this.identity!, fingerprint: this.hub.deviceTls().fingerprint });
+          if (!this.running) return ws.close();
+          this.attachLink(ws, p.id);
+          return;
+        } catch {
+          /* the next address, or the peer dials us */
+        }
+      }
+    })();
+  }
+
+  /** A peer's link that it dialed (device app, signed at the upgrade). */
+  accept(ws: WebSocket, from: string): void {
+    this.attachLink(ws, from);
+  }
+
+  private attachLink(ws: WebSocket, peerId: string): void {
+    const rpc = linkPeer(ws);
+    serveLink(rpc, peerId, {
+      call: (from, c) => this.serveCall(from, c),
+      deviceUrl: () => `https://127.0.0.1:${this.hub.config.devicePort}`,
+      fingerprint: () => this.hub.deviceTls().fingerprint,
+    });
+    const old = this.links.get(peerId);
+    if (!old || old.closed) this.links.set(peerId, rpc);
+    rpc.onClose(() => {
+      if (this.links.get(peerId) === rpc) this.links.delete(peerId);
+    });
+  }
+
+  /** The link to the leader, for forwarding the phones. */
+  leaderLink(): RpcPeer | undefined {
+    if (this.leads()) return undefined;
+    const p = [...this.peers.values()].find((x) => x.online && x.hello?.role === "leader");
+    const l = p && this.links.get(p.id);
+    return l && !l.closed ? l : undefined;
+  }
+
+  /** What the device-app routes answer, for a call over a link. */
+  private async serveCall(from: string, c: LinkCall): Promise<LinkAnswer> {
+    const b = (c.body ?? {}) as any;
+    switch (c.path) {
+      case "/api/replica/hello":
+        return { status: 200, body: this.hello() };
+      case "/api/replica/changes":
+        return { status: 200, body: await this.changes(b.db === "vault" ? "vault" : "main", b.vector ?? {}, Number(b.wait) || 0) };
+      case "/api/replica/files/changes":
+        return { status: 200, body: this.files.changesSince(Number(b.cursor) || 0, Math.min(Number(b.limit) || 500, 2_000)) };
+      case "/api/replica/files/read": {
+        const bytes = await this.files.read(String(b.root ?? ""), String(b.path ?? ""), String(b.sha ?? ""));
+        return bytes ? { status: 200, body: Buffer.from(bytes).toString("base64"), binary: true } : { status: 404, body: { error: "gone" } };
+      }
+      case "/api/replica/vault-key":
+        this.receiveKey(from, String(b.key ?? ""));
+        return { status: 200, body: { ok: true } };
+      default:
+        return { status: 404, body: { error: `no ${c.path}` } };
+    }
+  }
+
   // ---------- who leads ----------
 
   private better(p: Peer): boolean {
@@ -448,10 +532,12 @@ export class Cluster {
   }
 
   /** The leader to forward clients to, when this replica is standby. */
-  leaderTarget(): { url: string; name: string } | undefined {
+  leaderTarget(): { url?: string; name: string; link?: RpcPeer } | undefined {
     if (this.leads()) return undefined;
     const p = [...this.peers.values()].find((x) => x.online && x.hello?.role === "leader");
-    return p?.url ? { url: p.url, name: p.name } : undefined;
+    if (!p) return undefined;
+    const link = this.links.get(p.id);
+    return { name: p.name, ...(p.url ? { url: p.url } : {}), ...(link && !link.closed ? { link } : {}) };
   }
 
   // ---------- the vault on other replicas ----------

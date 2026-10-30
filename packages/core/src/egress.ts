@@ -53,6 +53,7 @@ interface Grant {
 export class EgressProxy {
   private grants = new Map<string, Grant>();
   private server?: http.Server;
+  private sockets = new Set<import("node:net").Socket>();
   private denyLogged = new Map<string, number>();
   audit?: AuditLog;
   /** Dynamic extra allowlist for brains (settings.brainEgressAllow). */
@@ -192,6 +193,11 @@ export class EgressProxy {
     });
 
     this.server = server;
+    // Tunnels (CONNECT) leave the server's own bookkeeping: they are tracked here so closing can end them.
+    server.on("connection", (sock) => {
+      this.sockets.add(sock);
+      sock.on("close", () => this.sockets.delete(sock));
+    });
     return new Promise((resolve, reject) => {
       server.once("error", reject);
       server.listen(port, "127.0.0.1", () => resolve());
@@ -204,6 +210,8 @@ export class EgressProxy {
       if (!this.server) return r();
       this.server.close(() => r());
       this.server.closeAllConnections?.();
+      for (const sock of this.sockets) sock.destroy();
+      this.sockets.clear();
     });
   }
 }

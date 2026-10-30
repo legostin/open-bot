@@ -3,9 +3,18 @@
 // be checked over exactly what was sent.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type WebSocket from "ws";
 import type { Hub } from "../app.ts";
+import { LINK_PATH } from "../replica-link.ts";
 
 export async function registerReplicaRoutes(app: FastifyInstance, hub: Hub): Promise<void> {
+  // A peer's lasting link (replica-link.ts): signed at the upgrade, then RPC both ways.
+  app.get(LINK_PATH, { websocket: true }, (socket, req) => {
+    const from = hub.cluster.verify("GET", LINK_PATH, "", req.headers.authorization);
+    if (!from) return socket.close(4401, "not a replica of this hub");
+    hub.cluster.accept(socket as unknown as WebSocket, from);
+  });
+
   await app.register(async (r) => {
     r.removeAllContentTypeParsers();
     r.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: 8 * 1024 * 1024 }, (_req, body, done) => done(null, body));
