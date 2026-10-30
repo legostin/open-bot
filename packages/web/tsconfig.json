@@ -20,6 +20,7 @@
       "@owlbot/shared/avatar": ["../shared/src/avatar.ts"],
       "@owlbot/shared/group": ["../shared/src/group.ts"],
       "@owlbot/shared/thinking": ["../shared/src/thinking.ts"],
+      "@owlbot/shared/models": ["../shared/src/models.ts"],
       "@owlbot/ui": ["../ui-sdk/src/index.ts"]
     }
   },

@@ -29,6 +29,7 @@ import { ThinkingCard } from "./ThinkingCard";
 import { PageCard } from "./PageCard";
 import { TaskLine } from "./TaskLine";
 import { LiveStep } from "./LiveStep";
+import { ModelBadge } from "./ModelBadge";
 import { ConnectDeviceCard } from "./ConnectDeviceCard";
 import { WidgetCard } from "./WidgetCard";
 import { t, type MessageKey } from "../../i18n";
@@ -411,10 +412,14 @@ export const DefaultMessage = memo(function DefaultMessage({
             <span className="font-semibold text-fg">{name}</span>
             {details && message.brainRef && <span className="font-mono text-[11px]">{message.brainRef}</span>}
             <span className="tabular-nums">{formatTime(message.createdAt)}</span>
+            {/* Which brain, model and effort answered: said when tapped. */}
+            {!streaming && <ModelBadge message={message} className="self-center" />}
           </div>
         )}
-        <div className="msg-parts text-[15px] leading-relaxed">
+        <div className={cx("msg-parts text-[15px] leading-relaxed", grouped && "group/msg relative")}>
           <Parts message={message} />
+          {/* A reply after another of the agent's: its mark shows on hover (the first one's is in the header). */}
+          {grouped && !streaming && <ModelBadge message={message} className="absolute top-0 -right-1 opacity-0 transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100" />}
         </div>
       </div>
     </div>

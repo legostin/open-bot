@@ -101,3 +101,13 @@ export function catalogOf(models: readonly string[], names: Record<string, strin
   const ids = [...new Set([...own.map((p) => p.id), ...models])];
   return ids.map((id) => own.find((p) => p.id === id) ?? profileOf(id, names[id]));
 }
+
+const capital = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+
+/** A model's name for people: "claude-sonnet-5-5" → "Sonnet 5.5", "opus" → "Opus"; other ids as they are. */
+export function modelLabel(id: string): string {
+  const claude = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{6,})?$/i.exec(id);
+  if (claude) return `${capital(claude[1])} ${claude[2]}${claude[3] ? `.${claude[3]}` : ""}`;
+  if (/^(fable|opus|sonnet|haiku)$/i.test(id)) return capital(id.toLowerCase());
+  return id;
+}

@@ -129,8 +129,9 @@ interface Live {
   brainRef: string;
   /** The agent definition the session was opened with: an edited agent gets a fresh session on its next turn. */
   stamp: string;
-  /** The model it thinks with now (the router's choice for its last turn). */
+  /** The model and effort it thinks with now (the router's choice for its last turn). */
   model?: string;
+  effort?: string;
 }
 
 /** Before a message in a live session that the hub moved to another model (model-router.ts). */
@@ -1373,7 +1374,7 @@ export class SessionRunner {
         ? { confine: { ...confinement(this.d.config.dataDir, workspace, local && ref.brainId === "claude-code" ? this.d.claudePluginDirs() : []), permissionTool: NATIVE_PERMISSION_TOOL } }
         : {}),
     });
-    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv, kind, this.d.toolNames?.()), ...(thinking.model ? { model: thinking.model } : {}) });
+    this.live.set(row.id, { handle, brainRef: formatBrainRef(ref), stamp: sessionStamp(agent, conv, kind, this.d.toolNames?.()), ...(thinking.model ? { model: thinking.model } : {}), ...(thinking.effort ? { effort: thinking.effort } : {}) });
     if (!sameBrain) this.d.audit.append("core", "session.open", row.id, { agent: agent.id, brain: formatBrainRef(ref), conversation: conv.id, task: task?.id });
     return { row, handle, fresh: !!prior && !resume };
   }
@@ -1725,6 +1726,7 @@ export class SessionRunner {
         // A live session that thinks with another model now hears it was the hub's doing, not something to remark on.
         if (pick?.model && live!.model && live!.model !== pick.model) input.text = input.text.replace(/^(\[Now: [^\]]*\]\n)?/, (now) => `${now}${MODEL_SWITCH_NOTE}\n`);
         if (pick?.model) live!.model = pick.model;
+        if (pick?.effort) live!.effort = pick.effort;
         const r = await this.streamTurn(conv, row!, live!, agent, { ...input, ...backup, ...thinks }, task, opts.replyChannel, opts.replyTo);
         if (r.retry) {
           lastError = r.error ?? lastError;
@@ -1759,8 +1761,22 @@ export class SessionRunner {
     replyChannel?: string,
     replyTo?: TurnOpts["replyTo"],
   ): Promise<TurnResult & { retry?: boolean }> {
+    // How it thinks for this reply: the model asked for (the one that answers replaces it when the brain says) and the effort.
+    let model = turn.model ?? live.model;
+    const effort = turn.effort ?? live.effort;
     const newMessage = (parts: MessagePart[] = []) =>
-      this.d.store.addMessage({ conversationId: conv.id, role: "assistant", parts, status: "streaming", agentId: agent.id, taskId: task?.id, brainRef: live.brainRef, channel: replyChannel });
+      this.d.store.addMessage({
+        conversationId: conv.id,
+        role: "assistant",
+        parts,
+        status: "streaming",
+        agentId: agent.id,
+        taskId: task?.id,
+        brainRef: live.brainRef,
+        ...(model ? { model } : {}),
+        ...(effort ? { effort } : {}),
+        channel: replyChannel,
+      });
     // The reply's first message shows which of the user's messages it answers.
     const answers: MessagePart[] = replyTo ? [{ type: "reply_to", ...replyTo }] : [];
     let msg = newMessage(answers);
@@ -1848,6 +1864,12 @@ export class SessionRunner {
         }
         case "usage":
           tokens += (e.inputTokens ?? 0) + (e.outputTokens ?? 0);
+          break;
+        case "model":
+          if (e.model && e.model !== model) {
+            model = e.model;
+            this.d.store.updateMessage(msg.id, { model });
+          }
           break;
         case "limit_hit":
           limited = { resetAt: e.resetAt };

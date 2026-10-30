@@ -301,6 +301,9 @@ export class CodexAppTurn {
       if (!r && this.threadId && turn.recap) turn = { ...turn, text: `${turn.recap}\n\n---\n${turn.text}` };
       if (!r) r = await this.request("thread/start", thread);
       this.threadId = r?.thread?.id ?? this.threadId;
+      // The model the thread answers with (its default when none was asked for).
+      const model = typeof r?.model === "string" && r.model ? r.model : this.s.model;
+      if (model) this.events.push({ type: "model", model });
       const t = await this.request("turn/start", { threadId: this.threadId, input: this.input(turn), ...(this.s.effort ? { effort: this.s.effort } : {}) });
       this.parser.turnId = t?.turn?.id;
       this.started = true;

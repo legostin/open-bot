@@ -92,6 +92,11 @@ const MIGRATIONS: string[] = [
   `alter table approvals add column ask text;`,
   // The brain and depth chosen for a task by whoever started it (Task.thinking, JSON).
   `alter table tasks add column thinking text;`,
+  // The model that answered a reply and the effort it was asked for (Message.model, Message.effort).
+  `
+  alter table messages add column model text;
+  alter table messages add column effort text;
+  `,
 ];
 
 export function openDb(file: string): Db {

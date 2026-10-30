@@ -62,6 +62,8 @@ export class ClaudeStreamParser {
   mcpFailed = false;
   /** User messages from stdin the CLI has taken (--replay-user-messages echoes each one when it does). */
   replays = 0;
+  /** The model that answered (reported once). */
+  model?: string;
   private t: Translate;
 
   constructor(t: Translate = brainsT()) {
@@ -96,6 +98,11 @@ export class ClaudeStreamParser {
       case "assistant": {
         if (!top) break;
         const m = msg.message ?? {};
+        // The model that answers, once per turn (not the stand-in Claude Code writes for its own error messages).
+        if (typeof m.model === "string" && m.model && m.model !== "<synthetic>" && m.model !== this.model) {
+          this.model = m.model;
+          out.push({ type: "model", model: m.model });
+        }
         for (const block of m.content ?? []) {
           if (block.type === "text" && block.text && !this.streamed.has(m.id)) out.push({ type: "text", delta: block.text });
           if (block.type === "tool_use") out.push({ type: "tool_call", id: block.id, name: stripPrefix(block.name), input: block.input ?? {} });

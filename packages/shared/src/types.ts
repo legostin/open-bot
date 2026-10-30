@@ -359,6 +359,9 @@ export interface Message {
   agentId?: string;
   taskId?: string;
   brainRef?: string;
+  /** How the agent thought for this reply: the model that answered (as the brain named it) and the effort it was asked for. */
+  model?: string;
+  effort?: string;
   /** Where a user message came from / where an assistant reply should also go. */
   channel?: string;
   createdAt: ISODate;
@@ -720,6 +723,8 @@ export type BrainEvent =
   | { type: "tool_call"; id: string; name: string; input: unknown }
   | { type: "tool_result"; id: string; output: string; isError?: boolean }
   | { type: "usage"; inputTokens?: number; outputTokens?: number; costUsd?: number }
+  /** The model that answers this turn, as the brain names it (an alias it resolved, its default), when it can tell. */
+  | { type: "model"; model: string }
   | { type: "limit_hit"; resetAt?: ISODate; detail: string }
   | { type: "error"; message: string; fatal?: boolean }
   | { type: "done"; resumeToken?: string };

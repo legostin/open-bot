@@ -377,6 +377,7 @@ export class ApiBrainSession implements BrainSessionImpl {
       yield { type: "error", message: key.error, fatal: true };
       return;
     }
+    yield { type: "model", model };
 
     let tools: McpTool[];
     try {

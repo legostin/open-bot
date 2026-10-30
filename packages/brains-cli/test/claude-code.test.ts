@@ -29,6 +29,14 @@ async function collect(it: AsyncIterable<BrainEvent>): Promise<BrainEvent[]> {
 }
 
 describe("ClaudeStreamParser", () => {
+  it("says once which model answers, not the stand-in of its own error messages", () => {
+    const p = new ClaudeStreamParser();
+    expect(p.push({ type: "assistant", message: { id: "a", model: "<synthetic>", content: [] }, parent_tool_use_id: null })).toEqual([]);
+    expect(p.push({ type: "assistant", message: { id: "b", model: "claude-haiku-5-5", content: [] }, parent_tool_use_id: null })).toEqual([{ type: "model", model: "claude-haiku-5-5" }]);
+    expect(p.push({ type: "assistant", message: { id: "c", model: "claude-haiku-5-5", content: [] }, parent_tool_use_id: null })).toEqual([]);
+    expect(p.push({ type: "assistant", message: { id: "d", model: "claude-opus-5-5", content: [] }, parent_tool_use_id: "t1" })).toEqual([]);
+  });
+
   it("streams text once, maps tools, skips subagent output", () => {
     const p = new ClaudeStreamParser();
     const ev = [
@@ -284,6 +292,12 @@ describe("Codex provider (fake CLI)", () => {
   const stateDir = mkdtempSync(join(tmpdir(), "owl-cx-state-"));
   const provider = createCodexProvider({ command: () => fakeCodex, stateDir, sandbox: () => "workspace-write" });
   const text = (ev: BrainEvent[]) => ev.filter((e) => e.type === "text").map((e: any) => e.delta).join("");
+
+  it("says which model the thread answers with", async () => {
+    const s = await provider.createSession(opts({ model: "gpt-x" }));
+    const ev = await collect(s.send({ text: "hi" }));
+    expect(ev).toContainEqual({ type: "model", model: "gpt-x" });
+  });
 
   it("runs turns through the app server and resumes the thread", async () => {
     const s = await provider.createSession(opts({ model: "gpt-x" }));

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentDef } from "../src/types.ts";
+import { modelLabel } from "../src/models.ts";
 import { brainsFor, brainSpeed, fitEffort, parseThinking, patchChoice, resolveThinking, taskThinking, thinkingFor, withChoice, workKind } from "../src/thinking.ts";
 
 const presets = { fast: { model: "sonnet", effort: "low" }, balanced: { model: "opus", effort: "medium" }, deep: { model: "opus", effort: "xhigh" } };
@@ -91,5 +92,13 @@ describe("thinking per kind of work", () => {
     });
     expect(parseThinking({ task: { preset: "slow" } })).toBeUndefined();
     expect(parseThinking("deep")).toBeUndefined();
+  });
+
+  it("names models for people", () => {
+    expect(modelLabel("claude-sonnet-5-5")).toBe("Sonnet 5.5");
+    expect(modelLabel("claude-fable-5-1")).toBe("Fable 5.1");
+    expect(modelLabel("claude-opus-4-20250514")).toBe("Opus 4");
+    expect(modelLabel("haiku")).toBe("Haiku");
+    expect(modelLabel("deepseek-chat")).toBe("deepseek-chat");
   });
 });

@@ -107,7 +107,7 @@ describe("brain-api plugin", () => {
     const events = await h.brainSend("s-tool", { text: "Скажи ping" });
 
     const kinds = events.map((e) => e.type).filter((t, i, a) => t !== a[i - 1]);
-    expect(kinds).toEqual(["text", "usage", "tool_call", "tool_result", "text", "usage", "done"]);
+    expect(kinds).toEqual(["model", "text", "usage", "tool_call", "tool_result", "text", "usage", "done"]);
     const call = events.find((e) => e.type === "tool_call");
     expect(call).toEqual({ type: "tool_call", id: "toolu_mock_1_0", name: "echo", input: { text: "ping" } });
     expect(events.find((e) => e.type === "tool_result")).toEqual({ type: "tool_result", id: "toolu_mock_1_0", output: "echo: ping" });

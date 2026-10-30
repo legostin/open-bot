@@ -86,6 +86,13 @@ describe("front desk (integration)", () => {
     expect(await ask("desk", "THINKING?")).toBe("fake thinks: model=smart effort=low");
     await ask("desk", "Спасибо!");
     expect(await ask("desk", "MODELS?")).toBe("fake used: smart/low, quick/low, smart/low");
+    // Each reply says how it was made, for the mark by the message.
+    const replies = hub.store.listMessages(hub.store.agentConversation("desk").id, { limit: 50 }).filter((m) => m.role === "assistant");
+    expect(replies.map((m) => [m.brainRef, m.model, m.effort])).toEqual([
+      ["fake@local", "smart", "low"],
+      ["fake@local", "quick", "low"],
+      ["fake@local", "smart", "low"],
+    ]);
     const c = hub.store.agentConversation("desk").id;
     const delegated = async (input: Record<string, unknown>) => {
       const before = hub.store.listTasks({ limit: 500 }).length;
