@@ -707,7 +707,7 @@ export interface BrainSessionOptions {
    * that, the brain asks the hub through the MCP tool `permissionTool`, which may ask the person. Unset: no sandbox
    * (a remote machine, or a hub isolated by unix users).
    */
-  confine?: { denyRead: string[]; allowRead: string[]; permissionTool: string };
+  confine?: { denyRead: string[]; allowRead: string[]; allowWrite?: string[]; permissionTool: string };
   /**
    * A dialog the person talks in: the brain keeps its process between turns (and may start it before the first one,
    * `warm`), so a reply does not wait for a CLI to start. Unset for tasks: their process ends with the turn.
