@@ -10,7 +10,7 @@
     "settings": {
       "type": "object",
       "properties": {
-        "command": { "type": "string", "title": "%settings.command.title%", "default": "codex" },
+        "command": { "type": "string", "title": "%settings.command.title%", "description": "%settings.command.description%", "default": "codex" },
         "apiKeyRef": { "type": "string", "title": "%settings.apiKeyRef.title%", "description": "%settings.apiKeyRef.description%" },
         "sandbox": { "type": "string", "enum": ["danger-full-access", "workspace-write", "read-only"], "default": "danger-full-access", "title": "%settings.sandbox.title%", "description": "%settings.sandbox.description%" }
       }

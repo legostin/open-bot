@@ -1,14 +1,12 @@
 // Brains on this machine: Claude Code / Codex CLIs logged in with the owner's subscriptions.
 // Same brain.* contract as plugin processes (packages/plugin-sdk/src/runner.ts), driven over the hub WebSocket.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, ProbeResult } from "@owlbot/shared";
 import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
-import { createClaudeCodeProvider, createCodexProvider } from "@owlbot/brains-cli";
+import { codexChooser, createClaudeCodeProvider, createCodexProvider } from "@owlbot/brains-cli";
 import type { PolicyStore } from "./policy.ts";
 import { resolveWorkspace } from "./guard.ts";
 import { hubLocale, tHub } from "./messages.ts";
@@ -46,59 +44,6 @@ export function resolveCli(command: string, env: NodeJS.ProcessEnv = process.env
     }
   }
   return command;
-}
-
-/** Where the ChatGPT and Codex apps keep the Codex they run (macOS): their `codex-cli` folder. */
-export const APP_CODEX_ROOTS = ["ChatGPT.app", "Codex.app"].flatMap((app) =>
-  ["/Applications", join(homedir(), "Applications")].map((dir) => join(dir, app, "Contents", "Resources", "codex-cli")),
-);
-
-function versionOf(text: string): { parts: number[]; pre: boolean } | undefined {
-  const m = /(\d+)\.(\d+)\.(\d+)(-[\w.]+)?/.exec(text);
-  return m ? { parts: [Number(m[1]), Number(m[2]), Number(m[3])], pre: !!m[4] } : undefined;
-}
-
-/** Positive when version text `a` is newer than `b` ("codex-cli 0.165.0-alpha.1.2" vs "0.153.4"); unknown is oldest. */
-export function compareVersions(a: string | undefined, b: string | undefined): number {
-  const pa = versionOf(a ?? "");
-  const pb = versionOf(b ?? "");
-  if (!pa || !pb) return pa ? 1 : pb ? -1 : 0;
-  for (let i = 0; i < 3; i++) if (pa.parts[i] !== pb.parts[i]) return pa.parts[i] - pb.parts[i];
-  return (pb.pre ? 1 : 0) - (pa.pre ? 1 : 0);
-}
-
-/** The Codex copies the apps carry, with their versions (`codex-package.json` names the entry point). */
-export function appCodexes(roots: string[] = APP_CODEX_ROOTS): Array<{ command: string; version: string }> {
-  const out: Array<{ command: string; version: string }> = [];
-  for (const root of roots) {
-    try {
-      const pkg = JSON.parse(readFileSync(join(root, "codex-package.json"), "utf8"));
-      const entry = typeof pkg.entrypoint === "string" && /^[\w-]+(\/[\w.-]+)*$/.test(pkg.entrypoint) && !pkg.entrypoint.includes("..") ? pkg.entrypoint : "bin/codex";
-      const command = join(root, entry);
-      if (typeof pkg.version === "string" && existsSync(command)) out.push({ command, version: pkg.version });
-    } catch {
-      // Not installed here.
-    }
-  }
-  return out;
-}
-
-/**
- * The newest Codex on this machine: the one on PATH or a copy the ChatGPT / Codex app carries. Codex's servers offer
- * newer models only to newer clients, so an npm install left behind sees an older line-up (GPT-6 Astra and GPT-5.6
- * where the app's copy also has GPT-6.1 Sol, Terra and GPT-6 Luna).
- */
-export function newestCodex(onPath: string, apps = appCodexes()): string {
-  if (!apps.length) return onPath;
-  let version: string | undefined;
-  try {
-    version = execFileSync(onPath, ["--version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] });
-  } catch {
-    version = undefined;
-  }
-  let best: { command: string; version: string | undefined } = { command: onPath, version };
-  for (const a of apps) if (compareVersions(a.version, best.version) > 0) best = a;
-  return best.command;
 }
 
 /** Target script of an npm cmd-shim: `"%dp0%\node_modules\pkg\bin\cli.js" %*`. */
@@ -162,6 +107,7 @@ export class BrainHost {
     const policy = () => o.policy.get();
     const stateDir = (id: string) => join(o.home, "brains", id);
     const log = (m: string) => o.log?.(m);
+    const codex = codexChooser();
     this.providers.set(
       "claude-code",
       createClaudeCodeProvider({
@@ -175,23 +121,14 @@ export class BrainHost {
     this.providers.set(
       "codex",
       createCodexProvider({
-        command: () => this.codexCommand(),
+        // The Codex policy names, else the newest on this machine (Codex offers newer models only to newer clients).
+        command: () => resolveCli(codex(policy().brains.codex.command)),
         sandbox: () => policy().brains.codex.sandbox,
         stateDir: stateDir("codex"),
         log,
         locale: hubLocale,
       }),
     );
-  }
-
-  private codex?: { at: number; command: string };
-
-  /** The Codex policy names, else the newest on this machine (asked again every ten minutes). */
-  private codexCommand(): string {
-    const named = this.o.policy.get().brains.codex.command;
-    if (named || process.platform !== "darwin") return resolveCli(named ?? DEFAULT_COMMANDS.codex);
-    if (!this.codex || Date.now() - this.codex.at > 10 * 60_000) this.codex = { at: Date.now(), command: newestCodex(DEFAULT_COMMANDS.codex) };
-    return this.codex.command;
   }
 
   private enabled(id: string): id is NodeBrainId {
