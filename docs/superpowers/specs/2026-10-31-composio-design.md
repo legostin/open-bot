@@ -18,7 +18,8 @@ MCP servers with open registration) stay as they are and are preferred where the
   > account's keys are kept there, not on your hub, and Composio sees what the agent reads and sends. It needs your
   > own Composio account (free up to 100,000 calls a month). [composio.dev]
 
-  The badge is everywhere the card is: the catalog, the entry's page, the card in the chat; web, desktop and iOS.
+  The badge is everywhere the card is: the catalog, the entry's page, the card in the chat; web, desktop and iOS
+  (the iOS app draws no integration cards in the chat yet, for any integration: there the badge is in the catalog).
 - **Connecting, chat first.** "Connect Slack" (or Connect in the catalog, which opens the chat with that request):
   1. No Composio key yet: the agent shows Slack's card with the key field and where to get it (composio.dev →
      Settings → API keys); the key goes straight to the vault.
@@ -41,8 +42,9 @@ Two general abilities, for any integration of this kind.
 - The running plugin reports its entries' state, and entries it added, with `ctx.catalog.update(entries)`
   (`packages/plugin-sdk/src/types.ts`, `runner.ts`, request `catalog.update`). Each state: `status`
   (`connected` | `needs-setup` | `broken`), `connect` (`setup` while the plugin's own secrets are missing, else
-  `signin`), `account`, `detail`. The core keeps the last report per plugin in its settings store so added entries
-  come back after a restart (before the plugin reports again they show as `needs-setup`).
+  `signin`), `account`, `detail`. The core keeps the last report while the plugin runs; the plugin keeps its added
+  entries in its own storage and reports them again when it starts. While the plugin is off only the manifest's
+  entries show.
 - In the catalog an entry's id is `<pluginId>:<entryId>` (`composio:slack`). `listIntegrations` expands such a
   plugin into its own card (if it has an `integration` block of its own) plus one view per entry. Every place that
   takes an integration id takes it: `hub_integrations_list`, `hub_integration_connect`, the chat card
