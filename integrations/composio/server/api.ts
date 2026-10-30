@@ -6,8 +6,12 @@ import type { JsonSchema } from "@owlbot/shared";
 
 export const DEFAULT_API = "https://backend.composio.dev/api/v3.1";
 
-/** key: the key was refused; limit: the month's calls are used up; down: Composio is unreachable or failing. */
-export type ComposioErrorKind = "key" | "limit" | "down" | "other";
+/**
+ * key: the key was refused (401); limit: the plan's calls are used up (402); rate: too many calls just now (429);
+ * down: Composio is unreachable or failing; other: the request itself (403 is an account without access to that
+ * channel or repository, not a bad key).
+ */
+export type ComposioErrorKind = "key" | "limit" | "rate" | "down" | "other";
 
 export class ComposioError extends Error {
   status: number;
@@ -15,11 +19,11 @@ export class ComposioError extends Error {
   constructor(status: number, message: string) {
     super(message);
     this.status = status;
-    this.kind = status === 401 || status === 403 ? "key" : status === 402 || status === 429 ? "limit" : status === 0 || status >= 500 ? "down" : "other";
+    this.kind = status === 401 ? "key" : status === 402 ? "limit" : status === 429 ? "rate" : status === 0 || status >= 500 ? "down" : "other";
   }
 }
 
-/** An app of Composio's (a toolkit). `managed`: Composio signs in to it with its own OAuth app (or it needs none). */
+/** An app of Composio's (a toolkit). `managed`: Composio signs in to it with its own OAuth app. */
 export interface Toolkit {
   slug: string;
   name: string;
@@ -71,7 +75,7 @@ function toolkitOf(t: any): Toolkit {
     slug: str(t?.slug).toLowerCase(),
     name: str(t?.name) || str(t?.slug),
     description: str(t?.meta?.description),
-    managed: t?.no_auth === true || (Array.isArray(t?.composio_managed_auth_schemes) && t.composio_managed_auth_schemes.length > 0),
+    managed: Array.isArray(t?.composio_managed_auth_schemes) && t.composio_managed_auth_schemes.length > 0,
   };
 }
 
@@ -102,7 +106,7 @@ export function composioApi(base: string, key: () => Promise<string>): ComposioA
         method,
         headers: { "x-api-key": await key(), accept: "application/json", ...(body !== undefined ? { "content-type": "application/json" } : {}) },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(30_000),
       });
     } catch (e: any) {
       throw new ComposioError(0, e?.cause?.message ?? e?.message ?? String(e));

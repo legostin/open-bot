@@ -32,5 +32,6 @@
   "error.notManaged": "Composio cannot sign in to {name} by itself (it needs its own OAuth client)",
   "error.keyRejected": "Composio did not accept the key",
   "error.down": "Composio is unreachable: {message}",
-  "approval.run": "Composio: run {tool}"
+  "approval.run": "Composio: run {tool} {arguments}",
+  "error.failed": "Composio: {message}"
 }

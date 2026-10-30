@@ -571,7 +571,7 @@ export class PluginHost {
   async catalogSignIn(id: string, entryId: string): Promise<string> {
     const r = this.running.get(id);
     if (!r) throw new LocalizedError("catalog.notRunning", { name: id });
-    const { url } = await r.peer.request<{ url: string }>("catalog.signin", { entryId }, { timeoutMs: 60_000 });
+    const { url } = await r.peer.request<{ url: string }>("catalog.signin", { entryId }, { timeoutMs: 120_000 });
     if (!/^https:\/\//.test(String(url))) throw new LocalizedError("catalog.badSignin", { name: id });
     return url;
   }

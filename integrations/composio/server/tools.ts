@@ -16,9 +16,28 @@ export function toolName(slug: string): string {
   return `${name.slice(0, MAX_NAME - 7)}_${hash}`;
 }
 
-/** A read only when Composio says it only reads; its tags are best effort, so anything else (untagged too) writes. */
+/**
+ * A read only when Composio says it only reads and nothing else: its tags are best effort, so a tool that also says
+ * it creates, updates or deletes, or says nothing, writes (and asks).
+ */
 export function effectOf(tags: string[]): ToolEffect {
-  return tags.includes("readOnlyHint") ? "read" : "external";
+  const writes = ["createHint", "updateHint", "destructiveHint"].some((t) => tags.includes(t));
+  return tags.includes("readOnlyHint") && !writes ? "read" : "external";
+}
+
+/** Placeholders an approval card shows: the tool's fields, required ones first, at most five. */
+const SHOWN_FIELDS = 5;
+
+/**
+ * The approval card's text: the app, the action and what it is done with ("Gmail: Send email — recipient_email:
+ * {recipient_email}, subject: {subject}…"), so the person sees where it goes before saying yes.
+ */
+export function approvalOf(tool: ComposioTool, app: string): string {
+  const props = Object.keys((tool.inputSchema?.properties as Record<string, unknown> | undefined) ?? {}).filter((k) => /^[a-zA-Z0-9_]+$/.test(k));
+  const required = new Set(Array.isArray(tool.inputSchema?.required) ? (tool.inputSchema.required as string[]) : []);
+  const fields = [...props.filter((k) => required.has(k)), ...props.filter((k) => !required.has(k))].slice(0, SHOWN_FIELDS);
+  const head = `${app}: ${tool.name}`.replace(/[{}]/g, "");
+  return fields.length ? `${head} — ${fields.map((k) => `${k}: {${k}}`).join(", ")}` : head;
 }
 
 /** The agents' tool for a Composio tool of `app` ("Slack"): every result came from outside. */
@@ -29,7 +48,7 @@ export function specOf(tool: ComposioTool, app: string): ToolSpec {
     inputSchema: tool.inputSchema,
     effect: effectOf(tool.tags),
     source: true,
-    approvalSummary: `${app}: ${tool.name}`.replace(/[{}]/g, ""),
+    approvalSummary: approvalOf(tool, app),
   };
 }
 

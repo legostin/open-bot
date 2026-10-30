@@ -9,6 +9,9 @@ const relPath = z
   .string()
   .refine((p) => p.startsWith("./") && !p.split(/[\\/]/).includes(".."), "path must start with ./ and stay inside the plugin");
 
+/** A page a person opens from a card: https only (a link may reach the system browser). */
+const httpsUrl = z.string().url().refine((u) => u.startsWith("https://"), "link must be an https:// address");
+
 export const PluginPermissionsSchema = z
   .object({
     /** Hostname patterns for egress, "*" = any. */
@@ -33,7 +36,7 @@ export const SetupSecretSchema = z.object({
   title: z.string(),
   /** Where to get it (markdown). */
   hint: z.string().optional(),
-  link: z.string().url().optional(),
+  link: httpsUrl.optional(),
   /** Regular expression for the whole value: lets the hub recognise it when the user pastes it into a message. */
   pattern: z.string().optional(),
   required: z.boolean().default(false),
@@ -48,7 +51,7 @@ export const IntegrationViaSchema = z.object({
   name: z.string().min(1),
   /** The note ("%key%" of the plugin's locales); `{name}` is the card's own name. */
   about: z.string().min(1),
-  link: z.string().url().optional(),
+  link: httpsUrl.optional(),
 });
 
 /** The id of one of a plugin's catalog entries ("slack"); the catalog shows it as "<plugin>:<entry>". */

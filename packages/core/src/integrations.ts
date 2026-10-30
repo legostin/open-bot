@@ -178,7 +178,11 @@ export function popularIds(hub: Hub, views: IntegrationView[], now = new Date())
     .sort((a, b) => b.prefix.length - a.prefix.length);
   const uses = new Map<string, number>();
   for (const [tool, n] of hub.audit.countByTarget("policy.decision", since)) {
-    const id = prefixes.find((p) => p.id.includes(":") && tool.startsWith(p.prefix))?.id ?? owners.get(tool) ?? prefixes.find((p) => tool.startsWith(p.prefix))?.id;
+    // An entry's prefix counts only for its own plugin's tools (or tools no longer registered): another plugin cannot
+    // take a tool's uses by naming an entry after it.
+    const owner = owners.get(tool);
+    const entry = prefixes.find((p) => p.id.includes(":") && tool.startsWith(p.prefix) && (!owner || p.id.startsWith(`${owner}:`)))?.id;
+    const id = entry ?? owner ?? prefixes.find((p) => tool.startsWith(p.prefix))?.id;
     if (id) uses.set(id, (uses.get(id) ?? 0) + n);
   }
   const pick = (id: string) => {

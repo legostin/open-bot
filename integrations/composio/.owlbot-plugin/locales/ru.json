@@ -32,5 +32,6 @@
   "error.notManaged": "Composio не может сам войти в {name} (нужен свой OAuth-клиент)",
   "error.keyRejected": "Composio не принял ключ",
   "error.down": "Composio недоступен: {message}",
-  "approval.run": "Composio: выполнить {tool}"
+  "approval.run": "Composio: выполнить {tool} {arguments}",
+  "error.failed": "Composio: {message}"
 }

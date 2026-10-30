@@ -4,24 +4,19 @@
 // Composio key (vault://composio).
 //
 // Sign-in: an auth config with Composio's own OAuth app (made once per app), a link the person opens, then the plugin
-// polls the connected account until it works (nothing has to come back to the hub, so a phone can sign in too).
+// polls the connected account until it works (nothing has to come back to the hub, so a phone can sign in too). An
+// account the hub stops waiting for, or one a newer sign-in replaces, is deleted at Composio: nothing it made is left.
 // A connected app's main tools become tools of their own (composio_slack_send_message…): a read only when Composio
-// tags it readOnlyHint, every other one asks; composio_tools_search / composio_tool_run reach the rest.
+// tags it read-only and nothing else, every other one asks; composio_tools_search adds others, composio_tool_run
+// runs one by name.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
 import type { CatalogEntryState, ToolResult } from "@owlbot/shared";
-import { ComposioError, composioApi, DEFAULT_API } from "./api.ts";
+import { ComposioError, composioApi, DEFAULT_API, type ComposioTool } from "./api.ts";
 import { effectOf, resultText, specOf, toolName } from "./tools.ts";
-
-interface Settings {
-  /** Composio's API (tests point it at a fake). */
-  apiUrl?: string;
-  /** How often a sign-in in progress is checked, in ms. */
-  pollMs?: number;
-}
 
 /** What the plugin keeps about one app. */
 interface App {
@@ -30,16 +25,23 @@ interface App {
   /** The connected account that works (or last did), and its status at Composio. */
   accountId?: string;
   status?: string;
-  /** A sign-in in progress: the account its link made. */
+  /** A sign-in in progress: the account its link made, and until when it is waited for (ms). */
   pending?: string;
+  pendingUntil?: number;
   /** An app added from the chat (not one of the manifest's): its name. */
   added?: { name: string };
 }
 
-/** Main tools one app gets as tools of its own, at most. */
+// Composio's address and the polling pace come from the environment, not from settings an agent could change: the
+// key is only ever sent to Composio.
+const API = process.env.OWLBOT_COMPOSIO_API || DEFAULT_API;
+const POLL_MS = Math.max(20, Number(process.env.OWLBOT_COMPOSIO_POLL_MS) || 3000);
+/** Main tools one app gets as tools of its own, at most; and with those composio_tools_search added. */
 const MAX_TOOLS = 30;
-/** How long a sign-in link is waited for when Composio does not say. */
+const MAX_APP_TOOLS = 60;
+/** How long a sign-in link is waited for when Composio does not say, and how long after it runs out. */
 const LINK_MS = 10 * 60_000;
+const GRACE_MS = Number(process.env.OWLBOT_COMPOSIO_GRACE_MS) || 2 * 60_000;
 const PENDING = new Set(["INITIATED", "INITIALIZING"]);
 const APP_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 
@@ -53,8 +55,6 @@ function manifestApps(pluginDir: string): Array<{ id: string; name: string }> {
 
 const plugin: PluginModule & { stop?: () => void } = {
   async activate(ctx: PluginContext) {
-    let settings: Settings = ctx.settings ?? {};
-    ctx.onSettingsChange((s) => (settings = s ?? {}));
     const known = manifestApps(ctx.pluginDir);
     const apps: Record<string, App> = (await ctx.storage.get<Record<string, App>>("apps")) ?? {};
     let userId = await ctx.storage.get<string>("userId");
@@ -64,22 +64,36 @@ const plugin: PluginModule & { stop?: () => void } = {
       await ctx.storage.set("userId", userId);
     }
     const user = userId;
-    /** missing: no key in the vault; rejected: Composio refused the one there. */
+    /** missing: no key in the vault (or it is locked); rejected: Composio refused the one there. */
     let keyState: "missing" | "ok" | "rejected" = "missing";
     const registered = new Map<string, string[]>();
     const polls = new Map<string, ReturnType<typeof setTimeout>>();
+    /** Bumped when an app signs in again or out: a poll or a tool listing still under way for it then stops. */
+    const gens = new Map<string, number>();
 
+    // The key is read once and kept until the vault changes (every read is a line in the security log).
+    let cachedKey: string | undefined;
     const key = async () => {
+      if (cachedKey) return cachedKey;
       const item = await ctx.vault.get("vault://composio", { reason: "Composio" });
-      return item.value ?? item.password ?? item.token ?? Object.values(item)[0] ?? "";
+      cachedKey = item.value ?? item.password ?? item.token ?? Object.values(item)[0] ?? "";
+      return cachedKey;
     };
     const hasKey = () => key().then((k) => !!k, () => false);
-    const api = () => composioApi(settings.apiUrl || DEFAULT_API, key);
+    const api = () => composioApi(API, key);
     const save = () => ctx.storage.set("apps", apps);
     const isKnown = (app: string) => known.some((e) => e.id === app);
     const nameOf = (app: string) => known.find((e) => e.id === app)?.name ?? apps[app]?.added?.name ?? app;
     const ids = () => [...known.map((e) => e.id), ...Object.keys(apps).filter((a) => apps[a]!.added && !isKnown(a))];
     const connected = () => ids().filter((a) => apps[a]?.accountId && apps[a]!.status === "ACTIVE");
+    const bump = (app: string) => {
+      const gen = (gens.get(app) ?? 0) + 1;
+      gens.set(app, gen);
+      clearTimeout(polls.get(app));
+      polls.delete(app);
+      return gen;
+    };
+    const forget = (id: string) => void api().deleteAccount(id).catch((e) => ctx.log.warn(`composio: could not delete account ${id}: ${(e as Error).message}`));
 
     function stateOf(app: string): CatalogEntryState {
       const a = apps[app];
@@ -94,19 +108,35 @@ const plugin: PluginModule & { stop?: () => void } = {
     }
     const report = () => ctx.catalog.update(ids().map(stateOf));
 
-    /** What the agent hears about a failed request; a refused key also turns every entry to its key step. */
-    function failure(e: unknown): ToolResult {
+    /** A refused key turns every entry to its key step. */
+    const keyRefused = () => {
+      keyState = "rejected";
+      report();
+    };
+
+    /** What the agent hears about a failed request. */
+    function failure(e: unknown, app?: string): ToolResult {
       if (e instanceof ComposioError) {
         if (e.kind === "key") {
-          keyState = "rejected";
-          report();
+          keyRefused();
           return text("Composio refused its API key (it may have been revoked): the user stores a new one on the card (hub_integration_connect id composio).", true);
         }
-        if (e.kind === "limit") return text(`Composio's limit of calls is used up (${e.message}). Tell the user: it resets next month, or their Composio plan can be raised.`, true);
+        if (e.kind === "limit") return text(`Composio's plan has no calls left (${e.message}). Tell the user: it resets with the next billing month, or their Composio plan can be raised.`, true);
+        if (e.kind === "rate") return text(`Too many calls just now (${e.message}); wait a little and try again.`, true);
         if (e.kind === "down") return text(`Composio is unreachable right now (${e.message}); try again later.`, true);
-        return text(`Composio: ${e.message}`, true);
+        return text(`${app ? nameOf(app) : "Composio"}: ${e.message}`, true);
       }
       return text(`Error: ${(e as Error)?.message ?? String(e)}`, true);
+    }
+
+    /** What the person sees when a sign-in or sign-out fails (in the hub's language). */
+    function personError(e: unknown): Error {
+      if (!(e instanceof ComposioError)) return e as Error;
+      if (e.kind === "key") {
+        keyRefused();
+        return new Error(ctx.i18n.t("error.keyRejected"));
+      }
+      return new Error(ctx.i18n.t(e.kind === "down" ? "error.down" : "error.failed", { message: e.message }));
     }
 
     function unregisterTools(app: string) {
@@ -114,18 +144,25 @@ const plugin: PluginModule & { stop?: () => void } = {
       registered.delete(app);
     }
 
+    function addTool(app: string, tool: ComposioTool): string {
+      const spec = specOf(tool, nameOf(app));
+      ctx.tools.register({ ...spec, handler: (input) => run(app, tool.slug, tool.version, input) });
+      const names = registered.get(app) ?? [];
+      if (!names.includes(spec.name)) names.push(spec.name);
+      registered.set(app, names);
+      return spec.name;
+    }
+
     /** A connected app's main tools as tools of their own (its first ones when Composio marks none as main). */
-    async function registerTools(app: string) {
+    async function registerTools(app: string, accountId: string) {
+      const gen = gens.get(app);
       let list = await api().tools(app, { important: true, limit: MAX_TOOLS });
       if (!list.length) list = await api().tools(app, { limit: 20 });
+      // Signed out or in again meanwhile: these tools are not for the account there is now.
+      const a = apps[app];
+      if (gens.get(app) !== gen || a?.accountId !== accountId || a.status !== "ACTIVE") return;
       unregisterTools(app);
-      const names: string[] = [];
-      for (const tool of list.slice(0, MAX_TOOLS)) {
-        const spec = specOf(tool, nameOf(app));
-        ctx.tools.register({ ...spec, handler: (input) => run(app, tool.slug, tool.version, input) });
-        names.push(spec.name);
-      }
-      registered.set(app, names);
+      for (const tool of list.slice(0, MAX_TOOLS)) addTool(app, tool);
     }
 
     async function run(app: string, slug: string, version: string | undefined, input: unknown): Promise<ToolResult> {
@@ -136,28 +173,86 @@ const plugin: PluginModule & { stop?: () => void } = {
         if (!r.ok) return text(`${nameOf(app)} did not do it: ${r.error ?? "the call failed"}${r.data ? `\n${resultText(r.data, 4000)}` : ""}`, true);
         return text(resultText(r.data));
       } catch (e) {
-        return failure(e);
+        return failure(e, app);
       }
     }
 
-    /** Where every known account is at Composio, and their apps' tools. */
+    /** Checks a sign-in in progress until its account works, fails, or its link has run out a while ago. */
+    function poll(app: string, accountId: string, until: number) {
+      const gen = bump(app);
+      const live = () => gens.get(app) === gen && apps[app]?.pending === accountId;
+      const stop = async (drop: boolean) => {
+        if (gens.get(app) === gen) polls.delete(app);
+        const a = apps[app];
+        if (a?.pending === accountId) {
+          delete a.pending;
+          delete a.pendingUntil;
+        }
+        // Nobody signs in with it any more: Composio keeps nothing of it.
+        if (drop) forget(accountId);
+        await save();
+        report();
+      };
+      const tick = async () => {
+        if (!live()) return;
+        let status: string | undefined;
+        try {
+          status = (await api().account(accountId)).status;
+        } catch (e) {
+          if (!live()) return;
+          if (e instanceof ComposioError && e.kind === "key") {
+            keyState = "rejected";
+            return stop(false);
+          }
+          if (e instanceof ComposioError && e.status === 404) return stop(false);
+          ctx.log.warn(`composio: checking ${app}'s sign-in: ${(e as Error).message}`);
+        }
+        if (!live()) return;
+        const a = apps[app]!;
+        if (status === "ACTIVE") {
+          polls.delete(app);
+          const old = a.accountId;
+          Object.assign(a, { accountId, status: "ACTIVE" });
+          delete a.pending;
+          delete a.pendingUntil;
+          await save();
+          if (old && old !== accountId) forget(old);
+          await registerTools(app, accountId).catch((e) => ctx.log.warn(`composio: ${app}'s tools: ${(e as Error).message}`));
+          report();
+          return;
+        }
+        if (status && !PENDING.has(status)) return stop(true);
+        if (Date.now() > until + GRACE_MS) return stop(true);
+        polls.set(app, setTimeout(() => void tick(), POLL_MS));
+      };
+      polls.set(app, setTimeout(() => void tick(), POLL_MS));
+    }
+
+    /** Where every known account and sign-in in progress is at Composio, and their apps' tools. */
     async function sync() {
       if (!(await hasKey())) {
         keyState = "missing";
         report();
         return;
       }
-      if (keyState === "missing") keyState = "ok";
+      keyState = "ok";
       report();
       for (const app of Object.keys(apps)) {
         const a = apps[app]!;
-        if (!a.accountId || keyState !== "ok") continue;
+        if (keyState !== "ok") break;
         try {
-          a.status = (await api().account(a.accountId)).status;
-          if (a.status === "ACTIVE") await registerTools(app);
-          else unregisterTools(app);
+          if (a.accountId) {
+            const id = a.accountId;
+            const status = (await api().account(id)).status;
+            if (apps[app] !== a || a.accountId !== id) continue;
+            a.status = status;
+            if (status === "ACTIVE") await registerTools(app, id);
+            else unregisterTools(app);
+          }
+          // A sign-in left in progress (the hub restarted meanwhile): wait for it again, or let it go.
+          if (a.pending && !polls.has(app)) poll(app, a.pending, a.pendingUntil ?? Date.now());
         } catch (e) {
-          if (e instanceof ComposioError && e.status === 404) {
+          if (e instanceof ComposioError && e.status === 404 && a.accountId) {
             delete a.accountId;
             delete a.status;
             unregisterTools(app);
@@ -168,87 +263,72 @@ const plugin: PluginModule & { stop?: () => void } = {
       await save();
       report();
     }
+    // One sync at a time: the vault's events come in bursts.
+    let syncing: Promise<void> = Promise.resolve();
+    const resync = () => {
+      syncing = syncing.then(sync).catch((e) => ctx.log.warn(`composio: sync failed: ${(e as Error).message}`));
+      return syncing;
+    };
 
-    /** Checks a sign-in in progress until its account works, fails, or its link runs out. */
-    function poll(app: string, accountId: string, until: number) {
-      const done = async () => {
-        polls.delete(app);
-        const a = apps[app];
-        if (a?.pending === accountId) delete a.pending;
-        await save();
-        report();
-      };
-      const tick = async () => {
-        const a = apps[app];
-        if (!a || a.pending !== accountId) return;
-        try {
-          const acc = await api().account(accountId);
-          if (acc.status === "ACTIVE") {
-            const old = a.accountId;
-            Object.assign(a, { accountId, status: "ACTIVE" });
-            if (old && old !== accountId) void api().deleteAccount(old).catch(() => {});
-            await registerTools(app).catch((e) => ctx.log.warn(`composio: ${app}'s tools: ${(e as Error).message}`));
-            return done();
-          }
-          if (!PENDING.has(acc.status)) return done();
-        } catch (e) {
-          if (e instanceof ComposioError && e.kind === "key") {
-            keyState = "rejected";
-            return done();
-          }
-          ctx.log.warn(`composio: checking ${app}'s sign-in: ${(e as Error).message}`);
-        }
-        if (Date.now() > until) return done();
-        polls.set(app, setTimeout(() => void tick(), settings.pollMs ?? 3000));
-      };
-      clearTimeout(polls.get(app));
-      polls.set(app, setTimeout(() => void tick(), settings.pollMs ?? 3000));
-    }
     plugin.stop = () => {
       for (const t of polls.values()) clearTimeout(t);
       polls.clear();
     };
+
+    /** The app's auth config with Composio's own OAuth app, made the first time. */
+    async function authConfig(app: string, a: App): Promise<string> {
+      if (a.authConfigId) return a.authConfigId;
+      const kit = await api().toolkit(app);
+      if (!kit.managed) throw new Error(ctx.i18n.t("error.notManaged", { name: nameOf(app) }));
+      a.authConfigId = await api().createAuthConfig(app);
+      await save();
+      return a.authConfigId;
+    }
 
     ctx.catalog.onSignIn(async (app) => {
       if (!ids().includes(app)) throw new Error(`Composio has no app "${app}" in the catalog`);
       if (!(await hasKey())) throw new Error(ctx.i18n.t("error.noKey"));
       try {
         const a = (apps[app] ??= {});
-        if (!a.authConfigId) {
-          const kit = await api().toolkit(app);
-          if (!kit.managed) throw new Error(ctx.i18n.t("error.notManaged", { name: nameOf(app) }));
-          a.authConfigId = await api().createAuthConfig(app);
-          await save();
+        let link;
+        try {
+          link = await api().link(await authConfig(app, a), user);
+        } catch (e) {
+          // An auth config deleted at Composio, or of another project (a new key): make a new one, once.
+          if (!(e instanceof ComposioError) || (e.status !== 400 && e.status !== 404) || !a.authConfigId) throw e;
+          delete a.authConfigId;
+          link = await api().link(await authConfig(app, a), user);
         }
-        const link = await api().link(a.authConfigId, user);
-        a.pending = link.accountId;
-        if (keyState !== "ok") keyState = "ok";
-        await save();
+        // A sign-in started before and not finished: its account goes, this one replaces it.
+        if (a.pending && a.pending !== link.accountId) forget(a.pending);
         const expires = link.expiresAt ? Date.parse(link.expiresAt) : NaN;
-        poll(app, link.accountId, Number.isFinite(expires) ? expires : Date.now() + LINK_MS);
+        a.pending = link.accountId;
+        a.pendingUntil = Number.isFinite(expires) ? expires : Date.now() + LINK_MS;
+        keyState = "ok";
+        await save();
+        poll(app, link.accountId, a.pendingUntil);
         report();
         return { url: link.url };
       } catch (e) {
-        if (!(e instanceof ComposioError)) throw e;
-        if (e.kind === "key") {
-          keyState = "rejected";
-          report();
-          throw new Error(ctx.i18n.t("error.keyRejected"));
-        }
-        throw new Error(ctx.i18n.t("error.down", { message: e.message }));
+        throw personError(e);
       }
     });
 
     ctx.catalog.onSignOut(async (app) => {
       const a = apps[app];
-      clearTimeout(polls.get(app));
-      polls.delete(app);
+      // At Composio first: when that fails nothing here changes, and the card keeps saying what is true.
+      try {
+        for (const id of [a?.accountId, a?.pending]) if (id) await api().deleteAccount(id);
+      } catch (e) {
+        throw personError(e);
+      }
+      bump(app);
       unregisterTools(app);
-      if (a?.accountId) await api().deleteAccount(a.accountId);
       if (a) {
         delete a.accountId;
         delete a.status;
         delete a.pending;
+        delete a.pendingUntil;
         // An app added from the chat leaves the catalog with its sign-in.
         if (a.added && !isKnown(app)) delete apps[app];
       }
@@ -256,12 +336,17 @@ const plugin: PluginModule & { stop?: () => void } = {
       report();
     });
 
-    // A key stored, changed or removed: try it.
+    // A key stored, changed or removed, or the vault unlocked: read it again and check everything with it.
+    const vaultChanged = () => {
+      cachedKey = undefined;
+      keyState = "missing";
+      void resync();
+    };
     ctx.events.on("vault.updated", (p: { ids?: string[] }) => {
       if (Array.isArray(p?.ids) && !p.ids.some((id) => id.replace(/^vault:\/\//, "") === "composio")) return;
-      keyState = "missing";
-      void sync();
+      vaultChanged();
     });
+    ctx.events.on("vault.state", vaultChanged);
 
     const needKey = () => text("Composio has no key yet: show its card (hub_integration_connect id composio) so the user stores one; the card says where to get it.", true);
 
@@ -283,7 +368,7 @@ const plugin: PluginModule & { stop?: () => void } = {
             list
               .map((t) => {
                 const where = ids().includes(t.slug) ? ` In the catalog as composio:${t.slug}${connected().includes(t.slug) ? ", connected" : ""}.` : "";
-                return `${t.slug} — ${t.name}: ${t.description.slice(0, 160)} [${t.managed ? "Composio signs in by itself" : "needs its own OAuth client: cannot be added"}]${where}`;
+                return `${t.slug} — ${t.name}: ${t.description.slice(0, 160)} [${t.managed ? "Composio signs in by itself" : "Composio cannot sign in by itself: cannot be added"}]${where}`;
               })
               .join("\n"),
           );
@@ -307,7 +392,7 @@ const plugin: PluginModule & { stop?: () => void } = {
         if (!(await hasKey())) return needKey();
         try {
           const kit = await api().toolkit(slug);
-          if (!kit.managed) return text(`Composio cannot sign in to ${kit.name} by itself (it needs its own OAuth client), so it cannot be added.`, true);
+          if (!kit.managed) return text(`Composio cannot sign in to ${kit.name} by itself (it needs its own OAuth client or credentials), so it cannot be added.`, true);
           apps[slug] = { added: { name: kit.name || slug } };
           await save();
           report();
@@ -323,7 +408,8 @@ const plugin: PluginModule & { stop?: () => void } = {
       effect: "read",
       source: true,
       description:
-        "Search a connected Composio app's other tools: its main ones are tools of their own already (composio_<app>_…). Run one found here with composio_tool_run.",
+        "Search a Composio app's other tools: its main ones are tools of their own already (composio_<app>_…). Those found for a connected app become tools of their own too " +
+        "(from your next step; composio_tool_run runs one by its slug meanwhile).",
       inputSchema: {
         type: "object",
         properties: { app: { type: "string", description: "The app, e.g. slack (as in composio:slack)" }, query: { type: "string", description: "What the tool should do" } },
@@ -335,18 +421,17 @@ const plugin: PluginModule & { stop?: () => void } = {
         try {
           const list = await api().tools(app, { query: String(input.query ?? "").trim(), limit: 10 });
           if (!list.length) return text(`${nameOf(app)} has no tool like that.`);
-          const mine = new Set(registered.get(app) ?? []);
-          const note = connected().includes(app) ? "" : `\n${nameOf(app)} is not connected yet: show its card with hub_integration_connect (id composio:${app}) first.`;
-          return text(
-            list
-              .map((t) => {
-                const own = mine.has(toolName(t.slug)) ? ` (already composio_${toolName(t.slug)})` : "";
-                return `${t.slug} — ${t.name}${own} (${effectOf(t.tags) === "read" ? "reads" : "changes something: asks the user"}): ${t.description.slice(0, 200)}\n  input: ${JSON.stringify(t.inputSchema).slice(0, 600)}`;
-              })
-              .join("\n") + note,
-          );
+          const live = connected().includes(app);
+          const lines = list.map((t) => {
+            const mine = (registered.get(app) ?? []).includes(toolName(t.slug));
+            // Each one found becomes a tool of its own, with what it does to the world from its own tags.
+            const own = mine ? toolName(t.slug) : live && (registered.get(app)?.length ?? 0) < MAX_APP_TOOLS ? addTool(app, t) : undefined;
+            return `${t.slug} — ${t.name}${own ? ` (composio_${own})` : ""} (${effectOf(t.tags) === "read" ? "reads" : "changes something: asks the user"}): ${t.description.slice(0, 200)}\n  input: ${JSON.stringify(t.inputSchema).slice(0, 600)}`;
+          });
+          const note = live ? "" : `\n${nameOf(app)} is not connected yet: show its card with hub_integration_connect (id composio:${app}) first.`;
+          return text(lines.join("\n") + note);
         } catch (e) {
-          return failure(e);
+          return failure(e, app);
         }
       },
     });
@@ -357,7 +442,8 @@ const plugin: PluginModule & { stop?: () => void } = {
       source: true,
       approvalSummary: "%approval.run%",
       description:
-        "Run a tool of a connected Composio app found with composio_tools_search, by its slug (e.g. SLACK_LIST_REMINDERS), with its arguments, on the user's account. It always asks the user first.",
+        "Run a tool of a connected Composio app by its slug (e.g. SLACK_LIST_REMINDERS, from composio_tools_search) with its arguments, on the user's account. It always asks the user first; " +
+        "prefer the tool's own composio_<app>_… tool once it is there.",
       inputSchema: {
         type: "object",
         properties: { tool: { type: "string", description: "The tool's slug, e.g. SLACK_LIST_REMINDERS" }, arguments: { type: "object", description: "Its input, as composio_tools_search showed it" } },
@@ -376,7 +462,7 @@ const plugin: PluginModule & { stop?: () => void } = {
     // The catalog first (no request to Composio needed), then where the accounts are.
     keyState = (await hasKey()) ? "ok" : "missing";
     report();
-    void sync().catch((e) => ctx.log.warn(`composio: sync failed: ${(e as Error).message}`));
+    void resync();
   },
   deactivate() {
     plugin.stop?.();
