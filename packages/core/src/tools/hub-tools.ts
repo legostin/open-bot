@@ -695,7 +695,7 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         "Show an integration's card in this chat so the user can connect it (e.g. Google Calendar: a Connect button that signs in with Google; " +
-        "Telegram: its setup steps; Granola: a Sign in button that opens its own sign-in; remote-access: a permanent link to Owlbot from anywhere, through Tailscale). " +
+        "Telegram: its setup steps; Granola, Notion, Linear: a Sign in button that opens the service's own sign-in; remote-access: a permanent link to Owlbot from anywhere, through Tailscale). " +
         "Use it whenever the user wants to connect a service, or a tool says it is not connected. Ids: see hub_integrations_list.",
       inputSchema: obj({ id: { type: "string", description: "Integration id" } }, ["id"]),
     },

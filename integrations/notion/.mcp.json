@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "notion": {
+      "type": "http",
+      "url": "https://mcp.notion.com/mcp",
+      "readTools": [
+        "notion-search", "notion-ai-search", "notion-connector-search", "notion-memory-search", "notion-get-tool-access", "notion-get-self",
+        "notion-download-skill", "notion-get-enabled-skills", "notion-fetch", "notion-get-file-download-urls",
+        "notion-list-private-pages", "notion-list-shared-pages", "notion-list-favorite-pages", "notion-list-recent-pages", "notion-list-page-backlinks",
+        "notion-view-version", "notion-get-version-changes", "notion-download-attachment",
+        "notion-query-data-sources", "notion-query-multiple-data-sources", "notion-query-meeting-notes",
+        "notion-search-agents", "notion-query-sessions", "notion-search-sessions", "notion-get-session-status", "notion-wait-session",
+        "notion-list-session-events", "notion-read-session-event", "notion-get-comments", "notion-get-suggested-edit",
+        "notion-get-teams", "notion-get-groups", "notion-get-users", "notion-get-async-task",
+        "notion-calendar-list-calendars", "notion-calendar-list-events", "notion-calendar-list-coworkers-events",
+        "notion-calendar-list-calendar-resources", "notion-calendar-list-contacts"
+      ]
+    }
+  }
+}

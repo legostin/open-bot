@@ -89,6 +89,8 @@ function fakeService() {
         tools: [
           { name: "list_meetings", description: "List meetings", inputSchema: { type: "object", properties: {} } },
           { name: "switch_workspace", description: "Switch the workspace", inputSchema: { type: "object", properties: {} } },
+          // Named after the service, as Notion's notion-search is.
+          { name: "notes-search", description: "Search the notes", inputSchema: { type: "object", properties: {} } },
         ],
       }));
       mcp.setRequestHandler(CallToolRequestSchema, async (r) => ({ content: [{ type: "text", text: r.params.name === "list_meetings" ? "Standup, 2026-10-29" : "ok" }] }));
@@ -170,6 +172,9 @@ describe("an integration with its own sign-in", () => {
     // What the integration vouches for only reads; anything else asks the person.
     expect(hub.tools.get("notes_list_meetings")!.descriptor).toMatchObject({ effect: "read", source: true });
     expect(hub.tools.get("notes_switch_workspace")!.descriptor.effect).toBe("external");
+    // Its own name is not prefixed twice.
+    expect(hub.tools.get("notes_search")).toBeDefined();
+    expect(hub.tools.get("notes_notes-search")).toBeUndefined();
     const r = await hub.tools.get("notes_list_meetings")!.invoke({}, {} as any);
     expect(r.content).toEqual([{ type: "text", text: "Standup, 2026-10-29" }]);
   });

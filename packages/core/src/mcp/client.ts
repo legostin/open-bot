@@ -254,7 +254,9 @@ export class McpClientManager {
       conn.client = client;
       const { tools } = await client.listTools();
       for (const tool of tools) {
-        const full = sanitizeToolName(`${name}_${tool.name}`).slice(0, 64);
+        // A tool already named after its server (Notion's notion-search) is not prefixed twice: notion_search.
+        const own = tool.name.startsWith(`${name}-`) || tool.name.startsWith(`${name}_`) ? tool.name.slice(name.length + 1) : tool.name;
+        const full = sanitizeToolName(`${name}_${own}`).slice(0, 64);
         const readOnly = !!tool.annotations?.readOnlyHint || (trusted && !!config.readTools?.includes(tool.name));
         this.registry.register(
           {

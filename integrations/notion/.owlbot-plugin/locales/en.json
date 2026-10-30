@@ -1,0 +1,6 @@
+{
+  "name": "Notion",
+  "description": "Your Notion workspace for the agents: search and read pages and databases, write and update pages, comment. Connects through Notion's own sign-in; the agents see what your Notion account can open. Some search filters and comment tools need a Business plan.",
+  "integration.summary": "Pages and databases from Notion: find, read and write",
+  "integration.example": "Find my launch notes in Notion"
+}

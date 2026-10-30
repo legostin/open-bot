@@ -1,0 +1,6 @@
+{
+  "name": "Linear",
+  "description": "Your Linear workspace for the agents: find and read issues, projects, cycles and documents, create and update issues, comment. Connects through Linear's own sign-in.",
+  "integration.summary": "Issues and projects from Linear: what is on and who does it",
+  "integration.example": "What is assigned to me in Linear this week?"
+}
