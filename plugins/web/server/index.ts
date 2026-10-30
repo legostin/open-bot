@@ -5,7 +5,7 @@ import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
 import type { ToolResult } from "@owlbot/shared";
 import { guardedFetch, DEFAULT_USER_AGENT, MAX_BYTES } from "./fetch.ts";
 import { extractHtml, type TextFormat } from "./extract.ts";
-import { webSearch, type SearchSettings } from "./search.ts";
+import { searchUnavailable, webSearch, type SearchSettings } from "./search.ts";
 import { findFeeds, parseFeed } from "./rss.ts";
 
 interface WebSettings extends SearchSettings {
@@ -196,11 +196,17 @@ const plugin: PluginModule = {
         const query = String(input.query ?? "").trim();
         if (!query) return text("Error: query is required", true);
         const count = clampInt(input.count, 8, 1, 20);
-        const { provider, results } = await webSearch(query, count, {
-          settings,
-          userAgent: userAgent(),
-          vault: (id) => ctx.vault.get(`vault://${id}`, { reason: "web_search" }),
-        });
+        let found: Awaited<ReturnType<typeof webSearch>>;
+        try {
+          found = await webSearch(query, count, {
+            settings,
+            userAgent: userAgent(),
+            vault: (id) => ctx.vault.get(`vault://${id}`, { reason: "web_search" }),
+          });
+        } catch (e: any) {
+          return text(searchUnavailable(query, String(e?.message ?? e)), true);
+        }
+        const { provider, results } = found;
         if (!results.length) return text(`No results for "${query}" (provider: ${provider}).`);
         const body = results.map((r, i) => `${i + 1}. ${r.title || r.url}\n   ${r.url}${r.snippet ? `\n   ${r.snippet}` : ""}`).join("\n\n");
         return text(`Search results for "${query}" (provider: ${provider}):\n\n${body}`);

@@ -106,6 +106,8 @@ function startServer(): Promise<void> {
           );
         case "/html/":
           return html(DDG_HTML);
+        case "/refused/":
+          return res.writeHead(202, { "content-type": "text/html" }).end('<form id="challenge-form" action="/anomaly.js"><div class="anomaly-modal">Select all squares containing a duck</div></form>');
         case "/feed.xml":
           return res.writeHead(200, { "content-type": "application/rss+xml" }).end(RSS);
         case "/site":
@@ -344,6 +346,20 @@ describe("web_search", () => {
       // A key stored later is used on the next search.
       h.setVault("brave_api_key", { value: "brave-test-key" });
       expect(await h.invokeText("search", { query: "now with brave" })).toContain("(provider: brave)");
+    } finally {
+      await h.stop();
+    }
+  });
+
+  it("when DuckDuckGo refuses, points to the browser and to a Brave key", async () => {
+    const h = await startPlugin({ dir: DIR, settings: { duckduckgoUrl: `${base}/refused/`, braveBaseUrl: base, tavilyBaseUrl: base } });
+    try {
+      const r = await h.invoke("search", { query: "пробки москва" });
+      expect(r.isError).toBe(true);
+      const t = (r.content[0] as any).text as string;
+      expect(t).toContain("duckduckgo: it refused the request with a bot check");
+      expect(t).toContain("browser_open https://duckduckgo.com/?q=%D0%BF%D1%80%D0%BE%D0%B1%D0%BA%D0%B8%20%D0%BC%D0%BE%D1%81%D0%BA%D0%B2%D0%B0");
+      expect(t).toContain('hub_plugin_setup with id "web"');
     } finally {
       await h.stop();
     }

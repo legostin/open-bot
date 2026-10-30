@@ -143,9 +143,23 @@ async function duckduckgo(deps: SearchDeps, query: string, count: number): Promi
   if (!res.ok && res.status !== 202) throw new Error(`duckduckgo: HTTP ${res.status}`);
   const results = parseDuckDuckGo(html);
   if (!results.length && (res.status === 202 || /anomaly|challenge-form|captcha/i.test(html)) && !/no-results/.test(html)) {
-    throw new Error("duckduckgo: the request was rejected with a bot check; configure Brave, Tavily or SearXNG in the web plugin settings");
+    throw new Error("duckduckgo: it refused the request with a bot check (without a search API key it often does)");
   }
   return results.slice(0, count);
+}
+
+/**
+ * What the model gets when no provider answered (without a key that is DuckDuckGo, which often refuses automated
+ * requests): the same search in the browser, and how the person gets reliable search.
+ */
+export function searchUnavailable(query: string, reason: string): string {
+  const q = encodeURIComponent(query);
+  return [
+    `Web search failed: ${reason}`,
+    `Search in the browser instead, if you have its tools: browser_open https://duckduckgo.com/?q=${q} ` +
+      `(or https://www.google.com/search?q=${q}, https://yandex.ru/search/?text=${q}), then browser_get_text.`,
+    'For reliable web search, offer the user a free Brave Search API key: show the web plugin\'s setup card (hub_plugin_setup with id "web").',
+  ].join("\n");
 }
 
 /** Run a search with the configured provider ("auto": first configured of brave → tavily → searxng → duckduckgo). */
