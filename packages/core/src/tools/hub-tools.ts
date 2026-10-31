@@ -772,6 +772,8 @@ export function registerHubTools(hub: Hub): void {
     return text(
       `The ${view.name} card is shown in the chat: ${state}. ` +
         (view.via ? `It goes through ${view.via.name}, an outside service (the card's badge explains it). ` : "") +
+        // Google asks for each permission with a box of its own: a box left empty breaks the app's tools later.
+        (view.via && view.status !== "connected" ? "Tell the user to allow everything the service's page asks for (tick every box, e.g. on Google's page). " : "") +
         (view.status === "connected" ? "" : "Tell the user in a sentence to press the button on it; you get a system note once it is connected."),
     );
   }

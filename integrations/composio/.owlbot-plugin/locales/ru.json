@@ -57,6 +57,7 @@
   "example.reddit": "Что нового в r/selfhosted?",
   "detail.key": "Composio не принял ключ: сохраните новый",
   "detail.expired": "Вход перестал работать: войдите снова",
+  "detail.scopes": "Даны не все разрешения: войдите снова и отметьте все галочки на странице сервиса",
   "detail.waiting": "Ждём входа на странице Composio",
   "error.noKey": "У Composio ещё нет ключа: сначала сохраните его на карточке",
   "error.notManaged": "Composio не может сам войти в {name} (нужен свой OAuth-клиент)",

@@ -114,6 +114,7 @@ describe("a plugin's catalog entries", () => {
     const told = vi.spyOn(hub.runner, "tellAgent").mockImplementation(() => {});
     const card = await hub.tools.get("hub_integration_connect")!.invoke({ id: "outside:chat" }, call(conv.id));
     expect((card.content[0] as { text: string }).text).toContain("It goes through Outside, an outside service");
+    expect((card.content[0] as { text: string }).text).toContain("allow everything the service's page asks for (tick every box");
 
     expect(await hub.entrySignIn("outside:chat", conv.id)).toBe("https://outside.example/link/chat");
     await until(async () => (await entry("outside:chat"))?.status === "connected", "the entry connected");
