@@ -1,10 +1,131 @@
-# Piomio
+<p align="center">
+  <a href="https://piomio.io"><img src="packages/web/public/favicon.svg" width="88" height="88" alt="Piomio"></a>
+</p>
 
-[Русский](README.ru.md)
+<h1 align="center">Piomio</h1>
 
-A friendly, proactive personal agent that lives on your own hardware. Piomio is an open-source alternative to Grok, Meta Muse and OpenAI Dots: an installer for your computer or one Docker image for a server, the subscriptions you already pay for, your own computers, and security from day one. It speaks English and Russian.
+<p align="center">
+  <b>A team of AI agents that works for you.</b><br>
+  They sort your mail, write letters you approve with one tap, work in a browser and learn by watching you.<br>
+  On your own computers, with the subscriptions you already pay for. Open source.
+</p>
 
-## Features
+<p align="center">
+  <a href="https://piomio.io"><b>▶&nbsp;Live demo</b></a> &nbsp;·&nbsp;
+  <a href="#install">Install</a> &nbsp;·&nbsp;
+  <a href="#a-day-with-the-team">What it does</a> &nbsp;·&nbsp;
+  <a href="#how-it-works">How it works</a> &nbsp;·&nbsp;
+  <a href="README.ru.md">Русский</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/legostin/piomio/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/legostin/piomio?style=flat-square&color=f4a11a&label=release"></a>
+  <img alt="macOS, Windows, Docker" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Docker-1c1814?style=flat-square">
+  <img alt="English and Russian" src="https://img.shields.io/badge/EN%20%C2%B7%20RU-1c1814?style=flat-square">
+  <a href="#license"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-1c1814?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="https://piomio.io"><img src="docs/readme/demo-en.gif" width="880" alt="The real Piomio app: Ada goes through 47 letters and sums them up"></a>
+</p>
+<p align="center"><sub>Not a mock-up: <a href="https://piomio.io">piomio.io</a> runs the real app in your browser on a demo hub, chapter by chapter.</sub></p>
+
+## Meet the team
+
+Piomio is a personal agent platform you run yourself. You get a small team of agents, each with a name, a face, a job and a memory, and you talk to them like to colleagues. They answer at once when they can, hand longer work to each other as tasks and come back when it is done. They think with the subscriptions you already have (Claude Code, Codex) or any API key, run on your Mac, PC or server, and never send, buy or delete anything without your yes. Think of it as an open-source alternative to Grok, Meta Muse and OpenAI Dots that lives with you.
+
+## A day with the team
+
+| | |
+|---|---|
+| ☀️&nbsp;**The morning brief comes by itself** | Meetings, the letters that matter, the weather, what not to forget. Then a nudge: leave for lunch at 12:30? |
+| 📬&nbsp;**47 letters, sorted while you watch** | “Go through my mail.” Three that matter, two draft replies, the invoice turned into a task, the newsletters archived. |
+| ✉️&nbsp;**Nothing leaves without your yes** | Letters, bookings, pushes and payments wait for one tap on a card. “Always allow” makes a rule for that one address. |
+| 🛡️&nbsp;**The letter that asked too much** | A phishing mail tells the agent to forward your invoices. After outside content, a new recipient always asks you. Keys go into a vault the model never sees. |
+| 🔌&nbsp;**A service in one sentence** | “Connect my Notion.” The card comes into the chat; you sign in once. Gmail, Google Calendar, Slack, GitHub, Linear, Notion and many more. |
+| 👥&nbsp;**Three requests, one message** | The assistant splits them up: a teammate compares laptops, a reminder is set, the trains are found, and each answer comes back as a reply. |
+| 💻&nbsp;**Your computers, your subscriptions** | An agent fixes a failing test on your MacBook through Claude Code; when that subscription hits its limit, it carries on with Codex. |
+| 🎓&nbsp;**Show it once, and it’s done for you** | Order water in the agents’ browser while you talk. The agent keeps it as a skill, asks what it may press alone and up to what amount, and orders every Friday. |
+| 🗺️&nbsp;**A page instead of a wall of text** | “Make a page for Saturday’s walk.” A real interactive page arrives in the chat: the route, places with prices, the weather, photos. |
+| 📰&nbsp;**Your own news channel** | “Every morning, collect news about AI and electric cars.” An agent edits a channel: the gist, the numbers and a big picture. |
+
+<p align="center">
+  <img src="docs/readme/teach-en.gif" width="880" alt="Teach mode: showing an agent how to order water in its browser">
+</p>
+<p align="center"><sub><b>Teach mode.</b> Show a task once in the agents’ browser, with your clicks, your voice and a highlight on what matters, and it becomes a skill the whole team can run.</sub></p>
+
+<p align="center">
+  <img src="packages/site/src/assets/iphone/en-2-team.jpg" width="250" alt="The team in the iPhone app">
+  &nbsp;&nbsp;
+  <img src="packages/site/src/assets/iphone/en-1-chat.jpg" width="250" alt="Ada’s chat on the iPhone: a letter waiting for your yes">
+</p>
+<p align="center"><sub><b>The team in your pocket.</b> The iPhone app (soon in TestFlight): every chat and card, approvals with Face ID.</sub></p>
+
+## Install
+
+**On your Mac or Windows PC.** About two minutes, nothing else to install.
+
+1. Download Piomio from the [latest release](https://github.com/legostin/piomio/releases/latest): `piomio-<version>.dmg` for macOS 13.5 or later (Apple silicon and Intel), `piomio-setup-<version>-x64.exe` for Windows 10 and 11.
+2. Open it, choose **A new Piomio on this computer** and pick a password.
+3. In the chat, press **Sign in** on Claude Code or Codex (your subscription), or paste an API key.
+
+That’s it. From here the assistant leads the setup in the chat, one step at a time: Telegram, a backup brain, other computers, getting to know you.
+
+**On a server.** One Docker image:
+
+```bash
+git clone https://github.com/legostin/piomio.git && cd piomio
+docker compose up -d --build
+docker compose logs piomio | grep -A1 "Piomio:"
+```
+
+Open http://localhost:8080, enter the setup code from the logs and pick a password.
+
+**On your iPhone.** The app is coming to TestFlight soon. It pairs with your hub by a QR code, and approvals need Face ID.
+
+**On more computers.** Each one joins as a machine with a one-time code: its files, its commands (if its owner allows) and its own Claude Code or Codex. See [Other computers](#other-computers).
+
+## How to work with it
+
+- **Just talk.** Write to an agent like to a person: several things at once if you like, even while it works. Quick things get answered right away; anything with steps becomes a task on the side, and the answer comes back as a reply to what you asked.
+- **Tap instead of typing.** Agents ask with buttons under their messages. Cards in the chat connect services, take keys and show what an agent wants to do.
+- **Say yes once.** Anything that leaves your computer (a letter, a booking, a push, a payment) waits for your tap. “Always allow” makes a narrow rule: one recipient, one site, up to an amount.
+- **Let it run by itself.** Reminders, schedules, page watchers and news channels work in the background and decide on their own whether to stay quiet, add to the digest, notify you or ask.
+- **Teach it.** Show a browser task once; the agent keeps it as a skill and does it when asked or on a schedule.
+- **Wherever you are.** The desktop app for macOS and Windows, any browser, the iPhone app and Telegram: the same chats everywhere. One private link reaches your hub from anywhere, with no ports to open.
+
+## How it works
+
+```mermaid
+flowchart LR
+  you(["You"]) --- apps["Desktop app · Web · iPhone · Telegram"]
+  apps --- hub["Piomio hub<br/>on your computer or server"]
+  hub --- brains["Brains<br/>Claude Code · Codex · API keys"]
+  hub --- team["Your agents<br/>a name, a face, a job"]
+  hub --- tools["Plugins and MCP<br/>browser · mail · calendar · pages · channels"]
+  hub --- machines["Your other computers"]
+  hub --- guard["Vault · approvals · sandbox<br/>egress filter · audit"]
+```
+
+- **The hub** is one Node.js process (the desktop app brings its own): chats, agents, memory, tasks, plugins, the vault and the security console.
+- **Brains** are what agents think with. Claude Code and Codex run on your subscriptions; the Anthropic, OpenAI and OpenRouter APIs or any OpenAI-compatible server are fallbacks. When one hits its limit, the agent moves to the next and comes back once it resets.
+- **Agents** are markdown files: a name, a face, a prompt, the brains and tools they may use. New ones are made in the chat.
+- **Everything else is a plugin,** the interface included: the browser, memory, triggers, Telegram, integrations. See [docs/plugins.md](docs/plugins.md).
+
+## Security, in short
+
+- **Secrets stay in a vault.** Models only ever see `vault://` references, and secret values are stripped from everything that reaches a model, a channel or a log.
+- **External actions need your yes,** and a separate console holds approvals, the vault and the audit log. After reading outside content (mail, the web), new recipients ask again.
+- **Sandbox.** Brains and plugins run as separate users with their own folders, and all their traffic goes through an egress filter.
+- **Audit.** Every tool call, decision and vault access lands in a hash-chained log you can verify.
+
+## Reference
+
+Everything in detail, one click away.
+
+
+<details>
+<summary><b>All features</b></summary>
 
 - **Your subscriptions are the brains.** Claude Code (Claude subscription) and Codex (ChatGPT subscription) run as harnesses; the Anthropic, OpenAI and OpenRouter APIs, or any OpenAI-compatible server, act as fallbacks. When a subscription hits its limit, the agent moves on to the next brain and switches back once the limit resets.
 - **Proactive.** Reminders, schedules, and watching pages and feeds. Background tasks decide for themselves whether something deserves your attention: stay silent, add it to the digest, send a notification, or ask you.
@@ -20,9 +141,13 @@ A friendly, proactive personal agent that lives on your own hardware. Piomio is 
 - **Channels.** The app for Windows and macOS, the iPhone app (see [Phone](#phone)), the web UI and Telegram.
 - **Access from anywhere.** One permanent link to your hub for any browser and the phone app, through Piomio's own Tailscale node: nothing to install on the phone, no ports to open (see [Access from anywhere](#access-from-anywhere)).
 
-## Quick start
+</details>
 
-### On your computer (Windows, macOS)
+
+<details>
+<summary><b>Installing in detail: the desktop app and Docker</b></summary>
+
+#### On your computer (Windows, macOS)
 
 Get the app: `piomio-setup-<version>-x64.exe` for Windows 10 and 11, `piomio-<version>.dmg` for macOS 13.5 or later (Apple silicon and Intel). It brings everything it needs: no Node.js, Docker or WSL. To build it yourself, see [Desktop app](#desktop-app).
 
@@ -42,7 +167,7 @@ The desktop version runs the hub, plugins and CLI brains as your own user: the D
 
 The app is not signed yet. Windows SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**. If macOS refuses to open it, choose **Open Anyway** in **System Settings → Privacy & Security** (on macOS 13 and 14, Control-clicking the app and choosing **Open** works too).
 
-### On a server (Docker)
+#### On a server (Docker)
 
 ```bash
 git clone <repo> piomio && cd piomio
@@ -56,13 +181,21 @@ docker compose logs piomio | grep -A1 "Piomio:"
 
 Everything is stored in the `piomio-data` volume (`/data`): the database, the vault, workspaces, CLI logins and plugins.
 
-## Languages
+</details>
+
+<a id="languages"></a>
+<details>
+<summary><b>Languages</b></summary>
 
 - The **hub language** is taken from the first user's browser during setup. You can pin it with `PIOMIO_LANG=en` or `PIOMIO_LANG=ru`, and change it later in **Settings**. It is used for notifications, Telegram, approval cards, and as the default language of the web UI.
 - Each browser can switch the interface language on its own; this does not change the hub language.
 - Agents reply in the language you write to them.
 
-## Connecting brains
+</details>
+
+
+<details>
+<summary><b>Connecting brains and API keys</b></summary>
 
 **Claude Code (Claude Pro/Max subscription) and Codex (ChatGPT subscription)** sign in from the chat. Press **Sign in** next to the brain on the setup card, or ask the assistant ("connect Codex"): a card shows the sign-in page to open.
 
@@ -88,7 +221,11 @@ The address and model of an OpenAI-compatible server are set in the API brain pl
 
 The **Brains** page shows the state of every brain: installed, signed in, rate-limited until a given time. The order in which brains are tried is set per agent.
 
-## Group chats
+</details>
+
+
+<details>
+<summary><b>Group chats</b></summary>
 
 Invite several agents into one chat: in the sidebar, under **Groups**, choose **New group**, give it a name and pick two to eight agents. The first one you pick leads.
 
@@ -99,14 +236,22 @@ Invite several agents into one chat: in the sidebar, under **Groups**, choose **
 
 Change a group's name and members with the button next to its name. Group chats live in the app and the web UI; Telegram does not mirror them.
 
-## Telegram
+</details>
+
+
+<details>
+<summary><b>Telegram</b></summary>
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and ask the assistant to connect Telegram: its card takes the token. The bot connects by itself.
 2. In the same card, tap **Open the bot in Telegram** and press Start: that links your chat. The bot only answers the private chat it was linked from.
 
 Telegram receives replies (with formatting: bold, lists, code, tables), notifications, the digest, and approval cards with buttons. Pictures in a reply arrive as photos or an album, a map as a location pin. Send the bot photos, albums, files and voice messages up to 20 MB (Telegram's limit for bots) or share a place: the agent gets them in its working folder. A forwarded message or a reply tells the agent where it came from or what it answers. Chat commands: `/help`, `/tasks`, `/stop`. The full details of an action are shown only in the console unless you turn on the `channelApprovalDetails` setting.
 
-## Integrations
+</details>
+
+
+<details>
+<summary><b>Integrations</b></summary>
 
 **Settings → Integrations** lists the services your agents work with, as cards: access from anywhere, Google Calendar, Telegram, web search and the browser for now. Each card shows its status and the one button that moves it forward. You can also just ask the assistant ("connect my Google Calendar"): it shows the same card in the chat.
 
@@ -114,7 +259,11 @@ Telegram receives replies (with formatting: bold, lists, code, tables), notifica
 
 Piomio signs in with its own Google client. To use your own instead, create one in [Google Cloud](https://console.cloud.google.com/): a project with the Google Calendar API enabled, the OAuth consent screen (External, In production), and an OAuth client of type **Desktop app**. Then set `PIOMIO_GOOGLE_CLIENT_ID` and `PIOMIO_GOOGLE_CLIENT_SECRET`. Until Google verifies a client's calendar access, the sign-in shows an "unverified app" warning.
 
-## Other computers
+</details>
+
+<a id="other-computers"></a>
+<details>
+<summary><b>Other computers</b></summary>
 
 1. On the **Machines** page, connect a new machine to get a one-time code (valid for 10 minutes).
 2. On the other computer (it only needs Node.js 24.5+), download the daemon from the hub and pair the machine:
@@ -127,7 +276,11 @@ Piomio signs in with its own Google client. To use your own instead, create one 
 
 Under the team in the sidebar (and in the phone app's **Hub** tab) every machine shows whether it is online and, while agents work there, who works on what and what they are doing right now: running a command, reading or editing files, on the web, writing, or waiting for your approval. A row opens that chat or task.
 
-## Phone
+</details>
+
+<a id="phone"></a>
+<details>
+<summary><b>Phone</b></summary>
 
 The Piomio iOS app (repository `piomio-ios`) is the hub in your pocket: your team of agents, the chats with every card, tasks, notifications, and approvals that need Face ID. The phone runs no brains; it connects to this hub.
 
@@ -136,7 +289,11 @@ The Piomio iOS app (repository `piomio-ios`) is the hub in your pocket: your tea
 
 The QR gives the phone every address it can use, and the phone takes whichever answers: the hub's own HTTPS port for phones on the home network (the hub's port + 2: 41782 in the desktop app, 8082 on a server; `PIOMIO_DEVICE_PORT`; only this port opens to the network, the web UI stays where it was), the computer's Tailscale address, and the link from [access from anywhere](#access-from-anywhere) (a phone paired before the link learns it on its next connection). `PIOMIO_DEVICES=0` closes the home-network port; phones then use the link alone. The phone pins the hub's own certificate from the QR, so no domain or CA is involved. Its token is revoked in one click in **Devices**; approving an action needs a signature by a key that stays in the phone's Secure Enclave, so a stolen token cannot approve anything. Rules, the vault's items and the audit stay in the security console. In Docker, publish the device port and list the addresses phones should use: `PIOMIO_DEVICE_URLS=https://192.168.1.10:8082`.
 
-## Access from anywhere
+</details>
+
+<a id="access-from-anywhere"></a>
+<details>
+<summary><b>Access from anywhere</b></summary>
 
 **Settings → Integrations → Access from anywhere** gives the hub one permanent link, `https://piomio.<your-tailnet>.ts.net`. It opens the web UI in any browser and serves the phone app away from home; nothing needs installing on the phone or that other computer. Piomio runs its own [Tailscale](https://tailscale.com) node (`packages/tailnet`) and opens the link with Tailscale Funnel.
 
@@ -148,7 +305,7 @@ Through the link come the web UI (sign in with your Piomio password: passkeys be
 
 The desktop app and the Docker image include the node. When you run from source, build it with `npm run build:tailnet` (needs Go); without it the card says it is unavailable.
 
-### Your own Tailscale or proxy
+#### Your own Tailscale or proxy
 
 Don't publish the ports to the internet directly. To reach the security console from elsewhere too, install [Tailscale](https://tailscale.com) on the host and let `tailscale serve` put HTTPS in front of both ports (HTTPS certificates must be enabled for your tailnet):
 
@@ -167,7 +324,11 @@ environment:
 
 Passkeys (passwordless sign-in) need HTTPS or `localhost`; `tailscale serve` takes care of the certificate.
 
-## Security model
+</details>
+
+
+<details>
+<summary><b>Security model</b></summary>
 
 - **Two origins.** The chat and plugins live on `:8080`. Approvals, the vault, rules and the audit log live on `:8081`, with their own cookie, a strict CSP and `frame-ancestors 'none'`. Plugin code on the main page cannot read or click anything in the console.
 - **Vault.** Secrets are encrypted with XChaCha20-Poly1305 under a data key, which in turn is wrapped by a key derived with Argon2id. Models only ever see `vault://id`. A plugin gets an item only if the item is declared in its permissions **and** the item's scope allows that plugin, domain or agent. Secret values are stripped from everything that goes to models, channels and logs. After a restart the vault is sealed, unless you ticked "unlock automatically" (the passphrase is then kept in `/data/vault.passphrase`, readable by the hub only) or pass a passphrase file through `PIOMIO_VAULT_PASSPHRASE_FILE` (a Docker secret).
@@ -176,7 +337,11 @@ Passkeys (passwordless sign-in) need HTTPS or `localhost`; `tailscale serve` tak
 - **Nodes.** Nodes authenticate with an Ed25519 key created during one-time pairing. Every action on a machine has to pass both the hub policy and the node's local policy.
 - **Audit.** Every tool call, policy decision, vault access and sign-in is recorded in a hash-chained log. Check its integrity with `docker exec piomio piomio-entrypoint audit-verify` or in the console.
 
-## Container commands
+</details>
+
+
+<details>
+<summary><b>Container commands</b></summary>
 
 ```bash
 docker exec piomio piomio-entrypoint reset-password 'new-password'
@@ -190,7 +355,11 @@ docker exec piomio piomio-entrypoint audit-verify
 - `backup [dir]` copies the databases, agents, skills, commands and plugins with their data; the vault stays encrypted.
 - `audit-verify` checks the audit log's hash chain and exits with code 2 if it is broken.
 
-## Environment variables
+</details>
+
+
+<details>
+<summary><b>Environment variables</b></summary>
 
 | Variable | Default | |
 |---|---|---|
@@ -216,7 +385,11 @@ docker exec piomio piomio-entrypoint audit-verify
 
 Most behaviour is configured in **Settings** in the web UI: language, time zone, quiet hours, digest times, `channelApprovalDetails` (full action details in Telegram) and `brainEgressAllow` (extra hosts brains may reach). One hub setting has no field on that page yet: `egressPrivateAllow`, the local-network hosts plugins and brains may reach (for example `searxng` or `nas.local`); set it through `PATCH /api/settings`.
 
-## Development
+</details>
+
+<a id="desktop-app"></a>
+<details>
+<summary><b>Development and building the desktop app</b></summary>
 
 ```bash
 npm install
@@ -229,7 +402,7 @@ npm run typecheck
 
 You need Node.js 24.5+ (TypeScript runs without a build step). Outside Docker the browser plugin downloads Playwright's Chromium by itself the first time it starts without one (a one-time download into Playwright's cache, or `PLAYWRIGHT_BROWSERS_PATH`); browser calls made meanwhile wait for it. Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` to turn that off and install it yourself with `npx playwright install chromium`. The project layout and conventions are described in [CLAUDE.md](CLAUDE.md), the design in [docs/superpowers/specs](docs/superpowers/specs/2026-10-26-piomio-design.md) (in Russian). Core messages live in `packages/core/src/locales/{en,ru}.ts`, plugin messages in `.piomio-plugin/locales/{en,ru}.json`; `npm test` checks that every translation matches English.
 
-### Desktop app
+#### Desktop app
 
 ```bash
 npm run package:desktop   # on Windows: dist/desktop/piomio-setup-<version>-x64.exe
@@ -243,6 +416,8 @@ Silent installs: `piomio-setup-<version>-x64.exe /S` (add `/NOSTART` to leave it
 To try a build next to an installed Piomio, add `-- --test`: it makes **Piomio Test** (`piomio-test-<version>.dmg`, `piomio-test-setup-<version>-x64.exe`) with its own data, machine pairing, start-at-login entry and ports right after the app's (41790, console 41791, egress proxy 41799). Its window titles, tray menu and setup screens say it is a test build.
 
 To run the app from source without touching an installed Piomio: stage once (`node packaging/desktop/stage.mjs --skip-build`), then `PIOMIO_APP_ROOT=$PWD/dist/desktop/stage-darwin/app PIOMIO_DATA_DIR=/tmp/owl-data npm run tauri -w @piomio/desktop -- dev` with `{"port":18080}` in `/tmp/owl-data/desktop.json`. With `PIOMIO_DATA_DIR` set the app writes no start-at-login entries.
+
+</details>
 
 ## License
 
