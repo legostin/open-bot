@@ -32,6 +32,11 @@
         "windowSize": { "width": 660, "height": 400 },
         "appPosition": { "x": 180, "y": 190 },
         "applicationFolderPosition": { "x": 480, "y": 190 }
+      },
+      "entitlements": "./Entitlements.plist",
+      "files": {
+        "Resources/en.lproj/InfoPlist.strings": "./macos/en.lproj/InfoPlist.strings",
+        "Resources/ru.lproj/InfoPlist.strings": "./macos/ru.lproj/InfoPlist.strings"
       }
     },
     "windows": {
