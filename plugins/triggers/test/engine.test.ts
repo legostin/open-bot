@@ -1,6 +1,6 @@
 // In-process engine tests with a fake plugin context (persistence across "restarts", catch-up, limits, feedback).
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "@piomio/plugin-sdk";
 import { TriggerEngine } from "../server/engine.ts";
 import type { Trigger } from "../server/types.ts";
@@ -232,5 +232,117 @@ describe("trigger engine", () => {
     await e2.runNow(t.id);
     expect(f2.created()[0].params.machine).toBeUndefined();
     e2.stop();
+  });
+});
+
+// The hub on several machines (cluster.ts): the Mac leads and sleeps, the VPS leads meanwhile and runs the planned slot,
+// and the Mac wakes still leading. A sleeping computer's wall clock runs on while its timers stand still: here
+// `vi.setSystemTime` moves the wall clock alone, and advancing the timers moves both.
+describe("a replica that slept through a planned run", () => {
+  const clocks = { toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] as Array<"setTimeout"> };
+  const brief = () => base({ id: "t_brief", name: "Morning brief", cron: "0 8 * * *", state: { nextRunAt: "2026-10-31T03:00:00.000Z" } });
+  afterEach(() => vi.useRealTimers());
+
+  /** The Mac leads from 07:58 Almaty; the VPS (its own storage, or the same one when given) runs 08:00 while the Mac sleeps. */
+  async function vpsRunsWhileMacSleeps(macKv: Map<string, unknown>, vpsKv = macKv) {
+    vi.useFakeTimers(clocks);
+    vi.setSystemTime(new Date("2026-10-31T02:58:00Z"));
+    const mac = fakeCtx(macKv, "Asia/Almaty");
+    const macEngine = new TriggerEngine(mac.ctx);
+    await macEngine.start();
+    await macEngine.boot();
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z")); // asleep
+    const vps = fakeCtx(vpsKv, "Asia/Almaty");
+    const vpsEngine = new TriggerEngine(vps.ctx);
+    await vpsEngine.start();
+    await vpsEngine.boot();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vps.created()).toHaveLength(1);
+    vpsEngine.stop(); // the Mac is back: the VPS stands by
+    return { mac, macEngine };
+  }
+
+  it("does not run it again when what the other replica wrote is already here", async () => {
+    const kv = new Map<string, unknown>([["initialized", true], ["trigger:t_brief", brief()]]);
+    const { mac, macEngine } = await vpsRunsWhileMacSleeps(kv);
+    vi.setSystemTime(new Date("2026-10-31T03:02:53Z")); // wakes: its timer fires at once
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(mac.created()).toHaveLength(0);
+    expect(await macEngine.runs("t_brief")).toHaveLength(1);
+    expect(macEngine.get("t_brief")!.state).toMatchObject({ nextRunAt: "2026-11-01T03:00:00.000Z", runsToday: { count: 1 } });
+    macEngine.stop();
+  });
+
+  it("waits for what the other replica wrote before running a slot it slept through", async () => {
+    const macKv = new Map<string, unknown>([["initialized", true], ["trigger:t_brief", brief()]]);
+    const vpsKv = new Map(macKv);
+    const { mac, macEngine } = await vpsRunsWhileMacSleeps(macKv, vpsKv);
+    vi.setSystemTime(new Date("2026-10-31T03:02:53Z"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mac.created()).toHaveLength(0);
+    for (const [k, v] of vpsKv) macKv.set(k, structuredClone(v)); // replicated, seconds after the wake
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(mac.created()).toHaveLength(0);
+    expect(macEngine.get("t_brief")!.state.nextRunAt).toBe("2026-11-01T03:00:00.000Z");
+    macEngine.stop();
+  });
+
+  it("waits as well for a slot that comes right after it woke, while the other replica may still lead", async () => {
+    vi.useFakeTimers(clocks);
+    vi.setSystemTime(new Date("2026-10-31T02:56:00Z"));
+    const macKv = new Map<string, unknown>([["initialized", true], ["trigger:t_brief", brief()]]);
+    const vpsKv = new Map(macKv);
+    const mac = fakeCtx(macKv, "Asia/Almaty");
+    const macEngine = new TriggerEngine(mac.ctx);
+    await macEngine.start();
+    await macEngine.boot();
+    vi.setSystemTime(new Date("2026-10-31T02:58:50Z")); // asleep
+    await vi.advanceTimersByTimeAsync(60_000); // wakes at 07:59:50; its timer notices
+    const vps = fakeCtx(vpsKv, "Asia/Almaty"); // still leads for a few seconds
+    const vpsEngine = new TriggerEngine(vps.ctx);
+    await vpsEngine.start();
+    await vpsEngine.boot();
+    await vi.advanceTimersByTimeAsync(10_000); // 08:00 on both
+    expect(vps.created()).toHaveLength(1);
+    expect(mac.created()).toHaveLength(0);
+    vpsEngine.stop();
+    for (const [k, v] of vpsKv) macKv.set(k, structuredClone(v));
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(mac.created()).toHaveLength(0);
+    macEngine.stop();
+  });
+
+  it("runs a slot it slept through once, after the wait, when no other replica ran it", async () => {
+    vi.useFakeTimers(clocks);
+    vi.setSystemTime(new Date("2026-10-31T02:58:00Z"));
+    const f = fakeCtx(new Map<string, unknown>([["initialized", true], ["trigger:t_brief", brief()]]), "Asia/Almaty");
+    const e = new TriggerEngine(f.ctx);
+    await e.start();
+    await e.boot();
+    vi.setSystemTime(new Date("2026-10-31T03:02:53Z"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(f.created()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(f.created()).toHaveLength(1);
+    expect((await e.runs("t_brief"))[0]).toMatchObject({ reason: "schedule", status: "started" });
+    expect(e.get("t_brief")!.state).toMatchObject({ lastSlot: "2026-10-31T03:00:00.000Z", nextRunAt: "2026-11-01T03:00:00.000Z" });
+    e.stop();
+  });
+
+  it("never runs a slot twice, even when it is planned again (the clock set back, then an edit)", async () => {
+    vi.useFakeTimers(clocks);
+    vi.setSystemTime(new Date("2026-10-31T02:59:30Z"));
+    const f = fakeCtx(new Map<string, unknown>([["initialized", true], ["trigger:t_brief", brief()]]), "Asia/Almaty");
+    const e = new TriggerEngine(f.ctx);
+    await e.start();
+    await e.boot();
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(f.created()).toHaveLength(1);
+    vi.setSystemTime(new Date("2026-10-31T02:58:30Z"));
+    expect((await e.update("t_brief", { name: "Brief" })).state.nextRunAt).toBe("2026-10-31T03:00:00.000Z");
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(f.created()).toHaveLength(1);
+    expect(e.get("t_brief")!.state.nextRunAt).toBe("2026-11-01T03:00:00.000Z");
+    e.stop();
   });
 });
