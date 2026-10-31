@@ -436,6 +436,31 @@ describe("hub (integration)", () => {
     expect(msgs.some((m) => m.parts.some((p: any) => p.type === "notification" && p.kind === "report" && p.notificationId === n.id))).toBe(true);
   });
 
+  it("tells the person plainly when a schedule's report did not come", async () => {
+    // Pinned to a brain this hub does not have: the run cannot start, and the agent has nothing set up to start it with.
+    const task = hub.runner.createTask({ agentId: "assistant", goal: "Brief me", title: "Morning brief", background: true, createdBy: "trigger", triggerId: "t_brief_failing", deliver: "report", brainRef: "gone@local" });
+    const n = await until(() => hub.notifier.list(50).find((x) => x.taskId === task.id), "the alert");
+    expect(n).toMatchObject({
+      level: "notify",
+      kind: "alert",
+      title: "Didn't work out: “Morning brief”",
+      body: "Тестовый ассистент isn't signed in to any brain yet. Sign in from its chat.",
+    });
+    expect(hub.store.getTask(task.id)?.status).toBe("failed");
+    const dialog = hub.store.listMessages(hub.store.agentConversation("assistant").id, { limit: 100 });
+    expect(dialog.some((m) => m.parts.some((p) => p.type === "notification" && p.kind === "alert" && p.notificationId === n.id))).toBe(true);
+    // No report was made out of the failure.
+    expect(hub.notifier.list(50).some((x) => x.taskId === task.id && x.kind === "report")).toBe(false);
+  });
+
+  it("keeps an ordinary failing schedule quiet", async () => {
+    const task = hub.runner.createTask({ agentId: "assistant", goal: "Check things", title: "Quiet check", background: true, createdBy: "trigger", triggerId: "t_check_failing", brainRef: "gone@local" });
+    await until(() => hub.store.getTask(task.id)?.status === "failed", "the task to fail");
+    // The failure path is synchronous after the status change; give any stray notification a moment to land.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(hub.notifier.list(100).filter((x) => x.taskId === task.id)).toEqual([]);
+  });
+
   it("serves tools to brains over MCP with per-session tokens", async () => {
     expect((await web.raw("POST", "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }, { authorization: "Bearer nope" })).status).toBe(401);
     await web.req("POST", `/api/conversations/${conv}/messages`, { text: 'CALL notify {"level":"silent","title":"from-mcp"}' });

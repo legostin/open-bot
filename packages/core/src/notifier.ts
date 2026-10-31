@@ -44,6 +44,8 @@ const UNREAD = "n.read_at is null and (m.id is null or c.read_at is null or m.cr
 const INBOX_KINDS = "('report', 'alert', 'question', 'digest')";
 /** How long the default agent may write the digest before the card goes out. */
 export const DIGEST_WRITE_MS = 3 * 60_000;
+/** A schedule that fires twice delivers one report: the same text from the same trigger within this window is the same report. */
+export const REPORT_DUPLICATE_MS = 10 * 60_000;
 
 const fromRow = (r: any): Notification => ({
   id: r.id,
@@ -142,6 +144,11 @@ export class Notifier {
     return agentId && this.hasAgent(agentId) ? agentId : this.settings.get().defaultAgent;
   }
 
+  /** The person answered one of this trigger's notifications "off": nothing from it pushes any more. */
+  private triggerSilenced(triggerId: string): boolean {
+    return !!this.db.prepare("select 1 from notifications where trigger_id = ? and feedback = 'off' limit 1").get(triggerId);
+  }
+
   feedbackToken(id: string, value: string): string {
     return this.sign(`f:${id}:${value}`);
   }
@@ -162,12 +169,9 @@ export class Notifier {
     if (!NOTIFY_LEVELS.includes(level)) level = "silent";
 
     // Feedback "off" on this trigger silences it.
-    if (input.triggerId && level !== "ask") {
-      const off = this.db.prepare("select 1 from notifications where trigger_id = ? and feedback = 'off' limit 1").get(input.triggerId);
-      if (off) {
-        level = "silent";
-        reason = t("notify.reason.triggerOff");
-      }
+    if (input.triggerId && level !== "ask" && this.triggerSilenced(input.triggerId)) {
+      level = "silent";
+      reason = t("notify.reason.triggerOff");
     }
 
     // Dedup: same title+body in the last 6 hours.
@@ -273,10 +277,31 @@ export class Notifier {
       await this.notify({ level: "notify", title: t("notify.report.emptyTitle", { title: task.title }), body: t("notify.report.emptyBody"), agentId: task.agentId, taskId: task.id });
       return undefined;
     }
+    // A schedule that fires twice (a rerun, a duplicate run) brings the same report: the first one stands.
+    if (task.triggerId) {
+      const dup = this.db
+        .prepare("select * from notifications where kind = 'report' and trigger_id = ? and body = ? and created_at > ? order by created_at desc limit 1")
+        .get(task.triggerId, text, new Date(Date.now() - REPORT_DUPLICATE_MS).toISOString());
+      if (dup) return fromRow(dup);
+    }
     const s = this.settings.get();
     const agentId = this.recipient(task.agentId);
     const caption = t("notify.report.caption", { time: localHHMM(s.timezone) });
-    const n: Notification = { id: newId("n_"), level: "notify", kind: "report", title: task.title, body: text, agentId: task.agentId, taskId: task.id, triggerId: task.triggerId, createdAt: nowIso() };
+    // A schedule the person muted still writes its report (they ordered it) but never pushes it.
+    const muted = !!task.triggerId && this.triggerSilenced(task.triggerId);
+    const reason = muted ? t("notify.reason.triggerOff") : undefined;
+    const n: Notification = {
+      id: newId("n_"),
+      level: "notify",
+      kind: "report",
+      title: task.title,
+      body: text,
+      agentId: task.agentId,
+      taskId: task.id,
+      triggerId: task.triggerId,
+      createdAt: nowIso(),
+      ...(reason ? { reason } : {}),
+    };
     const dialog = this.store.agentConversation(agentId);
     const m = this.store.addMessage({
       conversationId: dialog.id,
@@ -288,8 +313,8 @@ export class Notifier {
     });
     const deliveredAt = nowIso();
     this.db
-      .prepare("insert into notifications(id, level, kind, title, body, agent_id, task_id, trigger_id, created_at, delivered_at, message_id) values (?,?,?,?,?,?,?,?,?,?,?)")
-      .run(n.id, n.level, n.kind, n.title, n.body, n.agentId ?? null, n.taskId ?? null, n.triggerId ?? null, n.createdAt, deliveredAt, m.id);
+      .prepare("insert into notifications(id, level, kind, title, body, agent_id, task_id, trigger_id, created_at, delivered_at, message_id, reason) values (?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(n.id, n.level, n.kind, n.title, n.body, n.agentId ?? null, n.taskId ?? null, n.triggerId ?? null, n.createdAt, deliveredAt, m.id, reason ?? null);
     const out: Notification = { ...n, deliveredAt, messageId: m.id };
     this.bus.emit("notification.created", out);
     await this.channels.broadcast({
@@ -297,7 +322,7 @@ export class Notifier {
       text: `${n.title} · ${caption}\n\n${truncate(text, 3500)}`,
       link: `${this.publicUrl}/agent/${encodeURIComponent(agentId)}`,
       notificationId: n.id,
-      silent: inQuietHours(s.quietHours, localHHMM(s.timezone)),
+      silent: muted || inQuietHours(s.quietHours, localHHMM(s.timezone)),
     });
     this.inboxChanged();
     return out;

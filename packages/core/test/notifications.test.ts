@@ -281,11 +281,11 @@ describe("scheduled reports", () => {
     ...over,
   });
 
-  it("delivers the final reply whole, as the agent's message, silently in quiet hours and past the rate limit", async () => {
+  it("delivers the final reply whole, as the agent's message, silently in quiet hours", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
     try {
-      const { notifier, notes, sent, row } = setup({ settings: { quietHours: { enabled: true, start: "23:00", end: "08:00" }, notifyRatePerHour: 0 } });
+      const { notifier, notes, sent, row } = setup({ settings: { quietHours: { enabled: true, start: "23:00", end: "08:00" } } });
       const n = await notifier.deliverReport(task());
       expect(notes()[0]).toMatchObject({ kind: "report", title: "Утренняя сводка по Алматы", body: task().result, caption: "scheduled, 03:00", notificationId: n!.id });
       expect(row(n!.id)).toMatchObject({ kind: "report", level: "notify", trigger_id: "t_brief" });
@@ -295,6 +295,94 @@ describe("scheduled reports", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("never holds a report back for the rate limit: the next one from the same schedule arrives as well", async () => {
+    const { notifier, notes, sent, row } = setup({ settings: { notifyRatePerHour: 1 } });
+    const first = await notifier.deliverReport(task());
+    const second = await notifier.deliverReport(task({ id: "t_r2", result: "Через час +8°, туман уходит." }));
+    expect(notes().map((p) => [p.kind, p.body])).toEqual([
+      ["report", task().result],
+      ["report", "Через час +8°, туман уходит."],
+    ]);
+    expect(sent.map((m) => [m.kind, m.silent])).toEqual([
+      ["notification", false],
+      ["notification", false],
+    ]);
+    expect([row(first!.id), row(second!.id)]).toMatchObject([
+      { level: "notify", kind: "report", trigger_id: "t_brief" },
+      { level: "notify", kind: "report", trigger_id: "t_brief" },
+    ]);
+    // The limit really is spent for this schedule: an ordinary notify from it now waits for the digest.
+    const held = await notifier.notify({ level: "notify", title: "Ещё новость", body: "x", agentId: "assistant", triggerId: "t_brief" });
+    expect(held).toMatchObject({ effectiveLevel: "digest", reason: "rate limit — moved to the digest" });
+  });
+
+  it("does not deliver the same report twice when a schedule fires twice", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const { notifier, notes, sent, db, bus, events } = setup();
+      const created: string[] = [];
+      bus.on("notification.created", (n) => created.push(n.id));
+      const first = await notifier.deliverReport(task());
+      const rows = () => (db.prepare("select count(*) as n from notifications where kind = 'report'").get() as { n: number }).n;
+      const unread = events.length;
+
+      // The same run twice a minute apart: the second one writes nothing and hands back the first.
+      vi.setSystemTime(new Date("2026-10-31T03:01:00Z"));
+      const again = await notifier.deliverReport(task({ id: "t_r2" }));
+      expect(again?.id).toBe(first!.id);
+      expect(notes()).toHaveLength(1);
+      expect(sent).toHaveLength(1);
+      expect(rows()).toBe(1);
+      expect(events).toHaveLength(unread);
+      expect(created).toEqual([first!.id]);
+
+      // Another text from the same schedule is its own report.
+      await notifier.deliverReport(task({ id: "t_r3", result: "Уже +7°." }));
+      expect(rows()).toBe(2);
+
+      // A schedule without an id cannot be told apart, so nothing is guarded.
+      await notifier.deliverReport(task({ id: "t_r4", triggerId: undefined, result: "Без расписания" }));
+      await notifier.deliverReport(task({ id: "t_r5", triggerId: undefined, result: "Без расписания" }));
+      expect(rows()).toBe(4);
+
+      // Past the window the same text is news again.
+      vi.setSystemTime(new Date("2026-10-31T03:11:00Z"));
+      const later = await notifier.deliverReport(task({ id: "t_r6" }));
+      expect(later!.id).not.toBe(first!.id);
+      expect(rows()).toBe(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a schedule the person muted quiet: the report is still written and stored, but pushed silently", async () => {
+    const { notifier, notes, sent, row, db } = setup();
+    db.prepare("insert into notifications(id, level, title, body, trigger_id, created_at, feedback) values (?,?,?,?,?,?,?)").run(
+      "n_old",
+      "notify",
+      "Вчерашняя сводка",
+      "старая",
+      "t_brief",
+      "2026-10-30T03:00:00.000Z",
+      "off",
+    );
+    const n = await notifier.deliverReport(task());
+    expect(n).toMatchObject({ kind: "report", level: "notify", reason: "the trigger is muted by the user" });
+    expect(notes()).toHaveLength(1);
+    expect(row(n!.id)).toMatchObject({ kind: "report", trigger_id: "t_brief", reason: "the trigger is muted by the user" });
+    expect(row(n!.id).message_id).toBeTruthy();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ kind: "notification", silent: true });
+
+    // Another schedule is not affected; an ordinary notify from the muted one is still silent.
+    const other = await notifier.deliverReport(task({ id: "t_r2", triggerId: "t_other", result: "Другая сводка" }));
+    expect(other!.reason).toBeUndefined();
+    expect(sent[1]).toMatchObject({ silent: false });
+    const quiet = await notifier.notify({ level: "notify", title: "Новость", body: "x", agentId: "assistant", triggerId: "t_brief" });
+    expect(quiet).toMatchObject({ effectiveLevel: "silent", reason: "the trigger is muted by the user" });
   });
 
   it("says so when a report came back empty", async () => {
