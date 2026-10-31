@@ -320,6 +320,7 @@
     padding: 0.5rem 0.875rem;
     box-shadow: 0 1px 2px rgb(70 45 10 / 0.05);
   }
+  /* In a grouped message no bubble has the tail, wherever its words come among the parts (so not `:first-child`). */
   .is-grouped .msg-parts > .md {
     border-top-left-radius: 1.25rem;
   }

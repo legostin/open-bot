@@ -46,6 +46,8 @@ export interface Bootstrap {
   /** A new hub: only the setup card until a brain works, then the assistant opens the intro (FirstRun.tsx). */
   firstRun?: boolean;
   pendingApprovals: number;
+  /** Reports, digests, alerts and questions not read yet (the Inbox's badge); missing on an older hub. */
+  inboxUnread?: number;
   uiPlugins: UiPluginEntry[];
   channels: ChannelEntry[];
 }
@@ -346,6 +348,9 @@ function handleEvent(e: UiEvent): void {
       break;
     case "approval.pending":
       session.set((s) => (s ? { ...s, pendingApprovals: e.data.count } : s));
+      break;
+    case "inbox.changed":
+      session.set((s) => (s ? { ...s, inboxUnread: e.data.unread } : s));
       break;
     case "vault.state":
       session.set((s) => (s ? { ...s, vaultState: e.data.state } : s));
