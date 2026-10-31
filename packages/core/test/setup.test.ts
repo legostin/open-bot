@@ -116,6 +116,18 @@ describe("what counts as a brain", () => {
     expect(await guideOver({ "codex@vps": true }, ["claude-code@local"]).usable()).toBe(true);
   });
 
+  it("says the hub is starting until its brains are in, and asks the page to look again then", () => {
+    const g = guideOver({ "claude-code@local": true }, ["claude-code@local"]);
+    const emitted: string[] = [];
+    (g as any).d.bus.emit = (e: string) => emitted.push(e);
+    expect(g.starting()).toBe(true);
+    g.start();
+    expect(g.starting()).toBe(false);
+    expect(emitted).toContain("brains.updated");
+    g.stop();
+    expect(g.starting()).toBe(true);
+  });
+
   it("none when nothing on the hub works", async () => {
     expect(await guideOver({ "codex@local": false, "api:anthropic@local": false }, ["codex@local", "api:*"]).usable()).toBe(false);
   });
@@ -134,7 +146,7 @@ describe("setup with no working brain", () => {
 
   it("lists the agent's brains and the steps left", async () => {
     const s = await h.ok("GET", "/api/setup");
-    expect(s).toMatchObject({ agentId: "assistant", usable: false, firstRun: true, vault: "absent", telegram: false, machines: 0 });
+    expect(s).toMatchObject({ agentId: "assistant", usable: false, firstRun: true, starting: false, vault: "absent", telegram: false, machines: 0 });
     expect(s.brains).toEqual([
       expect.objectContaining({ ref: "gated@local", kind: "api", signedIn: false }),
       expect.objectContaining({ ref: "codex@local", kind: "cli", installed: true, signedIn: false, canInstall: false }),

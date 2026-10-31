@@ -3,12 +3,12 @@
 // alone on a new hub's first screen (FirstRun.tsx). Live from /api/setup; once a brain works it shrinks to one line and
 // the agent takes over. On a new hub the empty dialog of the default agent then asks the hub to open the intro.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, CircleCheck, RefreshCw } from "lucide-react";
 import type { SetupState } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
-import { cliRows, introDue, showGate } from "../lib/setup";
+import { cliRows, introDue, newest, showGate } from "../lib/setup";
 import { conversations, hubEvents, session, useConversationMessages } from "../state/app";
 import { BrainLoginCard } from "./BrainLoginCard";
 import { PluginSetupCard, VaultGate } from "./SecretCards";
@@ -20,15 +20,19 @@ export function useSetupState(agentId: string | undefined, enabled = true) {
   const [state, setState] = useState<SetupState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const query = agentId ? `?agent=${encodeURIComponent(agentId)}` : "";
+  // Brains come in one by one as the hub starts, each with an event: only the newest answer counts.
+  const ticket = useMemo(newest, []);
   const load = useCallback(() => {
+    const current = ticket();
     api.get<SetupState>(`/api/setup${query}`).then(
       (s) => {
+        if (!current()) return;
         setState(s);
         setError(null);
       },
-      (e) => setError(errorText(e)),
+      (e) => current() && setError(errorText(e)),
     );
-  }, [query]);
+  }, [query, ticket]);
   useEffect(() => {
     if (!enabled) return;
     load();
@@ -38,7 +42,9 @@ export function useSetupState(agentId: string | undefined, enabled = true) {
     });
   }, [load, enabled]);
   const refresh = async () => {
-    setState(await api.post<SetupState>("/api/setup/refresh", agentId ? { agent: agentId } : {}));
+    const current = ticket();
+    const s = await api.post<SetupState>("/api/setup/refresh", agentId ? { agent: agentId } : {});
+    if (current()) setState(s);
   };
   return { state, error, refresh };
 }

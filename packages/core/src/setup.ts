@@ -77,6 +77,8 @@ export function isSetupStep(v: unknown): v is SetupStep {
 export class SetupGuide {
   private d: SetupDeps;
   private held = new Map<string, Held>();
+  /** This replica leads and its plugins have started: what the brains say from now on is the hub's real state. */
+  private started = false;
   private timer?: NodeJS.Timeout;
   private checking?: Promise<void>;
   private again = false;
@@ -86,13 +88,21 @@ export class SetupGuide {
     d.bus.on("brains.updated", () => this.schedule());
   }
 
-  /** Called once the plugins have started. */
+  /** Called once the plugins have started. Pages that asked while the hub was starting look again now. */
   start(): void {
+    this.started = true;
+    this.d.bus.emit("brains.updated", {});
     this.schedule();
   }
 
   stop(): void {
+    this.started = false;
     clearTimeout(this.timer);
+  }
+
+  /** Still starting, or another replica leads: the brains are not all here yet. */
+  starting(): boolean {
+    return !this.started;
   }
 
   private saved(): Saved {
@@ -187,6 +197,7 @@ export class SetupGuide {
       brains,
       usable,
       firstRun: !saved.kickoffDone,
+      starting: !this.started,
       vault: vaultState === "uninitialized" ? "absent" : vaultState === "sealed" ? "locked" : "open",
       telegram,
       machines,

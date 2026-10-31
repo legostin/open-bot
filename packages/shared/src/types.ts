@@ -676,6 +676,11 @@ export interface SetupState {
   usable: boolean;
   /** The hub has not started talking with the person yet: no brain until now, or the intro has not begun. */
   firstRun: boolean;
+  /**
+   * The hub is still starting (a replica waits to see whether another one leads, then starts its plugins), or another
+   * replica leads: its brains are not all here, so `usable` says nothing yet and no setup card should show.
+   */
+  starting: boolean;
   vault: "absent" | "locked" | "open";
   telegram: boolean;
   machines: number;

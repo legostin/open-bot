@@ -21,7 +21,8 @@ export function FirstRunGate({ children }: { children: ReactNode }) {
   }, [usable]);
 
   if (through || usable) return <>{children}</>;
-  if (!state)
+  // Still starting: its brains are not all in, so it is too early to ask for one.
+  if (!state || state.starting)
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-bg" role="status">
         <OwlMark size={52} mood="sleepy" className="animate-zoom" />

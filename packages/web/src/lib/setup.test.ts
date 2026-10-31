@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Message, SetupBrain, SetupState } from "@owlbot/shared";
-import { cliRows, introDue, primaryRef, showGate } from "./setup";
+import { cliRows, introDue, newest, primaryRef, showGate } from "./setup";
 
 const brain = (ref: string, o: Partial<SetupBrain> = {}): SetupBrain => ({ ref, label: ref, kind: "cli", installed: false, signedIn: false, canInstall: false, ...o });
-const state = (brains: SetupBrain[], usable = false, firstRun = false): SetupState => ({
+const state = (brains: SetupBrain[], usable = false, firstRun = false, starting = false): SetupState => ({
   agentId: "assistant",
   brains,
   usable,
   firstRun,
+  starting,
   vault: "absent",
   telegram: false,
   machines: 0,
@@ -47,6 +48,23 @@ describe("showGate", () => {
     expect(showGate([msg("user", [{ type: "text", text: "hi" }]), card], s)).toBe(false);
     expect(showGate([card, msg("user", [{ type: "text", text: "again" }])], s)).toBe(false);
     expect(showGate([card, msg("assistant", [{ type: "text", text: "hello" }])], s)).toBe(true);
+  });
+});
+
+describe("showGate while the hub starts", () => {
+  it("shows no card while the hub is starting: its brains are not in yet", () => {
+    expect(showGate([], state([brain("codex@local", { installed: true })], false, false, true))).toBe(false);
+  });
+});
+
+describe("newest", () => {
+  it("keeps only the newest request current, so an older answer that comes back later is dropped", () => {
+    const ticket = newest();
+    const first = ticket();
+    expect(first()).toBe(true);
+    const second = ticket();
+    expect(first()).toBe(false);
+    expect(second()).toBe(true);
   });
 });
 
