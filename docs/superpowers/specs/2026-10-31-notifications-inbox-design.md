@@ -159,9 +159,9 @@ a badge). Top to bottom:
 **Unread**: an entry is unread until the Inbox shows it, or until its message's conversation is read
 (`conversations.read_at`). Opening the Inbox marks what it shows as read.
 
-Everything here can also be done in the chat: the agent can send the digest now (`digest_now`), change digest
-times and quiet hours (`settings_update`, already there), and turn a schedule into a report or a check
-(`trigger_update`).
+Everything here can also be done in the chat: the agent can read the Inbox (`inbox_view`), send the digest now
+(`digest_now`), change digest times and quiet hours (`settings_update`, already there), and turn a schedule into a
+report or a check (`trigger_update`).
 
 ## Telegram
 
@@ -200,6 +200,8 @@ times and quiet hours (`settings_update`, already there), and turn a schedule in
   - an `inbox.changed` hub event keeps the badge live.
 - **Agent tool** `digest_now` (core): gathers and sends the digest now and says how many items went in, or that
   there was nothing.
+- **Agent tool** `inbox_view` (core, read-only): unread questions, the next digest, the 20 newest entries and the 20
+  newest behind-the-scenes rows with why each stayed there.
 - `BehindEntry.waiting`: the row is held for the next digest (level digest, not digested, not replaced). Items that
   went into digests sent before `digest_id` existed are digested with no digest to link: "went into an earlier digest".
 - i18n: every new string in `packages/core/src/locales/{en,ru}.ts`, the web catalogs and the iOS strings.

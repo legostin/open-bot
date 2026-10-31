@@ -900,6 +900,95 @@ describe("the digest_now tool", () => {
   });
 });
 
+describe("the inbox_view tool", () => {
+  const toolSetup = (opts: Parameters<typeof setup>[0] = {}) => {
+    const h = setup(opts);
+    const registry = new ToolRegistry();
+    registerCoreTools({ registry, store: h.store, notifier: h.notifier } as unknown as CoreToolDeps);
+    const view = async () => {
+      const r = await registry.get("inbox_view")!.invoke({}, { agentId: "assistant", conversationId: "c_1" } as never);
+      return r.content.map((c: { text?: string }) => c.text ?? "").join("");
+    };
+    return { ...h, registry, view };
+  };
+
+  it("is read-only", () => {
+    const { registry } = toolSetup();
+    expect(registry.get("inbox_view")!.descriptor.effect).toBe("read");
+  });
+
+  it("reads the Inbox to the agent: unread questions, the next digest, what came in, and what stayed behind the scenes and why", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T10:00:00Z"));
+    try {
+      const h = toolSetup({ settings: { digestTimes: ["19:00"] } });
+      expect(await h.view()).toBe(
+        [
+          "The user's Inbox (times are UTC).",
+          "Unread questions: none.",
+          "Next digest: nothing waits for it.",
+          "Recent entries: none.",
+          "Behind the scenes: nothing.",
+        ].join("\n"),
+      );
+      await h.notifier.notify({ level: "ask", title: "Залить антифриз?", body: "", agentId: "scout" });
+      const alert = await h.notifier.notify({ level: "notify", title: "Ботсад закрыт\n2 ноября", body: "x", agentId: "assistant" });
+      h.notifier.markInboxRead([alert.id]);
+      vi.setSystemTime(new Date("2026-10-31T10:01:00Z"));
+      await h.notifier.notify({ level: "notify", title: "From the hub", body: "y" });
+      vi.setSystemTime(new Date("2026-10-31T10:05:00Z"));
+      await h.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "scout" });
+      await h.notifier.notify({ level: "silent", title: "Ничего срочного", body: "", agentId: "scout" });
+      await h.notifier.notify({ level: "digest", title: "Утро", body: "1", agentId: "assistant", triggerId: "t_brief" });
+      await h.notifier.notify({ level: "digest", title: "Утро 2", body: "2", agentId: "assistant", triggerId: "t_brief" });
+      await h.notifier.notify({ level: "notify", kind: "approval", title: "Waiting for your approval", body: "Send", agentId: "assistant" });
+      h.db.prepare("insert into notifications(id, level, kind, title, body, created_at, digested) values ('n_legacy', 'digest', 'item', 'Old item', 'o', '2026-10-01T10:00:00.000Z', 1)").run();
+      await h.notifier.notify({ level: "notify", title: "Курс доллара", body: "480", agentId: "scout" });
+
+      const out = await h.view();
+      expect(out).toContain('Unread questions (1):\n- "Залить антифриз?" from Scout, 2026-10-31 10:00');
+      expect(out).toContain("Next digest: at 19:00, 2 item(s) waiting.");
+      expect(out).toContain('Recent entries (newest first):\n- alert "From the hub" from Assistant, 2026-10-31 10:01, unread\n- alert "Ботсад закрыт 2 ноября" from Assistant, 2026-10-31 10:00, read');
+      expect(out).toContain("Behind the scenes (newest first; these did not reach the user):");
+      expect(out).toContain('- item "Курс доллара" from Scout, 2026-10-31 10:05: silent (duplicate)');
+      expect(out).toContain('- item "Курс доллара" from Scout, 2026-10-31 10:05: waits for the next digest');
+      expect(out).toContain('- item "Ничего срочного" from Scout, 2026-10-31 10:05: silent, just for the record');
+      expect(out).toContain('- item "Утро" from Assistant, 2026-10-31 10:05: replaced by a newer one');
+      expect(out).toContain('- item "Утро 2" from Assistant, 2026-10-31 10:05: waits for the next digest');
+      expect(out).toContain('- approval "Waiting for your approval" from Assistant, 2026-10-31 10:05: an approval push; the approval itself is in the chat');
+      expect(out).toContain('- item "Old item", 2026-10-01 10:00: went into an earlier digest');
+
+      // Once a digest is out, its items say which one.
+      await h.notifier.flushDigest();
+      await h.notifier.digestWritten("t_digest_1", "Сводка");
+      const later = await h.view();
+      expect(later).toMatch(/- item "Утро 2" from Assistant, 2026-10-31 10:05: went into the digest "Morning digest · [^"]+" \(2026-10-31 10:05\)/);
+      expect(later).toMatch(/- digest "Morning digest · [^"]+" from Assistant, 2026-10-31 10:05, unread/);
+      expect(later).toContain("Next digest: nothing waits for it.");
+      h.notifier.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays short: the 20 newest entries and behind-the-scenes rows, and says there are more", async () => {
+    const h = toolSetup();
+    const put = h.db.prepare("insert into notifications(id, level, kind, title, body, created_at, delivered_at) values (?,?,?,?,?,?,?)");
+    for (let i = 0; i < 30; i++) {
+      const at = new Date(Date.UTC(2026, 9, 31, 3, i)).toISOString();
+      put.run(`n_a${i}`, "notify", "alert", `Alert ${i}`, "", at, at);
+      put.run(`n_i${i}`, "silent", "item", `Item ${i}`, "", at, null);
+    }
+    const out = await h.view();
+    expect(out.match(/^- alert /gm)).toHaveLength(20);
+    expect(out.match(/^- item /gm)).toHaveLength(20);
+    expect(out).toContain('"Alert 29"');
+    expect(out).not.toContain('"Alert 9"');
+    expect(out).toContain("Older entries are not shown.");
+    expect(out).toContain("Behind the scenes (newest first; these did not reach the user; 30 in all, older ones not shown):");
+  });
+});
+
 describe("the Inbox", () => {
   const digestOf = (n: ReturnType<typeof setup>) => n.db.prepare("select * from notifications where kind = 'digest'").get() as any;
   /** The Inbox the way an app reads it: a page, then the next one before its last entry, until nothing more. */
