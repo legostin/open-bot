@@ -103,7 +103,7 @@ export function digestPrompt(m: DigestMaterial): string {
   }
   if (m.told.length) {
     lines.push("", "## Already told today (do not retell)");
-    for (const x of m.told) lines.push(`- ${x.time} ${x.title}`);
+    for (const x of m.told) lines.push(`- ${x.time} ${oneLine(x.title)}`);
   }
   return lines.join("\n");
 }

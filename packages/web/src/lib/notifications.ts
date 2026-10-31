@@ -112,5 +112,5 @@ export function behindWhy(b: Pick<BehindEntry, "supersededBy" | "digest" | "kind
 
 /** A notification that pops up as it arrives: an alert or a question that reached the person; nothing the hub held back (it says why). */
 export function toastWorthy(n: Pick<Notification, "kind" | "reason">): boolean {
-  return (n.kind === "alert" || n.kind === "question") && !n.reason;
+  return (n.kind === "alert" || n.kind === "question" || n.kind === "report" || n.kind === "digest") && !n.reason;
 }

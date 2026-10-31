@@ -183,12 +183,12 @@ describe("why a row stayed behind the scenes", () => {
 });
 
 describe("which notifications pop up", () => {
-  it("pops up an alert or a question that reached the person, nothing else", () => {
-    expect(toastWorthy({ kind: "alert" })).toBe(true);
-    expect(toastWorthy({ kind: "question" })).toBe(true);
-    // Reports and digests are in the chat already; approval pushes have their own card; items stay behind the scenes.
-    for (const kind of ["report", "digest", "approval", "item"] as const) expect(toastWorthy({ kind })).toBe(false);
+  it("pops up what reached the person: an alert, a question, a report or a digest, nothing else", () => {
+    for (const kind of ["alert", "question", "report", "digest"] as const) expect(toastWorthy({ kind })).toBe(true);
+    // Approval pushes have their own card; items stay behind the scenes.
+    for (const kind of ["approval", "item"] as const) expect(toastWorthy({ kind })).toBe(false);
     // A row the hub held back (a muted schedule, quiet hours) carries why: it does not pop up.
     expect(toastWorthy({ kind: "alert", reason: "the trigger is muted by the user" })).toBe(false);
+    expect(toastWorthy({ kind: "report", reason: "the trigger is muted by the user" })).toBe(false);
   });
 });
