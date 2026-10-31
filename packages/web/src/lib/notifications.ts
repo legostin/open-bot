@@ -1,6 +1,6 @@
 // How notifications read: a part's kind (parts saved before kinds read by level), source labels, the Inbox's days and paging.
 
-import type { BehindEntry, InboxView, NotificationKind, NotificationSource, NotifyLevel } from "@piomio/shared";
+import type { BehindEntry, InboxEntry, InboxView, NotificationKind, NotificationSource, NotifyLevel } from "@piomio/shared";
 
 export function partKind(p: { kind?: NotificationKind; level: NotifyLevel }): NotificationKind {
   if (p.kind) return p.kind;
@@ -40,11 +40,29 @@ export const INBOX_PAGE = 50;
 export const INBOX_PAGE_MAX = 200;
 
 /**
- * How many rows a refresh asks for: once the person has paged in beyond the first page it re-reads as many (up to the hub's most),
- * so they keep their place; before that the default first page (undefined).
+ * How many rows a load asks for: the first page, or, once the person has paged in beyond it, as many rows as they have (up to the
+ * hub's most), so a refresh keeps their place.
  */
-export function reloadLimit(loaded: number): number | undefined {
-  return loaded > INBOX_PAGE ? Math.min(loaded, INBOX_PAGE_MAX) : undefined;
+export function reloadLimit(loaded: number): number {
+  return Math.min(Math.max(loaded, INBOX_PAGE), INBOX_PAGE_MAX);
+}
+
+/** Remember the questions the view holds under "Waiting for you": for the rest of the visit they stay there. */
+export function pinWaiting(pinned: Set<string>, view: Pick<InboxView, "questions">): void {
+  for (const q of view.questions) pinned.add(q.id);
+}
+
+const newestFirst = (a: InboxEntry, b: InboxEntry): number => (a.createdAt === b.createdAt ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.createdAt < b.createdAt ? 1 : -1);
+
+/**
+ * The view as the page shows it: "Waiting for you" and the by-day list. Reading a question makes the hub list it by its time
+ * instead of under Waiting; one that was under Waiting earlier in this visit (`pinned`) stays there, newest first, and is not
+ * in the by-day list.
+ */
+export function splitWaiting(view: Pick<InboxView, "questions" | "entries">, pinned: ReadonlySet<string>): { waiting: InboxEntry[]; byDay: InboxEntry[] } {
+  const asked = new Set(view.questions.map((q) => q.id));
+  const held = view.entries.filter((e) => pinned.has(e.id) && !asked.has(e.id));
+  return { waiting: [...view.questions, ...held].sort(newestFirst), byDay: view.entries.filter((e) => !pinned.has(e.id) && !asked.has(e.id)) };
 }
 
 /**

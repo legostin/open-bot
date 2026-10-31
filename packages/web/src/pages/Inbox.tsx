@@ -6,7 +6,7 @@ import { Link } from "wouter";
 import { ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import type { BehindEntry, InboxEntry, InboxView } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
-import { appendPage, behindMayHaveMore, behindWhy, dayLabel, groupByDay, idsToMarkRead, INBOX_PAGE, mergeBehind, reloadLimit } from "../lib/notifications";
+import { appendPage, behindMayHaveMore, behindWhy, dayLabel, groupByDay, idsToMarkRead, INBOX_PAGE, mergeBehind, pinWaiting, reloadLimit, splitWaiting } from "../lib/notifications";
 import { formatTime } from "../lib/format";
 import { useStore } from "../lib/store";
 import { agents, ensureAgents, hubEvents, reconnected, session } from "../state/app";
@@ -130,6 +130,8 @@ export function InboxPage() {
   const [reveal, setReveal] = useState<string>();
   // Entries that were unread when shown: marked read at once, their dot stays while the page is open.
   const fresh = useRef(new Set<string>());
+  // Questions that stood under "Waiting for you" at some point of this visit: they stay there once read (the hub then lists them by their time).
+  const pinned = useRef(new Set<string>());
   // What load() reads to know how far the person has paged, and the number of the latest request (an older answer never replaces a newer one).
   const shown = useRef<InboxView | null>(null);
   const latest = useRef(0);
@@ -137,15 +139,15 @@ export function InboxPage() {
   useEffect(() => ensureAgents(), []);
   useEffect(() => {
     shown.current = view;
+    if (view) pinWaiting(pinned.current, view);
   }, [view]);
 
   // A refresh keeps as many rows as the person has paged in, so they keep their place; the first page is read afresh either way.
   const load = useCallback(async () => {
     const mine = ++latest.current;
     setError(undefined);
-    const limit = reloadLimit(shown.current?.entries.length ?? 0);
     try {
-      const v = await api.get<InboxView>(limit ? `/api/inbox?limit=${limit}` : "/api/inbox");
+      const v = await api.get<InboxView>(`/api/inbox?limit=${reloadLimit(shown.current?.entries.length ?? 0)}`);
       if (mine === latest.current) setView(v);
     } catch (e) {
       if (mine === latest.current) setError(errorText(e));
@@ -204,7 +206,7 @@ export function InboxPage() {
     const last = view?.entries.at(-1);
     if (!last) return;
     try {
-      const next = await api.get<InboxView>(`/api/inbox?before=${encodeURIComponent(last.createdAt)}`);
+      const next = await api.get<InboxView>(`/api/inbox?limit=${INBOX_PAGE}&before=${encodeURIComponent(last.createdAt)}`);
       // A refresh that landed meanwhile may have changed the list this page follows: then it is dropped, and "Show earlier" asks again.
       setView((v) => v && appendPage(v, next, last.id));
     } catch (e) {
@@ -234,6 +236,7 @@ export function InboxPage() {
   const row = (e: InboxEntry) => <Row key={e.id} e={e} open={open === e.id} onToggle={() => setOpen(open === e.id ? undefined : e.id)} dot={e.unread || fresh.current.has(e.id)} />;
   const tz = s?.timezone;
   const now = new Date();
+  const { waiting, byDay } = view ? splitWaiting(view, pinned.current) : { waiting: [], byDay: [] };
   const empty = view && !view.questions.length && !view.entries.length && !s?.pendingApprovals;
 
   return (
@@ -249,7 +252,7 @@ export function InboxPage() {
           </button>
         </div>
       )}
-      {view && (view.questions.length > 0 || !!s?.pendingApprovals) && (
+      {view && (waiting.length > 0 || !!s?.pendingApprovals) && (
         <Section label={t("inbox.waiting")}>
           {!!s?.pendingApprovals && (
             <a href={`${s.consoleUrl}/#/approvals`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-surface-2/70">
@@ -257,11 +260,11 @@ export function InboxPage() {
               <ChevronRight className="size-4 text-muted" />
             </a>
           )}
-          {view.questions.map(row)}
+          {waiting.map(row)}
         </Section>
       )}
       {view &&
-        groupByDay(view.entries, tz).map((g) => (
+        groupByDay(byDay, tz).map((g) => (
           <Section key={g.day} label={dayLabel(g.day, now, tz, locale, { today: t("inbox.today"), yesterday: t("inbox.yesterday") })}>
             {g.entries.map(row)}
           </Section>
