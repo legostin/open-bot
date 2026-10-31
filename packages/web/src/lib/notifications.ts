@@ -1,6 +1,6 @@
-// How notifications read: a part's kind (parts saved before kinds read by level), source labels, the Inbox's days.
+// How notifications read: a part's kind (parts saved before kinds read by level), source labels, the Inbox's days and paging.
 
-import type { NotificationKind, NotificationSource, NotifyLevel } from "@piomio/shared";
+import type { BehindEntry, InboxView, NotificationKind, NotificationSource, NotifyLevel } from "@piomio/shared";
 
 export function partKind(p: { kind?: NotificationKind; level: NotifyLevel }): NotificationKind {
   if (p.kind) return p.kind;
@@ -32,4 +32,56 @@ export function dayLabel(day: string, now: Date, tz: string | undefined, locale:
   if (day === fmt.format(now)) return words.today;
   if (day === fmt.format(new Date(now.getTime() - 86_400_000))) return words.yesterday;
   return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
+}
+
+/** The hub's page of the Inbox and of "Behind the scenes" when no `limit` is asked for. */
+export const INBOX_PAGE = 50;
+/** The most rows the hub gives in one page. */
+export const INBOX_PAGE_MAX = 200;
+
+/**
+ * How many rows a refresh asks for: once the person has paged in beyond the first page it re-reads as many (up to the hub's most),
+ * so they keep their place; before that the default first page (undefined).
+ */
+export function reloadLimit(loaded: number): number | undefined {
+  return loaded > INBOX_PAGE ? Math.min(loaded, INBOX_PAGE_MAX) : undefined;
+}
+
+/**
+ * The page after `afterId` joined to the view, skipping rows already shown. The view is returned untouched when its last row is no
+ * longer `afterId`: a refresh landed while the page was on its way, and this page would follow a different list.
+ */
+export function appendPage(view: InboxView, next: Pick<InboxView, "entries" | "hasMore">, afterId: string): InboxView {
+  if (view.entries.at(-1)?.id !== afterId) return view;
+  const shown = new Set(view.entries.map((e) => e.id));
+  return { ...view, entries: [...view.entries, ...next.entries.filter((e) => !shown.has(e.id))], hasMore: next.hasMore };
+}
+
+/** Rows of a page of "Behind the scenes" added to those already shown (none when it starts afresh), each row once. */
+export function mergeBehind(kept: BehindEntry[], page: BehindEntry[]): BehindEntry[] {
+  const shown = new Set(kept.map((b) => b.id));
+  return [...kept, ...page.filter((b) => !shown.has(b.id))];
+}
+
+/** The list of "Behind the scenes" is a bare array: a page as long as asked for (the hub may run it longer on a tie of times) may have more after it. */
+export function behindMayHaveMore(page: readonly unknown[], limit: number = INBOX_PAGE): boolean {
+  return page.length >= limit;
+}
+
+/** What the Inbox shows that the person has not been counted as seeing: unread and not yet sent to the hub as read. */
+export function idsToMarkRead(view: Pick<InboxView, "questions" | "entries">, fresh: ReadonlySet<string>): string[] {
+  return [...view.questions, ...view.entries].filter((e) => e.unread && !fresh.has(e.id)).map((e) => e.id);
+}
+
+export type BehindReason = "superseded" | "inDigest" | "approval" | "waiting" | "silent";
+
+/**
+ * Why a row stayed behind the scenes: what became of it, and the hub's own reason (quiet hours, the rate limit, a muted
+ * schedule…) when it has one. A replaced row and an approval push need no reason beyond their line.
+ */
+export function behindWhy(b: Pick<BehindEntry, "supersededBy" | "digest" | "kind" | "level" | "reason">): { key: BehindReason; reason?: string } {
+  if (b.supersededBy) return { key: "superseded" };
+  if (b.digest) return { key: "inDigest", ...(b.reason ? { reason: b.reason } : {}) };
+  if (b.kind === "approval") return { key: "approval" };
+  return { key: b.level === "digest" ? "waiting" : "silent", ...(b.reason ? { reason: b.reason } : {}) };
 }

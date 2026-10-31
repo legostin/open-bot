@@ -175,12 +175,6 @@ export default {
   "threadStatus.interrupted": "interrupted",
   "threadStatus.cancelled": "cancelled",
 
-  // notification levels
-  "notifyLevel.silent": "silent",
-  "notifyLevel.digest": "for digest",
-  "notifyLevel.notify": "notification",
-  "notifyLevel.ask": "question",
-
   // sign-in and first run
   "auth.tagline": "Your personal agent, on your own hardware",
   "auth.version": "version {version}",

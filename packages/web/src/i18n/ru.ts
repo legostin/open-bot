@@ -175,12 +175,6 @@ export default {
   "threadStatus.interrupted": "прервано",
   "threadStatus.cancelled": "отменено",
 
-  // notification levels
-  "notifyLevel.silent": "тихо",
-  "notifyLevel.digest": "в сводку",
-  "notifyLevel.notify": "уведомление",
-  "notifyLevel.ask": "вопрос",
-
   // sign-in and first run
   "auth.tagline": "Ваш личный агент — на вашем железе",
   "auth.version": "версия {version}",
