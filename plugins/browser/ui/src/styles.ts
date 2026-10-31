@@ -130,6 +130,32 @@ const CSS = `
 .obb-card .obb-icon,.obb-card .obb-glyph{width:20px;height:20px}
 .obb-sheet-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-top:1px solid var(--border)}
 
+.obb-menu.is-up{top:auto;bottom:calc(100% + 6px)}
+
+.obb-teach{display:flex;align-items:center;gap:6px;min-height:42px;padding:5px 8px 5px 12px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--accent-soft) 55%,var(--surface))}
+.obb-teach.is-phone{margin:0 4px 8px;padding:4px 4px 4px 12px;border:0;border-radius:14px}
+.obb-teach.is-phone .obb-ib{width:38px;height:38px}
+.obb-rec{flex:none;width:9px;height:9px;border-radius:50%;background:var(--danger);animation:obb-rec 1.6s ease-out infinite}
+@keyframes obb-rec{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--danger) 55%,transparent)}70%,100%{box-shadow:0 0 0 6px transparent}}
+.obb-teach-text{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;margin-left:4px}
+.obb-teach-goal{flex:0 1 auto;font-weight:600}
+.obb-teach-sub{flex:1 1 0;color:var(--muted);font-size:12px}
+.obb-teach.is-phone .obb-teach-text{flex-direction:column;align-items:stretch;gap:1px;line-height:1.25}
+.obb-teach.is-phone .obb-teach-sub{flex:none;font-size:11.5px}
+.obb-mic{transition:background .12s,box-shadow .09s linear}
+.obb-mic.is-off{color:var(--muted)}
+.obb-mic.is-starting{animation:obb-blink 1.4s ease-in-out infinite}
+.obb-mic.is-on,.obb-mic.is-on:hover{background:var(--accent-soft);color:var(--accent-text);box-shadow:inset 0 0 0 1.5px var(--accent),0 0 0 calc(var(--lvl,0) * 6px) color-mix(in srgb,var(--accent) 40%,transparent)}
+.obb-ib.obb-hl-btn[aria-pressed=true]{background:var(--accent-soft);color:var(--accent-text);box-shadow:inset 0 0 0 1.5px var(--accent)}
+
+.obb-hl{position:absolute;inset:0;z-index:6;pointer-events:none}
+.obb-hl.is-on{pointer-events:auto;cursor:crosshair;touch-action:none;background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.obb-hl-hint{position:absolute;left:50%;top:10px;max-width:calc(100% - 24px);padding:6px 12px;border-radius:15px;background:var(--surface);color:var(--fg);font-size:12px;font-weight:500;box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transform:translateX(-50%);pointer-events:none}
+.obb-hl-frame{position:absolute;box-sizing:border-box;border:2px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);pointer-events:none}
+.obb-hl-frame.is-sent{opacity:.85}
+.obb-hl-frame.is-ok{animation:obb-flash .7s ease-out forwards}
+@keyframes obb-flash{0%{background:color-mix(in srgb,var(--accent) 50%,transparent);box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 60%,transparent)}45%{box-shadow:0 0 0 8px transparent}100%{opacity:0;box-shadow:0 0 0 8px transparent}}
+
 @media (hover:none){.obb-tab .obb-ib,.obb-visit .obb-ib{opacity:.7}}
 `;
 

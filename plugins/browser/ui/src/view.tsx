@@ -1,6 +1,7 @@
 // The browser's live view: the compact picture in the corner window, and in the large view a browser — tabs, a
 // toolbar, the address bar, history — laid out like a desktop browser on a wide view and like a phone browser
-// (address on top, buttons at the bottom) on a narrow one.
+// (address on top, buttons at the bottom) on a narrow one. While the person shows an agent a task, the teach bar sits
+// on top of the page (teach.tsx), and Highlight frames a part of the picture (highlight.tsx).
 
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
@@ -8,6 +9,7 @@ import { ArrowLeft, ArrowRight, History, Keyboard as KeyboardIcon, RotateCw, X }
 import { Badge, Button, EmptyState, Spinner } from "@piomio/ui";
 import type { LiveViewProps } from "@piomio/ui";
 import { ControlButton, IconButton, MoreMenu } from "./chrome.tsx";
+import { HighlightButton, HighlightLayer, useHighlight } from "./highlight.tsx";
 import { HistoryPanel } from "./history.tsx";
 import { errorText, host, isBlank, send, t, toolLabel, touchScreen, viewerId, type BrowserState } from "./host.ts";
 import { NewTabPage } from "./newtab.tsx";
@@ -15,11 +17,12 @@ import { Omnibox } from "./omnibox.tsx";
 import { Screen, useBoxSize, type Keyboard } from "./screen.tsx";
 import { addStyles } from "./styles.ts";
 import { TabStrip, TabSwitcher } from "./tabs.tsx";
+import { TeachBar, useLesson } from "./teach.tsx";
 
 /** Narrower than this, the large view is a phone browser. */
 const PHONE_WIDTH = 640;
 
-export function BrowserView({ mode }: LiveViewProps) {
+export function BrowserView({ mode, expand }: LiveViewProps) {
   addStyles();
   const expanded = mode === "expanded";
   const [state, setState] = useState<BrowserState | null>(null);
@@ -40,6 +43,8 @@ export function BrowserView({ mode }: LiveViewProps) {
   const width = useBoxSize(root).w;
   const phone = (width || (typeof window === "undefined" ? PHONE_WIDTH : window.innerWidth)) < PHONE_WIDTH;
   const touch = touchScreen();
+  const teach = state?.teach ?? null;
+  const lesson = useLesson(teach);
 
   useEffect(() => {
     send({ type: "watch", on: true, id: viewerId, refresh: true });
@@ -65,11 +70,17 @@ export function BrowserView({ mode }: LiveViewProps) {
     };
   }, []);
 
-  // The compact window takes no input: leaving the large view hands control back to the agent.
+  // The compact window takes no input: leaving the large view hands control back to the agent (not in the middle of
+  // a demonstration: it goes on when the view is large again).
   useEffect(() => {
-    if (!expanded && state?.control === "user") send({ type: "control", on: false });
+    if (!expanded && state?.control === "user" && !state.teach) send({ type: "control", on: false });
     if (!expanded) setPanel(null);
   }, [expanded]);
+
+  // A demonstration starts in the large view, so the person can act at once.
+  useEffect(() => {
+    if (teach && !expanded) expand();
+  }, [teach?.id]);
 
   useEffect(() => {
     if (!error) return;
@@ -82,6 +93,7 @@ export function BrowserView({ mode }: LiveViewProps) {
   const tabs = state?.tabs ?? [];
   const active = tabs.find((x) => x.active);
   const blank = !!state?.running && !state.loading && isBlank(state.url);
+  const hl = useHighlight(expanded && (control || !!teach) && !!state?.running && !blank, setError);
 
   const screen = (overlay?: ReactNode) => (
     <Screen
@@ -138,7 +150,12 @@ export function BrowserView({ mode }: LiveViewProps) {
         <Button onClick={() => send({ type: "start" })}>{t("ui.start")}</Button>
       </div>
     ) : (
-      screen(blank ? <NewTabPage state={state} search={search} /> : undefined)
+      screen(
+        <>
+          {blank && <NewTabPage state={state} search={search} />}
+          {(hl.on || hl.sent) && <HighlightLayer hl={hl} imgRef={imgRef} />}
+        </>,
+      )
     );
 
   const reload = state?.loading ? (
@@ -160,7 +177,17 @@ export function BrowserView({ mode }: LiveViewProps) {
       <ArrowRight />
     </IconButton>
   );
-  const status = control ? t("ui.status.user") : state?.busy ? t("ui.status.busy", { tool: toolLabel(state.busy) }) : t("ui.status.agent");
+  const status = teach
+    ? t("ui.status.teach")
+    : control
+      ? t("ui.status.user")
+      : state?.busy
+        ? t("ui.status.busy", { tool: toolLabel(state.busy) })
+        : t("ui.status.agent");
+  const teachBar = teach && <TeachBar teach={teach} lesson={lesson} hl={hl} phone={phone} />;
+  // The teach bar has its own Highlight; the menu's "Teach" is for when no demonstration runs.
+  const highlight = control && !teach && <HighlightButton hl={hl} />;
+  const onTeach = state?.running && !teach ? () => send({ type: "teach", action: "start" }) : undefined;
 
   // Cmd/Ctrl+L: to the address bar, even while the keys go to the page.
   const onKeyDownCapture = (e: ReactKeyboardEvent) => {
@@ -176,9 +203,10 @@ export function BrowserView({ mode }: LiveViewProps) {
       <div ref={setRoot} className="obb" onKeyDownCapture={onKeyDownCapture}>
         <div className="obb-phone">
           <Omnibox state={state} variant="phone" inputRef={omniRef} trailing={isBlank(state?.url) ? undefined : reload} />
+          {teachBar}
           {error && <div className="obb-error">{error}</div>}
           {body(false)}
-          {state?.running && (
+          {state?.running && !teach && (
             <div className="obb-pstatus">
               {(control || state.busy) && <span className={`obb-dot${control ? " is-user" : ""}`} aria-hidden />}
               <span className="obb-trunc">{status}</span>
@@ -200,7 +228,9 @@ export function BrowserView({ mode }: LiveViewProps) {
                 <KeyboardIcon />
               </IconButton>
             )}
-            {state?.running && <ControlButton control={control} short />}
+            {highlight}
+            {!control && <MoreMenu url={state?.url ?? ""} onTeach={onTeach} up />}
+            {state?.running && !teach && <ControlButton control={control} short />}
           </div>
           {panel === "tabs" && <TabSwitcher tabs={tabs} onClose={() => setPanel(null)} onHistory={() => setPanel("history")} />}
           {panel === "history" && <HistoryPanel sheet onClose={() => setPanel(null)} />}
@@ -221,17 +251,19 @@ export function BrowserView({ mode }: LiveViewProps) {
           <IconButton label={t("ui.history.title")} pressed={panel === "history"} onClick={() => setPanel(panel === "history" ? null : "history")}>
             <History />
           </IconButton>
-          <MoreMenu url={state?.url ?? ""} />
-          {state?.running && <ControlButton control={control} />}
+          {highlight}
+          <MoreMenu url={state?.url ?? ""} onTeach={onTeach} />
+          {state?.running && !teach && <ControlButton control={control} />}
         </div>
+        {teachBar}
         {error && <div className="obb-error">{error}</div>}
         <div className="obb-body">
           {body(true)}
           {panel === "history" && <HistoryPanel sheet={false} onClose={() => setPanel(null)} />}
         </div>
         <div className="obb-foot">
-          {state?.running && (control ? <Badge tone="warning">{status}</Badge> : state.busy ? <Badge tone="info">{status}</Badge> : <Badge tone="neutral">{status}</Badge>)}
-          <span className="obb-trunc">{control ? t(touch ? "ui.hint.touch" : "ui.hint.user") : t("ui.hint.agent")}</span>
+          {state?.running && (control || teach ? <Badge tone="warning">{status}</Badge> : state.busy ? <Badge tone="info">{status}</Badge> : <Badge tone="neutral">{status}</Badge>)}
+          <span className="obb-trunc">{teach ? t("ui.teach.hint") : control ? t(touch ? "ui.hint.touch" : "ui.hint.user") : t("ui.hint.agent")}</span>
         </div>
       </div>
     </div>

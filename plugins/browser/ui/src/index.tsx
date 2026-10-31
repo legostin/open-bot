@@ -12,8 +12,15 @@ import { BrowserView } from "./view.tsx";
 
 /** What the host shows in the live view's title bar and how it decides when to open the window. */
 function toLiveActivity(a: Activity): LiveViewActivity {
-  const status = a.attention ? t("ui.activity.captcha") : a.control === "user" ? t("ui.activity.user") : hostOf(a.url);
-  return { active: !!a.busy, attention: a.attention, userControl: a.control === "user", agentId: a.agentId ?? undefined, status };
+  // A demonstration needs the person: the window comes back highlighted even if they closed it.
+  const status = a.teach ? t("ui.activity.teach") : a.attention ? t("ui.activity.captcha") : a.control === "user" ? t("ui.activity.user") : hostOf(a.url);
+  return {
+    active: !!a.busy,
+    attention: a.attention || !!a.teach,
+    userControl: a.control === "user" || !!a.teach,
+    agentId: a.agentId ?? undefined,
+    status,
+  };
 }
 
 export default definePluginUI((ui) => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import { Copy, ExternalLink, Globe, Hand, Loader2, MoreHorizontal } from "lucide-react";
+import { Copy, ExternalLink, Globe, GraduationCap, Hand, Loader2, MoreHorizontal } from "lucide-react";
 import { host, iconSrc, openOutside, send, t } from "./host.ts";
 
 export function IconButton(props: {
@@ -74,43 +74,63 @@ function useDismiss(open: boolean, close: () => void) {
   return ref;
 }
 
-/** "⋯": copy the page's link, open it in the person's own browser. */
-export function MoreMenu({ url }: { url: string }) {
+/**
+ * "⋯": copy the page's link, open it in the person's own browser, and teach the agent (`onTeach`, left out while a
+ * demonstration runs). `up`: the menu opens above the button (the phone's bottom bar).
+ */
+export function MoreMenu({ url, onTeach, up }: { url: string; onTeach?: () => void; up?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useDismiss(open, () => setOpen(false));
   const web = /^https?:\/\//i.test(url);
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <IconButton label={t("ui.menu.more")} pressed={open} disabled={!web} onClick={() => setOpen(!open)}>
+      <IconButton label={t("ui.menu.more")} pressed={open} disabled={!web && !onTeach} onClick={() => setOpen(!open)}>
         <MoreHorizontal />
       </IconButton>
       {open && (
-        <div className="obb-menu" role="menu">
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              void navigator.clipboard?.writeText(url).then(
-                () => host.toast(t("ui.menu.copied"), "success"),
-                () => host.toast(url),
-              );
-            }}
-          >
-            <Copy aria-hidden />
-            {t("ui.menu.copy")}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              openOutside(url);
-            }}
-          >
-            <ExternalLink aria-hidden />
-            {t("ui.menu.open")}
-          </button>
+        <div className={`obb-menu${up ? " is-up" : ""}`} role="menu">
+          {web && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                void navigator.clipboard?.writeText(url).then(
+                  () => host.toast(t("ui.menu.copied"), "success"),
+                  () => host.toast(url),
+                );
+              }}
+            >
+              <Copy aria-hidden />
+              {t("ui.menu.copy")}
+            </button>
+          )}
+          {web && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                openOutside(url);
+              }}
+            >
+              <ExternalLink aria-hidden />
+              {t("ui.menu.open")}
+            </button>
+          )}
+          {onTeach && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onTeach();
+              }}
+            >
+              <GraduationCap aria-hidden />
+              {t("ui.teach.start")}
+            </button>
+          )}
         </div>
       )}
     </div>

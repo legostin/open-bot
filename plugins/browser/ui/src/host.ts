@@ -34,6 +34,21 @@ export interface BrowserState {
   canGoForward?: boolean;
   searchEngine?: string;
   install?: InstallStatus;
+  /** The person is showing an agent a task (teach mode); null otherwise. */
+  teach?: TeachState | null;
+}
+
+/** A demonstration going on: the person shows the agent a task (or one step of it) in this browser. */
+export interface TeachState {
+  id: string;
+  /** What is being shown, in the agent's words ("" when the person started it from the menu). */
+  goal: string;
+  scope: "task" | "step";
+  startedAt: number;
+  /** Steps recorded so far. */
+  steps: number;
+  /** The hub can write down speech: the microphone is offered. */
+  speech: boolean;
 }
 
 /** The backend's "activity" event: sent on every change, whether or not anyone watches. */
@@ -44,6 +59,8 @@ export interface Activity {
   url: string;
   control: "agent" | "user";
   attention: boolean;
+  /** A demonstration is going on (the window opens highlighted). */
+  teach?: boolean;
 }
 
 /** A page in the history (server/history.ts). */
