@@ -1,7 +1,9 @@
 // Core methods plugins call (core-call.ts) against a fake hub: a note that wakes an agent (conversations.tell), the
 // words of an audio clip (speech.transcribe) and a task that follows a skill (tasks.create).
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Conversation, Task } from "@piomio/shared";
 import type { Hub } from "../src/app.ts";
 import { createCoreCall } from "../src/core-call.ts";
@@ -124,5 +126,32 @@ describe("core methods for plugins", () => {
     expect(f.created[1].skill).toBeUndefined();
     expect(f.created[1].goal).toBe("No skill");
     await expect(call("triggers", "tasks.create", { agentId: "assistant", goal: "x", skill: "nope" })).rejects.toThrow(/No skill "nope"/);
+  });
+});
+
+describe("files.fetch: a file an agent hands a plugin", () => {
+  it("reads a file inside the session's workspace and nothing outside it", async () => {
+    const ws = mkdtempSync(join(tmpdir(), "fetch-ws-"));
+    const outside = mkdtempSync(join(tmpdir(), "fetch-out-"));
+    mkdirSync(join(ws, "attachments"));
+    writeFileSync(join(ws, "attachments", "photo.jpg"), "jpeg bytes");
+    writeFileSync(join(outside, "secret.txt"), "nope");
+    symlinkSync(join(outside, "secret.txt"), join(ws, "link.txt"));
+    const f = fakeHub();
+    const sessions: Record<string, any> = { s_local: { id: "s_local", brainRef: "fake@local" }, s_far: { id: "s_far", brainRef: "fake@vps" } };
+    (f.hub as any).store.getSession = (id: string) => sessions[id];
+    (f.hub as any).runner.workspacePath = () => ws;
+    const call = createCoreCall(f.hub);
+    const got = (await call("browser", "files.fetch", { sessionId: "s_local", path: "attachments/photo.jpg" })) as { name: string; size: number; data: string };
+    expect(got).toMatchObject({ name: "photo.jpg", size: 10 });
+    expect(Buffer.from(got.data, "base64").toString()).toBe("jpeg bytes");
+    // An absolute path inside the workspace is fine too.
+    expect(await call("browser", "files.fetch", { sessionId: "s_local", path: join(ws, "attachments", "photo.jpg") })).toMatchObject({ name: "photo.jpg" });
+    await expect(call("browser", "files.fetch", { sessionId: "s_local", path: "../" + join("..", outside, "secret.txt") })).rejects.toThrow(/outside the workspace|there is no/);
+    await expect(call("browser", "files.fetch", { sessionId: "s_local", path: join(outside, "secret.txt") })).rejects.toThrow(/outside the workspace/);
+    await expect(call("browser", "files.fetch", { sessionId: "s_local", path: "link.txt" })).rejects.toThrow(/outside the workspace/);
+    await expect(call("browser", "files.fetch", { sessionId: "s_local", path: "attachments" })).rejects.toThrow(/not a file/);
+    await expect(call("browser", "files.fetch", { sessionId: "s_local", path: "missing.jpg" })).rejects.toThrow(/there is no missing.jpg/);
+    await expect(call("browser", "files.fetch", { sessionId: "s_far", path: "attachments/photo.jpg" })).rejects.toThrow(/on the hub/);
   });
 });

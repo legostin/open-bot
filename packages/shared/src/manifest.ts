@@ -160,6 +160,7 @@ export const CORE_METHODS = [
   "machines.list", // the computers tasks run on (the hub's own first, id "local"); tasks.create's `machine` takes one
   "notifications.feedback", // apply a signed feedback button press (useful / less / off)
   "files.deliver", // write a file (in base64 chunks) into a session workspace's downloads/ folder
+  "files.fetch", // read a file an agent hands the plugin from its workspace (base64), e.g. one to upload to a site
   "connections.token", // an access token of the hub's connection the plugin's integration uses (e.g. Google)
   "conversations.tell", // a note for an agent that it answers: wakes the task, else the dialog (the default agent's when none)
   "speech.transcribe", // the words of a short audio clip (base64), with the hub's speech-to-text; { check: true } says if one is set up

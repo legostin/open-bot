@@ -1,8 +1,8 @@
 // Core API exposed to plugins (each method must be granted in the plugin's permissions.core).
 
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import type { AttachmentKind, CoreMethod } from "@piomio/shared";
 import { parseBrainRef } from "@piomio/shared";
 import type { Hub } from "./app.ts";
@@ -11,6 +11,8 @@ import { MAX_TRANSCRIBE_BYTES, uploadName } from "./transcribe.ts";
 
 /** Largest file a plugin may hand to a workspace. */
 const MAX_DELIVER_BYTES = 1024 * 1024 * 1024;
+/** Largest file a plugin may read from a workspace (it travels as base64). */
+const MAX_FETCH_BYTES = 25 * 1024 * 1024;
 
 const KINDS = new Set<AttachmentKind>(["photo", "voice", "audio", "video", "file"]);
 
@@ -200,6 +202,25 @@ export function createCoreCall(hub: Hub) {
           rel = `downloads/${candidate}`;
         }
         return { path: rel, absolutePath: join(hub.runner.workspacePath(s), rel) };
+      }
+      case "files.fetch": {
+        // A file an agent hands a plugin (one to upload to a site): from that session's workspace on the hub, nowhere else.
+        const s = hub.store.getSession(String(p.sessionId ?? ""));
+        if (!s) throw new Error("session not found");
+        if (parseBrainRef(s.brainRef).machineId !== "local") throw new Error("files can only be read from a workspace on the hub");
+        const root = realpathSync(hub.runner.workspacePath(s));
+        const asked = String(p.path ?? "");
+        let file: string;
+        try {
+          file = realpathSync(resolve(root, asked));
+        } catch {
+          throw new Error(`there is no ${asked} in the workspace`);
+        }
+        if (!file.startsWith(root + sep)) throw new Error(`${asked} is outside the workspace`);
+        const st = statSync(file);
+        if (!st.isFile()) throw new Error(`${asked} is not a file`);
+        if (st.size > MAX_FETCH_BYTES) throw new Error(`${asked} is larger than 25 MB`);
+        return { name: basename(file), size: st.size, data: readFileSync(file).toString("base64") };
       }
       case "connections.token": {
         // Only for the account its own integration connects with: a Google integration gets Google's token.
