@@ -15,6 +15,7 @@ import { t, type MessageKey } from "../i18n";
 import { Icon } from "./icon";
 import { PluginSetupCard, VaultGate } from "./SecretCards";
 import { RemoteAccessCard } from "./RemoteAccessCard";
+import { ServiceLogo } from "./ServiceLogo";
 import { ViaBadge } from "./ViaBadge";
 import { Badge, Button, cx, Input, Spinner } from "./ui";
 
@@ -227,9 +228,14 @@ export function IntegrationCard({ view, conversationId, className }: { view: Int
   return (
     <div className={cx("flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3.5", className)}>
       <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-fg">
-          <Icon name={view.icon} className="size-5" />
-        </span>
+        <ServiceLogo
+          logo={view.logo}
+          fallback={
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-fg">
+              <Icon name={view.icon} className="size-5" />
+            </span>
+          }
+        />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-semibold">{view.name}</span>

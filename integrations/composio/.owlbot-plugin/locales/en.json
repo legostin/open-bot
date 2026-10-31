@@ -57,6 +57,7 @@
   "example.reddit": "What is new on r/selfhosted?",
   "detail.key": "Composio did not accept the key: store a new one",
   "detail.expired": "The sign-in stopped working: sign in again",
+  "detail.scopes": "Not every permission was allowed: sign in again and tick every box on the service's page",
   "detail.waiting": "Waiting for the sign-in on Composio's page",
   "error.noKey": "Composio has no key yet: store it on the card first",
   "error.notManaged": "Composio cannot sign in to {name} by itself (it needs its own OAuth client)",

@@ -77,7 +77,7 @@ export default {
   "integrations.disconnect": "Disconnect",
   "integrations.disconnectConfirm": "Disconnect {name}? The agents lose access until you connect it again.",
   "integrations.waiting": "Finish signing in in the browser: this card updates by itself.",
-  "integrations.waitingByItself": "Finish signing in on the page that opened: this card updates by itself, from any device.",
+  "integrations.waitingByItself": "Finish signing in on the page that opened and allow everything it asks for (tick every box): this card updates by itself, from any device.",
   "integrations.pasteHint": "Didn't get back to Owlbot (a hub on a server, or a phone)? Copy the address from the browser's address bar and paste it here.",
   "integrations.pasteLabel": "The address from the browser",
   "integrations.pasteDone": "Done",

@@ -6,7 +6,7 @@
   "description": "%description%",
   "builtin": true,
   "defaultEnabled": false,
-  "integration": {"category": "work", "icon": "file-text", "connect": "signin", "summary": "%integration.summary%", "example": "%integration.example%"},
+  "integration": {"category": "work", "icon": "file-text", "logo": "./logo.png", "connect": "signin", "summary": "%integration.summary%", "example": "%integration.example%"},
   "permissions": {
     "network": ["mcp.notion.com"]
   }

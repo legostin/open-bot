@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { ToolCallContext } from "@owlbot/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { cleanCatalogReport } from "../src/plugins/host.ts";
-import { entryRef, listCatalog, listIntegrations } from "../src/integrations.ts";
+import { entryRef, listCatalog, listIntegrations, logoFile } from "../src/integrations.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 
@@ -87,6 +87,7 @@ describe("a plugin's catalog entries", () => {
       plugin: "outside",
       signinReturn: false,
       via: { name: "Outside", about: "Chat goes through Outside, an outside service.", link: "https://outside.example" },
+      logo: expect.stringMatching(/^\/api\/integrations\/outside%3Achat\/logo\?v=[0-9a-z]+$/),
       example: "What is new in Chat?",
     });
     expect((await entry("outside:chat", "ru"))!.via!.about).toBe("Chat работает через Outside, внешний сервис.");
@@ -94,6 +95,15 @@ describe("a plugin's catalog entries", () => {
     expect(c.sections.find((s) => s.id === "communication")!.items.map((i) => i.id)).toContain("outside:chat");
     // The built-in pick of an entry counts among the popular ones.
     expect(c.popular).toEqual(["outside:chat"]);
+  });
+
+  it("serves a card's logo only when it is a small PNG inside its plugin", async () => {
+    expect(logoFile(hub, "outside:chat")).toMatch(/outside[\\/]logos[\\/]chat\.png$/);
+    // The plugin's own "logo" is text named .png: no logo, the icon stays.
+    expect(logoFile(hub, "outside")).toBeUndefined();
+    expect((await entry("outside"))!.logo).toBeUndefined();
+    expect(logoFile(hub, "outside:nothing")).toBeUndefined();
+    expect(logoFile(hub, "weather")).toBeUndefined();
   });
 
   it("turns on with its plugin and waits for its key", async () => {
@@ -114,6 +124,7 @@ describe("a plugin's catalog entries", () => {
     const told = vi.spyOn(hub.runner, "tellAgent").mockImplementation(() => {});
     const card = await hub.tools.get("hub_integration_connect")!.invoke({ id: "outside:chat" }, call(conv.id));
     expect((card.content[0] as { text: string }).text).toContain("It goes through Outside, an outside service");
+    expect((card.content[0] as { text: string }).text).toContain("allow everything the service's page asks for (tick every box");
 
     expect(await hub.entrySignIn("outside:chat", conv.id)).toBe("https://outside.example/link/chat");
     await until(async () => (await entry("outside:chat"))?.status === "connected", "the entry connected");

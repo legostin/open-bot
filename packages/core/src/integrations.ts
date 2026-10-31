@@ -7,6 +7,8 @@
 // plugin's Slack, GitHub…), listed as "<plugin>:<entry>"; one going through an outside service (`integration.via`)
 // carries that service's badge.
 
+import { openSync, readSync, closeSync, statSync } from "node:fs";
+import { resolve, sep } from "node:path";
 import type { CatalogView, IntegrationInfo, IntegrationVia, IntegrationView, Locale, OwlbotManifest } from "@owlbot/shared";
 import { toolPrefixOf } from "@owlbot/shared";
 import type { Hub } from "./app.ts";
@@ -49,6 +51,47 @@ function plainIntegration(m: OwlbotManifest): IntegrationInfo {
   return { category: brain ? "brains" : "other", icon: brain ? "brain" : "puzzle", connect: m.contributes.setup?.secrets.length ? "setup" : "none", scopes: [], entries: [] };
 }
 
+/** A logo the hub serves, at most: a 128×128 PNG is a few KB. */
+export const MAX_LOGO_BYTES = 64 * 1024;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/**
+ * The file of a card's logo (`integration.logo` or an entry's `logo`): a PNG inside the plugin's folder, small enough;
+ * undefined for anything else, so a manifest cannot make the hub serve another file.
+ */
+export function logoFile(hub: Hub, id: string): string | undefined {
+  const ref = entryRef(id);
+  const r = hub.plugins.get(ref?.pluginId ?? id);
+  const integ = r?.layout?.manifest.integration;
+  const rel = ref ? integ?.entries.find((e) => e.id === ref.entryId)?.logo : integ?.logo;
+  if (!r || !rel || !rel.toLowerCase().endsWith(".png")) return undefined;
+  const root = resolve(r.dir);
+  const file = resolve(root, rel);
+  if (!file.startsWith(root + sep)) return undefined;
+  try {
+    const st = statSync(file);
+    if (!st.isFile() || st.size > MAX_LOGO_BYTES) return undefined;
+    const head = Buffer.alloc(8);
+    const fd = openSync(file, "r");
+    try {
+      readSync(fd, head, 0, 8, 0);
+    } finally {
+      closeSync(fd);
+    }
+    return head.equals(PNG_SIGNATURE) ? file : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The address of a card's logo, with its version so a new file is fetched again; undefined when it has none. */
+function logoUrl(hub: Hub, id: string): string | undefined {
+  const file = logoFile(hub, id);
+  if (!file) return undefined;
+  const st = statSync(file);
+  return `/api/integrations/${encodeURIComponent(id)}/logo?v=${Math.round(st.mtimeMs).toString(36)}${st.size.toString(36)}`;
+}
+
 const ENTRY_REF = /^([a-z][a-z0-9-]{1,40}):([a-z0-9][a-z0-9_-]{0,47})$/;
 
 /** One of a plugin's entries ("composio:slack"): its plugin and its own id; undefined for anything else. */
@@ -77,6 +120,10 @@ function entryViews(hub: Hub, r: PluginRecord, integ: IntegrationInfo, own: Inte
     ...reported.filter((e) => !known.has(e.id) && e.name).map((e) => ({ id: e.id, name: e.name!, summary: e.summary, category: e.category ?? "other", icon: e.icon ?? "puzzle", example: e.example })),
   ];
   const keyMissing = () => hub.secrets.setupView(r.id, locale).secrets.some((s) => s.required && !s.present);
+  const logo = (id: string) => {
+    const url = logoUrl(hub, id);
+    return url ? { logo: url } : undefined;
+  };
   return entries.map((e) => {
     const s = state.get(e.id);
     const name = localizePluginValue(r.layout, e.name, locale);
@@ -92,6 +139,7 @@ function entryViews(hub: Hub, r: PluginRecord, integ: IntegrationInfo, own: Inte
       plugin: r.id,
       signinReturn: false,
       ...(via ? { via } : {}),
+      ...(logo(`${r.id}:${e.id}`) ?? {}),
       ...(e.example ? { example: localizePluginValue(r.layout, e.example, locale) } : {}),
       ...(s?.account ? { account: s.account } : {}),
       ...(s?.detail ? { detail: localizePluginValue(r.layout, s.detail, locale) } : {}),
@@ -120,6 +168,8 @@ export async function listIntegrations(hub: Hub, locale: Locale, opts: { all?: b
       status: "connected",
       ...(integ.example ? { example: localizePluginValue(r.layout, integ.example, locale) } : {}),
     };
+    const logo = logoUrl(hub, r.id);
+    if (logo) view.logo = logo;
     if (!r.enabled) view.status = "off";
     else if (integ.connect === "google") {
       const acc = hub.connections.get("google");
