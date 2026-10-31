@@ -34,7 +34,7 @@ export function dayLabel(day: string, now: Date, tz: string | undefined, locale:
   return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
 }
 
-/** The hub's page of the Inbox and of "Behind the scenes" when no `limit` is asked for. */
+/** The first page's size: the `limit` the web asks for on the Inbox and on "Behind the scenes". */
 export const INBOX_PAGE = 50;
 /** The most rows the hub gives in one page. */
 export const INBOX_PAGE_MAX = 200;
@@ -47,9 +47,9 @@ export function reloadLimit(loaded: number): number {
   return Math.min(Math.max(loaded, INBOX_PAGE), INBOX_PAGE_MAX);
 }
 
-/** Remember the questions the view holds under "Waiting for you": for the rest of the visit they stay there. */
-export function pinWaiting(pinned: Set<string>, view: Pick<InboxView, "questions">): void {
-  for (const q of view.questions) pinned.add(q.id);
+/** Remember the questions the view holds under "Waiting for you" (the rows themselves): for the rest of the visit they stay there. */
+export function pinWaiting(pinned: Map<string, InboxEntry>, view: Pick<InboxView, "questions">): void {
+  for (const q of view.questions) pinned.set(q.id, q);
 }
 
 const newestFirst = (a: InboxEntry, b: InboxEntry): number => (a.createdAt === b.createdAt ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.createdAt < b.createdAt ? 1 : -1);
@@ -57,11 +57,13 @@ const newestFirst = (a: InboxEntry, b: InboxEntry): number => (a.createdAt === b
 /**
  * The view as the page shows it: "Waiting for you" and the by-day list. Reading a question makes the hub list it by its time
  * instead of under Waiting; one that was under Waiting earlier in this visit (`pinned`) stays there, newest first, and is not
- * in the by-day list.
+ * in the by-day list. A pinned question comes from the view's entries when it is there (fresher), else as it was stored: with
+ * enough newer rows it falls off the first page and is in neither list.
  */
-export function splitWaiting(view: Pick<InboxView, "questions" | "entries">, pinned: ReadonlySet<string>): { waiting: InboxEntry[]; byDay: InboxEntry[] } {
+export function splitWaiting(view: Pick<InboxView, "questions" | "entries">, pinned: ReadonlyMap<string, InboxEntry>): { waiting: InboxEntry[]; byDay: InboxEntry[] } {
   const asked = new Set(view.questions.map((q) => q.id));
-  const held = view.entries.filter((e) => pinned.has(e.id) && !asked.has(e.id));
+  const listed = new Map(view.entries.map((e) => [e.id, e]));
+  const held = [...pinned].filter(([id]) => !asked.has(id)).map(([id, stored]) => listed.get(id) ?? stored);
   return { waiting: [...view.questions, ...held].sort(newestFirst), byDay: view.entries.filter((e) => !pinned.has(e.id) && !asked.has(e.id)) };
 }
 

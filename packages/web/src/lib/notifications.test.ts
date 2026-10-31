@@ -93,16 +93,17 @@ describe("Inbox paging", () => {
 
 describe("Waiting for you during a visit", () => {
   const ids = (list: InboxEntry[]) => list.map((e) => e.id);
+  const pins = (...list: InboxEntry[]) => new Map(list.map((e) => [e.id, e]));
 
   it("shows the view as the hub sent it when nothing was pinned", () => {
     const v = view([entry("a"), entry("b")], { questions: [entry("q", { kind: "question", unread: true })] });
-    const split = splitWaiting(v, new Set());
+    const split = splitWaiting(v, new Map());
     expect(ids(split.waiting)).toEqual(["q"]);
     expect(ids(split.byDay)).toEqual(["a", "b"]);
   });
 
   it("keeps a question under Waiting after reading it moved it into the list", () => {
-    const pinned = new Set<string>();
+    const pinned = new Map<string, InboxEntry>();
     // The first view: the question is unread, so the hub lists it under Waiting.
     const first = view([entry("a", { createdAt: "2026-10-31T09:00:00Z" })], { questions: [entry("q", { kind: "question", unread: true, createdAt: "2026-10-31T10:00:00Z" })] });
     pinWaiting(pinned, first);
@@ -115,20 +116,40 @@ describe("Waiting for you during a visit", () => {
     expect(ids(split.byDay)).toEqual(["a"]);
     // A question that was never under Waiting in this visit is listed by its time.
     expect(ids(splitWaiting(view([entry("old", { kind: "question" }), entry("a")]), pinned).byDay)).toEqual(["old", "a"]);
+    // Going to answer it in the chat lets it go: it is listed by its time again.
+    pinned.delete("q");
+    expect(ids(splitWaiting(reloaded, pinned).waiting)).toEqual([]);
+    expect(ids(splitWaiting(reloaded, pinned).byDay)).toEqual(["q", "a"]);
   });
 
-  it("keeps Waiting newest first, held rows and new questions together, each once", () => {
-    const pinned = new Set(["q1", "q2"]);
+  it("keeps a pinned question that newer rows pushed off the first page", () => {
+    const pinned = new Map<string, InboxEntry>();
+    const first = view([entry("a", { createdAt: "2026-10-30T09:00:00Z" })], { questions: [entry("q", { kind: "question", unread: true, title: "Old question", createdAt: "2026-10-30T08:00:00Z" })] });
+    pinWaiting(pinned, first);
+    // Read, and more than a page of newer rows came since: the hub lists it on no page we hold.
+    const newer = Array.from({ length: INBOX_PAGE }, (_, i) => entry(`n${i}`, { createdAt: `2026-10-31T10:${String(59 - i).padStart(2, "0")}:00Z` }));
+    const reloaded = view(newer);
+    pinWaiting(pinned, reloaded);
+    const split = splitWaiting(reloaded, pinned);
+    expect(ids(split.waiting)).toEqual(["q"]);
+    expect(split.waiting[0].title).toBe("Old question");
+    expect(ids(split.byDay)).toEqual(newer.map((e) => e.id));
+  });
+
+  it("keeps Waiting newest first, held rows and new questions together, each once, a held row as the list has it", () => {
+    const pinned = pins(entry("q1", { title: "stale 1", createdAt: "2026-10-31T08:00:00Z" }), entry("q2", { title: "stale 2", createdAt: "2026-10-31T11:00:00Z" }), entry("q4", { title: "stored 4", createdAt: "2026-10-31T07:00:00Z" }));
     const v = view(
-      [entry("q2", { createdAt: "2026-10-31T11:00:00Z" }), entry("x", { createdAt: "2026-10-31T10:30:00Z" }), entry("q1", { createdAt: "2026-10-31T08:00:00Z" })],
+      [entry("q2", { title: "fresh 2", createdAt: "2026-10-31T11:00:00Z" }), entry("x", { createdAt: "2026-10-31T10:30:00Z" }), entry("q1", { title: "fresh 1", createdAt: "2026-10-31T08:00:00Z" })],
       { questions: [entry("q3", { kind: "question", unread: true, createdAt: "2026-10-31T10:00:00Z" })] },
     );
     const split = splitWaiting(v, pinned);
-    expect(ids(split.waiting)).toEqual(["q2", "q3", "q1"]);
+    // q4 is on no loaded page: it comes from its stored copy
+    expect(ids(split.waiting)).toEqual(["q2", "q3", "q1", "q4"]);
+    expect(split.waiting.map((e) => e.title)).toEqual(["fresh 2", "q3", "fresh 1", "stored 4"]);
     expect(ids(split.byDay)).toEqual(["x"]);
     // a row the hub lists under both is shown once, under Waiting
     const both = view([entry("q3", { createdAt: "2026-10-31T10:00:00Z" })], { questions: v.questions });
-    const dup = splitWaiting(both, new Set(["q3"]));
+    const dup = splitWaiting(both, pins(entry("q3")));
     expect(ids(dup.waiting)).toEqual(["q3"]);
     expect(dup.byDay).toEqual([]);
   });

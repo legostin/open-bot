@@ -1,7 +1,7 @@
 // Inbox: what waits for you, then what came in by day (reports, digests, alerts), each a row that opens in place;
 // the rest behind "Behind the scenes". The same view as the phone's Inbox tab.
 
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import type { BehindEntry, InboxEntry, InboxView } from "@piomio/shared";
@@ -29,7 +29,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Row({ e, open, onToggle, dot }: { e: InboxEntry; open: boolean; onToggle: () => void; dot: boolean }) {
+function Row({ e, open, onToggle, onOpenChat, dot }: { e: InboxEntry; open: boolean; onToggle: () => void; onOpenChat: () => void; dot: boolean }) {
   const a = useStore(agents)?.find((x) => x.id === e.agentId);
   const [feedback, setFeedback] = useState(e.feedback);
   const preview = e.body.replace(/[#*_`>[\]]/g, "").replace(/\s+/g, " ").trim();
@@ -67,7 +67,7 @@ function Row({ e, open, onToggle, dot }: { e: InboxEntry; open: boolean; onToggl
               ))}
             <span className="flex-1" />
             {e.conversationId && (
-              <Link href={`/chat/${e.conversationId}`} className="text-accent-text hover:underline">
+              <Link href={`/chat/${e.conversationId}`} onClick={onOpenChat} className="text-accent-text hover:underline">
                 {t("inbox.openChat")}
               </Link>
             )}
@@ -130,8 +130,10 @@ export function InboxPage() {
   const [reveal, setReveal] = useState<string>();
   // Entries that were unread when shown: marked read at once, their dot stays while the page is open.
   const fresh = useRef(new Set<string>());
-  // Questions that stood under "Waiting for you" at some point of this visit: they stay there once read (the hub then lists them by their time).
-  const pinned = useRef(new Set<string>());
+  // Questions that stood under "Waiting for you" at some point of this visit: they stay there once read (the hub then lists them by
+  // their time, or on no page at all when newer rows push them off the first). Going to answer one in the chat lets it go.
+  const pinned = useRef(new Map<string, InboxEntry>());
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
   // What load() reads to know how far the person has paged, and the number of the latest request (an older answer never replaces a newer one).
   const shown = useRef<InboxView | null>(null);
   const latest = useRef(0);
@@ -233,11 +235,23 @@ export function InboxPage() {
     setOpen(id);
     setReveal(id);
   };
-  const row = (e: InboxEntry) => <Row key={e.id} e={e} open={open === e.id} onToggle={() => setOpen(open === e.id ? undefined : e.id)} dot={e.unread || fresh.current.has(e.id)} />;
+  const row = (e: InboxEntry) => (
+    <Row
+      key={e.id}
+      e={e}
+      open={open === e.id}
+      onToggle={() => setOpen(open === e.id ? undefined : e.id)}
+      onOpenChat={() => {
+        // The Inbox may stay beside the chat: the question leaves Waiting at once.
+        if (pinned.current.delete(e.id)) redraw();
+      }}
+      dot={e.unread || fresh.current.has(e.id)}
+    />
+  );
   const tz = s?.timezone;
   const now = new Date();
   const { waiting, byDay } = view ? splitWaiting(view, pinned.current) : { waiting: [], byDay: [] };
-  const empty = view && !view.questions.length && !view.entries.length && !s?.pendingApprovals;
+  const empty = view && !waiting.length && !byDay.length && !s?.pendingApprovals;
 
   return (
     <Page title={t("nav.notifications")}>
