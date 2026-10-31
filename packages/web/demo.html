@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "./shared/react.js",
+          "react/jsx-runtime": "./shared/react-jsx-runtime.js",
+          "react-dom": "./shared/react-dom.js",
+          "react-dom/client": "./shared/react-dom-client.js",
+          "@piomio/ui": "./shared/piomio-ui.js"
+        }
+      }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>Piomio · demo</title>
+    <script type="module" src="/src/demo/boot.ts"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

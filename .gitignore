@@ -17,3 +17,6 @@ packages/tailnet/bin/
 .claude/settings.local.json
 packages/desktop/src-tauri/target/
 packages/desktop/src-tauri/gen/
+
+packages/web/dist-demo/
+packages/site/dist/

@@ -3,7 +3,7 @@
 
 import { useEffect } from "react";
 import type { AgentDef } from "@piomio/shared";
-import { defaultAvatar } from "@piomio/shared";
+import { defaultAvatar } from "@piomio/shared/avatar";
 import { useStore } from "../../lib/store";
 import { api, errorText } from "../../lib/api";
 import { agents, ensureAgents, refreshAgents } from "../../state/app";

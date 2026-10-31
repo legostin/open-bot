@@ -1,0 +1,71 @@
+/* The demo's own layer over the app: the person's pointer and the guard over the composer. */
+
+.demo-cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  opacity: 0;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.25));
+  will-change: transform;
+}
+.demo-cursor svg {
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+.demo-cursor-ring {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgb(244 161 26 / 0.45);
+  transform: scale(0);
+  opacity: 0;
+}
+.demo-cursor.is-press .demo-cursor-ring {
+  animation: demo-press 420ms var(--ease-out, ease-out);
+}
+@keyframes demo-press {
+  0% {
+    transform: scale(0.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.demo-guard {
+  position: fixed;
+  z-index: 50;
+  display: none;
+  align-items: flex-start;
+  justify-content: flex-end;
+  cursor: default;
+  border-radius: 1.25rem;
+}
+.demo-guard-note {
+  margin: -0.65rem 0.75rem 0 0;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--hairline);
+  opacity: 0;
+  transform: translateY(2px);
+  transition:
+    opacity 200ms,
+    transform 200ms;
+  white-space: nowrap;
+}
+.demo-guard:hover .demo-guard-note {
+  opacity: 1;
+  transform: none;
+}

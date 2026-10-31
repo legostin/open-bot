@@ -1,4 +1,6 @@
-import { resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { transform } from "esbuild";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -21,13 +23,68 @@ function devImportMap(): Plugin {
   return {
     name: "piomio-dev-import-map",
     apply: "serve",
-    transformIndexHtml: () => [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify(IMPORT_MAP), injectTo: "head-prepend" }],
+    // demo.html carries its own map (relative paths).
+    transformIndexHtml: (_html, ctx) => (ctx.path.endsWith("demo.html") ? [] : [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify(IMPORT_MAP), injectTo: "head-prepend" }]),
   };
 }
 
-export default defineConfig({
-  base: "/",
-  plugins: [react(), tailwindcss(), devImportMap()],
+// ----- The demo build (`vite build --mode demo`, the website's live demo: src/demo/) -----
+
+const ROOT = resolve(import.meta.dirname, "../..");
+/** UI plugins the demo hub lists in its bootstrap (src/demo/hub/routes.ts). */
+const DEMO_UI_PLUGINS = ["browser", "memory", "triggers"];
+/** Files served next to demo.html: pictures, tiles, pages (src/demo/static/). */
+const DEMO_STATIC = resolve(import.meta.dirname, "src/demo/static");
+
+function filesUnder(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name);
+    return statSync(p).isDirectory() ? filesUnder(p) : [p];
+  });
+}
+
+async function serviceWorker(): Promise<string> {
+  const src = readFileSync(resolve(import.meta.dirname, "src/demo/sw.ts"), "utf8");
+  return (await transform(src, { loader: "ts", format: "iife", target: "es2022" })).code;
+}
+
+/** The demo's service worker, the UI plugins' modules and its static files: served in dev, emitted in the build. */
+function demoFiles(): Plugin {
+  const plugin = (id: string) => resolve(ROOT, "plugins", id, "ui/dist/index.js");
+  return {
+    name: "piomio-demo-files",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const path = (req.url ?? "").split("?")[0];
+        const ui = /^\/plugins-ui\/([a-z-]+)\/index\.js$/.exec(path);
+        let body: string | Buffer | undefined;
+        let type = "text/javascript";
+        if (path === "/demo-sw.js") body = await serviceWorker();
+        else if (ui && DEMO_UI_PLUGINS.includes(ui[1]) && existsSync(plugin(ui[1]))) body = readFileSync(plugin(ui[1]));
+        else if (/^\/(media|files|tiles|pages)\//.test(path) && existsSync(join(DEMO_STATIC, path))) {
+          body = readFileSync(join(DEMO_STATIC, path));
+          type = /\.svg$/.test(path) ? "image/svg+xml" : /\.png$/.test(path) ? "image/png" : /\.jpe?g$/.test(path) ? "image/jpeg" : /\.html$/.test(path) ? "text/html" : "application/octet-stream";
+        }
+        if (body === undefined) return next();
+        res.setHeader("content-type", type);
+        res.end(body);
+      });
+    },
+    async generateBundle() {
+      this.emitFile({ type: "asset", fileName: "demo-sw.js", source: await serviceWorker() });
+      for (const id of DEMO_UI_PLUGINS) {
+        if (!existsSync(plugin(id))) this.error(`UI plugin ${id} is not built: npm run build:ui-plugins`);
+        this.emitFile({ type: "asset", fileName: `plugins-ui/${id}/index.js`, source: readFileSync(plugin(id)) });
+      }
+      for (const f of filesUnder(DEMO_STATIC)) this.emitFile({ type: "asset", fileName: relative(DEMO_STATIC, f), source: readFileSync(f) });
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  base: mode === "demo" ? "./" : "/",
+  plugins: [react(), tailwindcss(), devImportMap(), ...(mode === "demo" ? [demoFiles()] : [])],
   resolve: {
     // The browser-safe part of @piomio/shared, taken from this checkout (not whatever node_modules links to).
     alias: {
@@ -39,20 +96,25 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist",
+    outDir: mode === "demo" ? "dist-demo" : "dist",
     emptyOutDir: true,
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 1500,
+    ...(mode === "demo" ? { rollupOptions: { input: resolve(import.meta.dirname, "demo.html") } } : {}),
   },
   server: {
     port: 5173,
     strictPort: true,
-    proxy: {
-      "/api": { target: HUB, ws: true },
-      "/mcp": { target: HUB },
-      "/plugins-ui": { target: HUB },
-      "/shared": { target: HUB },
-    },
+    // The demo answers /api itself (src/demo/shims.ts) and serves its own plugin modules.
+    proxy:
+      mode === "demo"
+        ? undefined
+        : {
+            "/api": { target: HUB, ws: true },
+            "/mcp": { target: HUB },
+            "/plugins-ui": { target: HUB },
+            "/shared": { target: HUB },
+          },
   },
-});
+}));
