@@ -226,6 +226,8 @@ describe("device port", () => {
     const page = await pageRequest(devicePort, fp, "GET", "/m/chat/abc", undefined, { cookie });
     expect(page.status).toBe(200);
     expect(String(page.headers["content-security-policy"])).toContain("connect-src 'self'");
+    // The voice of a demonstration in the browser's live view: the hub's own page may use the microphone, nothing else.
+    expect(page.headers["permissions-policy"]).toBe("camera=(), microphone=(self), geolocation=()");
 
     const boot = await pageRequest(devicePort, fp, "GET", "/api/bootstrap", undefined, { cookie });
     expect(boot.json.device.name).toBe("Page phone");

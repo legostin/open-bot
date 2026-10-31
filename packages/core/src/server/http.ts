@@ -173,13 +173,14 @@ export class FailureBudget {
   }
 }
 
-export function securityHeaders(reply: FastifyReply, csp: string): void {
+/** `microphone`: the document may record the person's voice (the hub's own UI); nothing else may. */
+export function securityHeaders(reply: FastifyReply, csp: string, opts: { microphone?: boolean } = {}): void {
   reply.header("content-security-policy", csp);
   reply.header("x-content-type-options", "nosniff");
   reply.header("referrer-policy", "no-referrer");
   reply.header("x-frame-options", "DENY");
   reply.header("cross-origin-opener-policy", "same-origin");
-  reply.header("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  reply.header("permissions-policy", `camera=(), microphone=${opts.microphone ? "(self)" : "()"}, geolocation=()`);
 }
 
 /** HTTP error with a core message key (locales/en.ts); text that is not a key is shown as is. */

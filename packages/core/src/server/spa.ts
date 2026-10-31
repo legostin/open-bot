@@ -38,6 +38,8 @@ export function sendSpaIndex(webDist: string, req: FastifyRequest, reply: Fastif
       "form-action 'self'",
       "object-src 'none'",
     ].join("; "),
+    // The browser's live view records the person's voice while they show an agent a task.
+    { microphone: true },
   );
   const indexFile = join(webDist, "index.html");
   if (!existsSync(indexFile)) {
