@@ -30,6 +30,13 @@
   "demo.noWorker": "This browser keeps the live demo off (private mode?). Here is how it looks.",
   "demo.failed": "The demo stumbled.",
   "demo.chapters": "Chapters",
+  "demo.watch": "Watch the day",
+  "demo.tapToWatch": "Tap to watch full screen",
+  "demo.story": "A day with the team, chapter {n} of {total}",
+  "demo.close": "Close",
+  "demo.prev": "Previous chapter",
+  "demo.next": "Next chapter",
+  "demo.touchHint": "You can tap around: it’s the real app",
 
   "story.eyebrow": "A day with the team",
   "story.title": "One Tuesday in Lisbon",

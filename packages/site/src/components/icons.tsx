@@ -169,3 +169,23 @@ export const Globe = (p: P) => (
     <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
   </Stroke>
 );
+export const Play = ({ size = 18, ...p }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...p}>
+    <path d="M8 5.6v12.8c0 .8.9 1.3 1.6.9l10-6.4c.6-.4.6-1.3 0-1.7l-10-6.4C8.9 4.3 8 4.8 8 5.6z" />
+  </svg>
+);
+export const Close = (p: P) => (
+  <Stroke {...p}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </Stroke>
+);
+export const ChevronLeft = (p: P) => (
+  <Stroke {...p}>
+    <path d="M15 6l-6 6 6 6" />
+  </Stroke>
+);
+export const ChevronRight = (p: P) => (
+  <Stroke {...p}>
+    <path d="M9 6l6 6-6 6" />
+  </Stroke>
+);

@@ -323,39 +323,34 @@ body {
 }
 
 /*
- * One live window for the first screen and the story. Phone: headline, then the window sticking under the top bar,
- * then the chapters scrolling beneath it. Wide: two columns, the window sticking on the right across both rows.
+ * Wide screens: one live window for the first screen and the story, sticking on the right across both rows while the
+ * chapters scroll on the left. Phones and tablets: no sticky window (it left too little room to scroll and took the
+ * swipes); each chapter is a card with its own window instead, and the day plays full screen as stories.
  */
 .stage {
   display: flex;
   flex-direction: column;
 }
 .stage-window {
-  position: sticky;
-  top: 64px;
-  z-index: 20;
-  height: 54svh;
-  margin-inline: -16px;
-  padding: 8px 16px 10px;
-  background: var(--bg);
-}
-/* Text scrolling up under the window fades out instead of meeting a hard edge. */
-.stage-window::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  top: 100%;
-  height: 28px;
-  background: linear-gradient(var(--bg), rgb(0 0 0 / 0));
-  pointer-events: none;
+  display: none;
 }
 .stage-window-inner {
   height: 100%;
 }
-@media (min-width: 640px) {
-  .stage-window {
-    margin-inline: -24px;
-    padding-inline: 24px;
+/* The full-screen story: the bar of the chapter on screen fills while it plays. */
+.story-progress {
+  width: 0;
+  animation: story-progress 50s linear forwards;
+}
+@keyframes story-progress {
+  to {
+    width: 92%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-progress {
+    animation: none;
+    width: 50%;
   }
 }
 @media (min-width: 1024px) {
@@ -373,6 +368,9 @@ body {
     grid-row: 2;
   }
   .stage-window {
+    display: block;
+    position: sticky;
+    z-index: 20;
     grid-column: 2;
     grid-row: 1 / span 2;
     align-self: start;
@@ -380,10 +378,5 @@ body {
     height: calc(100svh - 100px);
     max-height: 900px;
     margin: 16px 0 0;
-    padding: 0;
-    background: none;
-  }
-  .stage-window::after {
-    display: none;
   }
 }

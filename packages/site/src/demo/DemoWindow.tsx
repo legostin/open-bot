@@ -1,7 +1,9 @@
 // The live window: the real app (the demo build, same origin) in an iframe dressed as a Mac window. It plays the chapter
 // it is given; a new chapter reloads the frame (a fresh world) under a short fade. Out of view or in a hidden tab the
 // script pauses. On a wide window the app is drawn at desktop size and scaled down, so its sidebar shows; on a phone it
-// gets the real width and its phone layout.
+// gets the real width and its phone layout. `idle` shows the still picture without a frame (another window plays),
+// `passive` lets touches through to the page (a card in the phone's feed), `bare` drops the window's title bar (the
+// full-screen story).
 
 import { useEffect, useRef, useState } from "react";
 import { data } from "../data";
@@ -23,7 +25,17 @@ declare global {
   }
 }
 
-export function DemoWindow({ chapter, className = "" }: { chapter: ChapterId; className?: string }) {
+interface Props {
+  chapter: ChapterId;
+  className?: string;
+  idle?: boolean;
+  passive?: boolean;
+  bare?: boolean;
+  /** The chapter played to its end. */
+  onEnded?: () => void;
+}
+
+export function DemoWindow({ chapter, className = "", idle = false, passive = false, bare = false, onEnded }: Props) {
   const { lang, t } = useI18n();
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -33,6 +45,8 @@ export function DemoWindow({ chapter, className = "" }: { chapter: ChapterId; cl
   const [first, setFirst] = useState(true);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const src = demoSrc(data.base, lang, loaded) + (nonce ? `&r=${nonce}` : "");
+  const ended = useRef(onEnded);
+  ended.current = onEnded;
 
   // Follow the chapter in view, once the reader settles on it.
   useEffect(() => {
@@ -44,10 +58,16 @@ export function DemoWindow({ chapter, className = "" }: { chapter: ChapterId; cl
     return () => clearTimeout(id);
   }, [chapter, loaded]);
 
+  // A window that comes alive loads its frame afresh.
+  useEffect(() => {
+    if (!idle) setStatus((s) => (s === "noworker" ? s : "loading"));
+  }, [idle]);
+
   // What the frame says.
   useEffect(() => {
     const take = (d: FromDemo) => {
       if (d.type === "ready" || d.type === "playing") setFirst(false);
+      if (d.type === "ended") ended.current?.();
       setStatus((s) => {
         if (s === "noworker") return s;
         if (d.type === "failed") return d.message === "no service worker" ? "noworker" : "failed";
@@ -66,7 +86,7 @@ export function DemoWindow({ chapter, className = "" }: { chapter: ChapterId; cl
       /* not there yet */
     }
     return () => window.removeEventListener("message", on);
-  }, []);
+  }, [idle]);
 
   // Pause off screen and in a hidden tab.
   useEffect(() => {
@@ -85,7 +105,7 @@ export function DemoWindow({ chapter, className = "" }: { chapter: ChapterId; cl
       io.disconnect();
       document.removeEventListener("visibilitychange", sync);
     };
-  }, []);
+  }, [idle]);
 
   // The window's size, for the scale.
   useEffect(() => {
@@ -99,41 +119,54 @@ export function DemoWindow({ chapter, className = "" }: { chapter: ChapterId; cl
   const phone = !!size && size.w < PHONE_BELOW;
   const scale = size && !phone ? Math.min(1, size.w / DESKTOP_WIDTH) : 1;
   const frameStyle = size ? { width: size.w / scale, height: size.h / scale, transform: `scale(${scale})`, transformOrigin: "0 0" } : { width: "100%", height: "100%" };
-  const covered = status === "loading" || status === "noworker";
+  const covered = idle || status === "loading" || status === "noworker";
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-[18px] bg-canvas shadow-[var(--shadow-window)] ${className}`}>
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-4">
-        <span className="size-3 rounded-full bg-[#ff5f57]" />
-        <span className="size-3 rounded-full bg-[#febc2e]" />
-        <span className="size-3 rounded-full bg-[#28c840]" />
-        <span className="ml-3 truncate text-[13px] font-medium text-muted">{t("demo.windowTitle")}</span>
-        <span className="ml-auto inline-flex items-center gap-2 rounded-full bg-accent-soft px-2.5 py-1 text-[11.5px] font-semibold text-accent-text" title={t("demo.liveHint")}>
-          <span className="live-dot size-1.5 rounded-full" />
-          {t("demo.live")}
-        </span>
-      </div>
+      {!bare && (
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-4">
+          <span className="size-3 rounded-full bg-[#ff5f57]" />
+          <span className="size-3 rounded-full bg-[#febc2e]" />
+          <span className="size-3 rounded-full bg-[#28c840]" />
+          <span className="ml-3 truncate text-[13px] font-medium text-muted">{t("demo.windowTitle")}</span>
+          <span
+            className="ml-auto inline-flex items-center gap-2 rounded-full bg-accent-soft px-2.5 py-1 text-[11.5px] font-semibold text-accent-text"
+            title={t("demo.liveHint")}
+          >
+            <span className="live-dot size-1.5 rounded-full" />
+            {t("demo.live")}
+          </span>
+        </div>
+      )}
       <div ref={box} className="@container relative min-h-0 flex-1 overflow-hidden">
-        <iframe
-          ref={frame}
-          key={lang}
-          src={src}
-          title={t("demo.liveHint")}
-          className={`absolute left-0 top-0 block border-0 transition-opacity duration-500 ${covered ? "opacity-0" : "opacity-100"}`}
-          style={frameStyle}
-        />
+        {!idle && (
+          <iframe
+            ref={frame}
+            key={lang}
+            src={src}
+            title={t("demo.liveHint")}
+            tabIndex={passive ? -1 : undefined}
+            className={`absolute left-0 top-0 block border-0 transition-opacity duration-500 ${covered ? "opacity-0" : "opacity-100"}`}
+            style={{
+              ...frameStyle,
+              ...(passive ? { pointerEvents: "none" as const } : {}),
+            }}
+          />
+        )}
         <div className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${covered ? "opacity-100" : "opacity-0"}`}>
-          {first || status === "noworker" ? <Poster /> : <div className="absolute inset-0 bg-bg" />}
-          {status === "loading" && (
+          {idle || first || status === "noworker" ? <Poster /> : <div className="absolute inset-0 bg-bg" />}
+          {!idle && status === "loading" && (
             <div className="absolute inset-x-0 bottom-6 flex justify-center">
               <span className="rounded-full bg-surface px-3.5 py-1.5 text-[13px] font-medium text-muted shadow-[var(--shadow)]">{t("demo.loading")}</span>
             </div>
           )}
           {status === "noworker" && (
-            <div className="absolute inset-x-4 bottom-4 rounded-2xl bg-surface/95 px-4 py-3 text-[14px] text-fg-2 shadow-[var(--shadow)]">{t("demo.noWorker")}</div>
+            <div className="absolute inset-x-4 bottom-4 rounded-2xl bg-surface/95 px-4 py-3 text-[14px] text-fg-2 shadow-[var(--shadow)]">
+              {t("demo.noWorker")}
+            </div>
           )}
         </div>
-        {(status === "ended" || status === "failed") && (
+        {!idle && !passive && (status === "ended" || status === "failed") && (
           <button
             type="button"
             onClick={() => {

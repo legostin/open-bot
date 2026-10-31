@@ -23,6 +23,45 @@ async function readBody(input: RequestInfo | URL, init?: RequestInit): Promise<u
   }
 }
 
+/**
+ * The demo lives in a frame of the site's page. A browser's scrollIntoView() and focus() scroll every scrolling box
+ * around the element, the page outside the frame included: the director's pointer and the app's own focusing would
+ * pull the visitor's page back to the demo while they read further down. Here both scroll only this document.
+ */
+function keepScrollInside(): void {
+  const realFocus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (this: HTMLElement, opts?: FocusOptions) {
+    realFocus.call(this, { ...opts, preventScroll: true });
+  };
+
+  const scrollable = (el: Element) => {
+    const s = getComputedStyle(el);
+    return (/(auto|scroll|overlay)/.test(s.overflowY) && el.scrollHeight > el.clientHeight) || (/(auto|scroll|overlay)/.test(s.overflowX) && el.scrollWidth > el.clientWidth);
+  };
+  const offset = (start: number, end: number, boxStart: number, boxEnd: number, where: ScrollLogicalPosition) => {
+    if (where === "start") return start - boxStart;
+    if (where === "end") return end - boxEnd;
+    if (where === "center") return (start + end) / 2 - (boxStart + boxEnd) / 2;
+    // "nearest": only as far as it takes to show it.
+    if (start < boxStart) return start - boxStart;
+    if (end > boxEnd) return Math.min(end - boxEnd, start - boxStart);
+    return 0;
+  };
+  Element.prototype.scrollIntoView = function (this: Element, arg?: boolean | ScrollIntoViewOptions) {
+    const o: ScrollIntoViewOptions = typeof arg === "object" ? arg : { block: arg === false ? "end" : "start" };
+    const block = o.block ?? "start";
+    const inline = o.inline ?? "nearest";
+    for (let box = this.parentElement; box; box = box.parentElement) {
+      if (!scrollable(box)) continue;
+      const r = this.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      const top = offset(r.top, r.bottom, b.top, b.bottom, block);
+      const left = offset(r.left, r.right, b.left, b.right, inline);
+      if (top || left) box.scrollBy({ top, left, behavior: o.behavior ?? "auto" });
+    }
+  };
+}
+
 export function installShims(api: ApiPeer, sockets: SocketPeer): void {
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -51,6 +90,8 @@ export function installShims(api: ApiPeer, sockets: SocketPeer): void {
       const ctx = new AudioContext();
       return ctx.createMediaStreamDestination().stream;
     };
+
+  keepScrollInside();
 
   const RealWebSocket = window.WebSocket;
   const Shim = function (this: unknown, url: string | URL, protocols?: string | string[]) {
