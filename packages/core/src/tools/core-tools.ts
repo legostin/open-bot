@@ -158,7 +158,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
       if (invalid) return text(`Nothing was sent: ${invalid}`, true);
       const n = await d.notifier.notify({
         level: i.level,
-        title: String(i.title).slice(0, 200),
+        title: String(i.title).trim().slice(0, 200),
         body: String(i.body ?? ""),
         agentId: ctx.agentId,
         taskId: ctx.taskId,

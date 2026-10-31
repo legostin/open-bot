@@ -200,6 +200,8 @@ times and quiet hours (`settings_update`, already there), and turn a schedule in
   - an `inbox.changed` hub event keeps the badge live.
 - **Agent tool** `digest_now` (core): gathers and sends the digest now and says how many items went in, or that
   there was nothing.
+- `BehindEntry.waiting`: the row is held for the next digest (level digest, not digested, not replaced). Items that
+  went into digests sent before `digest_id` existed are digested with no digest to link: "went into an earlier digest".
 - i18n: every new string in `packages/core/src/locales/{en,ru}.ts`, the web catalogs and the iOS strings.
 
 ## Errors and limits

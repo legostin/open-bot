@@ -597,6 +597,8 @@ describe("hub (integration)", () => {
       kind: "alert",
       title: "Didn't work out: “Morning brief”",
       body: "Тестовый ассистент isn't signed in to any brain yet. Sign in from its chat.",
+      // From the schedule: muting the schedule mutes its failures too.
+      triggerId: "t_brief_failing",
     });
     expect(hub.store.getTask(task.id)?.status).toBe("failed");
     const dialog = hub.store.listMessages(hub.store.agentConversation("assistant").id, { limit: 100 });

@@ -862,6 +862,8 @@ export interface BehindEntry {
   taskId?: string;
   createdAt: ISODate;
   reason?: string;
+  /** Held for the next digest and not gone into one yet (level digest, not digested, not replaced). */
+  waiting: boolean;
   /** The digest it went into. */
   digest?: { id: string; title: string; createdAt: ISODate };
   supersededBy?: string;

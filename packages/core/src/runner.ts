@@ -801,7 +801,8 @@ export class SessionRunner {
       if (!cur.background || cur.createdBy !== "trigger" || cur.deliver === "report") {
         const who = this.d.agents.get(cur.agentId);
         const body = humanFailure(r.error, r.errorCode, who ? agentName(who, hubLocale()) : cur.agentId);
-        await this.d.notifier.notify({ level: "notify", title: t("notify.failedTitle", { title: cur.title }), body, agentId: cur.agentId, taskId: cur.id });
+        // From a schedule it carries the schedule: the person's feedback on that schedule (muted, less) covers its failures too.
+        await this.d.notifier.notify({ level: "notify", title: t("notify.failedTitle", { title: cur.title }), body, agentId: cur.agentId, taskId: cur.id, triggerId: cur.triggerId });
       }
       return;
     }

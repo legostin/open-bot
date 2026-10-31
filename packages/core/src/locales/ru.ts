@@ -45,6 +45,8 @@ export default {
   "notify.reason.duplicate": "повтор",
   "notify.reason.rateLimited": "лимит частоты — в сводку",
   "notify.reason.quietHours": "тихие часы — в сводку",
+  "notify.reason.rateLimitedSilent": "лимит частоты — без уведомления",
+  "notify.reason.quietHoursSilent": "тихие часы — без уведомления",
   "notify.reason.superseded": "заменено более новым",
   "inbox.badIds": "Укажите id записей, которые прочитаны",
   "notification.notFound": "Уведомление не найдено",

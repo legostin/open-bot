@@ -1,8 +1,8 @@
 // "Is it worth interrupting you?" — levels, quiet hours, rate limits, dedup, digests, feedback.
 
 import type { BehindEntry, InboxEntry, InboxView, MessagePart, Notification, NotificationKind, NotificationSource, NotifyLevel, Task } from "@piomio/shared";
-import { newId, nowIso, truncate } from "@piomio/shared";
-import { json, type Db } from "./db.ts";
+import { isPublicHttpUrl, newId, nowIso, truncate } from "@piomio/shared";
+import { json, tx, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { CoreSettings, Settings } from "./settings.ts";
 import type { ChannelRegistry } from "./channels.ts";
@@ -122,6 +122,7 @@ export class Notifier {
   publicUrl: string;
   hasAgent: (id: string) => boolean;
   startTask?: (t: { agentId: string; title: string; goal: string; deliver: "digest" }) => { id: string };
+  cancelTask?: (id: string) => void;
   agentName: (id: string) => string;
   digestWriteMs: number;
   private digestTimer?: NodeJS.Timeout;
@@ -143,6 +144,8 @@ export class Notifier {
     hasAgent: (id: string) => boolean;
     /** Starts the default agent's digest task (the runner's createTask); without it the card goes out at once. */
     startTask?: (t: { agentId: string; title: string; goal: string; deliver: "digest" }) => { id: string };
+    /** Stops a task (the runner's cancelTask): the digest's writer, once the card went out instead of its reply. */
+    cancelTask?: (id: string) => void;
     /** An agent's name in the hub language, for the digest's material. */
     agentName?: (id: string) => string;
     /** How long the digest task may write before the card goes out (DIGEST_WRITE_MS). */
@@ -158,6 +161,7 @@ export class Notifier {
     this.publicUrl = d.publicUrl;
     this.hasAgent = d.hasAgent;
     this.startTask = d.startTask;
+    this.cancelTask = d.cancelTask;
     this.agentName = d.agentName ?? ((id) => id);
     this.digestWriteMs = d.digestWriteMs ?? DIGEST_WRITE_MS;
   }
@@ -209,9 +213,10 @@ export class Notifier {
     if (level === "notify") {
       const key = input.triggerId ?? input.agentId ?? "none";
       const col = input.triggerId ? "trigger_id" : "agent_id";
+      // The budget is for alerts: reports (ordered by the person) and approval pushes (their card is in the chat) do not spend it.
       const recent = (
         this.db
-          .prepare(`select count(*) as n from notifications where ${col} = ? and level = 'notify' and delivered_at is not null and created_at > ?`)
+          .prepare(`select count(*) as n from notifications where ${col} = ? and kind = 'alert' and delivered_at is not null and created_at > ?`)
           .get(key, new Date(Date.now() - 3600_000).toISOString()) as { n: number }
       ).n;
       // Feedback "less" halves the budget for this trigger.
@@ -219,16 +224,17 @@ export class Notifier {
         ? (this.db.prepare("select count(*) as n from notifications where trigger_id = ? and feedback = 'less'").get(input.triggerId) as { n: number }).n
         : 0;
       const limit = Math.max(1, Math.floor(s.notifyRatePerHour / 2 ** Math.min(less, 3)));
-      if (recent >= limit) {
-        level = "digest";
-        reason = t("notify.reason.rateLimited");
-      } else if (inQuietHours(s.quietHours, localHHMM(s.timezone))) {
-        level = "digest";
-        reason = t("notify.reason.quietHours");
+      const held = recent >= limit ? "rateLimited" : inQuietHours(s.quietHours, localHHMM(s.timezone)) ? "quietHours" : undefined;
+      if (held) {
+        // An approval push held back is not news for the digest: the approval waits in the chat, the push just stays quiet.
+        level = input.kind === "approval" ? "silent" : "digest";
+        reason = t(input.kind === "approval" ? `notify.reason.${held}Silent` : `notify.reason.${held}`);
       }
     }
+    // A hook may move an approval push to the digest too: it stays quiet instead.
+    if (input.kind === "approval" && level === "digest") level = "silent";
 
-    const kind: NotificationKind = input.kind === "approval" && level === "notify" ? "approval" : KIND_OF_LEVEL[level];
+    const kind: NotificationKind = input.kind === "approval" && (level === "notify" || level === "silent") ? "approval" : KIND_OF_LEVEL[level];
     const n: Notification = {
       id: newId("n_"),
       level,
@@ -290,10 +296,15 @@ export class Notifier {
         : undefined,
     });
     this.db.prepare("update notifications set delivered_at = ?, message_id = ? where id = ?").run(nowIso(), messageId ?? null, n.id);
-    this.inboxChanged();
+    // An approval push is no Inbox row: the badges have nothing new.
+    if (n.kind !== "approval") this.inboxChanged();
   }
 
-  /** A scheduled report's final reply: the agent's own message in its dialog and the channels, at its time (silent in quiet hours, never held back). */
+  /**
+   * A scheduled report's final reply: the agent's own message in its dialog and the channels, at its time. Never moved to the
+   * digest; pushed silently in quiet hours or when the person muted the schedule, and dropped as a duplicate when the
+   * schedule fired twice with the same text.
+   */
   async deliverReport(task: Task): Promise<Notification | undefined> {
     const text = (task.result ?? "").trim();
     if (!text) {
@@ -310,7 +321,7 @@ export class Notifier {
     const s = this.settings.get();
     const agentId = this.recipient(task.agentId);
     const caption = t("notify.report.caption", { time: localHHMM(s.timezone) });
-    // A schedule the person muted still writes its report (they ordered it) but never pushes it.
+    // A schedule the person muted still writes its report (they ordered it): it lands in the chat and is pushed silently.
     const muted = !!task.triggerId && this.triggerSilenced(task.triggerId);
     const reason = muted ? t("notify.reason.triggerOff") : undefined;
     const n: Notification = {
@@ -386,7 +397,8 @@ export class Notifier {
       unread: !!r.unread,
       ...(part?.caption ? { caption: part.caption } : {}),
       ...(part?.sources?.length ? { sources: part.sources } : {}),
-      ...(n.agentId ? { agentId: n.agentId } : {}),
+      // Nobody in particular raised it: it is from the agent whose dialog it landed in (the default agent).
+      ...(n.agentId || r.conv_agent ? { agentId: n.agentId ?? r.conv_agent } : {}),
       ...(n.taskId ? { taskId: n.taskId } : {}),
       ...(r.msg_conv ? { conversationId: r.msg_conv } : {}),
       ...(n.messageId ? { messageId: n.messageId } : {}),
@@ -413,7 +425,7 @@ export class Notifier {
   /** The Inbox: unread questions ("Waiting for you"), then everything that reached the person, newest first. A digest still being written is not in it. */
   inbox(opts: { before?: string; limit?: number } = {}): InboxView {
     const limit = pageSize(opts.limit);
-    const cols = `n.*, m.conversation_id as msg_conv, m.parts as msg_parts, (${UNREAD}) as unread`;
+    const cols = `n.*, m.conversation_id as msg_conv, m.parts as msg_parts, c.agent_id as conv_agent, (${UNREAD}) as unread`;
     const questions = opts.before
       ? []
       : (this.db.prepare(`select ${cols} ${INBOX_FROM} where ${WAITING} order by n.created_at desc, n.id desc limit ${WAITING_SHOWN}`).all() as any[]).map((r) => this.entry(r));
@@ -448,6 +460,7 @@ export class Notifier {
         ...(n.agentId ? { agentId: n.agentId } : {}),
         ...(n.taskId ? { taskId: n.taskId } : {}),
         ...(n.reason ? { reason: n.reason } : {}),
+        waiting: n.level === "digest" && !r.digested && !n.supersededBy,
         ...(n.digestId && r.digest_title ? { digest: { id: n.digestId, title: r.digest_title, createdAt: r.digest_at } } : {}),
         ...(n.supersededBy ? { supersededBy: n.supersededBy } : {}),
       };
@@ -515,9 +528,11 @@ export class Notifier {
       };
     });
     const sections = await this.digestSections(s.timezone);
+    // Headlines of the last day at most: after days without a digest, older ones are no news.
+    const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString();
     const posts = this.db
       .prepare("select p.feed_id as feedId, f.title as feed, p.title as post from feed_posts p join feeds f on f.id = p.feed_id where p.created_at > ? order by p.created_at desc")
-      .all(last) as Array<{ feedId: string; feed: string; post: string }>;
+      .all(last > dayAgo ? last : dayAgo) as Array<{ feedId: string; feed: string; post: string }>;
     // The caps apply before the material is built; the totals stay true, so "and N more" is right.
     const channels: DigestChannel[] = [];
     for (const p of posts) {
@@ -566,13 +581,20 @@ export class Notifier {
     const material = await this.gather(s);
     // Stopped while gathering (a cluster standby, a shutdown): file nothing and start no writer; the items wait for the next flush after a restart.
     if (this.stopped) return 0;
-    if (!hasDigestContent(material)) return 0;
     const id = newId("n_");
-    const title = this.digestTitle(material);
-    // Until it goes out, the digest's body holds its material (for the card, also after a restart).
-    this.db.prepare("insert into notifications(id, level, kind, title, body, agent_id, created_at) values (?, 'digest', 'digest', ?, ?, ?, ?)").run(id, title, JSON.stringify(material), s.defaultAgent, nowIso());
-    const mark = this.db.prepare("update notifications set digest_id = ?, digested = 1 where id = ?");
-    for (const it of material.items) mark.run(id, it.id);
+    const title = tx(this.db, () => {
+      // An item replaced by a newer one while the sections were on their way stays replaced and out of this digest; the newer one waits for the next.
+      const live = this.db.prepare("select 1 from notifications where id = ? and superseded_by is null and digested = 0");
+      material.items = material.items.filter((it) => live.get(it.id));
+      if (!hasDigestContent(material)) return undefined;
+      const named = this.digestTitle(material);
+      // Until it goes out, the digest's body holds its material (for the card, also after a restart).
+      this.db.prepare("insert into notifications(id, level, kind, title, body, agent_id, created_at) values (?, 'digest', 'digest', ?, ?, ?, ?)").run(id, named, JSON.stringify(material), s.defaultAgent, nowIso());
+      const mark = this.db.prepare("update notifications set digest_id = ?, digested = 1 where id = ? and superseded_by is null");
+      for (const it of material.items) mark.run(id, it.id);
+      return named;
+    });
+    if (title === undefined) return 0;
     let task: { id: string } | undefined;
     if (this.startTask && this.hasAgent(s.defaultAgent)) {
       try {
@@ -607,7 +629,7 @@ export class Notifier {
     const timer = this.digestTimers.get(id);
     if (timer) clearTimeout(timer);
     this.digestTimers.delete(id);
-    const row = this.db.prepare("select * from notifications where id = ? and delivered_at is null").get(id) as { title: string; body: string } | undefined;
+    const row = this.db.prepare("select * from notifications where id = ? and delivered_at is null").get(id) as { title: string; body: string; task_id: string | null } | undefined;
     if (!row) return;
     const material = this.materialOf(row);
     const body =
@@ -621,6 +643,9 @@ export class Notifier {
     // Claimed first, so the timer and the reply arriving together send it once.
     const claimed = this.db.prepare("update notifications set delivered_at = ?, body = ? where id = ? and delivered_at is null").run(nowIso(), body, id);
     if (!Number(claimed.changes)) return;
+    // The card went out instead of the writer's reply: a writer still on its way (slow, rate-limited, queued again after a
+    // restart) is stopped, or it would spend a background run on a reply that is dropped. One that ended is left as it is.
+    if (text === undefined && row.task_id) this.stopWriter(row.task_id);
     const s = this.settings.get();
     const sources = digestSources(material);
     const dialog = this.store.agentConversation(s.defaultAgent);
@@ -643,12 +668,25 @@ export class Notifier {
     this.inboxChanged();
   }
 
-  /** A digest for the channels: the title, the text and the sources on one line (links on a public HTTPS hub). */
+  /** Stop the digest's writer, unless it already ended (failed, or done with nothing to say). */
+  private stopWriter(taskId: string): void {
+    const task = this.store.getTask(taskId);
+    if (task && (task.status === "done" || task.status === "failed" || task.status === "cancelled")) return;
+    try {
+      this.cancelTask?.(taskId);
+    } catch (e: any) {
+      console.log(`[piomio] digest: could not stop the writer: ${e?.message ?? e}`);
+    }
+  }
+
+  /** A digest for the channels: the title, the text and the sources on one line (links on a hub that opens from anywhere over HTTPS). */
   private channelText(title: string, body: string, sources: NotificationSource[]): string {
-    const pub = /^https:\/\//.test(this.publicUrl) && !/\/\/(localhost|127\.0\.0\.1)\b/.test(this.publicUrl) ? this.publicUrl.replace(/\/+$/, "") : undefined;
+    const pub = isPublicHttpUrl(this.publicUrl, { httpsOnly: true }) ? this.publicUrl.replace(/\/+$/, "") : undefined;
+    // A source's name is text: brackets (and the backslash that would escape one) cannot open or close a link.
+    const text = (s: string) => s.replace(/[\\[\]]/g, "\\$&");
     const line = sources
       .map((x) => {
-        const label = x.count && x.count > 1 ? `${x.label} (${x.count})` : x.label;
+        const label = text(x.count && x.count > 1 ? `${x.label} (${x.count})` : x.label);
         return pub && x.href ? `[${label}](${pub}${x.href})` : label;
       })
       .join(" · ");

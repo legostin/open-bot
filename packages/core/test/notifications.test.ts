@@ -59,7 +59,7 @@ describe("notification storage", () => {
 type Started = { agentId: string; title: string; goal: string; deliver: "digest" };
 
 /** A notifier over an in-memory hub: the channels' messages, the digest tasks it starts, and its Inbox events. */
-function setup(opts: { settings?: Partial<CoreSettings>; digestWriteMs?: number; startTask?: boolean } = {}) {
+function setup(opts: { settings?: Partial<CoreSettings>; digestWriteMs?: number; startTask?: boolean; publicUrl?: string } = {}) {
   const db = openDb(":memory:");
   const bus = new EventBus();
   const settings = new Settings(db, "UTC");
@@ -71,6 +71,7 @@ function setup(opts: { settings?: Partial<CoreSettings>; digestWriteMs?: number;
   const started: Started[] = [];
   const events: Array<{ unread: number }> = [];
   bus.on("inbox.changed", (e) => events.push(e));
+  const cancelled: string[] = [];
   const notifier = new Notifier({
     db,
     bus,
@@ -79,8 +80,9 @@ function setup(opts: { settings?: Partial<CoreSettings>; digestWriteMs?: number;
     hooks,
     store,
     sign: (p) => `sig:${p}`,
-    publicUrl: "https://hub.example.com",
+    publicUrl: opts.publicUrl ?? "https://hub.example.com",
     hasAgent: (id) => id === "assistant" || id === "scout",
+    cancelTask: (id) => void cancelled.push(id),
     agentName: (id) => (id === "assistant" ? "Assistant" : id === "scout" ? "Scout" : id),
     digestWriteMs: opts.digestWriteMs,
     ...(opts.startTask === false
@@ -98,7 +100,7 @@ function setup(opts: { settings?: Partial<CoreSettings>; digestWriteMs?: number;
       .flatMap((m) => m.parts)
       .filter((p) => p.type === "notification") as Array<Extract<MessagePart, { type: "notification" }>>;
   const row = (id: string) => db.prepare("select * from notifications where id = ?").get(id) as any;
-  return { db, bus, settings, store, hooks, notifier, sent, started, events, notes, row };
+  return { db, bus, settings, store, hooks, notifier, sent, started, events, cancelled, notes, row };
 }
 
 describe("notification intake", () => {
@@ -151,12 +153,37 @@ describe("notification intake", () => {
   });
 
   it("sends the approval push to the channels only: the approval's own card is already in the chat", async () => {
-    const { notifier, notes, sent, row } = setup();
+    const { notifier, notes, sent, row, events } = setup();
     const n = await notifier.notify({ level: "notify", kind: "approval", title: "Waiting for your approval", body: "Unlock the vault on vps", agentId: "assistant" });
     expect(n.kind).toBe("approval");
     expect(notes()).toHaveLength(0);
     expect(sent).toHaveLength(1);
     expect(row(n.id).delivered_at).toBeTruthy();
+    // It is no Inbox row: the apps' badges are not told about it.
+    expect(events).toEqual([]);
+  });
+
+  it("keeps an approval push it holds back out of the digest: it stays silent, the approval waits in the chat", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const quiet = setup({ settings: { quietHours: { enabled: true, start: "23:00", end: "08:00" } } });
+      const night = await quiet.notifier.notify({ level: "notify", kind: "approval", title: "Waiting for your approval", body: "Send the mail", agentId: "assistant" });
+      expect(night).toMatchObject({ effectiveLevel: "silent", kind: "approval", reason: "quiet hours — not pushed" });
+      expect(quiet.row(night.id)).toMatchObject({ level: "silent", kind: "approval", delivered_at: null });
+      expect(quiet.sent).toHaveLength(0);
+      expect(quiet.notifier.nextDigest()).toBeUndefined();
+
+      vi.setSystemTime(new Date("2026-10-31T12:00:00Z"));
+      const busy = setup({ settings: { notifyRatePerHour: 1 } });
+      await busy.notifier.notify({ level: "notify", title: "An alert", body: "x", agentId: "assistant" });
+      const held = await busy.notifier.notify({ level: "notify", kind: "approval", title: "Waiting for your approval", body: "Send the mail", agentId: "assistant" });
+      expect(held).toMatchObject({ effectiveLevel: "silent", kind: "approval", reason: "rate limit — not pushed" });
+      expect(busy.notifier.nextDigest()).toBeUndefined();
+      expect(busy.notifier.behind().find((b) => b.id === held.id)).toMatchObject({ kind: "approval", waiting: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("files a notification under item and keeps it silent when a hook turns it into a level the hub does not know", async () => {
@@ -229,6 +256,14 @@ describe("the notify tool and the background rules", () => {
     expect(textOf(await call({ level: "notify", title: "Brief" }, make({ deliver: "digest" })))).toMatch(/final reply is the digest/);
     expect(textOf(await call({ level: "notify", title: "Brief" }, make({ feedId: "f_1" })))).toMatch(/posts you publish/);
     expect((db.prepare("select count(*) as n from notifications").get() as { n: number }).n).toBe(0);
+  });
+
+  it("trims the title before cutting it to length", async () => {
+    const { call, db } = toolSetup();
+    const r = await call({ level: "silent", title: `${" ".repeat(250)}Курс доллара  ` });
+    expect(r.isError).toBeUndefined();
+    expect(textOf(r)).toBe("Notification recorded (level: silent).");
+    expect((db.prepare("select title from notifications").get() as { title: string }).title).toBe("Курс доллара");
   });
 
   it("lets a check notify, with the trigger it ran for", async () => {
@@ -313,9 +348,23 @@ describe("scheduled reports", () => {
       { level: "notify", kind: "report", trigger_id: "t_brief" },
       { level: "notify", kind: "report", trigger_id: "t_brief" },
     ]);
-    // The limit really is spent for this schedule: an ordinary notify from it now waits for the digest.
-    const held = await notifier.notify({ level: "notify", title: "Ещё новость", body: "x", agentId: "assistant", triggerId: "t_brief" });
-    expect(held).toMatchObject({ effectiveLevel: "digest", reason: "rate limit — moved to the digest" });
+    // Reports do not spend the schedule's budget of alerts: an ordinary notify from it still arrives.
+    const alert = await notifier.notify({ level: "notify", title: "Ещё новость", body: "x", agentId: "assistant", triggerId: "t_brief" });
+    expect(alert).toMatchObject({ effectiveLevel: "notify", kind: "alert" });
+  });
+
+  it("counts only alerts against the hour's budget: delivered reports and approval pushes leave it whole", async () => {
+    const { notifier } = setup({ settings: { notifyRatePerHour: 2 } });
+    for (let i = 0; i < 3; i++) await notifier.deliverReport(task({ id: `t_r${i}`, result: `Отчёт ${i}` }));
+    for (let i = 0; i < 3; i++) await notifier.notify({ level: "notify", kind: "approval", title: `Approve ${i}`, body: "x", agentId: "scout" });
+    // The schedule's two alerts arrive; the third one is over the budget.
+    const fromSchedule = [];
+    for (let i = 0; i < 3; i++) fromSchedule.push(await notifier.notify({ level: "notify", title: `Schedule alert ${i}`, body: `${i}`, agentId: "assistant", triggerId: "t_brief" }));
+    expect(fromSchedule.map((n) => n.effectiveLevel)).toEqual(["notify", "notify", "digest"]);
+    // The same for an agent's own alerts after its approval pushes.
+    const fromAgent = [];
+    for (let i = 0; i < 3; i++) fromAgent.push(await notifier.notify({ level: "notify", title: `Agent alert ${i}`, body: `${i}`, agentId: "scout" }));
+    expect(fromAgent.map((n) => n.effectiveLevel)).toEqual(["notify", "notify", "digest"]);
   });
 
   it("does not deliver the same report twice when a schedule fires twice", async () => {
@@ -484,6 +533,8 @@ describe("the digest", () => {
     expect(out.text).toContain("From: [Утренняя сводка по Алматы](https://hub.example.com/tasks/");
     expect(out.text).toContain("Calendar · [Новости Алматы](https://hub.example.com/channels/f_almaty)");
     expect(n.events.at(-1)).toEqual({ unread: 1 });
+    // The writer's own reply went out: there is nothing to stop.
+    expect(n.cancelled).toEqual([]);
   });
 
   it("sends the card when the assistant could not write it, every item whole with its line breaks", async () => {
@@ -518,10 +569,47 @@ describe("the digest", () => {
       expect(digestRow(n).delivered_at).toBeNull();
       await vi.advanceTimersByTimeAsync(1);
       expect(digestRow(n).delivered_at).toBeTruthy();
+      // The card went out: the writer is stopped, so a slow or rate-limited one spends no run on a reply nobody gets.
+      expect(n.cancelled).toEqual(["t_digest_1"]);
       await n.notifier.digestWritten("t_digest_1", "late");
       const parts = n.notes().filter((p) => p.kind === "digest");
       expect(parts).toHaveLength(1);
       expect(parts[0].body).toContain("### Schedules and checks");
+      expect(n.cancelled).toEqual(["t_digest_1"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops a writer that is still on its way when the card goes out, and leaves one that already ended alone", async () => {
+    vi.useFakeTimers();
+    try {
+      const n = setup({ digestWriteMs: 20_000 });
+      const writers: string[] = [];
+      (n.notifier as any).startTask = (t: Started) => {
+        const task = n.store.createTask({ agentId: t.agentId, title: t.title, goal: t.goal, background: true, createdBy: "trigger", deliver: "digest" });
+        writers.push(task.id);
+        return { id: task.id };
+      };
+      await seed(n);
+      // A rate-limited writer waits for its limit: the card goes out on time, and the writer is stopped.
+      await n.notifier.flushDigest();
+      n.store.updateTask(writers[0], { status: "paused", resumeAt: new Date(Date.now() + 3600_000).toISOString() });
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(n.cancelled).toEqual([writers[0]]);
+
+      // A writer that failed or said nothing has ended: the card goes out and nothing is stopped.
+      await n.notifier.notify({ level: "digest", title: "Ещё новость", body: "x", agentId: "assistant" });
+      await n.notifier.flushDigest();
+      n.store.updateTask(writers[1], { status: "failed", error: "no brain" });
+      await n.notifier.digestWritten(writers[1], undefined);
+      await n.notifier.notify({ level: "digest", title: "И ещё", body: "y", agentId: "assistant" });
+      await n.notifier.flushDigest();
+      n.store.updateTask(writers[2], { status: "done", result: " " });
+      await n.notifier.digestWritten(writers[2], " ");
+      expect(n.notes().filter((p) => p.kind === "digest")).toHaveLength(3);
+      expect(n.cancelled).toEqual([writers[0]]);
+      n.notifier.stop();
     } finally {
       vi.useRealTimers();
     }
@@ -559,6 +647,7 @@ describe("the digest", () => {
       await seed(n);
       await n.notifier.flushDigest();
       n.notifier.stop();
+      const stopped: string[] = [];
       const restarted = new Notifier({
         db: n.db,
         bus: n.bus,
@@ -570,6 +659,7 @@ describe("the digest", () => {
         publicUrl: "http://localhost:8080",
         hasAgent: () => true,
         digestWriteMs: 20_000,
+        cancelTask: (id) => void stopped.push(id),
       });
       restarted.startDigestTimer();
       await vi.advanceTimersByTimeAsync(19_999);
@@ -577,6 +667,8 @@ describe("the digest", () => {
       await vi.advanceTimersByTimeAsync(1);
       restarted.stop();
       expect(digestRow(n).delivered_at).toBeTruthy();
+      // The writer the hub may have queued again after the restart is stopped with it.
+      expect(stopped).toEqual(["t_digest_1"]);
     } finally {
       vi.useRealTimers();
     }
@@ -676,6 +768,67 @@ describe("the digest", () => {
     await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
     await n.notifier.flushDigest();
     expect(n.started[0].goal).toMatch(/Already told[^\n]*\n- \d\d:\d\d Ботсад закрыт 2 ноября/);
+    n.notifier.stop();
+  });
+
+  it("links the sources only on a hub reachable from outside, and keeps a source's name from making a link of its own", async () => {
+    const digestText = async (publicUrl: string, feed = "Новости Алматы") => {
+      const n = setup({ startTask: false, publicUrl });
+      n.hooks.register("digest.compose", "calendar", async () => ({ title: "Calendar", body: "10:00 Dentist" }));
+      n.db.prepare("insert into feeds(id, title, brief, agent_id, times, created_at, updated_at) values ('f1', ?, 'b', 'assistant', '[]', ?, ?)").run(feed, nowIso(), nowIso());
+      n.db.prepare("insert into feed_posts(id, feed_id, title, text, created_at) values ('p1', 'f1', 'Post', 't', ?)").run(nowIso());
+      await n.notifier.flushDigest();
+      return n.sent.find((m) => m.kind === "digest")!.text.split("\n\n").at(-1)!;
+    };
+    expect(await digestText("https://piomio.tail1234.ts.net")).toBe("From: Calendar · [Новости Алматы](https://piomio.tail1234.ts.net/channels/f1)");
+    // On the home network, on the tailnet's own addresses or on this computer the links would not open from a phone outside.
+    for (const url of ["https://192.168.1.20:8080", "https://10.0.0.5", "https://100.101.102.103", "https://mymac.local", "https://mymac", "https://localhost:8080", "http://hub.example.com"])
+      expect(await digestText(url)).toBe("From: Calendar · Новости Алматы");
+    // A channel named like a Markdown link stays plain text, linked or not.
+    const crafted = "Evil](https://evil.example) [x";
+    expect(await digestText("https://hub.example.com", crafted)).toBe("From: Calendar · [Evil\\](https://evil.example) \\[x](https://hub.example.com/channels/f1)");
+    expect(await digestText("https://192.168.1.20", crafted)).toBe("From: Calendar · Evil\\](https://evil.example) \\[x");
+    expect(await digestText("https://hub.example.com", "C:\\")).toBe("From: Calendar · [C:\\\\](https://hub.example.com/channels/f1)");
+  });
+
+  it("brings channel posts of the last day at most, however long ago the last digest was", async () => {
+    const n = setup({ startTask: false });
+    const ago = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+    // The last digest went out three days ago.
+    n.db.prepare("insert into notifications(id, level, kind, title, body, created_at, delivered_at) values ('n_old_digest', 'digest', 'digest', 'Old digest', 'old', ?, ?)").run(ago(72), ago(72));
+    n.db.prepare("insert into feeds(id, title, brief, agent_id, times, created_at, updated_at) values ('f1', 'News', 'b', 'assistant', '[]', ?, ?)").run(nowIso(), nowIso());
+    const post = n.db.prepare("insert into feed_posts(id, feed_id, title, text, created_at) values (?, 'f1', ?, 't', ?)");
+    post.run("p_stale", "Two days old headline", ago(48));
+    post.run("p_fresh", "This morning's headline", ago(2));
+    await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+    await n.notifier.flushDigest();
+    const body = (n.db.prepare("select body from notifications where kind = 'digest' and id != 'n_old_digest'").get() as { body: string }).body;
+    expect(body).toContain("This morning's headline");
+    expect(body).not.toContain("Two days old headline");
+  });
+
+  it("leaves out an item replaced while the digest was gathered: it is replaced, not in the digest", async () => {
+    const n = setup();
+    const old = await n.notifier.notify({ level: "digest", title: "☀️ Утро", body: "старое", agentId: "assistant", triggerId: "t_brief" });
+    const other = await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    n.hooks.register("digest.compose", "slow", async () => {
+      await gate;
+      return { title: "Calendar", body: "10:00 Dentist" };
+    });
+    const flushing = n.notifier.flushDigest();
+    // While a plugin's section is on its way, the schedule brings a newer item: it replaces the old one.
+    const newer = await n.notifier.notify({ level: "digest", title: "☀️ Утро, уточнение", body: "новое", agentId: "assistant", triggerId: "t_brief" });
+    release();
+    expect(await flushing).toBe(2);
+    const d = digestRow(n);
+    expect(n.row(old.id)).toMatchObject({ superseded_by: newer.id, digest_id: null });
+    expect(n.row(other.id)).toMatchObject({ digest_id: d.id, digested: 1 });
+    expect(n.row(newer.id)).toMatchObject({ digest_id: null, digested: 0, superseded_by: null });
+    expect(n.started[0].goal).not.toContain("старое");
+    expect(n.started[0].goal).toContain("480");
+    expect(JSON.parse(d.body).items.map((it: { id: string }) => it.id)).toEqual([other.id]);
     n.notifier.stop();
   });
 
@@ -816,6 +969,32 @@ describe("the Inbox", () => {
     expect(behind.find((b) => b.id === old.id)).toMatchObject({ supersededBy: cur.id });
     expect(behind.find((b) => b.id === cur.id)?.digest?.title).toMatch(/digest · /);
     expect(n.notifier.inbox().entries[0]).toMatchObject({ kind: "digest", body: "Сводка", agentId: "assistant", sources: [{ label: "Assistant" }] });
+  });
+
+  it("says which items still wait for the digest, apart from those that went into an earlier one", async () => {
+    const n = setup();
+    const waits = await n.notifier.notify({ level: "digest", title: "Waits", body: "w", agentId: "assistant" });
+    const quiet = await n.notifier.notify({ level: "silent", title: "Quiet", body: "q", agentId: "assistant" });
+    const replaced = await n.notifier.notify({ level: "digest", title: "Brief", body: "1", agentId: "assistant", triggerId: "t_brief" });
+    const brief = await n.notifier.notify({ level: "digest", title: "Brief 2", body: "2", agentId: "assistant", triggerId: "t_brief" });
+    // An item from a digest sent before digests were linked to their items: digested, with no digest to point at.
+    n.db.prepare("insert into notifications(id, level, kind, title, body, created_at, digested) values ('n_legacy', 'digest', 'item', 'Old', 'o', ?, 1)").run("2026-10-01T10:00:00.000Z");
+    const why = () => new Map(n.notifier.behind().map((b) => [b.id, b]));
+    const before = why();
+    expect([waits.id, brief.id, quiet.id, replaced.id, "n_legacy"].map((id) => before.get(id)!.waiting)).toEqual([true, true, false, false, false]);
+    expect(before.get("n_legacy")!.digest).toBeUndefined();
+    // Once they go into a digest they wait no more.
+    await n.notifier.flushDigest();
+    await n.notifier.digestWritten("t_digest_1", "Сводка");
+    const after = why();
+    expect([waits.id, brief.id].map((id) => after.get(id)!.waiting)).toEqual([false, false]);
+    expect(after.get(waits.id)!.digest).toBeTruthy();
+  });
+
+  it("names the agent whose dialog an entry landed in when nobody in particular raised it", async () => {
+    const n = setup();
+    const a = await n.notifier.notify({ level: "notify", title: "From the hub", body: "x" });
+    expect(n.notifier.inbox().entries.find((e) => e.id === a.id)).toMatchObject({ agentId: "assistant", conversationId: n.store.agentConversation("assistant").id });
   });
 
   it("never shows a digest that is still being written: its body is raw material", async () => {

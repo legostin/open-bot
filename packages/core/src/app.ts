@@ -175,6 +175,8 @@ export class Hub {
       // The default agent writes the digest: a quiet background task on a fast model. Its goal carries other runs' words
       // and channel headlines, so it is marked as reading outside content before the brain sees it.
       startTask: (job) => this.runner.createTask({ ...job, background: true, createdBy: "trigger", tainted: true, thinking: { preset: "fast", skill: "writing" } }),
+      // Once the card went out instead of its reply, the writer is stopped.
+      cancelTask: (id) => void this.runner.cancelTask(id),
       agentName: (id) => {
         const a = this.agents.get(id);
         return a ? agentName(a, hubLocale()) : id;
