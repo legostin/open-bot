@@ -74,6 +74,12 @@ export const FILE_ROOTS = ["workspaces", "pages", "agents", "skills", "commands"
 const HEARTBEAT_MS = 2_000;
 /** A replica that has not answered for this long is gone; the next one leads. */
 const GONE_MS = 8_000;
+/** Ran nothing this long (the computer slept, the process was stopped): another replica may have taken the lead. */
+const AWAY_MS = GONE_MS - HEARTBEAT_MS;
+/** A leader back from such a gap has this long to hear whether another replica led meanwhile. */
+const STALE_MS = 60_000;
+/** A replica back from a sleep asks for the lead only once it has stayed awake this long. */
+const AWAKE_BEFORE_LEAD_MS = 5 * 60_000;
 /** A starting replica listens this long before it leads alone. */
 const STARTUP_GRACE_MS = 6_000;
 /** How long a leader waits for its turns before it hands over. */
@@ -97,6 +103,8 @@ interface Hello {
   priority: number;
   sealed: boolean;
   wantLead: boolean;
+  /** It led, slept past GONE_MS and has just woken: a replica that led meanwhile keeps the lead. */
+  stale?: boolean;
   vectors: Record<DbName, Vector>;
   version: string;
 }
@@ -168,6 +176,14 @@ export class Cluster {
   private links = new Map<string, RpcPeer>();
   private dialing = new Map<string, number>();
   private lastRead: { key: string; bytes: Uint8Array } | undefined;
+  /** The wall clock at the last heartbeat or hello: a gap of AWAY_MS means this replica ran nothing meanwhile. */
+  private aliveAt = 0;
+  /** When this replica last came back from such a gap (0: not since it started). */
+  private wokeAt = 0;
+  /** Until when its lead counts as stale: it led into such a gap and has yet to hear who led meanwhile. */
+  private staleUntil = 0;
+  /** How long a replica back from a sleep stays awake before it asks for the lead (tests shorten it). */
+  awakeBeforeLead = AWAKE_BEFORE_LEAD_MS;
 
   constructor(hub: Hub) {
     this.hub = hub;
@@ -338,6 +354,7 @@ export class Cluster {
 
   private async tick(): Promise<void> {
     if (!this.running || !this.identity) return;
+    this.noticeSleep();
     this.refreshSelf();
     this.loadPeers();
     for (const p of this.peers.values()) this.dial(p);
@@ -505,13 +522,35 @@ export class Cluster {
     return p.priority < me.priority || (p.priority === me.priority && p.id < this.identity!.id);
   }
 
+  /**
+   * A sleeping computer runs nothing while its wall clock goes on (a Mac's DarkWake puts it to sleep every few minutes
+   * at night): past GONE_MS another replica takes the lead. Checked at every heartbeat and hello, so the first peer to
+   * ask after the wake already hears that this replica's lead went stale.
+   */
+  private noticeSleep(): void {
+    const now = Date.now();
+    const away = this.aliveAt ? now - this.aliveAt : 0;
+    this.aliveAt = now;
+    if (away < AWAY_MS) return;
+    this.wokeAt = now;
+    if (this.role === "leader" && this.peers.size) this.staleUntil = now + STALE_MS;
+    console.log(`[cluster] ${this.identity?.name}: back after ${Math.round(away / 1000)} s asleep`);
+  }
+
+  private leadStale(): boolean {
+    return Date.now() < this.staleUntil;
+  }
+
   private async decide(): Promise<void> {
     const online = [...this.peers.values()].filter((p) => p.online && p.hello);
     const better = online.filter((p) => this.better(p));
     const leader = online.find((p) => p.hello!.role === "leader");
     if (this.role === "leader") {
+      // Back from a sleep another replica led through: that one keeps the lead. This one held on to what it had before
+      // it slept (plugins' memory, timers, its copies of rows): it stands down, catches up and asks for the lead later.
+      if (leader && this.leadStale()) await this.switchTo("standby", "another replica led while this one slept", { stale: true });
       // After a split both led: the better one keeps it. A better one that is back and caught up gets it.
-      if (better.some((p) => p.hello!.role === "leader")) await this.switchTo("standby", "a replica ahead of this one leads");
+      else if (better.some((p) => p.hello!.role === "leader" && !p.hello!.stale)) await this.switchTo("standby", "a replica ahead of this one leads");
       else if (!this.handingOver && better.some((p) => p.hello!.wantLead)) void this.handOver();
       return;
     }
@@ -524,9 +563,11 @@ export class Cluster {
       return;
     }
     // A replica behind this one leads (it took over while this one was away): catch up, then ask for the lead.
-    // Pulls are long polls (20 s): one that came back with nothing more within that time means caught up.
+    // Pulls are long polls (20 s): one that came back with nothing more within that time means caught up. Back from a
+    // sleep, it asks only once it has stayed awake a while: a computer that naps all night leaves the lead with the
+    // replica that stays up, instead of both switching at every wake.
     const fresh = (db: DbName) => Date.now() - (this.peers.get(leader.id)?.current[db] ?? 0) < 25_000;
-    this.wantLead = fresh("main") && fresh("vault");
+    this.wantLead = fresh("main") && fresh("vault") && Date.now() - this.wokeAt >= this.awakeBeforeLead;
   }
 
   /** The leader steps down for a better replica once its turns are done (at most DRAIN_MS). */
@@ -541,16 +582,17 @@ export class Cluster {
     }
   }
 
-  private switchTo(role: Role, why: string): Promise<void> {
+  private switchTo(role: Role, why: string, o: { stale?: boolean } = {}): Promise<void> {
     const next = this.switching.then(async () => {
       if (this.role === role || !this.running) return;
       console.log(`[cluster] ${this.identity?.name}: ${role} (${why})`);
       this.role = role;
       this.wantLead = false;
+      this.staleUntil = 0;
       if (role === "leader") {
         await this.hub.lead();
         this.asked.clear();
-      } else await this.hub.standby();
+      } else await this.hub.standby(o);
       this.hub.audit.append("core", `cluster.${role}`, this.identity?.id ?? "", { why });
       this.emitState(true);
     });
@@ -636,6 +678,7 @@ export class Cluster {
   // ---------- what peers ask of us (device app routes) ----------
 
   hello(): Hello {
+    this.noticeSleep();
     const me = this.self();
     return {
       id: this.identity!.id,
@@ -644,6 +687,7 @@ export class Cluster {
       priority: me?.priority ?? 99,
       sealed: this.hub.vault.state() !== "unlocked",
       wantLead: this.wantLead,
+      stale: this.leadStale(),
       vectors: { main: this.main!.vector(), vault: this.vaultRepl!.vector() },
       version: this.hub.config.version,
     };

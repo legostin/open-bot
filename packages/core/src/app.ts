@@ -718,16 +718,21 @@ export class Hub {
     void announceUpdate(this).catch((e) => console.log(`[piomio] update note: ${e?.message ?? e}`));
   }
 
-  /** Another replica leads: this one stops its main-only work and keeps its data current. */
-  async standby(): Promise<void> {
+  /**
+   * Another replica leads: this one stops its main-only work and keeps its data current. `stale`: that one took the
+   * lead while this one slept (cluster.ts), and with it this one's tasks.
+   */
+  async standby(o: { stale?: boolean } = {}): Promise<void> {
     if (!this.leading) return;
     this.leading = false;
     this.notifier.stop();
     this.feeds.stop();
     this.setup.stop();
     await this.runner.stop();
-    // Its tasks go back to the queue: the leader carries them on from where they stopped.
-    for (const t of this.store.listTasks({ status: ["running", "waiting_approval", "interrupted"] })) this.store.updateTask(t.id, { status: "queued" });
+    // Its tasks go back to the queue: the leader carries them on from where they stopped. One that led while this
+    // replica slept queued them when it took over and may have finished them since: this one's older copies queued
+    // again would win over that (newest write wins) and run them twice.
+    if (!o.stale) for (const t of this.store.listTasks({ status: ["running", "waiting_approval", "interrupted"] })) this.store.updateTask(t.id, { status: "queued" });
     await this.plugins.stopAll();
     await this.mcpClients.closeAll();
     // Machines that reached this replica while it led reconnect, and land on the leader (directly or over the link).
