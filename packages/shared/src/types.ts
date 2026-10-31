@@ -1128,6 +1128,8 @@ export interface IntegrationView {
   detail?: string;
   /** Something to ask once it is on, in the person's words (the catalog's "Try"). */
   example?: string;
+  /** The service's logo, on the hub (GET /api/integrations/:id/logo, a PNG): drawn instead of the icon. */
+  logo?: string;
   /** One of a plugin's entries ("composio:slack"): the plugin it belongs to, which holds its setup and its switch. */
   plugin?: string;
   /** The outside service it goes through (Composio), with the badge's note in the reader's language. */

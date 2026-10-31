@@ -77,7 +77,7 @@ export default {
   "integrations.disconnect": "Отключить",
   "integrations.disconnectConfirm": "Отключить {name}? Агенты потеряют доступ, пока вы не подключите снова.",
   "integrations.waiting": "Завершите вход в браузере — карточка обновится сама.",
-  "integrations.waitingByItself": "Завершите вход на открывшейся странице — карточка обновится сама, с любого устройства.",
+  "integrations.waitingByItself": "Завершите вход на открывшейся странице и разрешите всё, что она спросит (отметьте все галочки), — карточка обновится сама, с любого устройства.",
   "integrations.pasteHint": "Не вернулись в Owlbot (хаб на сервере или телефон)? Скопируйте адрес из строки браузера и вставьте сюда.",
   "integrations.pasteLabel": "Адрес из браузера",
   "integrations.pasteDone": "Готово",

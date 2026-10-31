@@ -30,6 +30,8 @@ interface App {
   pendingUntil?: number;
   /** An app added from the chat (not one of the manifest's): its name. */
   added?: { name: string };
+  /** The service refused a call for a permission the person did not give at sign-in (an unticked box on Google's page). */
+  scopesMissing?: boolean;
 }
 
 // Composio's address and the polling pace come from the environment, not from settings an agent could change: the
@@ -44,6 +46,8 @@ const LINK_MS = 10 * 60_000;
 const GRACE_MS = Number(process.env.OWLBOT_COMPOSIO_GRACE_MS) || 2 * 60_000;
 const PENDING = new Set(["INITIATED", "INITIALIZING"]);
 const APP_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
+/** How a service says its token lacks a permission (Google: "Request had insufficient authentication scopes"). */
+const SCOPES_RE = /insufficient[ _](authentication[ _])?scopes?|insufficient[ _]?permissions?|insufficient_scope/i;
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 
@@ -101,6 +105,7 @@ const plugin: PluginModule & { stop?: () => void } = {
       const base = { id: app, ...look };
       if (keyState === "missing") return { ...base, status: "needs-setup", connect: "setup" };
       if (keyState === "rejected") return { ...base, status: "broken", connect: "setup", detail: "%detail.key%" };
+      if (a?.accountId && a.status === "ACTIVE" && a.scopesMissing) return { ...base, status: "broken", connect: "signin", detail: "%detail.scopes%" };
       if (a?.accountId && a.status === "ACTIVE") return { ...base, status: "connected", connect: "signin" };
       if (a?.pending && polls.has(app)) return { ...base, status: "needs-setup", connect: "signin", detail: "%detail.waiting%" };
       if (a?.accountId && a.status && !PENDING.has(a.status)) return { ...base, status: "broken", connect: "signin", detail: "%detail.expired%" };
@@ -115,7 +120,26 @@ const plugin: PluginModule & { stop?: () => void } = {
     };
 
     /** What the agent hears about a failed request. */
+    /**
+     * The service refused for a permission not given at sign-in: the card asks for a new sign-in, and the agent says
+     * what to do instead of guessing.
+     */
+    function scopesMissing(app: string): ToolResult {
+      const a = apps[app];
+      if (a && !a.scopesMissing) {
+        a.scopesMissing = true;
+        void save();
+        report();
+      }
+      return text(
+        `${nameOf(app)} was not given the permission this needs: when the user signed in, not every permission on its page was allowed (Google shows boxes to tick). ` +
+          `Show its card with hub_integration_connect id composio:${app}: the user signs in again and allows everything it asks for (ticks every box).`,
+        true,
+      );
+    }
+
     function failure(e: unknown, app?: string): ToolResult {
+      if (app && e instanceof ComposioError && SCOPES_RE.test(e.message)) return scopesMissing(app);
       if (e instanceof ComposioError) {
         if (e.kind === "key") {
           keyRefused();
@@ -170,6 +194,7 @@ const plugin: PluginModule & { stop?: () => void } = {
       if (!a?.accountId || a.status !== "ACTIVE") return text(`${nameOf(app)} is not connected: show its card with hub_integration_connect (id composio:${app}).`, true);
       try {
         const r = await api().execute(slug, { userId: user, accountId: a.accountId, args: (input ?? {}) as Record<string, unknown>, ...(version ? { version } : {}) });
+        if (!r.ok && SCOPES_RE.test(`${r.error ?? ""} ${resultText(r.data, 2000)}`)) return scopesMissing(app);
         if (!r.ok) return text(`${nameOf(app)} did not do it: ${r.error ?? "the call failed"}${r.data ? `\n${resultText(r.data, 4000)}` : ""}`, true);
         return text(resultText(r.data));
       } catch (e) {
@@ -213,6 +238,7 @@ const plugin: PluginModule & { stop?: () => void } = {
           polls.delete(app);
           const old = a.accountId;
           Object.assign(a, { accountId, status: "ACTIVE" });
+          delete a.scopesMissing;
           delete a.pending;
           delete a.pendingUntil;
           await save();
@@ -255,6 +281,7 @@ const plugin: PluginModule & { stop?: () => void } = {
           if (e instanceof ComposioError && e.status === 404 && a.accountId) {
             delete a.accountId;
             delete a.status;
+            delete a.scopesMissing;
             unregisterTools(app);
           } else if (e instanceof ComposioError && e.kind === "key") keyState = "rejected";
           else ctx.log.warn(`composio: could not check ${app}: ${(e as Error).message}`);
@@ -327,6 +354,7 @@ const plugin: PluginModule & { stop?: () => void } = {
       if (a) {
         delete a.accountId;
         delete a.status;
+        delete a.scopesMissing;
         delete a.pending;
         delete a.pendingUntil;
         // An app added from the chat leaves the catalog with its sign-in.

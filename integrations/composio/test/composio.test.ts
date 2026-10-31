@@ -47,7 +47,11 @@ const tools: Record<string, { important: any[]; all: any[] }> = {
   },
   github: {
     important: [],
-    all: [{ slug: "GITHUB_LIST_ISSUES", name: "List issues", description: "Lists issues", input_parameters: { type: "object", properties: { repo: { type: "string" } } }, tags: ["readOnlyHint"], toolkit: { slug: "github" } }],
+    all: [
+      { slug: "GITHUB_LIST_ISSUES", name: "List issues", description: "Lists issues", input_parameters: { type: "object", properties: { repo: { type: "string" } } }, tags: ["readOnlyHint"], toolkit: { slug: "github" } },
+      { slug: "GITHUB_LIST_STARS", name: "List stars", description: "Lists starred repositories", input_parameters: { type: "object", properties: {} }, tags: ["readOnlyHint"], toolkit: { slug: "github" } },
+      { slug: "GITHUB_LIST_WATCHED", name: "List watched", description: "Lists watched repositories", input_parameters: { type: "object", properties: {} }, tags: ["readOnlyHint"], toolkit: { slug: "github" } },
+    ],
   },
 };
 
@@ -113,6 +117,10 @@ function fakeComposio() {
         executed.push({ slug: m[1]!, body });
         if (m[1] === "SLACK_FAIL") return send(200, { successful: false, data: { ok: false }, error: "channel_not_found" });
         if (m[1] === "SLACK_FORBIDDEN") return send(403, { error: { message: "Connected account lacks permission for this resource" } });
+        // The service refused because the person did not tick every permission on its sign-in page (Google's boxes).
+        if (m[1] === "GITHUB_LIST_STARS")
+          return send(200, { successful: false, data: { message: "HTTP 403: Request had insufficient authentication scopes.", status_code: 403 }, error: "HTTP 403: Request had insufficient authentication scopes." });
+        if (m[1] === "GITHUB_LIST_WATCHED") return send(403, { error: { message: "Request had insufficient authentication scopes." } });
         return send(200, { successful: true, data: { ok: true, echo: body.arguments }, error: null, log_id: "log_1" });
       }
       send(404, { message: `no route ${req.method} ${path}` });
@@ -316,6 +324,23 @@ describe("the Composio integration", () => {
     h.emit("vault.state", { state: "unlocked" });
     await until(() => keyReads() > reads, "the key read again");
     await until(() => entry("slack")?.status === "connected" && h.tools.get("slack_send_message"), "slack still connected");
+  });
+
+  it("asks for a new sign-in when the service says a permission was not given, and is fine once it is", async () => {
+    await until(() => h.tools.get("github_list_stars"), "github's tools");
+    const r = await h.invoke("github_list_stars", {});
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toContain("GitHub was not given the permission this needs");
+    expect(textOf(r)).toContain("hub_integration_connect id composio:github");
+    await until(() => entry("github")?.status === "broken", "github asking for a new sign-in");
+    expect(entry("github")).toMatchObject({ status: "broken", connect: "signin", detail: "%detail.scopes%" });
+    // The same refusal as an HTTP error reads the same.
+    expect(textOf(await h.invoke("github_list_watched", {}))).toContain("GitHub was not given the permission this needs");
+
+    await h.catalogSignIn("github");
+    fake.accounts.get(`ca_${fake.state.n}`)!.status = "ACTIVE";
+    await until(() => entry("github")?.status === "connected", "github signed in again");
+    expect(entry("github")!.detail).toBeUndefined();
   });
 
   it("signs out at Composio first, keeps everything when that fails, and takes the app's tools back", async () => {
