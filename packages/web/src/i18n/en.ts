@@ -237,6 +237,7 @@ export default {
   "composer.nothingToStop": "Nothing to stop",
   "composer.hint": "Enter to send, Shift+Enter for a new line",
   "composer.groupPlaceholder": "Message the group…  @ to mention",
+  "composer.groupPlaceholderShort": "Message the group",
   "composer.mentions": "Members",
   "composer.everyone": "Everyone",
   "composer.everyoneHint": "each member answers in turn",
