@@ -30,7 +30,7 @@ const FIELDS: Record<string, JsonSchema> = {
   report: {
     type: "boolean",
     description:
-      "schedule/once only: true when each run's product is a message for the user at its time (a morning brief, a weekly summary): your final reply is delivered as is, never held back. false for checks that speak only when something needs attention (notify levels). Default: true for once and for a schedule running at most 3 times a day.",
+      "schedule/once only: true when each run's product is a message for the user at its time (a morning brief, a weekly summary): your final reply is delivered as is, never held back. false for checks that speak only when something needs attention (notify levels). Default: true for once and for a schedule running on average at most 3 times a day.",
   },
   cron: { type: "string", description: "schedule: 5-field cron 'minute hour day month weekday' in the user's local timezone, e.g. '0 9 * * 1-5' = weekdays at 09:00." },
   at: { type: "string", description: "once: ISO datetime. Without an offset it is the user's local time, e.g. '2026-10-27T09:00'. Must be in the future." },

@@ -132,6 +132,15 @@ describe("triggers plugin", () => {
     expect(defaultReport({ kind: "heartbeat" }, "Asia/Almaty", now)).toBe(false);
   });
 
+  it("answers a frequent schedule at once, without counting every run", () => {
+    const now = new Date("2026-10-31T00:00:00Z");
+    const started = performance.now();
+    const report = defaultReport({ kind: "schedule", cron: "* * * * *" }, "Asia/Almaty", now);
+    const elapsed = performance.now() - started;
+    expect(report).toBe(false);
+    expect(elapsed).toBeLessThan(100);
+  });
+
   it("rejects bad input with clear errors", async () => {
     const bad = async (input: any) => {
       const r = await h.invoke("create", input);
