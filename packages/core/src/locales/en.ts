@@ -47,6 +47,7 @@ export default {
   "notify.reason.rateLimited": "rate limit — moved to the digest",
   "notify.reason.quietHours": "quiet hours — moved to the digest",
   "notify.reason.superseded": "replaced by a newer one",
+  "inbox.badIds": "Give the ids of the entries to mark read",
   "notification.notFound": "Notification not found",
 
   // policy (shown on approval cards and in the audit log)

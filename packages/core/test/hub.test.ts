@@ -481,6 +481,9 @@ describe("hub (integration)", () => {
   it("sends the digest's card at once, with no notice about it, when its writer's budget is used up", async () => {
     // An agent with no background runs a day: its tasks fail before they start.
     await web.req("PUT", "/api/agents/frugal", { name: "Frugal", description: "No budget", brains: ["fake@local"], prompt: "Be frugal.", budget: { backgroundRunsPerDay: 0 } });
+    // The notices about this agent's budget that exist already (other tests may leave some): only a new one would be wrong.
+    const budgetNotices = () => hub.notifier.list(500).filter((x) => x.agentId === "frugal" && /daily budget/.test(x.title)).map((x) => x.id);
+    const before = budgetNotices();
     try {
       const task = hub.runner.createTask({ agentId: "frugal", goal: "Write the digest", title: "Digest", background: true, createdBy: "trigger", deliver: "digest" });
       fileDigest("n_digest_budget", task.id);
@@ -488,7 +491,7 @@ describe("hub (integration)", () => {
       expect(d.body).toContain("**Interrupted writer item** · 10:00");
       expect(hub.store.getTask(task.id)?.status).toBe("failed");
       // The card is the answer: no "used up its daily budget" item for the next digest.
-      expect(hub.notifier.list(100).some((x) => /daily budget/.test(x.title))).toBe(false);
+      expect(budgetNotices()).toEqual(before);
     } finally {
       await web.req("DELETE", "/api/agents/frugal");
     }
@@ -504,6 +507,74 @@ describe("hub (integration)", () => {
       await web.req("DELETE", "/api/agents/frugal");
     }
   });
+
+  /** The Inbox tests notify as an agent of their own: the assistant's hourly budget of alerts is not theirs to use up. */
+  const asInboxer = async (run: (dialog: string) => Promise<void>) => {
+    await web.req("PUT", "/api/agents/inboxer", { name: "Inboxer", description: "Writes to the Inbox", brains: ["fake@local"], prompt: "Write." });
+    try {
+      await run(hub.store.agentConversation("inboxer").id);
+    } finally {
+      await web.req("DELETE", "/api/agents/inboxer");
+    }
+  };
+
+  it("serves the Inbox and keeps its unread count", () =>
+    asInboxer(async (dialog) => {
+      const q = await hub.notifier.notify({ level: "ask", title: "Inbox question", body: "", agentId: "inboxer" });
+      const a = await hub.notifier.notify({ level: "notify", title: "Inbox alert", body: "news", agentId: "inboxer", triggerId: "t_inbox" });
+      const view = await web.req("GET", "/api/inbox");
+      expect(Array.isArray(view.entries)).toBe(true);
+      expect(view.questions.map((e: any) => e.id)).toContain(q.id);
+      expect(view.entries.find((e: any) => e.id === a.id)).toMatchObject({ kind: "alert", unread: true, feedbackable: true, agentId: "inboxer", conversationId: dialog });
+      expect(view.unread).toBeGreaterThanOrEqual(2);
+
+      const r = await web.req("POST", "/api/inbox/read", { ids: [a.id, q.id, 7] });
+      expect(r).toEqual({ ok: true, unread: view.unread - 2 });
+      expect((await web.req("GET", "/api/bootstrap")).inboxUnread).toBe(r.unread);
+      const after = await web.req("GET", "/api/inbox");
+      expect(after.questions.map((e: any) => e.id)).not.toContain(q.id);
+      expect(after.entries.find((e: any) => e.id === a.id)).toMatchObject({ unread: false });
+      expect(after.unread).toBe(r.unread);
+
+      expect(Array.isArray(await web.req("GET", "/api/inbox/behind"))).toBe(true);
+      expect((await web.raw("POST", "/api/inbox/read", { ids: "x" })).status).toBe(400);
+      expect((await web.raw("POST", "/api/inbox/read", {})).status).toBe(400);
+    }));
+
+  it("pages the Inbox by ?before and ?limit, and takes a limit that is not a number as not given", () =>
+    asInboxer(async () => {
+      await hub.notifier.notify({ level: "notify", title: "Inbox page one", body: "1", agentId: "inboxer" });
+      await new Promise((r) => setTimeout(r, 5));
+      await hub.notifier.notify({ level: "notify", title: "Inbox page two", body: "2", agentId: "inboxer" });
+      const first = await web.req("GET", "/api/inbox?limit=1");
+      expect(first.entries).toHaveLength(1);
+      expect(first.hasMore).toBe(true);
+      const older = await web.req("GET", `/api/inbox?limit=1&before=${encodeURIComponent(first.entries[0].createdAt)}`);
+      expect(older.questions).toEqual([]);
+      expect(older.entries[0].createdAt < first.entries[0].createdAt).toBe(true);
+      expect(older.entries[0].id).not.toBe(first.entries[0].id);
+      expect((await web.raw("GET", "/api/inbox?limit=lots")).status).toBe(200);
+      expect((await web.raw("GET", "/api/inbox/behind?limit=lots&before=a&before=b")).status).toBe(200);
+    }));
+
+  it("tells the apps the new unread count when a chat is read", () =>
+    asInboxer(async (dialog) => {
+      await hub.notifier.notify({ level: "notify", title: "Inbox badge alert", body: "unread", agentId: "inboxer" });
+      const unread = hub.notifier.unreadCount();
+      // What this chat holds unread (the agent's dialog outlives the agent, with what earlier tests left in it): reading it reads all of that.
+      const view = hub.notifier.inbox({ limit: 200 });
+      const inDialog = [...view.questions, ...view.entries].filter((e) => e.conversationId === dialog && e.unread).length;
+      expect(inDialog).toBeGreaterThan(0);
+      const seen: number[] = [];
+      const off = hub.bus.on("inbox.changed", (e) => seen.push(e.unread));
+      try {
+        await web.req("POST", `/api/conversations/${dialog}/read`, {});
+      } finally {
+        off();
+      }
+      expect(seen).toEqual([unread - inDialog]);
+      expect((await web.req("GET", "/api/bootstrap")).inboxUnread).toBe(unread - inDialog);
+    }));
 
   it("tells the person plainly when a schedule's report did not come", async () => {
     // Pinned to a brain this hub does not have: the run cannot start, and the agent has nothing set up to start it with.

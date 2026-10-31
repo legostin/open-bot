@@ -695,11 +695,11 @@ describe("the digest", () => {
     }
   });
 
-  it("arms no timer for a digest still being gathered when it is stopped, and does again once started", async () => {
+  it("files nothing for a digest still being gathered when it is stopped, and files it on the next flush once started", async () => {
     vi.useFakeTimers();
     try {
       const n = setup({ digestWriteMs: 1000 });
-      await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+      const item = await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
       // A plugin's section keeps the gathering open while the notifier is stopped (a cluster standby, a shutdown).
       let release!: () => void;
       const gate = new Promise<void>((resolve) => (release = resolve));
@@ -710,11 +710,18 @@ describe("the digest", () => {
       const flushing = n.notifier.flushDigest();
       n.notifier.stop();
       release();
-      expect(await flushing).toBe(2);
+      // Stopped meanwhile: no digest row, no writer, no timer; the item keeps waiting.
+      expect(await flushing).toBe(0);
+      expect(digestRow(n)).toBeUndefined();
+      expect(n.started).toHaveLength(0);
       expect(vi.getTimerCount()).toBe(0);
-      expect(digestRow(n).delivered_at).toBeNull();
-      // Led again: the digest the stop left open gets its time like after any restart.
+      expect(n.row(item.id)).toMatchObject({ digested: 0, digest_id: null });
+      // Led again: the next flush files the digest and starts its writer.
       n.notifier.startDigestTimer();
+      expect(vi.getTimerCount()).toBe(1);
+      expect(await n.notifier.flushDigest()).toBe(2);
+      expect(digestRow(n).delivered_at).toBeNull();
+      expect(n.started).toHaveLength(1);
       expect(vi.getTimerCount()).toBe(2);
       await vi.advanceTimersByTimeAsync(1000);
       expect(digestRow(n).delivered_at).toBeTruthy();
@@ -737,5 +744,279 @@ describe("the digest_now tool", () => {
     expect(textOf(await call())).toMatch(/being written from 1 item\(s\)/);
     expect(h.started).toHaveLength(1);
     h.notifier.stop();
+  });
+});
+
+describe("the Inbox", () => {
+  const digestOf = (n: ReturnType<typeof setup>) => n.db.prepare("select * from notifications where kind = 'digest'").get() as any;
+
+  it("lists what came in, unread questions first, and the rest behind the scenes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const a = await n.notifier.notify({ level: "notify", title: "Ботсад закрыт", body: "2 ноября", agentId: "assistant", triggerId: "t_watch" });
+      vi.setSystemTime(new Date("2026-10-31T03:01:00Z"));
+      const q = await n.notifier.notify({ level: "ask", title: "Залить антифриз?", body: "", agentId: "assistant" });
+      await n.notifier.notify({ level: "silent", title: "Ничего срочного", body: "", agentId: "assistant" });
+      await n.notifier.notify({ level: "digest", title: "Новости", body: "3", agentId: "assistant" });
+      const v = n.notifier.inbox();
+      expect(v.questions.map((e) => e.id)).toEqual([q.id]);
+      expect(v.entries.map((e) => e.id)).toEqual([a.id]);
+      expect(v.entries[0]).toMatchObject({ kind: "alert", unread: true, feedbackable: true, conversationId: n.store.agentConversation("assistant").id });
+      expect(v).toMatchObject({ unread: 2, behindCount: 2, hasMore: false, next: { time: "09:00", count: 1 } });
+
+      n.notifier.markInboxRead([q.id]);
+      const after = n.notifier.inbox();
+      expect(after.questions).toEqual([]);
+      expect(after.entries.map((e) => e.id)).toEqual([q.id, a.id]);
+      expect(after.unread).toBe(1);
+      expect(n.events.at(-1)).toEqual({ unread: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts an entry read once its chat is read", async () => {
+    const n = setup();
+    await n.notifier.notify({ level: "notify", title: "A", body: "a", agentId: "assistant" });
+    expect(n.notifier.unreadCount()).toBe(1);
+    n.store.markRead(n.store.agentConversation("assistant").id);
+    expect(n.notifier.unreadCount()).toBe(0);
+  });
+
+  it("says behind the scenes why each item did not reach the person, and shows the digest with its sources", async () => {
+    const n = setup();
+    const old = await n.notifier.notify({ level: "digest", title: "Утро", body: "1", agentId: "assistant", triggerId: "t_brief" });
+    const cur = await n.notifier.notify({ level: "digest", title: "Утро 2", body: "2", agentId: "assistant", triggerId: "t_brief" });
+    await n.notifier.flushDigest();
+    await n.notifier.digestWritten("t_digest_1", "Сводка");
+    const behind = n.notifier.behind();
+    expect(behind.find((b) => b.id === old.id)).toMatchObject({ supersededBy: cur.id });
+    expect(behind.find((b) => b.id === cur.id)?.digest?.title).toMatch(/digest · /);
+    expect(n.notifier.inbox().entries[0]).toMatchObject({ kind: "digest", body: "Сводка", agentId: "assistant", sources: [{ label: "Assistant" }] });
+  });
+
+  it("never shows a digest that is still being written: its body is raw material", async () => {
+    const n = setup();
+    await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+    await n.notifier.flushDigest();
+    const open = digestOf(n);
+    expect(open.delivered_at).toBeNull();
+    expect(open.body).toContain("partOfDay");
+
+    const v = n.notifier.inbox();
+    expect(v).toMatchObject({ questions: [], entries: [], unread: 0, hasMore: false, behindCount: 1 });
+    expect(v.next).toBeUndefined();
+    expect(JSON.stringify(v)).not.toContain("partOfDay");
+    // The item that went into it is behind the scenes; the open digest is not, and is not pointed at either.
+    const behind = n.notifier.behind();
+    expect(behind).toHaveLength(1);
+    expect(behind[0].id).not.toBe(open.id);
+    expect(behind[0].digest).toBeUndefined();
+    expect(JSON.stringify(behind)).not.toContain("partOfDay");
+
+    await n.notifier.digestWritten("t_digest_1", "Сводка");
+    expect(n.notifier.inbox().entries.map((e) => e.id)).toEqual([open.id]);
+    expect(n.notifier.behind()[0].digest).toMatchObject({ id: open.id });
+    expect(n.notifier.unreadCount()).toBe(1);
+  });
+
+  it("pages the entries newest first by their time, with the questions on the first page only", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const ids: string[] = [];
+      for (const title of ["A", "B", "C"]) {
+        ids.push((await n.notifier.notify({ level: "notify", title, body: title, agentId: "assistant" })).id);
+        vi.setSystemTime(new Date(Date.now() + 60_000));
+      }
+      const q = await n.notifier.notify({ level: "ask", title: "Q", body: "", agentId: "assistant" });
+      const first = n.notifier.inbox({ limit: 2 });
+      expect(first.questions.map((e) => e.id)).toEqual([q.id]);
+      // The unread question stands in "Waiting for you": it is not listed twice, and it does not take a place on the page.
+      expect(first.entries.map((e) => e.id)).toEqual([ids[2], ids[1]]);
+      expect(first.hasMore).toBe(true);
+      const second = n.notifier.inbox({ before: first.entries.at(-1)!.createdAt, limit: 2 });
+      expect(second.questions).toEqual([]);
+      expect(second.next).toBeUndefined();
+      expect(second.entries.map((e) => e.id)).toEqual([ids[0]]);
+      expect(second.hasMore).toBe(false);
+      // The limit stays between 1 and 200.
+      expect(n.notifier.inbox({ limit: 0 })).toMatchObject({ entries: [{ id: ids[2] }], hasMore: true });
+      expect(n.notifier.inbox({ limit: 1000 }).entries).toHaveLength(3);
+      expect(n.notifier.behind({ limit: 0 })).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("pages behind the scenes the same way and says what held an item back", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const a = await n.notifier.notify({ level: "silent", title: "A", body: "a", agentId: "assistant", taskId: "t_1" });
+      vi.setSystemTime(new Date("2026-10-31T03:01:00Z"));
+      const b = await n.notifier.notify({ level: "digest", title: "B", body: "b", agentId: "scout" });
+      vi.setSystemTime(new Date("2026-10-31T03:02:00Z"));
+      await n.notifier.notify({ level: "notify", title: "Ping", body: "p", agentId: "assistant", kind: "approval" });
+      expect(n.notifier.behind().map((e) => e.title)).toEqual(["Ping", "B", "A"]);
+      expect(n.notifier.behind({ limit: 1 }).map((e) => e.title)).toEqual(["Ping"]);
+      const older = n.notifier.behind({ before: n.notifier.get(b.id)!.createdAt });
+      expect(older).toMatchObject([{ id: a.id, level: "silent", kind: "item", agentId: "assistant", taskId: "t_1" }]);
+      expect(n.notifier.behind().find((e) => e.id === b.id)).toMatchObject({ level: "digest", kind: "item", agentId: "scout" });
+      // Alerts, questions and digests reached the person: they are not behind the scenes.
+      await n.notifier.notify({ level: "notify", title: "Alert", body: "x", agentId: "assistant" });
+      expect(n.notifier.behind().map((e) => e.title)).toEqual(["Ping", "B", "A"]);
+      expect(n.notifier.inbox().behindCount).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tells when the next digest comes: its time, and how many items wait", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const n = setup({ settings: { digestTimes: ["19:00", "09:00"] } });
+      expect(n.notifier.nextDigest()).toBeUndefined();
+      await n.notifier.notify({ level: "digest", title: "A", body: "a", agentId: "assistant" });
+      await n.notifier.notify({ level: "silent", title: "S", body: "s", agentId: "assistant" });
+      vi.setSystemTime(new Date("2026-10-31T10:00:00Z"));
+      expect(n.notifier.nextDigest()).toEqual({ time: "19:00", count: 1 });
+      // Past the last one today: the first one tomorrow.
+      vi.setSystemTime(new Date("2026-10-31T20:00:00Z"));
+      expect(n.notifier.nextDigest()).toEqual({ time: "09:00", count: 1 });
+      // Without times the digest only goes out when asked.
+      n.settings.update({ digestTimes: [] });
+      expect(n.notifier.nextDigest()).toEqual({ count: 1 });
+      // A digest that went out has taken its items with it.
+      await n.notifier.flushDigest();
+      expect(n.notifier.nextDigest()).toBeUndefined();
+      n.notifier.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives a report its caption and a card that is not from a check no rating", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const r = await n.notifier.deliverReport({
+        id: "t_r1",
+        conversationId: "c_t",
+        agentId: "assistant",
+        title: "Утренняя сводка",
+        goal: "g",
+        status: "done",
+        createdBy: "trigger",
+        triggerId: "t_brief",
+        background: true,
+        deliver: "report",
+        result: "Туман.",
+        createdAt: "2026-10-31T03:00:00.000Z",
+        updatedAt: "2026-10-31T03:01:00.000Z",
+      });
+      const alert = await n.notifier.notify({ level: "notify", title: "Просто так", body: "x", agentId: "assistant" });
+      const byId = new Map(n.notifier.inbox().entries.map((e) => [e.id, e]));
+      expect(byId.get(r!.id)).toMatchObject({ kind: "report", caption: "scheduled, 03:00", taskId: "t_r1", feedbackable: false });
+      expect(byId.get(alert.id)).toMatchObject({ kind: "alert", feedbackable: false });
+      expect("caption" in byId.get(alert.id)!).toBe(false);
+      expect("sources" in byId.get(alert.id)!).toBe(false);
+      n.notifier.feedback(r!.id, "useful");
+      expect(n.notifier.inbox().entries.find((e) => e.id === r!.id)?.feedback).toBe("useful");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("what counts as unread in the Inbox", () => {
+  const report = (n: ReturnType<typeof setup>, title: string, over: Partial<Task> = {}) =>
+    n.notifier.deliverReport({
+      id: `t_${title}`,
+      conversationId: "c_t",
+      agentId: "assistant",
+      title,
+      goal: "g",
+      status: "done",
+      createdBy: "trigger",
+      background: true,
+      deliver: "report",
+      result: `${title} text`,
+      createdAt: "2026-10-31T03:00:00.000Z",
+      updatedAt: "2026-10-31T03:00:00.000Z",
+      ...over,
+    });
+  const readMarker = (n: ReturnType<typeof setup>, conversationId: string) => (n.db.prepare("select read_at from conversations where id = ?").get(conversationId) as { read_at: string | null }).read_at;
+  const unreadIds = (n: ReturnType<typeof setup>) => n.notifier.inbox().entries.filter((e) => e.unread).map((e) => e.title);
+
+  it("counts a report read once its chat is read up to its message, and unread when its message is newer", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const dialog = n.store.agentConversation("assistant").id;
+      const first = await report(n, "First");
+      expect(unreadIds(n)).toEqual(["First"]);
+      // The chat was read exactly up to the message: it counts as read (at or after).
+      vi.setSystemTime(new Date("2026-10-31T03:05:00Z"));
+      n.store.markRead(dialog, n.store.getMessage(first!.messageId!)!.createdAt);
+      expect(readMarker(n, dialog)).toBe("2026-10-31T03:00:00.000Z");
+      expect(unreadIds(n)).toEqual([]);
+      expect(n.notifier.unreadCount()).toBe(0);
+      // A report that landed after that stays unread; the earlier one stays read.
+      vi.setSystemTime(new Date("2026-10-31T03:10:00Z"));
+      await report(n, "Second");
+      expect(unreadIds(n)).toEqual(["Second"]);
+      expect(n.notifier.unreadCount()).toBe(1);
+      // Reading the chat later covers it.
+      vi.setSystemTime(new Date("2026-10-31T03:15:00Z"));
+      n.store.markRead(dialog);
+      expect(unreadIds(n)).toEqual([]);
+      expect(n.notifier.unreadCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("marks an entry read on its own, without reading its chat, and keeps the first time it was read", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const dialog = n.store.agentConversation("assistant").id;
+      const a = await report(n, "A");
+      const b = await report(n, "B");
+      vi.setSystemTime(new Date("2026-10-31T03:05:00Z"));
+      n.notifier.markInboxRead([a!.id, "n_unknown"]);
+      expect(n.row(a!.id).read_at).toBe("2026-10-31T03:05:00.000Z");
+      expect(n.row(b!.id).read_at).toBeNull();
+      // The chat itself was not read.
+      expect(readMarker(n, dialog)).toBeNull();
+      expect(unreadIds(n)).toEqual(["B"]);
+      expect(n.events.at(-1)).toEqual({ unread: 1 });
+      // Opening it again does not move the time.
+      vi.setSystemTime(new Date("2026-10-31T04:00:00Z"));
+      n.notifier.markInboxRead([a!.id]);
+      expect(n.row(a!.id).read_at).toBe("2026-10-31T03:05:00.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts an entry with no chat message unread until it is opened", async () => {
+    const n = setup();
+    n.db
+      .prepare("insert into notifications(id, level, kind, title, body, created_at, delivered_at) values ('n_orphan', 'notify', 'alert', 'Orphan', 'o', ?, ?)")
+      .run(nowIso(), nowIso());
+    expect(n.notifier.unreadCount()).toBe(1);
+    expect(n.notifier.inbox().entries[0]).toMatchObject({ id: "n_orphan", unread: true });
+    expect("conversationId" in n.notifier.inbox().entries[0]!).toBe(false);
+    n.notifier.markInboxRead(["n_orphan"]);
+    expect(n.notifier.unreadCount()).toBe(0);
   });
 });

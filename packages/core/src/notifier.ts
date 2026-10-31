@@ -1,6 +1,6 @@
 // "Is it worth interrupting you?" — levels, quiet hours, rate limits, dedup, digests, feedback.
 
-import type { Notification, NotificationKind, NotificationSource, NotifyLevel, Task } from "@piomio/shared";
+import type { BehindEntry, InboxEntry, InboxView, MessagePart, Notification, NotificationKind, NotificationSource, NotifyLevel, Task } from "@piomio/shared";
 import { newId, nowIso, truncate } from "@piomio/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
@@ -54,6 +54,8 @@ const INBOX_FROM = "from notifications n left join messages m on m.id = n.messag
 /** Not opened in the Inbox, and its message (if any) after its conversation's read marker. */
 const UNREAD = "n.read_at is null and (m.id is null or c.read_at is null or m.created_at > c.read_at)";
 const INBOX_KINDS = "('report', 'alert', 'question', 'digest')";
+/** A page of the Inbox: 50 by default, 1 to 200 (what is not a number counts as the default). */
+const pageSize = (limit: number | undefined): number => Math.min(Math.max(Number.isFinite(limit) ? Math.trunc(limit!) : 50, 1), 200);
 /** How long the default agent may write the digest before the card goes out. */
 export const DIGEST_WRITE_MS = 3 * 60_000;
 /** A schedule that fires twice delivers one report: the same text from the same trigger within this window is the same report. */
@@ -121,7 +123,7 @@ export class Notifier {
   private lastDigestKey = "";
   private digestTimers = new Map<string, NodeJS.Timeout>();
   private flushing?: Promise<number>;
-  /** Set by stop(), cleared by startDigestTimer(): a flush that was gathering when the notifier stopped arms no timer. */
+  /** Set by stop(), cleared by startDigestTimer(): a flush that was gathering when the notifier stopped files no digest and arms no timer. */
   private stopped = false;
 
   constructor(d: {
@@ -354,6 +356,97 @@ export class Notifier {
     this.bus.emit("inbox.changed", { unread: this.unreadCount() });
   }
 
+  /** The next digest, when items wait for it: its local time (none without digest times) and how many. */
+  nextDigest(): { time?: string; count: number } | undefined {
+    const count = (this.db.prepare("select count(*) as n from notifications where kind = 'item' and level = 'digest' and digested = 0 and superseded_by is null").get() as { n: number }).n;
+    if (!count) return undefined;
+    const s = this.settings.get();
+    const now = localHHMM(s.timezone);
+    const times = [...s.digestTimes].sort();
+    const time = times.find((x) => x > now) ?? times[0];
+    return time ? { time, count } : { count };
+  }
+
+  /** An Inbox row (INBOX_FROM with its message's conversation, parts and read state) as the apps get it. */
+  private entry(r: any): InboxEntry {
+    const n = fromRow(r);
+    const part = json<MessagePart[]>(r.msg_parts, []).find((p): p is Extract<MessagePart, { type: "notification" }> => p.type === "notification");
+    return {
+      id: n.id,
+      kind: n.kind,
+      title: n.title,
+      body: n.body,
+      createdAt: n.createdAt,
+      unread: !!r.unread,
+      ...(part?.caption ? { caption: part.caption } : {}),
+      ...(part?.sources?.length ? { sources: part.sources } : {}),
+      ...(n.agentId ? { agentId: n.agentId } : {}),
+      ...(n.taskId ? { taskId: n.taskId } : {}),
+      ...(r.msg_conv ? { conversationId: r.msg_conv } : {}),
+      ...(n.messageId ? { messageId: n.messageId } : {}),
+      feedbackable: !!n.triggerId && n.kind !== "report",
+      ...(n.feedback ? { feedback: n.feedback } : {}),
+    };
+  }
+
+  /** The Inbox: unread questions ("Waiting for you"), then everything that reached the person, newest first. A digest still being written is not in it. */
+  inbox(opts: { before?: string; limit?: number } = {}): InboxView {
+    const limit = pageSize(opts.limit);
+    const cols = `n.*, m.conversation_id as msg_conv, m.parts as msg_parts, (${UNREAD}) as unread`;
+    const questions = opts.before
+      ? []
+      : (this.db.prepare(`select ${cols} ${INBOX_FROM} where n.kind = 'question' and n.delivered_at is not null and ${UNREAD} order by n.created_at desc limit 20`).all() as any[]).map((r) =>
+          this.entry(r),
+        );
+    // An unread question stands in "Waiting for you": the list leaves it out in the query, so a page is full whenever there is more.
+    const asked = questions.map((q) => q.id);
+    const rows = this.db
+      .prepare(
+        `select ${cols} ${INBOX_FROM} where n.kind in ${INBOX_KINDS} and n.delivered_at is not null and n.created_at < ? and n.id not in (${asked.map(() => "?").join(", ") || "''"}) order by n.created_at desc limit ?`,
+      )
+      .all(opts.before ?? "9999", ...asked, limit + 1) as any[];
+    const entries = rows.slice(0, limit).map((r) => this.entry(r));
+    const behindCount = (this.db.prepare("select count(*) as n from notifications where kind in ('item', 'approval')").get() as { n: number }).n;
+    const next = opts.before ? undefined : this.nextDigest();
+    return { ...(next ? { next } : {}), questions, entries, hasMore: rows.length > limit, behindCount, unread: this.unreadCount() };
+  }
+
+  /** Behind the scenes: items and approval pushes, with why each did not reach the person. */
+  behind(opts: { before?: string; limit?: number } = {}): BehindEntry[] {
+    const limit = pageSize(opts.limit);
+    // The digest an item went into is named once it is out: before that it is still being written and is nowhere to open.
+    const rows = this.db
+      .prepare(
+        "select n.*, d.title as digest_title, d.created_at as digest_at from notifications n left join notifications d on d.id = n.digest_id and d.delivered_at is not null " +
+          "where n.kind in ('item', 'approval') and n.created_at < ? order by n.created_at desc limit ?",
+      )
+      .all(opts.before ?? "9999", limit) as any[];
+    return rows.map((r) => {
+      const n = fromRow(r);
+      return {
+        id: n.id,
+        level: n.level,
+        kind: n.kind,
+        title: n.title,
+        body: n.body,
+        createdAt: n.createdAt,
+        ...(n.agentId ? { agentId: n.agentId } : {}),
+        ...(n.taskId ? { taskId: n.taskId } : {}),
+        ...(n.reason ? { reason: n.reason } : {}),
+        ...(n.digestId && r.digest_title ? { digest: { id: n.digestId, title: r.digest_title, createdAt: r.digest_at } } : {}),
+        ...(n.supersededBy ? { supersededBy: n.supersededBy } : {}),
+      };
+    });
+  }
+
+  /** The person saw these in the Inbox. */
+  markInboxRead(ids: string[]): void {
+    const st = this.db.prepare("update notifications set read_at = ? where id = ? and read_at is null");
+    const at = nowIso();
+    for (const id of ids.slice(0, 500)) st.run(at, id);
+    this.inboxChanged();
+  }
+
   list(limit = 100): Notification[] {
     // A digest still being written holds its raw material as its body: it is listed once it is written.
     return this.db.prepare("select * from notifications where not (kind = 'digest' and delivered_at is null) order by created_at desc limit ?").all(limit).map(fromRow);
@@ -455,6 +548,8 @@ export class Notifier {
     }
     const s = this.settings.get();
     const material = await this.gather(s);
+    // Stopped while gathering (a cluster standby, a shutdown): file nothing and start no writer; the items wait for the next flush after a restart.
+    if (this.stopped) return 0;
     if (!hasDigestContent(material)) return 0;
     const id = newId("n_");
     const title = this.digestTitle(material);
@@ -479,7 +574,7 @@ export class Notifier {
   }
 
   private armDigestTimer(id: string, ms: number): void {
-    // A digest still being gathered when the notifier stopped is left open: startDigestTimer gives it its time after a restart.
+    // A stopped notifier arms no timer: startDigestTimer gives an open digest its time after a restart.
     if (this.stopped) return;
     const timer = setTimeout(() => void this.deliverDigest(id, undefined).catch((e) => console.log(`[piomio] digest: ${e?.message ?? e}`)), Math.max(0, ms));
     timer.unref();

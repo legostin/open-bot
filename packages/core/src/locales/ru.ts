@@ -46,6 +46,7 @@ export default {
   "notify.reason.rateLimited": "лимит частоты — в сводку",
   "notify.reason.quietHours": "тихие часы — в сводку",
   "notify.reason.superseded": "заменено более новым",
+  "inbox.badIds": "Укажите id записей, которые прочитаны",
   "notification.notFound": "Уведомление не найдено",
 
   // policy
