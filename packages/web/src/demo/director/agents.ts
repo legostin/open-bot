@@ -23,6 +23,8 @@ export class Reply {
   private hub: DemoHub;
   private clock: Clock;
   private machine: string;
+  private brainId: string;
+  private taskId?: string;
 
   constructor(hub: DemoHub, clock: Clock, m: Message, machine: string) {
     this.hub = hub;
@@ -31,13 +33,15 @@ export class Reply {
     this.agent = m.agentId as AgentId;
     this.conversationId = m.conversationId;
     this.machine = machine;
+    this.brainId = (m.brainRef ?? "claude-code").split("@")[0];
+    this.taskId = m.taskId;
   }
 
   /** What the live line under the reply says (the machine's activity). */
   step(step: WorkStep, detail?: string): void {
     const machines = this.hub.world.machines.map((mc) => ({ ...mc, work: mc.work.filter((w) => w.conversationId !== this.conversationId) }));
     const mc = machines.find((x) => x.id === this.machine) ?? machines[0];
-    mc.work.push({ agentId: this.agent, conversationId: this.conversationId, brainId: "claude-code", step, ...(detail ? { detail } : {}), startedAt: iso() });
+    mc.work.push({ agentId: this.agent, conversationId: this.conversationId, ...(this.taskId ? { taskId: this.taskId } : {}), brainId: this.brainId, step, ...(detail ? { detail } : {}), startedAt: iso() });
     this.hub.world.machines = machines;
     this.hub.emit({ type: "machines.activity", data: machines });
   }
@@ -113,9 +117,9 @@ export class Agents {
   }
 
   /** Starts a reply in an agent's dialog (or another conversation). */
-  reply(agent: AgentId, opts: { conversationId?: string; taskId?: string; model?: string; machine?: string } = {}): Reply {
+  reply(agent: AgentId, opts: { conversationId?: string; taskId?: string; model?: string; machine?: string; brain?: "claude-code" | "codex" } = {}): Reply {
     const conversationId = opts.conversationId ?? dialogOf(agent);
-    const brainRef = opts.machine === "macbook" ? "claude-code@macbook" : "claude-code@local";
+    const brainRef = `${opts.brain ?? "claude-code"}@${opts.machine ?? "local"}`;
     const m: Message = {
       id: newId("msg"),
       conversationId,
@@ -124,7 +128,7 @@ export class Agents {
       status: "streaming",
       agentId: agent,
       brainRef,
-      model: opts.model ?? "claude-opus-5-5",
+      model: opts.model ?? (opts.brain === "codex" ? "gpt-5.5-codex" : "opus"),
       effort: "medium",
       ...(opts.taskId ? { taskId: opts.taskId } : {}),
       createdAt: iso(),
@@ -143,6 +147,20 @@ export class Agents {
     return r;
   }
 
+  /** A message that arrives whole (a digest, a notice): no streaming. */
+  arrive(agent: AgentId, parts: MessagePart[], opts: { conversationId?: string } = {}): Message {
+    const m: Message = {
+      id: newId("msg"),
+      conversationId: opts.conversationId ?? dialogOf(agent),
+      role: "assistant",
+      parts,
+      status: "complete",
+      agentId: agent,
+      createdAt: iso(),
+    };
+    return this.hub.addMessage(m);
+  }
+
   /** A message that is simply there (seeding a chapter with what happened before it). */
   seed(agent: AgentId, parts: MessagePart[], opts: { conversationId?: string; minutesAgo?: number; role?: Message["role"] } = {}): Message {
     const role = opts.role ?? "assistant";
@@ -152,7 +170,7 @@ export class Agents {
       role,
       parts,
       status: "complete",
-      ...(role === "assistant" ? { agentId: agent, brainRef: "claude-code@local", model: "claude-opus-5-5", effort: "medium" } : { channel: "web" }),
+      ...(role === "assistant" ? { agentId: agent, brainRef: "claude-code@local", model: "opus", effort: "medium" } : { channel: "web" }),
       createdAt: iso((opts.minutesAgo ?? 0) * 60_000),
     };
     this.hub.messagesOf(m.conversationId).push(m);

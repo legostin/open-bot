@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd9a0"/><stop offset="1" stop-color="#f7f4ef"/></linearGradient>
+    <linearGradient id="post" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd56b"/><stop offset="1" stop-color="#ffad29"/></linearGradient>
+    <linearGradient id="car" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6aa8ff"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#sky)"/>
+  <circle cx="960" cy="150" r="70" fill="#fff0d0"/>
+  <g fill="#e5ded4">
+    <rect x="60" y="250" width="150" height="300" rx="10"/><rect x="230" y="190" width="120" height="360" rx="10"/>
+    <rect x="370" y="290" width="110" height="260" rx="10"/><rect x="980" y="270" width="160" height="280" rx="10"/>
+  </g>
+  <g fill="#f7f4ef" opacity=".9">
+    <rect x="90" y="290" width="30" height="36" rx="4"/><rect x="150" y="290" width="30" height="36" rx="4"/><rect x="90" y="360" width="30" height="36" rx="4"/><rect x="150" y="360" width="30" height="36" rx="4"/>
+    <rect x="260" y="230" width="26" height="34" rx="4"/><rect x="306" y="230" width="26" height="34" rx="4"/><rect x="260" y="300" width="26" height="34" rx="4"/><rect x="306" y="300" width="26" height="34" rx="4"/>
+    <rect x="1010" y="310" width="34" height="38" rx="4"/><rect x="1074" y="310" width="34" height="38" rx="4"/>
+  </g>
+  <rect y="550" width="1200" height="125" fill="#d9d0c4"/>
+  <path d="M0 600h1200" stroke="#f7f4ef" stroke-width="8" stroke-dasharray="60 40"/>
+  <rect x="560" y="250" width="110" height="300" rx="22" fill="url(#post)" stroke="#2b1a03" stroke-width="6"/>
+  <rect x="582" y="282" width="66" height="74" rx="12" fill="#2b1a03"/>
+  <path d="M615 294l-18 32h16l-8 24 26-36h-16l10-20z" fill="#ffd56b"/>
+  <path d="M670 420c80 0 70 100 140 100" fill="none" stroke="#2b1a03" stroke-width="12" stroke-linecap="round"/>
+  <path d="M700 520c0-60 40-90 110-90h170c50 0 80 30 90 90v40H700z" fill="url(#car)" stroke="#1c1814" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M780 438l30-48h120l40 48z" fill="#e4ecfd" stroke="#1c1814" stroke-width="6" stroke-linejoin="round"/>
+  <circle cx="770" cy="565" r="34" fill="#1c1814"/><circle cx="1000" cy="565" r="34" fill="#1c1814"/>
+  <circle cx="770" cy="565" r="12" fill="#e5ded4"/><circle cx="1000" cy="565" r="12" fill="#e5ded4"/>
+</svg>

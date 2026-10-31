@@ -1,4 +1,4 @@
-// Sending a letter: the draft, the approval card, one tap, sent; then "letters to Anna may go without asking".
+// Sending a letter: the draft, the approval card, "always allow" for this one address, sent.
 
 import { seedMail } from "./mail";
 import type { Chapter } from "./types";
@@ -21,15 +21,12 @@ export const send: Chapter = {
       summary: t.summary,
       effect: "external",
     });
-    const answer = await d.decide(ap.id, "approve");
+    const answer = await d.decide(ap.id, "always", 1800);
     if (answer === "approved") {
       await r.tool("gmail_send_email", { to: t.to, subject: t.subject }, "sent", 700, "tool", "gmail");
-      await r.write(t.sent);
+      await r.write(t.sentAlways);
     }
     r.done();
-    await d.wait(1300);
-    await d.say(t.always);
-    await h.say("ada", t.alwaysDone, { think: 800 });
-    await d.wait(1200);
+    await d.wait(1500);
   },
 };

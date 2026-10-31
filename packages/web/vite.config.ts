@@ -33,6 +33,16 @@ function devImportMap(): Plugin {
 const ROOT = resolve(import.meta.dirname, "../..");
 /** UI plugins the demo hub lists in its bootstrap (src/demo/hub/routes.ts). */
 const DEMO_UI_PLUGINS = ["browser", "memory", "triggers"];
+/** Logos of the integrations the demo shows, from the plugins that ship them (served as logos/<id>.png). */
+const DEMO_LOGOS: Record<string, string> = {
+  notion: "integrations/notion/logo.png",
+  linear: "integrations/linear/logo.png",
+  telegram: "plugins/telegram/logo.png",
+  gmail: "integrations/composio/logos/gmail.png",
+  "google-calendar": "integrations/composio/logos/googlecalendar.png",
+  slack: "integrations/composio/logos/slack.png",
+  github: "integrations/composio/logos/github.png",
+};
 /** Files served next to demo.html: pictures, tiles, pages (src/demo/static/). */
 const DEMO_STATIC = resolve(import.meta.dirname, "src/demo/static");
 
@@ -62,7 +72,10 @@ function demoFiles(): Plugin {
         let type = "text/javascript";
         if (path === "/demo-sw.js") body = await serviceWorker();
         else if (ui && DEMO_UI_PLUGINS.includes(ui[1]) && existsSync(plugin(ui[1]))) body = readFileSync(plugin(ui[1]));
-        else if (/^\/(media|files|tiles|pages)\//.test(path) && existsSync(join(DEMO_STATIC, path))) {
+        else if (/^\/logos\/[a-z-]+\.png$/.test(path) && DEMO_LOGOS[path.slice(7, -4)]) {
+          body = readFileSync(resolve(ROOT, DEMO_LOGOS[path.slice(7, -4)]));
+          type = "image/png";
+        } else if (/^\/(media|files|tiles|pages)\//.test(path) && existsSync(join(DEMO_STATIC, path))) {
           body = readFileSync(join(DEMO_STATIC, path));
           type = /\.svg$/.test(path) ? "image/svg+xml" : /\.png$/.test(path) ? "image/png" : /\.jpe?g$/.test(path) ? "image/jpeg" : /\.html$/.test(path) ? "text/html" : "application/octet-stream";
         }
@@ -77,6 +90,7 @@ function demoFiles(): Plugin {
         if (!existsSync(plugin(id))) this.error(`UI plugin ${id} is not built: npm run build:ui-plugins`);
         this.emitFile({ type: "asset", fileName: `plugins-ui/${id}/index.js`, source: readFileSync(plugin(id)) });
       }
+      for (const [id, src] of Object.entries(DEMO_LOGOS)) this.emitFile({ type: "asset", fileName: `logos/${id}.png`, source: readFileSync(resolve(ROOT, src)) });
       for (const f of filesUnder(DEMO_STATIC)) this.emitFile({ type: "asset", fileName: relative(DEMO_STATIC, f), source: readFileSync(f) });
     },
   };

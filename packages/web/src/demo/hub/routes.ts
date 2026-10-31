@@ -122,6 +122,9 @@ export function registerRoutes(hub: DemoHub, notInDemo: string): void {
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .slice(0, limit);
   });
+  r.route("POST", "/api/feeds/:id/run", refuse);
+  r.route("PATCH", "/api/feeds/:id", refuse);
+  r.route("DELETE", "/api/feeds/:id", refuse);
   r.route("POST", "/api/feeds/:id/read", ({ params }) => {
     const f = w().feeds.find((x) => x.id === params.id);
     if (f && f.unread) {
@@ -132,6 +135,26 @@ export function registerRoutes(hub: DemoHub, notInDemo: string): void {
   });
   r.route("GET", "/api/pages", () => w().pages);
   r.route("GET", "/api/pages/:id", ({ params }) => w().pages.find((p) => p.id === params.id) ?? refuse());
+
+  // ----- integrations and secrets -----
+  r.route("GET", "/api/integrations", () => w().integrations);
+  r.route("GET", "/api/catalog", () => ({ popular: w().integrations.map((x) => x.id), sections: [{ id: "everyday", title: w().content.ui.catalogTitle, items: w().integrations }] }));
+  r.route("POST", "/api/integrations/:id/signin", ({ params }) => {
+    hub.signal(`signin:${params.id}`);
+    // The real hub answers the service's sign-in page; the demo's opens nowhere (shims.ts keeps window.open quiet).
+    return { url: `https://signin.demo.invalid/${params.id}` };
+  });
+  r.route("POST", "/api/integrations/:id/enabled", ({ params, body }) => {
+    hub.setIntegration(params.id, { status: body?.enabled ? "connected" : "off" });
+    return { ok: true };
+  });
+  r.route("GET", "/api/secret-requests/:id", ({ params }) => w().secretRequests.find((x) => x.id === params.id) ?? refuse());
+  r.route("POST", "/api/secret-requests/:id", ({ params }) => hub.saveSecret(params.id) ?? refuse());
+  r.route("POST", "/api/secret-requests/:id/cancel", ({ params }) => {
+    const x = w().secretRequests.find((s) => s.id === params.id);
+    if (x && x.status === "pending") x.status = "cancelled";
+    return x ?? refuse();
+  });
 
   // ----- approvals -----
   r.route("POST", "/api/approvals/:id", ({ params, body }) => {

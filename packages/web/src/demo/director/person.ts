@@ -83,14 +83,40 @@ export class Person {
    * Answers an approval card. The visitor may have pressed it already: then the script only waits for the answer.
    * Resolves with what was decided.
    */
-  async decide(approvalId: string, decision: "approve" | "deny", pause = 1400): Promise<"approved" | "denied"> {
+  async decide(approvalId: string, decision: "approve" | "always" | "deny", pause = 1400): Promise<"approved" | "denied"> {
     const answered = this.hub.waitApproval(approvalId);
     const early = await Promise.race([answered.then(() => true), this.clock.wait(pause).then(() => false)]);
     if (!early) {
-      const label = t(decision === "approve" ? "message.approval.approve" : "message.approval.deny");
+      const label = t(decision === "approve" ? "message.approval.approve" : decision === "always" ? "message.approval.always" : "message.approval.deny");
       await this.press(() => buttonByText(label), `the approval button “${label}”`);
     }
     return (await this.clock.until(answered)).status;
+  }
+
+  /** Types into a field of a card (a secret, a sign-in), letter by letter, as a person would. */
+  async fill(find: () => HTMLInputElement | HTMLTextAreaElement | null | undefined, value: string, what: string): Promise<void> {
+    const field = (await waitFor(this.clock, find, what)) as HTMLInputElement;
+    await this.cursor.moveTo(this.clock, field);
+    await this.cursor.press(this.clock);
+    field.focus({ preventScroll: true });
+    let typed = "";
+    for (const ch of value) {
+      typed += ch;
+      setFieldValue(field, typed);
+      await this.clock.wait(24 + Math.random() * 30);
+    }
+    await this.clock.wait(300);
+  }
+
+  /** Presses the newest button that says `label`. */
+  pressText(label: string): Promise<void> {
+    return this.press(() => buttonByText(label), `the button “${label}”`);
+  }
+
+  /** Goes to a page of the app (a channel, Tasks). */
+  async go(path: string): Promise<void> {
+    this.nav.go(path);
+    await this.clock.wait(500);
   }
 
   /** The dialog an agent's reply goes to. */

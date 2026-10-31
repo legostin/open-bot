@@ -2,7 +2,7 @@
 // page. Routes answer from the world (routes.ts); the chapter scripts change it through the methods here, which push the
 // same events a real hub would.
 
-import type { Approval, Conversation, GroupChat, Message, MessagePart, TeamMember, UiEvent } from "@piomio/shared";
+import type { Approval, Conversation, Feed, FeedPost, GroupChat, IntegrationView, Message, MessagePart, SecretRequest, TeamMember, UiEvent } from "@piomio/shared";
 import type { ApiPeer } from "../shims";
 import { iso, type World } from "../world";
 import { Router } from "./router";
@@ -184,6 +184,71 @@ export class DemoHub implements ApiPeer, SocketPeer {
     const w = this.approvalWaiters.get(id);
     this.approvalWaiters.delete(id);
     w?.({ status, remember });
+  }
+
+  // ----- signals the scripts wait for -----
+
+  private signals = new Map<string, Array<Listener<unknown>>>();
+
+  /** Something the visitor's app did (a sign-in started, a secret saved) that a script may be waiting for. */
+  signal(name: string, value?: unknown): void {
+    const ls = this.signals.get(name) ?? [];
+    this.signals.delete(name);
+    for (const l of ls) l(value);
+  }
+
+  waitSignal<T = unknown>(name: string): Promise<T> {
+    return new Promise((resolve) => {
+      const ls = this.signals.get(name) ?? [];
+      ls.push(resolve as Listener<unknown>);
+      this.signals.set(name, ls);
+    });
+  }
+
+  // ----- integrations, secrets, channels -----
+
+  setIntegration(id: string, patch: Partial<IntegrationView>): void {
+    const x = this.world.integrations.find((i) => i.id === id);
+    if (!x) return;
+    Object.assign(x, patch);
+    this.emit({ type: "connections.updated", data: { provider: id } });
+  }
+
+  secretRequest(spec: Pick<SecretRequest, "vaultId" | "title" | "hint" | "conversationId">): SecretRequest {
+    const r: SecretRequest = { id: `sr_${crypto.randomUUID().slice(0, 10)}`, status: "pending", createdAt: iso(), ...spec };
+    this.world.secretRequests.push(r);
+    this.emit({ type: "secret.request", data: r });
+    return r;
+  }
+
+  saveSecret(id: string): SecretRequest | undefined {
+    const r = this.world.secretRequests.find((x) => x.id === id);
+    if (!r || r.status !== "pending") return r;
+    r.status = "saved";
+    r.exists = true;
+    r.resolvedAt = iso();
+    this.emit({ type: "secret.request", data: r });
+    this.signal(`secret:${id}`);
+    return r;
+  }
+
+  upsertFeed(f: Feed): void {
+    const i = this.world.feeds.findIndex((x) => x.id === f.id);
+    if (i < 0) this.world.feeds.push(f);
+    else this.world.feeds[i] = f;
+    this.emit({ type: "feed.updated", data: f });
+  }
+
+  post(p: FeedPost): void {
+    this.world.posts.push(p);
+    const f = this.world.feeds.find((x) => x.id === p.feedId);
+    if (f) {
+      f.unread += 1;
+      f.lastPost = { title: p.title, createdAt: p.createdAt };
+      f.updatedAt = p.createdAt;
+    }
+    this.emit({ type: "feed.post", data: p });
+    if (f) this.emit({ type: "feed.updated", data: f });
   }
 
   // ----- the sidebar's view of the team -----

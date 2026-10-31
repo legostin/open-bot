@@ -2,7 +2,7 @@
 // from here, so a new language is a new file, not new code. Each locale tells its own story (person, city, currency,
 // letters), not a translation of the other.
 
-import type { Locale } from "@piomio/shared";
+import type { IntegrationView, Locale } from "@piomio/shared";
 import type { AgentId } from "../world";
 
 export interface Line {
@@ -32,9 +32,87 @@ export interface SendText {
   subject: string;
   to: string;
   summary: string;
-  sent: string;
-  always: string;
-  alwaysDone: string;
+  /** After "Always allow": the letter went and the narrow rule exists. */
+  sentAlways: string;
+}
+
+export interface MorningText {
+  digestTitle: string;
+  digest: string;
+  nudge: string;
+  choices: [string, string];
+  reminderSet: string;
+  dentistAsk: string;
+  clinic: string;
+  dentistSummary: string;
+  dentistBooked: string;
+}
+
+export interface SecurityText {
+  ask: string;
+  letter: string;
+  verdict: string;
+  choices: [string, string];
+  tryIntro: string;
+  summary: string;
+  blocked: string;
+  keyAsk: string;
+  keyIntro: string;
+  keyTitle: string;
+  keyHint: string;
+  /** The vault item's id: the only thing the agent ever sees of the key. */
+  keyVault: string;
+  /** What the script types into the secret card (an obviously made-up key). */
+  keyValue: string;
+  keySaved: string;
+}
+
+export interface ServicesText {
+  ask: string;
+  cardIntro: string;
+  account: string;
+  connected: string;
+  bookAsk: string;
+  eventSummary: string;
+  booked: string;
+}
+
+export interface TeamText {
+  ask: string;
+  laptopsTask: string;
+  laptopsGoal: string;
+  reply: string;
+  reviewing: string[];
+  laptopsResult: string;
+  trains: string;
+  trainsSites: string[];
+  pick: string;
+}
+
+export interface MachinesText {
+  ask: string;
+  steps: Array<{ step: "command" | "reading" | "editing"; detail: string }>;
+  fixed: string;
+  choices: [string, string];
+  pushCommand: string;
+  pushReason: string;
+  limit: string;
+  prAsk: string;
+  prSteps: Array<{ step: "command" | "reading" | "editing"; detail: string }>;
+  prDone: string;
+}
+
+export interface ChannelsText {
+  ask: string;
+  question: string;
+  choices: [string, string];
+  feedTitle: string;
+  brief: string;
+  sources: string[];
+  created: string;
+  gathering: string;
+  posts: Array<{ title: string; text: string; source: string; image: string }>;
+  issueIntro: string;
 }
 
 export interface Content {
@@ -47,9 +125,18 @@ export interface Content {
     demoNote: string;
     /** What the hub answers when the visitor reaches something the demo does not act out. */
     notInDemo: string;
+    catalogTitle: string;
   };
+  /** The catalog as the demo hub lists it (logos are added by the world). */
+  integrations: IntegrationView[];
   chapters: {
+    morning: MorningText;
     mail: MailText;
     send: SendText;
+    security: SecurityText;
+    services: ServicesText;
+    team: TeamText;
+    machines: MachinesText;
+    channels: ChannelsText;
   };
 }

@@ -3,6 +3,7 @@
 //   /api/files?path=P                      → <demo>/files/P
 //   /api/media?url=https://media.demo.invalid/P → <demo>/media/P
 //   /api/map/tiles/z/x/y.png               → <demo>/tiles/z/x/y.png
+//   /api/integrations/<id>/logo            → <demo>/logos/<id>.png
 // Built on its own (no imports) into demo-sw.js next to demo.html.
 
 // The web app's type checker knows the DOM, not workers: the little of the worker scope used here.
@@ -33,6 +34,8 @@ function target(url: URL): string | undefined {
     const m = /^https:\/\/media\.demo\.invalid\/(.+)$/.exec(src);
     return m ? new URL(`media/${m[1]}`, base).href : undefined;
   }
+  const logo = /^\/api\/integrations\/([a-z0-9-]+)\/logo$/.exec(url.pathname);
+  if (logo) return new URL(`logos/${logo[1]}.png`, base).href;
   const tile = /^\/api\/map\/tiles\/(\d+\/\d+\/\d+\.png)$/.exec(url.pathname);
   if (tile) return new URL(`tiles/${tile[1]}`, base).href;
   return undefined;

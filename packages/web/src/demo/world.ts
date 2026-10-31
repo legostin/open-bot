@@ -2,7 +2,7 @@
 // machines, approvals), made fresh from a locale's content at the start of every chapter. Times are the visitor's own
 // clock: history sits in the past relative to now, and what the chapter plays happens now.
 
-import type { AgentDef, Approval, Conversation, Feed, FeedPost, Locale, MachineActivity, Message, MessagePart, PageView, ProbeResult, Task } from "@piomio/shared";
+import type { AgentDef, Approval, Conversation, Feed, FeedPost, IntegrationView, Locale, MachineActivity, Message, MessagePart, PageView, ProbeResult, SecretRequest, Task } from "@piomio/shared";
 import type { Content } from "./content/types";
 
 export const TEAM = ["pio", "ada", "leo", "bit"] as const;
@@ -53,6 +53,9 @@ const CODEX: ProbeResult = {
   efforts: ["low", "medium", "high"],
 };
 
+/** Integrations whose logo the demo ships (static/logos/<id>.png, copied by the demo build). */
+export const LOGOS = ["notion", "gmail", "google-calendar", "linear", "telegram", "slack", "github"];
+
 export interface World {
   locale: Locale;
   content: Content;
@@ -69,6 +72,8 @@ export interface World {
   machines: MachineActivity[];
   approvals: Approval[];
   brains: BrainView[];
+  integrations: IntegrationView[];
+  secretRequests: SecretRequest[];
   /** Conversations with a turn in progress. */
   running: Set<string>;
 }
@@ -155,6 +160,8 @@ export function makeWorld(content: Content): World {
       { ref: "codex@macbook", label: `Codex · ${content.cast.machines.laptop}`, host: "macbook", connected: true, probe: CODEX },
       { ref: "api:anthropic", label: "Anthropic API", connected: true, probe: { ...CLAUDE, version: undefined } },
     ],
+    integrations: content.integrations.map((x) => ({ ...x, ...(LOGOS.includes(x.id) ? { logo: `/api/integrations/${x.id}/logo` } : {}) })),
+    secretRequests: [],
     running: new Set(),
   };
 }

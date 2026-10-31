@@ -37,6 +37,13 @@ export function installShims(api: ApiPeer, sockets: SocketPeer): void {
     });
   };
 
+  // Sign-in pages of services open nowhere in the demo (the hub answers a .invalid address for them).
+  const realOpen = window.open.bind(window);
+  window.open = (url?: string | URL, target?: string, features?: string) => {
+    if (url && /^https:\/\/[^/]*\.invalid\//.test(String(url))) return null;
+    return realOpen(url, target, features);
+  };
+
   const RealWebSocket = window.WebSocket;
   const Shim = function (this: unknown, url: string | URL, protocols?: string | string[]) {
     const u = new URL(String(url), location.href);
