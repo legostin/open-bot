@@ -724,10 +724,17 @@ export class SessionRunner {
     const conv = this.d.store.getConversation(fresh.conversationId);
     if (!agent || !conv) {
       this.d.store.updateTask(fresh.id, { status: "failed", error: t("task.missingAgent") });
+      // The digest's writer cannot run: the hub sends the card now, not after the writer's time is up.
+      if (fresh.deliver === "digest") await this.d.notifier.digestWritten(fresh.id, undefined);
       return;
     }
     if (fresh.background && !this.budgetOk(agent)) {
       this.d.store.updateTask(fresh.id, { status: "failed", error: t("task.budgetExhausted") });
+      // The card is the answer for the digest: no notice about the budget for the next digest to carry.
+      if (fresh.deliver === "digest") {
+        await this.d.notifier.digestWritten(fresh.id, undefined);
+        return;
+      }
       await this.d.notifier.notify({
         level: "digest",
         title: t("notify.budgetTitle", { agent: agentName(agent, hubLocale()) }),

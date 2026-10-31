@@ -443,6 +443,8 @@ describe("hub (integration)", () => {
     expect(d.body).toMatch(/fake heard/);
     const msgs: any[] = await web.req("GET", `/api/conversations/${conv}/messages`);
     expect(msgs.some((m) => m.parts.some((p: any) => p.type === "notification" && p.kind === "digest" && p.notificationId === d.id))).toBe(true);
+    // The writer reads other runs' words and channel headlines: its task is marked as reading outside content from the start.
+    expect(hub.store.getTask(d.taskId!)).toMatchObject({ deliver: "digest", tainted: true });
   });
 
   it("sends the digest's card when its writer fails", async () => {
@@ -458,6 +460,49 @@ describe("hub (integration)", () => {
     expect(hub.store.getTask(task.id)?.status).toBe("failed");
     // No alert about it: the card is the answer.
     expect(hub.notifier.list(100).some((x) => x.taskId === task.id && x.kind !== "digest")).toBe(false);
+  });
+
+  /** A digest waiting for `task`: the row the notifier files when it starts a writer, with no timer behind it (so only the runner can send the card). */
+  const fileDigest = (id: string, taskId: string) => {
+    const material = { partOfDay: "day", date: "2026-10-31", items: [{ id: `${id}_item`, title: "Interrupted writer item", body: "kept whole", time: "10:00" }], sections: [], channels: [], told: [] };
+    hub.db
+      .prepare("insert into notifications(id, level, kind, title, body, agent_id, task_id, created_at) values (?, 'digest', 'digest', 'Digest', ?, 'assistant', ?, ?)")
+      .run(id, JSON.stringify(material), taskId, new Date().toISOString());
+  };
+
+  it("sends the digest's card at once when its writer's agent is gone", async () => {
+    const task = hub.runner.createTask({ agentId: "ghost", goal: "Write the digest", title: "Digest", background: true, createdBy: "trigger", deliver: "digest" });
+    fileDigest("n_digest_ghost", task.id);
+    const d = await until(() => hub.notifier.get("n_digest_ghost")?.deliveredAt && hub.notifier.get("n_digest_ghost"), "the card", 5000);
+    expect(d.body).toContain("**Interrupted writer item** · 10:00");
+    expect(hub.store.getTask(task.id)?.status).toBe("failed");
+  });
+
+  it("sends the digest's card at once, with no notice about it, when its writer's budget is used up", async () => {
+    // An agent with no background runs a day: its tasks fail before they start.
+    await web.req("PUT", "/api/agents/frugal", { name: "Frugal", description: "No budget", brains: ["fake@local"], prompt: "Be frugal.", budget: { backgroundRunsPerDay: 0 } });
+    try {
+      const task = hub.runner.createTask({ agentId: "frugal", goal: "Write the digest", title: "Digest", background: true, createdBy: "trigger", deliver: "digest" });
+      fileDigest("n_digest_budget", task.id);
+      const d = await until(() => hub.notifier.get("n_digest_budget")?.deliveredAt && hub.notifier.get("n_digest_budget"), "the card", 5000);
+      expect(d.body).toContain("**Interrupted writer item** · 10:00");
+      expect(hub.store.getTask(task.id)?.status).toBe("failed");
+      // The card is the answer: no "used up its daily budget" item for the next digest.
+      expect(hub.notifier.list(100).some((x) => /daily budget/.test(x.title))).toBe(false);
+    } finally {
+      await web.req("DELETE", "/api/agents/frugal");
+    }
+  });
+
+  it("still tells the person about a budget used up by an ordinary background task", async () => {
+    await web.req("PUT", "/api/agents/frugal", { name: "Frugal", description: "No budget", brains: ["fake@local"], prompt: "Be frugal.", budget: { backgroundRunsPerDay: 0 } });
+    try {
+      const task = hub.runner.createTask({ agentId: "frugal", goal: "Check things", title: "Check things", background: true, createdBy: "trigger", triggerId: "t_frugal" });
+      await until(() => hub.store.getTask(task.id)?.status === "failed", "the task to fail", 5000);
+      expect(hub.notifier.list(100).some((x) => /Frugal has used up its daily budget/.test(x.title))).toBe(true);
+    } finally {
+      await web.req("DELETE", "/api/agents/frugal");
+    }
   });
 
   it("tells the person plainly when a schedule's report did not come", async () => {

@@ -172,8 +172,9 @@ export class Hub {
       sign: (p) => this.approvals.sign(p),
       publicUrl: config.publicUrl,
       hasAgent: (id) => !!this.agents.get(id),
-      // The default agent writes the digest: a quiet background task on a fast model.
-      startTask: (job) => this.runner.createTask({ ...job, background: true, createdBy: "trigger", thinking: { preset: "fast", skill: "writing" } }),
+      // The default agent writes the digest: a quiet background task on a fast model. Its goal carries other runs' words
+      // and channel headlines, so it is marked as reading outside content before the brain sees it.
+      startTask: (job) => this.runner.createTask({ ...job, background: true, createdBy: "trigger", tainted: true, thinking: { preset: "fast", skill: "writing" } }),
       agentName: (id) => {
         const a = this.agents.get(id);
         return a ? agentName(a, hubLocale()) : id;

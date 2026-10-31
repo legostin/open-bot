@@ -121,6 +121,8 @@ export class Notifier {
   private lastDigestKey = "";
   private digestTimers = new Map<string, NodeJS.Timeout>();
   private flushing?: Promise<number>;
+  /** Set by stop(), cleared by startDigestTimer(): a flush that was gathering when the notifier stopped arms no timer. */
+  private stopped = false;
 
   constructor(d: {
     db: Db;
@@ -353,7 +355,8 @@ export class Notifier {
   }
 
   list(limit = 100): Notification[] {
-    return this.db.prepare("select * from notifications order by created_at desc limit ?").all(limit).map(fromRow);
+    // A digest still being written holds its raw material as its body: it is listed once it is written.
+    return this.db.prepare("select * from notifications where not (kind = 'digest' and delivered_at is null) order by created_at desc limit ?").all(limit).map(fromRow);
   }
 
   get(id: string): Notification | undefined {
@@ -384,8 +387,10 @@ export class Notifier {
   private async gather(s: CoreSettings): Promise<DigestMaterial> {
     const now = new Date();
     const date = new Intl.DateTimeFormat("en-CA", { timeZone: s.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    // The window starts when the last digest was gathered (its row's time), not when it went out: what landed while the
+    // assistant wrote it is in no digest yet. One digest is open at a time and none while gathering, so this is the last one.
     const last =
-      (this.db.prepare("select max(delivered_at) as at from notifications where kind = 'digest'").get() as { at: string | null }).at ??
+      (this.db.prepare("select max(created_at) as at from notifications where kind = 'digest'").get() as { at: string | null }).at ??
       new Date(now.getTime() - 24 * 3600_000).toISOString();
     const rows = this.db.prepare("select * from notifications where kind = 'item' and level = 'digest' and digested = 0 and superseded_by is null order by created_at").all().map(fromRow);
     const items = rows.map((n) => {
@@ -461,8 +466,9 @@ export class Notifier {
     if (this.startTask && this.hasAgent(s.defaultAgent)) {
       try {
         task = this.startTask({ agentId: s.defaultAgent, title, goal: digestPrompt(material), deliver: "digest" });
-      } catch {
+      } catch (e: any) {
         // No writer could be started: the card goes out instead, the digest does not stay open.
+        console.log(`[piomio] digest: could not start the writer: ${e?.message ?? e}`);
       }
     }
     if (task) {
@@ -473,6 +479,8 @@ export class Notifier {
   }
 
   private armDigestTimer(id: string, ms: number): void {
+    // A digest still being gathered when the notifier stopped is left open: startDigestTimer gives it its time after a restart.
+    if (this.stopped) return;
     const timer = setTimeout(() => void this.deliverDigest(id, undefined).catch((e) => console.log(`[piomio] digest: ${e?.message ?? e}`)), Math.max(0, ms));
     timer.unref();
     this.digestTimers.set(id, timer);
@@ -543,6 +551,7 @@ export class Notifier {
   }
 
   startDigestTimer(): void {
+    this.stopped = false;
     this.recoverDigests();
     this.digestTimer = setInterval(() => {
       const s = this.settings.get();
@@ -557,6 +566,7 @@ export class Notifier {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.digestTimer) clearInterval(this.digestTimer);
     for (const timer of this.digestTimers.values()) clearTimeout(timer);
     this.digestTimers.clear();

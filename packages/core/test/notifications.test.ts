@@ -442,6 +442,27 @@ describe("the digest", () => {
     n.notifier.stop();
   });
 
+  it("starts one digest when asked twice at the same moment, from nothing open", async () => {
+    const n = setup();
+    await seed(n);
+    // Both calls pass the "is one open?" check before either has filed its digest: only the guard keeps them to one.
+    expect(await Promise.all([n.notifier.flushDigest(), n.notifier.flushDigest()])).toEqual([2, 2]);
+    expect(n.started).toHaveLength(1);
+    expect((n.db.prepare("select count(*) as c from notifications where kind = 'digest'").get() as { c: number }).c).toBe(1);
+    n.notifier.stop();
+  });
+
+  it("keeps a digest out of the list until it is written: its body is raw material before that", async () => {
+    const n = setup();
+    await seed(n);
+    await n.notifier.flushDigest();
+    expect(n.notifier.list().some((x) => x.kind === "digest")).toBe(false);
+    // The rest of the notifications are still listed.
+    expect(n.notifier.list().length).toBeGreaterThan(0);
+    await n.notifier.digestWritten("t_digest_1", "Спокойный день.");
+    expect(n.notifier.list().filter((x) => x.kind === "digest")).toMatchObject([{ body: "Спокойный день.", deliveredAt: expect.any(String) }]);
+  });
+
   it("delivers what the assistant wrote, with the sources the hub knows, once", async () => {
     const n = setup();
     await seed(n);
@@ -488,14 +509,22 @@ describe("the digest", () => {
   });
 
   it("sends the card when no reply came in time, and drops a late reply", async () => {
-    const n = setup({ digestWriteMs: 20 });
-    await seed(n);
-    await n.notifier.flushDigest();
-    await new Promise((r) => setTimeout(r, 80));
-    await n.notifier.digestWritten("t_digest_1", "late");
-    const parts = n.notes().filter((p) => p.kind === "digest");
-    expect(parts).toHaveLength(1);
-    expect(parts[0].body).toContain("### Schedules and checks");
+    vi.useFakeTimers();
+    try {
+      const n = setup({ digestWriteMs: 20_000 });
+      await seed(n);
+      await n.notifier.flushDigest();
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(digestRow(n).delivered_at).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(digestRow(n).delivered_at).toBeTruthy();
+      await n.notifier.digestWritten("t_digest_1", "late");
+      const parts = n.notes().filter((p) => p.kind === "digest");
+      expect(parts).toHaveLength(1);
+      expect(parts[0].body).toContain("### Schedules and checks");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("sends the card at once when there is nobody to write it", async () => {
@@ -506,38 +535,51 @@ describe("the digest", () => {
     expect(digestRow(n).delivered_at).toBeTruthy();
   });
 
-  it("sends the card at once when the writer could not be started, and does not stay open", async () => {
-    const n = setup({ startTask: false });
-    (n.notifier as any).startTask = () => {
-      throw new Error("no room");
-    };
-    await seed(n);
-    expect(await n.notifier.flushDigest()).toBe(2);
-    expect(digestRow(n).delivered_at).toBeTruthy();
-    expect(n.notes().filter((p) => p.kind === "digest")).toHaveLength(1);
+  it("sends the card at once when the writer could not be started, says why in the log, and does not stay open", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const n = setup({ startTask: false });
+      (n.notifier as any).startTask = () => {
+        throw new Error("no room");
+      };
+      await seed(n);
+      expect(await n.notifier.flushDigest()).toBe(2);
+      expect(digestRow(n).delivered_at).toBeTruthy();
+      expect(n.notes().filter((p) => p.kind === "digest")).toHaveLength(1);
+      expect(log).toHaveBeenCalledWith(expect.stringMatching(/^\[piomio\] digest: .*no room/));
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("after a restart, a digest left unwritten goes out as the card", async () => {
-    const n = setup({ digestWriteMs: 60_000 });
-    await seed(n);
-    await n.notifier.flushDigest();
-    n.notifier.stop();
-    const restarted = new Notifier({
-      db: n.db,
-      bus: n.bus,
-      settings: n.settings,
-      channels: { broadcast: async () => {} } as unknown as ChannelRegistry,
-      hooks: n.hooks,
-      store: n.store,
-      sign: (p) => p,
-      publicUrl: "http://localhost:8080",
-      hasAgent: () => true,
-      digestWriteMs: 20,
-    });
-    restarted.startDigestTimer();
-    await new Promise((r) => setTimeout(r, 80));
-    restarted.stop();
-    expect(digestRow(n).delivered_at).toBeTruthy();
+    vi.useFakeTimers();
+    try {
+      const n = setup({ digestWriteMs: 60_000 });
+      await seed(n);
+      await n.notifier.flushDigest();
+      n.notifier.stop();
+      const restarted = new Notifier({
+        db: n.db,
+        bus: n.bus,
+        settings: n.settings,
+        channels: { broadcast: async () => {} } as unknown as ChannelRegistry,
+        hooks: n.hooks,
+        store: n.store,
+        sign: (p) => p,
+        publicUrl: "http://localhost:8080",
+        hasAgent: () => true,
+        digestWriteMs: 20_000,
+      });
+      restarted.startDigestTimer();
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(digestRow(n).delivered_at).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      restarted.stop();
+      expect(digestRow(n).delivered_at).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("hands the material over oldest first, a section with no text left out, and a post as one line", async () => {
@@ -597,6 +639,37 @@ describe("the digest", () => {
     expect(bodies[1]).not.toContain("First news");
   });
 
+  it("brings what landed while a digest was being written into the next one: a post and an alert", async () => {
+    vi.useFakeTimers();
+    try {
+      const n = setup({ digestWriteMs: 10 * 60_000 });
+      n.db.prepare("insert into feeds(id, title, brief, agent_id, times, created_at, updated_at) values ('f1', 'News', 'b', 'assistant', '[]', ?, ?)").run(nowIso(), nowIso());
+      const post = (id: string, title: string) => n.db.prepare("insert into feed_posts(id, feed_id, title, text, created_at) values (?, 'f1', ?, 't', ?)").run(id, title, nowIso());
+      post("p_before", "Landed before the digest");
+      await n.notifier.notify({ level: "digest", title: "First news", body: "one", agentId: "assistant" });
+      await vi.advanceTimersByTimeAsync(1000);
+      // The first digest goes to its writer, and the writer takes a while.
+      expect(await n.notifier.flushDigest()).toBe(1);
+      expect(n.started[0].goal).toContain("Landed before the digest");
+      await vi.advanceTimersByTimeAsync(30_000);
+      post("p_during", "Landed while it was written");
+      await n.notifier.notify({ level: "notify", title: "Alert while it was written", body: "x", agentId: "assistant" });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await n.notifier.digestWritten("t_digest_1", "Done");
+      await vi.advanceTimersByTimeAsync(10_000);
+      await n.notifier.notify({ level: "digest", title: "Second news", body: "two", agentId: "assistant" });
+      expect(await n.notifier.flushDigest()).toBe(1);
+      // What landed in those 40 seconds is in no digest yet: this one brings it. What the first digest had already is not repeated.
+      const goal = n.started[1].goal;
+      expect(goal).toContain("Landed while it was written");
+      expect(goal).toContain("Alert while it was written");
+      expect(goal).not.toContain("Landed before the digest");
+      n.notifier.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("tells the assistant what already reached the person since the last digest", async () => {
     const n = setup();
     await n.notifier.notify({ level: "notify", title: "Ботсад закрыт 2 ноября", body: "Весь день.", agentId: "assistant" });
@@ -617,6 +690,35 @@ describe("the digest", () => {
       expect(vi.getTimerCount()).toBe(0);
       await vi.advanceTimersByTimeAsync(5000);
       expect(digestRow(n).delivered_at).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("arms no timer for a digest still being gathered when it is stopped, and does again once started", async () => {
+    vi.useFakeTimers();
+    try {
+      const n = setup({ digestWriteMs: 1000 });
+      await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+      // A plugin's section keeps the gathering open while the notifier is stopped (a cluster standby, a shutdown).
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      n.hooks.register("digest.compose", "slow", async () => {
+        await gate;
+        return { title: "Slow", body: "late section" };
+      });
+      const flushing = n.notifier.flushDigest();
+      n.notifier.stop();
+      release();
+      expect(await flushing).toBe(2);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(digestRow(n).delivered_at).toBeNull();
+      // Led again: the digest the stop left open gets its time like after any restart.
+      n.notifier.startDigestTimer();
+      expect(vi.getTimerCount()).toBe(2);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(digestRow(n).delivered_at).toBeTruthy();
+      n.notifier.stop();
     } finally {
       vi.useRealTimers();
     }
