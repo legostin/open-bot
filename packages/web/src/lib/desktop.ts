@@ -6,12 +6,31 @@ export interface DesktopApp {
   /** "piomio", or "piomio-test" in the test build. */
   scheme: string;
   test: boolean;
+  /** macOS: the window has no title bar; its buttons sit over the page's top-left corner. */
+  overlayTitleBar: boolean;
 }
 
 /** The desktop app whose window shows this page, if any. */
 export function desktopApp(w: unknown = globalThis): DesktopApp | undefined {
   const d = (w as { piomioDesktop?: Partial<DesktopApp> }).piomioDesktop;
-  return d && typeof d.scheme === "string" && /^piomio(-test)?$/.test(d.scheme) ? { scheme: d.scheme, test: d.test === true } : undefined;
+  return d && typeof d.scheme === "string" && /^piomio(-test)?$/.test(d.scheme)
+    ? { scheme: d.scheme, test: d.test === true, overlayTitleBar: d.overlayTitleBar === true }
+    : undefined;
+}
+
+/** In a window without a title bar: `<html class="owl-titlebar">` (the `titlebar:` variant) while the window's buttons
+ * show, that is, not in full screen. */
+export function applyDesktopDocument(app = desktopApp()): void {
+  if (!app?.overlayTitleBar) return;
+  const update = () => document.documentElement.classList.toggle("owl-titlebar", outerWidth < screen.width || outerHeight < screen.height);
+  update();
+  addEventListener("resize", update);
+}
+
+/** Where the window is dragged from when it has no title bar: the element itself, or ("deep") all of it but its
+ * buttons, links and fields. */
+export function dragRegion(deep = false, app = desktopApp()): { "data-tauri-drag-region"?: string } {
+  return app?.overlayTitleBar ? { "data-tauri-drag-region": deep ? "deep" : "" } : {};
 }
 
 /** The sign-in ticket in an address fragment, if any. */

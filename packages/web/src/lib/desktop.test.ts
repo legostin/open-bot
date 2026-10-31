@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { desktopApp, desktopTicketFrom, onAnotherComputer, pairLink } from "./desktop";
+import { desktopApp, desktopTicketFrom, dragRegion, onAnotherComputer, pairLink } from "./desktop";
 
 describe("desktop app links", () => {
   it("reads a sign-in ticket from the address fragment", () => {
@@ -17,9 +17,18 @@ describe("desktop app links", () => {
 
   it("knows the app window it runs in", () => {
     expect(desktopApp({})).toBeUndefined();
-    expect(desktopApp({ piomioDesktop: { scheme: "piomio", test: false } })).toEqual({ scheme: "piomio", test: false });
-    expect(desktopApp({ piomioDesktop: { scheme: "piomio-test", test: true } })).toEqual({ scheme: "piomio-test", test: true });
+    expect(desktopApp({ piomioDesktop: { scheme: "piomio", test: false } })).toEqual({ scheme: "piomio", test: false, overlayTitleBar: false });
+    expect(desktopApp({ piomioDesktop: { scheme: "piomio-test", test: true } })).toEqual({ scheme: "piomio-test", test: true, overlayTitleBar: false });
+    expect(desktopApp({ piomioDesktop: { scheme: "piomio", overlayTitleBar: true } })?.overlayTitleBar).toBe(true);
     expect(desktopApp({ piomioDesktop: { scheme: "javascript" } })).toBeUndefined();
+  });
+
+  it("marks where a window without a title bar is dragged from", () => {
+    const mac = { scheme: "piomio", test: false, overlayTitleBar: true };
+    expect(dragRegion(false, mac)).toEqual({ "data-tauri-drag-region": "" });
+    expect(dragRegion(true, mac)).toEqual({ "data-tauri-drag-region": "deep" });
+    expect(dragRegion(true, { ...mac, overlayTitleBar: false })).toEqual({});
+    expect(dragRegion(true, undefined)).toEqual({});
   });
 
   it("offers to connect the computer the web UI is open on, unless it is the hub's own or a phone", () => {

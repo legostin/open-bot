@@ -1,7 +1,8 @@
-//! Two windows: "main" shows the hub's own web UI (no app commands), "setup" the app's own screens (ui/). Links that
-//! leave the hub's origin open in the system browser; the hub's own downloads go into the Downloads folder; closing
-//! the hub window keeps the app in the tray.
+//! Two windows: "main" shows the hub's own web UI (no app commands but dragging it on macOS), "setup" the app's own
+//! screens (ui/). Links that leave the hub's origin open in the system browser; the hub's own downloads go into the
+//! Downloads folder; closing the hub window keeps the app in the tray.
 
+use tauri::ipc::CapabilityBuilder;
 use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
@@ -40,9 +41,23 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
   let popups = app.clone();
   let flavor = app.state::<AppState>().paths.flavor.clone();
   let scheme = flavor.scheme();
+  // macOS: no title bar strip. The window's buttons sit in the sidebar's top row, and the hub's page marks where the
+  // window is dragged from (data-tauri-drag-region): the one app command its origin gets, with the double click that
+  // zooms the window. Not for a hub at an IPv6 address, which a capability's URL pattern cannot name.
+  let overlay = cfg!(target_os = "macos") && url.host_str().is_some_and(|h| !h.starts_with('['));
+  if overlay {
+    app.add_capability(
+      CapabilityBuilder::new("hub-window-drag")
+        .local(false)
+        .remote(url.origin().ascii_serialization())
+        .window(MAIN)
+        .permission("core:window:allow-start-dragging")
+        .permission("core:window:allow-internal-toggle-maximize"),
+    )?;
+  }
   // The hub's settings page offers "Quit" and "Reset Piomio…" when it runs in this window (deeplink.rs).
-  let hello = format!("window.piomioDesktop = Object.freeze({{ scheme: {scheme:?}, test: {} }});", flavor.test);
-  WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
+  let hello = format!("window.piomioDesktop = Object.freeze({{ scheme: {scheme:?}, test: {}, overlayTitleBar: {overlay} }});", flavor.test);
+  let builder = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
     .title(&app.package_info().name)
     .initialization_script(hello)
     .inner_size(1200.0, 820.0)
@@ -73,8 +88,20 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
         true
       }
       _ => true,
-    })
-    .build()?;
+    });
+  // The buttons' centre lines up with the logo and the conversation's top bar, 32 points down (Layout.tsx). The first
+  // click on an inactive window reaches the page, so the window drags from its top row without being clicked first.
+  #[cfg(target_os = "macos")]
+  let builder = if overlay {
+    builder
+      .title_bar_style(tauri::TitleBarStyle::Overlay)
+      .hidden_title(true)
+      .traffic_light_position(tauri::LogicalPosition::new(20.0, 34.0))
+      .accept_first_mouse(true)
+  } else {
+    builder
+  };
+  builder.build()?;
   dock(app, true);
   Ok(())
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "setup",
-  "description": "The app's own setup screens. The hub's page in the main window gets no app commands.",
+  "description": "The app's own setup screens. The hub's page in the main window gets none but dragging the window on macOS (window.rs).",
   "windows": ["setup"],
   "permissions": [
     "allow-get-state",

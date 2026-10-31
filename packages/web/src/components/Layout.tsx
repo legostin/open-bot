@@ -14,6 +14,7 @@ import { connection, ensureTasks, session, tasks } from "../state/app";
 import { openPanel, panel, togglePanel } from "../state/panel";
 import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlot } from "../plugins/slots";
 import { cx, IconButton } from "./ui";
+import { dragRegion } from "../lib/desktop";
 import { ApprovalsBadge, ConnectionBadge, VaultBadge } from "./StatusBadges";
 import { CommandPalette } from "./CommandPalette";
 import { LiveViewWindow } from "./LiveViewWindow";
@@ -36,10 +37,12 @@ function Brand() {
   const s = useStore(session);
   const mood: OwlMood = c === "open" ? "awake" : c === "offline" ? "asleep" : "sleepy";
   return (
-    <Link href="/" className="flex items-center gap-2.5 px-4 pt-4 pb-3" title={s?.version ? `Piomio ${s.version}` : "Piomio"}>
-      <OwlMark size={28} mood={mood} />
-      <span className="font-display text-[16px] font-semibold">Piomio</span>
-    </Link>
+    <div {...dragRegion()} className="flex px-4 pt-4 pb-3 titlebar:pt-[18px] titlebar:pl-[100px]">
+      <Link href="/" className="flex items-center gap-2.5" title={s?.version ? `Piomio ${s.version}` : "Piomio"}>
+        <OwlMark size={28} mood={mood} />
+        <span className="font-display text-[16px] font-semibold">Piomio</span>
+      </Link>
+    </div>
   );
 }
 
@@ -133,7 +136,7 @@ export function HeaderActions() {
 export function TopBar({ children }: { children?: ReactNode }) {
   const shell = useContext(ShellContext);
   return (
-    <header className="glass @container/top relative z-20 flex h-12 shrink-0 items-center gap-1.5 px-2 sm:px-3">
+    <header {...dragRegion(true)} className="glass @container/top relative z-20 flex h-12 shrink-0 items-center gap-1.5 px-2 sm:px-3 titlebar:max-md:h-14 titlebar:max-md:pt-2 titlebar:max-md:pl-24">
       <IconButton label={t("layout.menu")} onClick={shell.openDrawer} className="size-8 md:hidden">
         <Menu className="size-[18px]" />
       </IconButton>
@@ -166,7 +169,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <ShellContext.Provider value={{ openDrawer: () => setDrawer(true), pane, togglePane: () => setPane((v) => !v) }}>
       {/* The shell never scrolls as a whole: it holds what escapes its panels (relative) and cannot be scrolled (clip). */}
-      <div className="relative flex h-dvh overflow-clip bg-canvas">
+      <div {...dragRegion()} className="relative flex h-dvh overflow-clip bg-canvas">
         <aside className="hidden w-[272px] shrink-0 flex-col md:flex">
           <Brand />
           <Sidebar />

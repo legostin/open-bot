@@ -3,6 +3,10 @@
 /* The iOS app's chat page (/m/*): <html class="owl-mobile">, set by lib/mobile.ts. `mobile:` utilities apply only there. */
 @custom-variant mobile (&:where(.owl-mobile, .owl-mobile *));
 
+/* The desktop app's window on macOS, whose buttons sit over the top-left corner: <html class="owl-titlebar">, set by
+   lib/desktop.ts. `titlebar:` utilities make room for them. */
+@custom-variant titlebar (&:where(.owl-titlebar, .owl-titlebar *));
+
 /*
  * Piomio's look, "Amber": warm ink and paper, and one light in it, the owl's amber eyes. Amber is what is yours and
  * what is alive: your messages, the button that sends, an agent at work, what is unread. Everything else stays quiet.
