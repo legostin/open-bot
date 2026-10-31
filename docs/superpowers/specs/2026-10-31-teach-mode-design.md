@@ -37,8 +37,8 @@ hints during a task and from any takeover; a skill of instructions the agent fol
   `replaces`: the same card). `browser_teach` with `scope: "step"` asks the person to show one step.
 - **Free use.** Each takeover with no agent waiting is a session in the browser's journal (steps, no secrets, 30
   days, only on the hub). When a session ends, a cheap check without a model looks for the same routine before
-  (same site, mostly the same controls in the same order, at least two earlier sessions on other days or three in
-  all). A match tells the default agent in its chat (`conversations.tell`), which offers in one message with
+  (same site, mostly the same controls in the same order: three sessions in all, or two on different days; offered
+  at most once a week). A match tells the default agent in its chat (`conversations.tell`), which offers in one message with
   quick replies "Заметил, ты уже третий раз … Хочешь, буду делать сам?" — yes makes a skill from those sessions,
   no is remembered for that routine.
 - **Control.** Browser setting "Remember what I do in the browser" (on by default) for free use; "забудь, что я
