@@ -339,7 +339,7 @@ export class Learning {
     const rec = this.rec;
     const at = Date.now() - Math.min(60_000, Math.max(0, Number(b.durationMs) || 0));
     try {
-      const r = await this.h.ctx.core.call<{ text?: string }>("speech.transcribe", { data, mimeType: typeof b.mimeType === "string" ? b.mimeType : "audio/webm" });
+      const r = await this.h.ctx.core.call<{ text?: string }>("speech.transcribe", { data, mimeType: typeof b.mimeType === "string" && b.mimeType ? b.mimeType.split(";")[0].trim() : "audio/webm" });
       const text = String(r?.text ?? "").trim();
       if (text && this.rec === rec) {
         rec.say(text, at);
