@@ -230,7 +230,7 @@
   "install.win.step3": "Sign in to Claude Code or Codex from the card in the chat. The assistant guides the rest.",
   "install.win.note": "Windows 10 and 11. Not signed yet: if SmartScreen warns, choose More info → Run anyway.",
   "install.docker.lead": "On a server, one image holds everything:",
-  "install.docker.note": "Open http://localhost:8080, enter the setup code from the logs and choose a password.",
+  "install.docker.note": "Open http://localhost:8080, enter the setup code from the logs and choose a password. On a remote server, first run ssh -N -L 8080:localhost:8080 -L 8081:localhost:8081 you@server on your computer.",
   "install.download": "Download",
   "install.version": "Version {version}",
   "install.allReleases": "All releases",

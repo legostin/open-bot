@@ -230,7 +230,7 @@
   "install.win.step3": "Войди в Claude Code или Codex с карточки в чате. Дальше ассистент проведёт сам.",
   "install.win.note": "Windows 10 и 11. Приложение пока не подписано: если SmartScreen предупреждает, нажми «Подробнее» → «Выполнить в любом случае».",
   "install.docker.lead": "На сервере всё помещается в один образ:",
-  "install.docker.note": "Открой http://localhost:8080, введи код настройки из логов и придумай пароль.",
+  "install.docker.note": "Открой http://localhost:8080, введи код настройки из логов и придумай пароль. Если сервер удалённый, сначала запусти на своём компьютере ssh -N -L 8080:localhost:8080 -L 8081:localhost:8081 you@server.",
   "install.download": "Скачать",
   "install.version": "Версия {version}",
   "install.allReleases": "Все релизы",
