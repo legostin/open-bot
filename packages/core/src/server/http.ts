@@ -26,6 +26,19 @@ export const MIME: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8",
   ".md": "text/markdown; charset=utf-8",
   ".pdf": "application/pdf",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
+  ".mp4": "video/mp4",
+  ".m4v": "video/mp4",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".ogg": "audio/ogg",
+  ".oga": "audio/ogg",
+  ".opus": "audio/ogg",
+  ".wav": "audio/wav",
+  ".flac": "audio/flac",
   ".map": "application/json; charset=utf-8",
   ".webmanifest": "application/manifest+json",
 };
@@ -39,11 +52,52 @@ export function safeFile(root: string, rel: string): string | undefined {
   return full;
 }
 
+/** `attachment` with the file's name (RFC 6266: an ASCII fallback, then the UTF-8 name). */
+export function attachmentDisposition(name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]|["\\%]/g, "_");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
+/** The single byte range a `Range` header asks for: undefined to send the whole file (none, malformed, several). */
+export function byteRange(header: string | undefined, size: number): { start: number; end: number } | "unsatisfiable" | undefined {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
+  if (!m || (!m[1] && !m[2])) return undefined;
+  if (!m[1]) {
+    // The last N bytes.
+    const n = Number(m[2]);
+    if (!n) return "unsatisfiable";
+    return { start: Math.max(0, size - n), end: size - 1 };
+  }
+  const start = Number(m[1]);
+  const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  if (start >= size || end < start) return "unsatisfiable";
+  return { start, end };
+}
+
+/**
+ * A file with its length (a download shows progress), a validator (opened again, it comes back as 304) and byte
+ * ranges (Safari plays a video only from a server that answers them).
+ */
 export function sendFile(reply: FastifyReply, file: string, opts: { cache?: boolean; download?: boolean } = {}): FastifyReply {
+  const st = statSync(file);
   const type = MIME[extname(file).toLowerCase()] ?? "application/octet-stream";
+  const etag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
   reply.header("content-type", type);
   reply.header("cache-control", opts.cache ? "public, max-age=31536000, immutable" : "no-cache");
-  if (opts.download) reply.header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(file.split(/[\\/]/).pop()!)}`);
+  reply.header("etag", etag);
+  reply.header("last-modified", st.mtime.toUTCString());
+  reply.header("accept-ranges", "bytes");
+  if (opts.download) reply.header("content-disposition", attachmentDisposition(file.split(/[\\/]/).pop()!));
+  const headers = reply.request.headers;
+  if (headers["if-none-match"]?.split(",").some((t) => t.trim().replace(/^W\//, "") === etag)) return reply.code(304).send();
+  const ifRange = headers["if-range"];
+  const range = ifRange === undefined || ifRange === etag ? byteRange(headers.range, st.size) : undefined;
+  if (range === "unsatisfiable") return reply.code(416).header("content-range", `bytes */${st.size}`).send();
+  if (range) {
+    reply.code(206).header("content-range", `bytes ${range.start}-${range.end}/${st.size}`).header("content-length", range.end - range.start + 1);
+    return reply.send(createReadStream(file, range));
+  }
+  reply.header("content-length", st.size);
   return reply.send(createReadStream(file));
 }
 
@@ -57,9 +111,14 @@ export function originOf(url: string): string {
   return new URL(url).origin;
 }
 
-/** Same-origin check for state-changing requests: Origin (or Referer) must be one of `origins`. */
+/**
+ * Same-origin check for state-changing requests: Origin (or Referer) must be one of `origins`. The page's
+ * `Referrer-Policy: no-referrer` makes a browser send `Origin: null` on its own same-origin XMLHttpRequests (an upload
+ * that reports progress); the browser's `Sec-Fetch-Site: same-origin`, which no page can set, vouches for those.
+ */
 export function originAllowed(req: FastifyRequest, origins: string[]): boolean {
   const o = req.headers.origin ?? (req.headers.referer ? safeOrigin(req.headers.referer) : undefined);
+  if ((!o || o === "null") && req.headers["sec-fetch-site"] === "same-origin") return true;
   if (!o) return false;
   return origins.includes(o);
 }

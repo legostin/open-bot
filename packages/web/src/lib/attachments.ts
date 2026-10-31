@@ -10,6 +10,10 @@ export interface PendingFile {
   size: number;
   type: string;
   status: "uploading" | "ready" | "error";
+  /** How much of it has gone up, 0…1. */
+  progress?: number;
+  /** A picture the person marked up before sending. */
+  marked?: boolean;
   /** The hub's path once uploaded (sent with the message). */
   path?: string;
   error?: string;

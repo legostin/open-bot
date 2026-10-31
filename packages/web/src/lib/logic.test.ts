@@ -79,6 +79,8 @@ describe("parts", () => {
     expect(items.map((i) => i.kind)).toEqual(["part", "tool", "orphan_result", "part"]);
     const tool = items[1];
     expect(tool.kind === "tool" && tool.result?.output).toBe("ok");
+    // A part knows its place in the message (the viewer's key for its pictures).
+    expect(items[3].kind === "part" && items[3].index).toBe(4);
   });
   it("pretty-prints JSON values and JSON strings", () => {
     expect(prettyJson({ a: 1 })).toBe('{\n  "a": 1\n}');

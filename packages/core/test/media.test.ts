@@ -5,7 +5,8 @@ import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, utimesSync, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EgressProxy } from "../src/egress.ts";
-import { FileCache, MediaError, MediaService, fetchImage, imageContentType, parseImageUrl, parseTile, readWorkspaceImage } from "../src/media.ts";
+import { FileCache, MediaError, MediaService, fetchImage, imageContentType, imageFileName, parseImageUrl, parseTile, readWorkspaceImage } from "../src/media.ts";
+import { attachmentDisposition, byteRange } from "../src/server/http.ts";
 
 const PNG = Buffer.from("89504e470d0a1a0a0000000d4948445200000001", "hex");
 const egress = new EgressProxy();
@@ -33,6 +34,31 @@ describe("media validation", () => {
     expect(imageContentType("image/svg+xml")).toBe("image/svg+xml");
     expect(imageContentType("text/html")).toBeUndefined();
     expect(imageContentType(undefined)).toBeUndefined();
+  });
+});
+
+describe("saving and ranges", () => {
+  it("names a downloaded web image after its address, with its type's extension", () => {
+    expect(imageFileName("https://upload.wikimedia.org/wiki/Eiffel%20Tower.JPG?w=200", "image/jpeg")).toBe("Eiffel Tower.jpg");
+    expect(imageFileName("https://example.com/", "image/png")).toBe("image.png");
+    expect(imageFileName("https://example.com/a%3Cb%3E.webp", "image/webp")).toBe("a_b_.webp");
+    expect(imageFileName("not a url", "image/gif")).toBe("image.gif");
+  });
+
+  it("says a file's name for downloads in ASCII and in UTF-8", () => {
+    expect(attachmentDisposition("report.pdf")).toBe(`attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`);
+    expect(attachmentDisposition('чек "1".jpg')).toBe(`attachment; filename="___ _1_.jpg"; filename*=UTF-8''${encodeURIComponent('чек "1".jpg')}`);
+  });
+
+  it("reads one byte range from a Range header", () => {
+    expect(byteRange("bytes=0-99", 1000)).toEqual({ start: 0, end: 99 });
+    expect(byteRange("bytes=900-", 1000)).toEqual({ start: 900, end: 999 });
+    expect(byteRange("bytes=-100", 1000)).toEqual({ start: 900, end: 999 });
+    expect(byteRange("bytes=-5000", 1000)).toEqual({ start: 0, end: 999 });
+    expect(byteRange("bytes=990-2000", 1000)).toEqual({ start: 990, end: 999 });
+    expect(byteRange("bytes=1000-", 1000)).toBe("unsatisfiable");
+    expect(byteRange("bytes=5-2", 1000)).toBe("unsatisfiable");
+    for (const whole of [undefined, "", "bytes=-", "bytes=0-1,5-9", "items=0-1", "bytes=a-b"]) expect(byteRange(whole, 1000), String(whole)).toBeUndefined();
   });
 });
 

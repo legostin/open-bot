@@ -2,13 +2,16 @@
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
 import { memo, useState } from "react";
-import { Bell, CircleAlert, CornerUpLeft, FilePen, FileText, Mic, ShieldAlert, SquareTerminal } from "lucide-react";
+import { Bell, CircleAlert, CornerUpLeft, FilePen, FileText, Mic, Play, ShieldAlert, SquareTerminal } from "lucide-react";
 import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@owlbot/shared";
 import { groupParts } from "../../lib/parts";
 import { fileSize, formatDuration, formatTime, notifyLevel } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import { api, errorText } from "../../lib/api";
 import { showDetails } from "../../state/prefs";
+import { openViewer, saveMedia } from "../../state/viewer";
+import { fileHref, mediaKind, partKey } from "../../lib/gallery";
+import { native } from "../../lib/native";
 import { Markdown } from "../../components/markdown";
 import { Badge, Button, cx } from "../../components/ui";
 import { AgentAvatar } from "../../components/AgentAvatar";
@@ -164,24 +167,52 @@ function ErrorPart({ message }: { message: string }) {
   );
 }
 
-function Attachment({ part }: { part: Extract<MessagePart, { type: "attachment" }> }) {
-  const href = `/api/files?path=${encodeURIComponent(part.path)}`;
-  const isImage = part.mimeType?.startsWith("image/");
+/**
+ * A file in a message. A picture or a video is its own thumbnail and opens the viewer on the chat's media; any other
+ * file is a chip that opens it (inside the phone app, the share sheet: the app's web view cannot show it itself).
+ */
+function Attachment({ part, message, index }: { part: Extract<MessagePart, { type: "attachment" }>; message: Message; index: number }) {
+  const href = fileHref(part.path);
+  const media = part.kind === "voice" ? undefined : mediaKind(part.mimeType);
   const isAudio = part.mimeType?.startsWith("audio/");
   const voice = part.kind === "voice";
   const meta = [part.durationSec !== undefined ? formatDuration(part.durationSec) : undefined, part.size !== undefined ? fileSize(part.size) : part.mimeType].filter(Boolean).join(" · ");
+  const key = partKey(message.id, index);
+  const open = () => openViewer({ kind: "chat", conversationId: message.conversationId }, key);
+  const label = t("viewer.open", { name: part.name || t("viewer.video") });
+  if (media === "image") {
+    return (
+      <button type="button" data-media-key={key} onClick={open} aria-label={label} title={part.name} className="my-1.5 block max-w-full cursor-zoom-in overflow-hidden rounded-2xl border border-hairline bg-surface-2 outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <img src={href} alt={part.name} className="block max-h-72 max-w-full" loading="lazy" decoding="async" />
+      </button>
+    );
+  }
+  if (media === "video") {
+    return (
+      <button type="button" data-media-key={key} onClick={open} aria-label={label} title={part.name} className="group relative my-1.5 block max-w-full overflow-hidden rounded-2xl border border-hairline bg-black outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        {/* The first frame as the thumbnail (#t: iOS draws none for preload=metadata otherwise). */}
+        <video src={`${href}#t=0.1`} preload="metadata" muted playsInline className="pointer-events-none block max-h-72 min-h-32 max-w-full min-w-48" />
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-black/50 text-white ring-1 ring-white/20 backdrop-blur transition group-hover:scale-105">
+            <Play className="size-5 translate-x-px fill-current" />
+          </span>
+        </span>
+        {part.durationSec !== undefined && <span className="absolute right-2 bottom-2 rounded-full bg-black/55 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">{formatDuration(part.durationSec)}</span>}
+      </button>
+    );
+  }
   return (
     <div className="my-1.5">
-      {isImage && (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="mb-1 block">
-          <img src={href} alt={part.name} className="max-h-72 max-w-full rounded-2xl border border-hairline" loading="lazy" />
-        </a>
-      )}
       {isAudio && <audio controls preload="none" src={href} className="mb-1 h-10 w-72 max-w-full" />}
       <a
         href={href}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={(e) => {
+          if (!native) return;
+          e.preventDefault();
+          saveMedia({ key, kind: "image", src: href, name: part.name, download: fileHref(part.path, true) });
+        }}
         className="press inline-flex max-w-full items-center gap-2 rounded-full border border-hairline bg-surface py-1.5 pr-3.5 pl-2 text-sm text-fg shadow-[0_1px_2px_rgb(70_45_10/0.06)] hover:bg-surface-2"
       >
         <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text">
@@ -299,9 +330,9 @@ function Parts({ message }: { message: Message }) {
           case "error":
             return <ErrorPart key={it.key} message={p.message} />;
           case "attachment":
-            return <Attachment key={it.key} part={p} />;
+            return <Attachment key={it.key} part={p} message={message} index={it.index} />;
           case "images":
-            return <ImagesCard key={it.key} items={p.items} />;
+            return <ImagesCard key={it.key} items={p.items} messageId={message.id} part={it.index} conversationId={message.conversationId} />;
           case "map":
             return <MapCard key={it.key} part={p} />;
           case "secret_request":

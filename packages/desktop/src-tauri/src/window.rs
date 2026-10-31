@@ -1,7 +1,8 @@
 //! Two windows: "main" shows the hub's own web UI (no app commands), "setup" the app's own screens (ui/). Links that
-//! leave the hub's origin open in the system browser; closing the hub window keeps the app in the tray.
+//! leave the hub's origin open in the system browser; the hub's own downloads go into the Downloads folder; closing
+//! the hub window keeps the app in the tray.
 
-use tauri::webview::NewWindowResponse;
+use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 
@@ -34,6 +35,7 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
     return Ok(());
   }
   let origin = url.clone();
+  let hub = url.clone();
   let browser = app.clone();
   let popups = app.clone();
   let flavor = app.state::<AppState>().paths.flavor.clone();
@@ -59,6 +61,18 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
     .on_new_window(move |u, _| {
       let _ = popups.opener().open_url(u.as_str(), None::<&str>);
       NewWindowResponse::Deny
+    })
+    // The media viewer's download button: WebKit saves the file into Downloads under a free name, and the page hears
+    // when it is there (state/viewer.ts). Only the hub's own files.
+    .on_download(move |webview, event| match event {
+      DownloadEvent::Requested { url, .. } => same_origin(&url, &hub),
+      DownloadEvent::Finished { path, success, .. } => {
+        let name = path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let detail = serde_json::json!({ "type": "download", "ok": success, "name": name });
+        let _ = webview.eval(format!("window.dispatchEvent(new CustomEvent('owlbot-desktop', {{ detail: {detail} }}))"));
+        true
+      }
+      _ => true,
     })
     .build()?;
   dock(app, true);

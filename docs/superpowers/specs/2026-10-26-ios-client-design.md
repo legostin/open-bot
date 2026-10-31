@@ -129,7 +129,8 @@ a Promise of the reply object (rejected with a message string on failure).
 | `dictation.stop` | `{}` | `{ text }`: the final words |
 | `openURL` | `{ url }` | `{ ok: true }`: opens in Safari (sign-in pages) |
 | `open` | `{ path }`: the web UI's path of another chat (`/`, `/agent/:id`, `/chat/:id`, `/tasks/:id`) or of a channel (`/channels/:id`) | `{ ok: true }`: the app opens that chat as its own screen (a new agent's card, a task line, a link in a message); rejects when the hub has no such chat |
-| `fullscreen` | `{ on }`: the page shows something full screen (a map) or stopped | `{ ok: true }`: the app hides its header while `on` (the page hides its own composer) |
+| `fullscreen` | `{ on }`: the page shows something full screen (a map, the media viewer) or stopped | `{ ok: true }`: the app hides its header while `on` (the page hides its own composer) |
+| `save` | `{ url, name }`: a hub file with `download=1` (the media viewer's download button, a file in a message) | `{ ok: true }`: the app downloads it through the page's session (its cookie, the pinned certificate) and offers it in the share sheet (Save Image, Save to Files…); rejects with the reason |
 | `haptic` | `{ kind: "light" \| "success" \| "warning" }` | `{ ok: true }` |
 | `reauth` | `{}` | none: the app gets a new ticket and reloads the page |
 

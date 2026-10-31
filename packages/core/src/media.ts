@@ -42,6 +42,19 @@ export const IMAGE_TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
+/** The name a downloaded web image is saved under: the address's last segment, with the extension of its type. */
+export function imageFileName(raw: string, type: string): string {
+  let last = "";
+  try {
+    last = decodeURIComponent(new URL(raw).pathname.split("/").pop() ?? "");
+  } catch {
+    // An address that does not parse still gets a name.
+  }
+  const ext = Object.keys(IMAGE_TYPES).find((e) => IMAGE_TYPES[e] === type) ?? "";
+  const stem = last.replace(/\.[a-z0-9]{1,5}$/i, "").replace(/[\u0000-\u001f\\/:*?"<>|]+/g, "_").trim().slice(0, 100) || "image";
+  return stem + ext;
+}
+
 /** The image type of a file name by its extension, or undefined when it is not an image. */
 export function imageTypeOf(file: string): string | undefined {
   return IMAGE_TYPES[extname(file).toLowerCase()];

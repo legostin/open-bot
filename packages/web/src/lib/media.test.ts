@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeSlide, formatCoords, isLocalSrc, mediaSrc, originalHref, osmLink, wrapIndex } from "./media";
+import { activeSlide, formatCoords, isLocalSrc, mediaSrc, osmLink } from "./media";
 
 describe("mediaSrc", () => {
   it("sends web images through the hub's proxy", () => {
@@ -18,12 +18,6 @@ describe("mediaSrc", () => {
     for (const bad of ["//evil.example/x.png", "javascript:alert(1)", "ftp://example.com/x.png", "data:text/html,<b>", "x.png"]) expect(mediaSrc(bad), bad).toBeUndefined();
     expect(isLocalSrc("blob:https://hub/123")).toBe(true);
     expect(isLocalSrc("//cdn.example/x")).toBe(false);
-  });
-
-  it("links the original: the web page or a download of the file", () => {
-    expect(originalHref("https://example.com/x.png")).toEqual({ href: "https://example.com/x.png", download: false });
-    expect(originalHref("file:a/b.png")).toEqual({ href: "/api/files?path=a%2Fb.png&download=1", download: true });
-    expect(originalHref("/local.png")).toBeUndefined();
   });
 });
 
@@ -44,12 +38,5 @@ describe("carousel", () => {
     // Scrolled to the end: the last slide, even though its left edge is out of reach.
     expect(activeSlide(lefts, 899, 900)).toBe(3);
     expect(activeSlide([], 10, 0)).toBe(0);
-  });
-
-  it("wraps around", () => {
-    expect(wrapIndex(0, -1, 3)).toBe(2);
-    expect(wrapIndex(2, 1, 3)).toBe(0);
-    expect(wrapIndex(1, 1, 3)).toBe(2);
-    expect(wrapIndex(0, 1, 0)).toBe(0);
   });
 });

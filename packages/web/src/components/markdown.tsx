@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import { ImageIcon, Lock } from "lucide-react";
 import { t } from "../i18n";
 import { mediaSrc } from "../lib/media";
+import { imageDownload } from "../lib/gallery";
+import { openViewer } from "../state/viewer";
 import { remarkUserText } from "../lib/user-markdown";
 import { openOutside } from "../lib/native";
 import { CopyButton, cx } from "./ui";
@@ -30,6 +32,24 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
+/** A picture in the words: it opens the media viewer on itself. */
+function MdImage({ src, shown, alt }: { src: string; shown: string; alt?: string }) {
+  const key = `md:${shown}`;
+  const open = (e: { preventDefault(): void }) => {
+    // A picture inside a link opens here rather than following the link (the viewer links the original).
+    e.preventDefault();
+    openViewer(
+      { kind: "list", items: [{ key, kind: "image", src: shown, name: alt || undefined, download: imageDownload(src), original: /^https?:\/\//i.test(src.trim()) ? src.trim() : undefined }] },
+      key,
+    );
+  };
+  return (
+    <button type="button" data-media-key={key} onClick={open} aria-label={alt || t("message.images.open")} className="my-2 inline-block max-w-full cursor-zoom-in overflow-hidden rounded-xl border border-border align-top">
+      <img src={shown} alt={alt ?? ""} className="block max-h-96 max-w-full" loading="lazy" decoding="async" />
+    </button>
+  );
+}
+
 // Inside the iOS app, links that leave the hub open in Safari (openOutside); in a browser, in a new tab.
 const components: Components = {
   a: ({ href, children }) => (
@@ -42,7 +62,7 @@ const components: Components = {
   img: ({ src, alt }) => {
     const s = typeof src === "string" ? src : "";
     const shown = s ? mediaSrc(s) : undefined;
-    if (shown) return <img src={shown} alt={alt ?? ""} className="my-2 inline-block max-h-96 max-w-full rounded-xl border border-border" loading="lazy" decoding="async" />;
+    if (shown) return <MdImage src={s} shown={shown} alt={alt} />;
     return (
       <a href={s} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => openOutside(e, s)} className="inline-flex items-center gap-1">
         <ImageIcon className="inline size-4" />

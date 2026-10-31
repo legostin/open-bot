@@ -18,14 +18,6 @@ export function mediaSrc(src: string): string | undefined {
   return isLocalSrc(s) ? s : undefined;
 }
 
-/** Where "open the original" leads: the page the picture is on the web, or a download of the workspace file. */
-export function originalHref(src: string): { href: string; download: boolean } | undefined {
-  const s = src.trim();
-  if (/^https?:\/\//i.test(s)) return { href: s, download: false };
-  if (s.startsWith("file:") && s.length > 5) return { href: `/api/files?path=${encodeURIComponent(s.slice(5))}&download=1`, download: true };
-  return undefined;
-}
-
 /** The same place on openstreetmap.org, with a marker. */
 export function osmLink(lat: number, lon: number, zoom = 16): string {
   const z = Math.max(1, Math.min(19, Math.round(zoom)));
@@ -45,9 +37,4 @@ export function activeSlide(slideLefts: number[], scrollLeft: number, maxScroll:
   let best = 0;
   for (let i = 1; i < slideLefts.length; i++) if (Math.abs(slideLefts[i] - scrollLeft) < Math.abs(slideLefts[best] - scrollLeft)) best = i;
   return best;
-}
-
-/** i moved by `step`, wrapping around n items. */
-export function wrapIndex(i: number, step: number, n: number): number {
-  return n > 0 ? (((i + step) % n) + n) % n : 0;
 }

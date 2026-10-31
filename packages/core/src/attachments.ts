@@ -3,7 +3,7 @@
 // whose path is relative to the workspaces root (what /api/files serves). The brain gets workspace-relative paths and
 // an English note; a session working in another folder (a group member) gets a copy.
 
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, isAbsolute, join, relative, sep } from "node:path";
 import type { AttachmentKind, MessagePart } from "@owlbot/shared";
 import { IMAGE_TYPES } from "./media.ts";
@@ -149,6 +149,17 @@ export function attachmentFromPath(root: string, conv: AttachmentOwner, path: un
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Takes back a file the person uploaded and did not send (removed from the composer, or replaced by a marked-up copy).
+ * A file a message already names stays.
+ */
+export function discardAttachment(root: string, conv: AttachmentOwner, path: unknown, sent: (path: string) => boolean): boolean {
+  const part = attachmentFromPath(root, conv, path);
+  if (!part || sent(part.path)) return false;
+  rmSync(join(attachmentsDir(root, conv), part.name), { force: true });
+  return true;
 }
 
 const sameFile = (a: string, b: string) => {

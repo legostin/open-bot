@@ -400,7 +400,7 @@ export function DefaultComposer({ conversationId }: { conversationId: string }) 
         </div>
       )}
       <div className="composer-box rounded-[26px] border border-hairline bg-surface p-1.5 shadow-pop transition-[border-color,box-shadow] duration-200 focus-within:border-accent/50 focus-within:shadow-[var(--shadow-pop),0_0_0_4px_color-mix(in_srgb,var(--accent)_16%,transparent)]">
-        {files.length > 0 && <AttachmentChips files={files} onRemove={(id) => removeFiles(conversationId, [id])} />}
+        {files.length > 0 && <AttachmentChips conversationId={conversationId} files={files} />}
         <div className="flex items-end gap-1">
           <button
             type="button"

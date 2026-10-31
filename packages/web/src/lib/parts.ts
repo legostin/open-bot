@@ -6,7 +6,7 @@ export type ToolCallPart = Extract<MessagePart, { type: "tool_call" }>;
 export type ToolResultPart = Extract<MessagePart, { type: "tool_result" }>;
 
 export type RenderItem =
-  | { kind: "part"; part: Exclude<MessagePart, ToolCallPart | ToolResultPart>; key: string }
+  | { kind: "part"; part: Exclude<MessagePart, ToolCallPart | ToolResultPart>; key: string; index: number }
   | { kind: "tool"; call: ToolCallPart; result?: ToolResultPart; key: string }
   | { kind: "orphan_result"; result: ToolResultPart; key: string };
 
@@ -22,7 +22,7 @@ export function groupParts(parts: MessagePart[]): RenderItem[] {
     if (p.type === "tool_call") out.push({ kind: "tool", call: p, result: results.get(p.id), key: `tool-${p.id}-${i}` });
     else if (p.type === "tool_result") {
       if (!calls.has(p.id)) out.push({ kind: "orphan_result", result: p, key: `res-${p.id}-${i}` });
-    } else out.push({ kind: "part", part: p, key: `${p.type}-${i}` });
+    } else out.push({ kind: "part", part: p, key: `${p.type}-${i}`, index: i });
   });
   return out;
 }

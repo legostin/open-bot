@@ -228,6 +228,11 @@ export class Store {
     return rows.map(msgFrom).reverse();
   }
 
+  /** Whether any message of the conversation has `text` in its parts' JSON (a file's path). */
+  messagesMention(conversationId: string, text: string): boolean {
+    return !!this.db.prepare("select 1 from messages where conversation_id = ? and instr(parts, ?) > 0 limit 1").get(conversationId, text);
+  }
+
   /** The conversation's first message (a task's goal, a thread's opening message). */
   firstMessage(conversationId: string): Message | undefined {
     const r = this.db.prepare("select * from messages where conversation_id = ? order by created_at, rowid limit 1").get(conversationId);

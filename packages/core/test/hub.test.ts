@@ -129,6 +129,11 @@ describe("hub (integration)", () => {
     expect((await web.raw("POST", "/api/conversations", { title: "x" })).status).toBe(403); // no CSRF yet
     web.csrf = boot.csrf;
     expect((await web.raw("POST", "/api/conversations", { title: "x" }, { origin: "https://evil.example" })).status).toBe(403);
+    // `Origin: null` (the page's no-referrer policy on an XMLHttpRequest) passes only when the browser vouches for it.
+    expect((await web.raw("POST", "/api/conversations", { title: "x" }, { origin: "null" })).status).toBe(403);
+    expect((await web.raw("POST", "/api/conversations", { title: "x" }, { origin: "null", "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect((await web.raw("POST", "/api/conversations", { title: "x" }, { origin: "null", "sec-fetch-site": "same-origin" })).status).toBe(200);
+    expect((await web.raw("POST", "/api/conversations", { title: "x" }, { origin: "https://evil.example", "sec-fetch-site": "same-origin" })).status).toBe(403);
     expect((await web.raw("POST", "/api/conversations", { title: "x" })).status).toBe(200);
     await web.req("PATCH", "/api/settings", { approvalInlineWaitSec: 1 });
   });
@@ -218,6 +223,42 @@ describe("hub (integration)", () => {
     const p = await fetch(`${hub.config.publicUrl}/api/files?path=${encodeURIComponent(pdf.path)}`, { headers: { cookie: web.cookie } });
     expect(p.headers.get("content-type")).toBe("application/pdf");
     expect(p.headers.get("content-security-policy")).toBeNull();
+  });
+
+  it("serves workspace files with their length, as byte ranges and as 304 when unchanged", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "ranges" });
+    const clip = (await web.upload(`/api/conversations/${c.id}/attachments?name=${encodeURIComponent("клип.mp4")}`, Buffer.from("0123456789"))).json;
+    const url = `${hub.config.publicUrl}/api/files?path=${encodeURIComponent(clip.path)}`;
+    const whole = await fetch(url, { headers: { cookie: web.cookie } });
+    expect(whole.headers.get("content-type")).toBe("video/mp4");
+    expect(whole.headers.get("content-length")).toBe("10");
+    expect(whole.headers.get("accept-ranges")).toBe("bytes");
+    const etag = whole.headers.get("etag")!;
+    expect(etag).toMatch(/^"[0-9a-f]+-[0-9a-f]+"$/);
+    const part = await fetch(url, { headers: { cookie: web.cookie, range: "bytes=2-5" } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get("content-range")).toBe("bytes 2-5/10");
+    expect(await part.text()).toBe("2345");
+    expect(await (await fetch(url, { headers: { cookie: web.cookie, range: "bytes=-3" } })).text()).toBe("789");
+    expect((await fetch(url, { headers: { cookie: web.cookie, range: "bytes=20-" } })).status).toBe(416);
+    // A range for another version of the file gets the whole file.
+    expect((await fetch(url, { headers: { cookie: web.cookie, range: "bytes=0-1", "if-range": '"old"' } })).status).toBe(200);
+    expect((await fetch(url, { headers: { cookie: web.cookie, "if-none-match": etag } })).status).toBe(304);
+    const saved = await fetch(`${url}&download=1`, { headers: { cookie: web.cookie } });
+    expect(saved.headers.get("content-disposition")).toBe(`attachment; filename="____.mp4"; filename*=UTF-8''${encodeURIComponent("клип.mp4")}`);
+  });
+
+  it("takes back a file that was uploaded and not sent, and keeps a sent one", async () => {
+    const c = await web.req("POST", "/api/conversations", { title: "take back" });
+    const kept = (await web.upload(`/api/conversations/${c.id}/attachments?name=kept.png`, Buffer.from("png"))).json;
+    const dropped = (await web.upload(`/api/conversations/${c.id}/attachments?name=dropped.png`, Buffer.from("png"))).json;
+    await web.req("POST", `/api/conversations/${c.id}/messages`, { attachments: [kept.path] });
+    const discard = (path: string) => web.req("DELETE", `/api/conversations/${c.id}/attachments?path=${encodeURIComponent(path)}`);
+    expect(await discard(kept.path)).toEqual({ removed: false });
+    expect(await discard(dropped.path)).toEqual({ removed: true });
+    expect(await discard(`assistant/${c.id}/attachments/../../x`)).toEqual({ removed: false });
+    expect((await web.raw("GET", `/api/files?path=${encodeURIComponent(dropped.path)}`)).status).toBe(404);
+    expect((await web.raw("GET", `/api/files?path=${encodeURIComponent(kept.path)}`)).status).toBe(200);
   });
 
   it("takes a channel's files inline (a Telegram voice note)", async () => {

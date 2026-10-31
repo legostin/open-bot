@@ -32,16 +32,48 @@ export async function request<T = any>(method: Method, path: string, body?: unkn
   return send<T>(method, path, method === "GET" ? undefined : { type: "application/json", body: JSON.stringify(body ?? {}) });
 }
 
-/** Raw bytes to the hub (a file for the next message). */
-export function upload<T = any>(path: string, data: Blob): Promise<T> {
-  return send<T>("POST", path, { type: "application/octet-stream", body: data });
+export interface UploadOptions {
+  /** How much has gone, 0…1 (XMLHttpRequest: fetch cannot tell). */
+  onProgress?: (fraction: number) => void;
+  signal?: AbortSignal;
 }
 
-async function send<T>(method: Method, path: string, payload?: { type: string; body: BodyInit }): Promise<T> {
+/** Raw bytes to the hub (a file for the next message). Aborted, it rejects with an AbortError. */
+export function upload<T = any>(path: string, data: Blob, opts: UploadOptions = {}): Promise<T> {
+  if (!opts.onProgress) return send<T>("POST", path, { type: "application/octet-stream", body: data }, opts.signal);
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const aborted = () => reject(new DOMException("aborted", "AbortError"));
+    if (opts.signal?.aborted) return aborted();
+    xhr.open("POST", path);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("accept", "application/json");
+    xhr.setRequestHeader("x-owlbot-locale", locale);
+    xhr.setRequestHeader("content-type", "application/octet-stream");
+    xhr.setRequestHeader("x-csrf", csrfToken);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) opts.onProgress?.(Math.min(1, e.loaded / e.total));
+    };
+    xhr.onload = () => {
+      try {
+        resolve(settle<T>(xhr.status, xhr.statusText, xhr.responseText, path));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    xhr.onerror = () => reject(new ApiError(0, t("app.offline")));
+    xhr.onabort = aborted;
+    opts.signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.send(data);
+  });
+}
+
+async function send<T>(method: Method, path: string, payload?: { type: string; body: BodyInit }, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { accept: "application/json", "x-owlbot-locale": locale };
   const init: RequestInit = {
     method,
     headers,
+    signal,
     credentials: "same-origin",
     // The page is served with `Referrer-Policy: no-referrer`, which would make the browser send `Origin: null`
     // on same-origin POSTs. The hub checks Origin for state-changing requests, so opt back in per request.
@@ -55,10 +87,16 @@ async function send<T>(method: Method, path: string, payload?: { type: string; b
   let res: Response;
   try {
     res = await fetch(path, init);
-  } catch {
+  } catch (e) {
+    if (signal?.aborted) throw e;
     throw new ApiError(0, t("app.offline"));
   }
-  const text = await res.text();
+  return settle<T>(res.status, res.statusText, await res.text(), path);
+}
+
+/** A hub answer as data, or an ApiError with the hub's words (a 401 also sends the page back to sign-in). */
+function settle<T>(status: number, statusText: string, text: string, path: string): T {
+  const ok = status >= 200 && status < 300;
   let data: any = undefined;
   if (text) {
     try {
@@ -67,10 +105,10 @@ async function send<T>(method: Method, path: string, payload?: { type: string; b
       data = text;
     }
   }
-  if (!res.ok) {
-    if (res.status === 401 && !path.startsWith("/api/auth/")) unauthorizedHandler?.();
-    const msg = (data && typeof data === "object" && typeof data.error === "string" && data.error) || (typeof data === "string" && data.length < 300 ? data : "") || res.statusText || `HTTP ${res.status}`;
-    throw new ApiError(res.status, msg, data);
+  if (!ok) {
+    if (status === 401 && !path.startsWith("/api/auth/")) unauthorizedHandler?.();
+    const msg = (data && typeof data === "object" && typeof data.error === "string" && data.error) || (typeof data === "string" && data.length < 300 ? data : "") || statusText || `HTTP ${status}`;
+    throw new ApiError(status, msg, data);
   }
   return data as T;
 }

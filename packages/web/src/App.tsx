@@ -11,6 +11,7 @@ import { PluginBoundary } from "./plugins/boundary";
 import { AuthScreen } from "./pages/Auth";
 import { Layout, TopBar } from "./components/Layout";
 import { Toasts } from "./components/Toasts";
+import { MediaViewer } from "./components/viewer/MediaViewer";
 import { Button, EmptyState } from "./components/ui";
 import { OwlMark } from "./components/OwlMark";
 import { sectionForPath, type PanelSection } from "./components/nav";
@@ -48,6 +49,7 @@ export function App() {
       )}
       {(p.kind === "setup" || p.kind === "login") && <AuthScreen mode={p.kind} auth={p.auth} />}
       {p.kind === "ready" && (mobileMode ? <MobileApp /> : <ReadyApp />)}
+      {p.kind === "ready" && <MediaViewer />}
       <Toasts />
     </>
   );

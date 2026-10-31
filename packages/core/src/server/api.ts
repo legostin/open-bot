@@ -13,12 +13,12 @@ import { agentFromMarkdown, localizedAgent, patchAgent } from "../agents.ts";
 import { draftPatch } from "../agent-drafts.ts";
 import { applyThinking } from "../thinking.ts";
 import { pipeToLeader } from "./forward.ts";
-import { HttpError, safeFile, sendFile } from "./http.ts";
-import { MediaError } from "../media.ts";
+import { attachmentDisposition, HttpError, safeFile, sendFile } from "./http.ts";
+import { imageFileName, MediaError } from "../media.ts";
 import { entryRef, googleScopes, listCatalog, listIntegrations } from "../integrations.ts";
 import { callbackParams } from "../connections.ts";
 import { machineHubUrl, qrSvg } from "../pairing.ts";
-import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
+import { attachmentFromPath, discardAttachment, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
 
 export interface ApiOptions {
   kind: "web" | "device";
@@ -152,6 +152,13 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
       const q = req.query as { name?: string; type?: string };
       return saveAttachment(join(cfg.dataDir, "workspaces"), conv, { name: q.name, mimeType: q.type, data: req.body });
     });
+  });
+  // A file uploaded for the next message and taken back before it was sent.
+  api.delete("/api/conversations/:id/attachments", async (req) => {
+    const conv = hub.store.getConversation((req.params as any).id);
+    if (!conv) throw new HttpError(404, "conversation.notFound");
+    const path = (req.query as { path?: unknown }).path;
+    return { removed: discardAttachment(join(cfg.dataDir, "workspaces"), conv, path, (p) => hub.store.messagesMention(conv.id, JSON.stringify(p))) };
   });
   api.post("/api/conversations/:id/interrupt", async (req) => ({ interrupted: hub.runner.interrupt((req.params as any).id) }));
   // The person opened the dialog or is typing: its brain gets ready ahead of the message (runner.warm), in the background.
@@ -632,8 +639,11 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
       .send(data);
   const mediaFailure = (e: unknown) => (e instanceof MediaError ? new HttpError(e.status, e.key) : e);
   api.get("/api/media", async (req, reply) => {
+    const q = req.query as { url?: unknown; download?: unknown };
     try {
-      const r = await hub.media.image((req.query as any).url);
+      const r = await hub.media.image(q.url);
+      // The viewer's download button: the picture saved under its own name.
+      if (q.download === "1") reply.header("content-disposition", attachmentDisposition(imageFileName(String(q.url), r.type)));
       return sendImage(reply, r.data, r.type, 24 * 3600);
     } catch (e) {
       throw mediaFailure(e);
