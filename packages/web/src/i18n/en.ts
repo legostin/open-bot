@@ -532,6 +532,10 @@ export default {
   "notifications.thanks.off": "I won't send this kind of thing anymore",
   "notifications.toTask": "task →",
   "notifications.toChat": "open chat →",
+  "notifications.sources": "From:",
+  "notifications.showAll": "Show all",
+  "notifications.showLess": "Show less",
+  "notifications.feedback.menu": "Rate this",
 
   // agents
   "agents.subtitle": "An agent is a role: a personality, a set of brains, tools and an initiative level.",

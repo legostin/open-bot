@@ -532,6 +532,10 @@ export default {
   "notifications.thanks.off": "Больше не буду присылать такое",
   "notifications.toTask": "задача →",
   "notifications.toChat": "в чат →",
+  "notifications.sources": "Из чего:",
+  "notifications.showAll": "Показать полностью",
+  "notifications.showLess": "Свернуть",
+  "notifications.feedback.menu": "Оценить",
 
   // agents
   "agents.subtitle": "Агент — это роль: характер, интеллект, инструменты и уровень инициативы.",
