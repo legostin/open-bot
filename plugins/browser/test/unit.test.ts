@@ -240,6 +240,10 @@ describe("takeover keys", () => {
     expect(keyEventParams({ key: "Enter", code: "Enter", action: "down" }, 0)).toMatchObject({ type: "keyDown", text: "\r", windowsVirtualKeyCode: 13 });
     expect(keyEventParams({ key: "a", code: "KeyA", action: "down" }, 2)).toMatchObject({ type: "rawKeyDown", text: undefined });
     expect(keyEventParams({ key: "ArrowLeft", action: "up" }, 0)).toMatchObject({ type: "keyUp", windowsVirtualKeyCode: 37 });
+    // A Windows key code is a native one only on Windows: on a Mac, Shift (16) made Chrome open its settings.
+    expect(keyEventParams({ key: "Shift", code: "ShiftLeft", keyCode: 16, action: "down" }, 8, "darwin")).not.toHaveProperty("nativeVirtualKeyCode");
+    expect(keyEventParams({ key: "Shift", code: "ShiftLeft", keyCode: 16, action: "down" }, 8, "linux")).not.toHaveProperty("nativeVirtualKeyCode");
+    expect(keyEventParams({ key: "Shift", code: "ShiftLeft", keyCode: 16, action: "down" }, 8, "win32")).toMatchObject({ nativeVirtualKeyCode: 16 });
     expect(keyEventParams({ key: "" }, 0)).toBeNull();
   });
 });

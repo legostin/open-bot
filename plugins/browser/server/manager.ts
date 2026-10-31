@@ -1283,7 +1283,7 @@ const SPECIAL_KEYS: Record<string, [number, string?]> = {
 for (let i = 1; i <= 12; i++) SPECIAL_KEYS[`F${i}`] = [111 + i];
 
 /** UI keyboard event → CDP Input.dispatchKeyEvent params. */
-export function keyEventParams(m: any, modifiers: number): any | null {
+export function keyEventParams(m: any, modifiers: number, platform: NodeJS.Platform = process.platform): any | null {
   const key = String(m.key ?? "");
   if (!key || key.length > 32) return null;
   const code = String(m.code ?? "");
@@ -1293,7 +1293,9 @@ export function keyEventParams(m: any, modifiers: number): any | null {
   // Ctrl/Meta shortcuts do not insert text (AltGr = Ctrl+Alt does).
   const shortcut = (modifiers & 4) !== 0 || ((modifiers & 2) !== 0 && (modifiers & 1) === 0);
   const text = shortcut ? undefined : (special?.[1] ?? (printable ? key : undefined));
-  const base = { key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers };
+  // The native key code is the Windows one only on Windows. Chrome on a Mac reads it as a Mac key code, and the
+  // Shift of a capital letter (16, the Mac's Y) then opened chrome://settings/help.
+  const base = { key, code, windowsVirtualKeyCode: vk, ...(platform === "win32" ? { nativeVirtualKeyCode: vk } : {}), modifiers };
   if (m.action === "up") return { ...base, type: "keyUp" };
   return { ...base, type: text ? "keyDown" : "rawKeyDown", text, unmodifiedText: text, autoRepeat: !!m.repeat };
 }

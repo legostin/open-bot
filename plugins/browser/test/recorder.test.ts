@@ -34,6 +34,7 @@ describe("recorder", () => {
     r.text("2", qty, 1_100);
     r.text("5", qty, 1_200);
     r.key("Backspace", qty, 1_300);
+    r.key("Shift", qty, 1_320);
     r.key("Tab", qty, 1_350);
     const city = field("Город");
     r.text("Алм", city, 1_400);

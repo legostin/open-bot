@@ -49,6 +49,7 @@ export interface Recording {
 const MULTI_CLICK_MS = 500;
 const MAX_STEPS = 400;
 const MAX_VALUE = 500;
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "Fn", "AltGraph"]);
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 const sameTarget = (a: Target | undefined, b: Target | undefined) => !!a && !!b && a.role === b.role && a.name === b.name && a.frame === b.frame;
@@ -108,6 +109,8 @@ export class Recorder {
 
   /** A key that is not text. Backspace takes a character back from what is being typed. */
   key(key: string, field: Target | undefined, at: number): void {
+    // Shift, Control and the like only change other keys.
+    if (MODIFIER_KEYS.has(key)) return;
     const last = this.last();
     if (key === "Backspace" && last?.kind === "type" && sameTarget(last.target, field)) {
       if (!last.secret && last.value) last.value = last.value.slice(0, -1);
