@@ -4,8 +4,8 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { chromium } from "playwright";
-import type { BrowserContext, CDPSession, Dialog, Download, Frame, LaunchOptions, Locator, Page } from "playwright";
-import { mkdirSync, rmSync, statSync } from "node:fs";
+import type { BrowserContext, CDPSession, Dialog, Download, FileChooser, Frame, LaunchOptions, Locator, Page } from "playwright";
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolResult } from "@piomio/shared";
 import type { PluginContext } from "@piomio/plugin-sdk";
@@ -94,6 +94,10 @@ export class BrowserManager {
   private refSeq = 1;
   private lastUse = Date.now();
   private notes: string[] = [];
+  /** A page asked for files (a file field was clicked) and nobody has answered yet. */
+  private chooser: { page: Page; fc: FileChooser; at: number } | null = null;
+  /** browser_upload is clicking something that opens a file chooser: that one is the tool's. */
+  private chooserFor: ((fc: FileChooser) => void) | null = null;
   private downloadWaiters: Array<(r: { done: Promise<DownloadRecord> }) => void> = [];
   private acceptDialogs = false;
   private headlessMode: boolean | null = null;
@@ -373,6 +377,9 @@ export class BrowserManager {
 
   private trackPage(p: Page): void {
     p.on("dialog", (d) => void this.onDialog(d));
+    // Listening takes the page's file dialog over (none would show in this browser): the person answers it in the
+    // live view, an agent with browser_upload.
+    p.on("filechooser", (fc) => this.onFileChooser(p, fc));
     p.on("download", (d) => this.onDownload(d));
     p.on("close", () => this.onPageClosed(p));
     p.on("framenavigated", (f) => {
@@ -508,6 +515,87 @@ export class BrowserManager {
   }
 
   /** While an approved browser_submit runs, confirm() dialogs are part of the approved action and get accepted. */
+  private onFileChooser(page: Page, fc: FileChooser): void {
+    if (this.chooserFor) {
+      this.chooserFor(fc);
+      this.chooserFor = null;
+      return;
+    }
+    this.chooser = { page, fc, at: Date.now() };
+    if (this.userControl) {
+      void fc
+        .element()
+        .getAttribute("accept")
+        .catch(() => null)
+        .then((accept) => this.ctx.ui.emit("filechooser", { open: true, multiple: fc.isMultiple(), accept: accept ?? "" }));
+    } else {
+      this.notes.push("The page opened a file chooser: to put a file there, call browser_upload with the file field's ref.");
+    }
+  }
+
+  /** Where files to upload wait (the person's from the live view, an agent's from its workspace); a day at most. */
+  uploadDir(): string {
+    const root = join(this.ctx.dataDir, "uploads");
+    mkdirSync(root, { recursive: true });
+    for (const d of readdirSync(root)) {
+      const p = join(root, d);
+      if (Date.now() - statSync(p).mtimeMs > 86_400_000) rmSync(p, { recursive: true, force: true });
+    }
+    const dir = join(root, `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`);
+    mkdirSync(dir);
+    return dir;
+  }
+
+  /** Save files to upload under their own names (made safe) in a fresh folder: their paths. */
+  saveUploads(files: Array<{ name: string; data: Buffer }>): string[] {
+    const dir = this.uploadDir();
+    return files.map((f, i) => {
+      const name = sanitizeFilename(f.name) || `file-${i + 1}`;
+      const path = join(dir, files.slice(0, i).some((x) => sanitizeFilename(x.name) === name) ? `${i + 1}-${name}` : name);
+      writeFileSync(path, f.data, { mode: 0o600 });
+      return path;
+    });
+  }
+
+  /** The person picked files in the live view for the page's file chooser (none: they cancelled it). */
+  async answerChooser(files: Array<{ name: string; data: Buffer }>): Promise<{ ok: boolean; error?: string }> {
+    const c = this.chooser;
+    this.chooser = null;
+    this.ctx.ui.emit("filechooser", { open: false });
+    if (!c || c.page.isClosed()) return { ok: false, error: "no file field is waiting" };
+    await c.fc.setFiles(files.length ? this.saveUploads(files) : []);
+    if (files.length) this.learning.files(files.map((f) => f.name));
+    this.scheduleState();
+    return { ok: true };
+  }
+
+  /**
+   * Put files into the file field `loc` (an <input type=file>, or a button or label that opens a file chooser).
+   * The paths are the plugin's own copies.
+   */
+  async setFiles(loc: Locator, paths: string[]): Promise<void> {
+    try {
+      await loc.setInputFiles(paths, { timeout: 8000 });
+      return;
+    } catch (e: any) {
+      if (!/not an? HTMLInputElement|Non-input element|is not an <input>|input\[type=file\]/i.test(String(e?.message ?? e))) throw e;
+    }
+    // Not the field itself: the page opens its file chooser when the control is clicked.
+    const chosen = new Promise<FileChooser>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.chooserFor = null;
+        reject(new ToolError("Clicking this element opened no file chooser. Use the ref of the file field (role file) from browser_snapshot."));
+      }, 8000);
+      this.chooserFor = (fc) => {
+        clearTimeout(timer);
+        resolve(fc);
+      };
+    });
+    await loc.click({ timeout: 8000 });
+    const fc = await chosen;
+    await fc.setFiles(paths);
+  }
+
   allowConfirmDialogs(on: boolean): void {
     this.acceptDialogs = on;
   }

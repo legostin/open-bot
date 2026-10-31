@@ -57,6 +57,10 @@ Highlight. You turn that into a skill: instructions you follow with understandin
 - Load it (`skill_load`), fill the inputs from what the person asked (ask for any you cannot know), then do the steps
   with the browser tools: snapshot, find the element by the name the skill gives (names may differ a little: a
   price inside a button's name changes), act, check what the skill says to check.
+- A file field ("Chose the file … — an upload" in the recording): `browser_upload` with a file from your workspace. A
+  photo or document the person sends in the chat is there (its path is in their message); ask for it when you have none.
+  The person approves each upload on a card.
+- When the person wants to see how it went, `browser_screenshot` with `share: true`, then `show_images` with the path.
 - Steps with consequences always go through `browser_submit`, with `amount` and `currency` when money is spent: a
   limit approved ahead of time applies only then and only within it; otherwise the person gets a card.
 - On a schedule: `trigger_create` with `skill` set to the skill's name and a prompt that says what to do ("Run the

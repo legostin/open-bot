@@ -81,7 +81,8 @@
       "ui.emit",
       "files.deliver",
       "conversations.tell",
-      "speech.transcribe"
+      "speech.transcribe",
+      "files.fetch"
     ],
     "ui": [
       "live.view",

@@ -127,3 +127,21 @@ describe("recorder: clicking into a field", () => {
     ]);
   });
 });
+
+describe("recorder: files for a page", () => {
+  it("records the names of the files chosen for the file field just clicked, in place of that click", () => {
+    const r = rec();
+    const upload: Target = { role: "file", name: "Upload Photo:" };
+    r.click(upload, 1_000);
+    r.files(["кот.jpg"], 2_000);
+    r.files(["a.png", "b.png"], 3_000);
+    const out = r.finish(4_000);
+    expect(out.steps).toEqual([
+      { kind: "file", at: 2_000, names: ["кот.jpg"], target: upload },
+      { kind: "file", at: 3_000, names: ["a.png", "b.png"] },
+    ]);
+    const md = toMarkdown(out);
+    expect(md).toContain("1. Chose the file «кот.jpg» for file «Upload Photo:» — an upload (browser_upload with a file from your workspace)");
+    expect(md).toContain("2. Chose 2 files «a.png», «b.png» — an upload");
+  });
+});

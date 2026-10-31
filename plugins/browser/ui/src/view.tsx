@@ -9,6 +9,7 @@ import { ArrowLeft, ArrowRight, History, Keyboard as KeyboardIcon, RotateCw, X }
 import { Badge, Button, EmptyState, Spinner } from "@piomio/ui";
 import type { LiveViewProps } from "@piomio/ui";
 import { ControlButton, IconButton, MoreMenu } from "./chrome.tsx";
+import { FileAsk } from "./files.tsx";
 import { HighlightButton, HighlightLayer, useHighlight } from "./highlight.tsx";
 import { HistoryPanel } from "./history.tsx";
 import { errorText, host, isBlank, send, t, toolLabel, touchScreen, viewerId, type BrowserState } from "./host.ts";
@@ -184,7 +185,12 @@ export function BrowserView({ mode, expand }: LiveViewProps) {
       : state?.busy
         ? t("ui.status.busy", { tool: toolLabel(state.busy) })
         : t("ui.status.agent");
-  const teachBar = teach && <TeachBar teach={teach} lesson={lesson} hl={hl} phone={phone} />;
+  const teachBar = (
+    <>
+      {teach && <TeachBar teach={teach} lesson={lesson} hl={hl} phone={phone} />}
+      <FileAsk phone={phone} />
+    </>
+  );
   // The teach bar has its own Highlight; the menu's "Teach" is for when no demonstration runs.
   const highlight = control && !teach && <HighlightButton hl={hl} />;
   const onTeach = state?.running && !teach ? () => send({ type: "teach", action: "start" }) : undefined;

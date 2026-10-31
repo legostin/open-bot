@@ -3,7 +3,7 @@
 import { createReadStream, writeFileSync, mkdirSync } from "node:fs";
 import type { Page, Response } from "playwright";
 import type { ToolCallContext, ToolEffect, ToolResult } from "@piomio/shared";
-import type { PluginContext, ToolHandler } from "@piomio/plugin-sdk";
+import type { PluginContext, PluginHttpRequest, PluginHttpResponse, ToolHandler } from "@piomio/plugin-sdk";
 import type { Visit } from "./history.ts";
 import { BrowserManager, ToolError, type Classified, type DownloadRecord } from "./manager.ts";
 import { SEARCH_ENGINES } from "./address.ts";
@@ -171,6 +171,16 @@ async function deliverDownload(ctx: PluginContext, call: ToolCallContext | undef
   }
 }
 
+/** A file made here (a screenshot) into the session's workspace (downloads/), in 4 MB pieces: its path there. */
+async function deliverBuffer(ctx: PluginContext, sessionId: string, name: string, buf: Buffer): Promise<string> {
+  let path: string | undefined;
+  for (let at = 0; at < buf.length || path === undefined; at += 4 * 1024 * 1024) {
+    const r = await ctx.core.call<{ path: string }>("files.deliver", { sessionId, name, ...(path ? { path } : {}), data: buf.subarray(at, at + 4 * 1024 * 1024).toString("base64") });
+    path = r.path;
+  }
+  return path;
+}
+
 export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
   const reg = (
     name: string,
@@ -323,10 +333,15 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
   reg(
     "screenshot",
     "read",
-    `JPEG screenshot of the current tab (the visible area, or the whole page up to 8000 px with fullPage). Prefer browser_snapshot / browser_get_text for reading; use screenshots for layout, images and charts. ${UNTRUSTED}`,
-    { fullPage: { type: "boolean", description: "Capture the whole scrollable page instead of the viewport." } },
+    "JPEG screenshot of the current tab (the visible area, or the whole page up to 8000 px with fullPage). Prefer browser_snapshot / " +
+      "browser_get_text for reading; use screenshots for layout, images and charts. When the person wants to see it (\"пришли скриншот\", " +
+      `"покажи, как выглядит"), pass share: a sharp copy goes into your workspace, then show it in the chat with show_images. ${UNTRUSTED}`,
+    {
+      fullPage: { type: "boolean", description: "Capture the whole scrollable page instead of the viewport." },
+      share: { type: "boolean", description: "For the person: also save a sharp PNG into your workspace to show with show_images." },
+    },
     [],
-    async (input) =>
+    async (input, call) =>
       mgr.tool("screenshot", async (page): Promise<ToolResult> => {
         const fullPage = input.fullPage === true;
         let clip: { x: number; y: number; width: number; height: number } | undefined;
@@ -335,10 +350,19 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
           if (s.h > 8000) clip = { x: 0, y: 0, width: s.vw, height: 8000 };
         }
         const buf = await page.screenshot({ type: "jpeg", quality: 55, fullPage, clip, scale: "css", timeout: 20_000 });
+        let shared = "";
+        if (input.share === true) {
+          if (!call?.sessionId) shared = " There is no workspace here to put a copy for the person in.";
+          else {
+            const png = await page.screenshot({ type: "png", fullPage, clip, scale: "css", timeout: 20_000 });
+            const path = await deliverBuffer(ctx, call.sessionId, `screenshot-${localTime(Date.now()).replace(/[: ]/g, "-")}.png`, png);
+            shared = ` A copy for the person is in your workspace: ${path}. Show it in the chat with show_images {images: [{path: "${path}"}]}.`;
+          }
+        }
         return {
           content: [
             { type: "image", data: buf.toString("base64"), mimeType: "image/jpeg" },
-            { type: "text", text: `Screenshot of ${fullPage ? (clip ? "the page (first 8000 px)" : "the whole page") : "the visible area"}, ${formatSize(buf.length)}.` },
+            { type: "text", text: `Screenshot of ${fullPage ? (clip ? "the page (first 8000 px)" : "the whole page") : "the visible area"}, ${formatSize(buf.length)}.${shared}` },
           ],
         };
       }),
@@ -830,6 +854,50 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
   // ---------- external ----------
 
   reg(
+    "upload",
+    "external",
+    "Put files from your workspace into a file field on the page: a photo for a post, a document for a form. `files` are paths in " +
+      "your workspace (attachments the person sent, downloads/…). `ref` is the file field (role file in browser_snapshot) or the " +
+      "button that opens the page's file chooser. The person approves on a card: `description` says which files go to which site, " +
+      "in their language. `url` must be the current page URL. This only chooses the files (some pages upload them at once); " +
+      "sending the form is browser_submit. When a page opens a file chooser after a click, use this tool for it.",
+    {
+      ref: refProp,
+      files: { type: "array", items: { type: "string" }, description: "Paths in your workspace, e.g. attachments/2026-10-31/cat.jpg." },
+      url: { type: "string", description: "Current page URL, from the last browser result." },
+      description: { type: "string", description: "What goes where, for the approval card, e.g. «Фото cat.jpg для новой записи на legost.in»." },
+    },
+    ["ref", "files", "url", "description"],
+    async (input, call) => {
+      const ref = str(input.ref, "ref", 20);
+      str(input.description, "description", 300);
+      const expected = str(input.url, "url", 4000);
+      const paths = Array.isArray(input.files) ? input.files.filter((f: unknown) => typeof f === "string" && f.trim()) : [];
+      if (!paths.length || paths.length > MAX_UPLOAD_FILES) throw new ToolError("Parameter files is required: 1 to 10 paths in your workspace.");
+      if (!call?.sessionId) throw new ToolError("There is no workspace to take the files from here.");
+      const files: Array<{ name: string; data: Buffer }> = [];
+      for (const path of paths) {
+        try {
+          const r = await ctx.core.call<{ name: string; data: string }>("files.fetch", { sessionId: call.sessionId, path });
+          files.push({ name: r.name, data: Buffer.from(r.data, "base64") });
+        } catch (e: any) {
+          throw new ToolError(`Could not take ${path} from your workspace: ${e?.message ?? e}. Nothing was uploaded.`);
+        }
+      }
+      return mgr.tool("upload", async (page) => {
+        if (originOf(page.url()) !== originOf(expected)) {
+          throw new ToolError(`The page has changed: ${page.url()} is open now, but the upload was approved for ${expected}. Nothing was uploaded.`);
+        }
+        const { loc } = await mgr.locate(page, ref);
+        await mgr.setFiles(loc, mgr.saveUploads(files));
+        await mgr.settle(1500);
+        return `Chose ${files.map((f) => `«${f.name}»`).join(", ")} in [${ref}]. Check the page with browser_snapshot; if a form still has to be sent, that is browser_submit.`;
+      });
+    },
+    { approvalSummary: "%approval.upload%" },
+  );
+
+  reg(
     "submit",
     "external",
     "Perform an action with consequences after the user approves it: click a submit-like control (Buy, Pay, Send, Delete, Publish, form submit buttons, " +
@@ -888,6 +956,24 @@ export function registerTools(ctx: PluginContext, mgr: BrowserManager): void {
     },
     { approvalSummary: "%approval.submit%" },
   );
+}
+
+/** Files a person or an agent may put into one file field, and how large each. */
+const MAX_UPLOAD_FILES = 10;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+/** POST upload/files {files: [{name, data}]} and upload/cancel: the person's answer to the page's file chooser. */
+export async function uploadHttp(mgr: BrowserManager, req: PluginHttpRequest): Promise<PluginHttpResponse> {
+  if (req.path === "/upload/cancel") return { body: await mgr.answerChooser([]) };
+  const list = (req.body as { files?: unknown } | undefined)?.files;
+  if (!Array.isArray(list) || !list.length || list.length > MAX_UPLOAD_FILES) return { status: 400, body: { ok: false, error: "files: 1 to 10" } };
+  const files: Array<{ name: string; data: Buffer }> = [];
+  for (const f of list) {
+    const data = Buffer.from(typeof f?.data === "string" ? f.data : "", "base64");
+    if (data.length > MAX_UPLOAD_BYTES) return { status: 413, body: { ok: false, error: "larger than 25 MB" } };
+    files.push({ name: String(f?.name ?? "file").slice(0, 200), data });
+  }
+  return { body: await mgr.answerChooser(files) };
 }
 
 /** "2026-10-30 14:02" in the hub's time zone. */

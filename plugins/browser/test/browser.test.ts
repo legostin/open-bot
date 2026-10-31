@@ -95,6 +95,13 @@ const PAGES: Record<string, string> = {
      <div contenteditable="true" aria-label="Send a message" style="min-height:20px;border:1px solid #ccc"></div>
      <input aria-label="Отправить сообщение">`,
   ),
+  "/upload": page(
+    "Загрузка",
+    `<style>body{margin:0}</style>
+     <input id="up" type="file" aria-label="Фото" style="position:absolute;left:0;top:0;width:400px;height:60px">
+     <p id="got" style="position:absolute;top:120px">нет</p>
+     <script>up.onchange = async () => { const f = up.files[0]; got.textContent = f.name + ":" + (await f.text()); }</script>`,
+  ),
   "/counter": page(
     "Счётчик",
     `<style>body{margin:0}</style>
@@ -143,6 +150,11 @@ describe("browser plugin (headless Chromium)", () => {
   const fakeCore = (method: string, p: any) => {
     // Speech-to-text is set up and hears the same words every time.
     if (method === "speech.transcribe") return p.check ? { available: true } : { text: "здесь главное — счётчик" };
+    // The agent's workspace holds one photo; anything else is not there.
+    if (method === "files.fetch") {
+      if (p.path !== "attachments/cat.jpg") throw new Error(`there is no ${p.path} in the workspace`);
+      return { name: "cat.jpg", size: 9, data: Buffer.from("meow-jpeg").toString("base64") };
+    }
     if (method !== "files.deliver") return {};
     const dir = join(workspace, "downloads");
     mkdirSync(dir, { recursive: true });
@@ -236,6 +248,7 @@ describe("browser plugin (headless Chromium)", () => {
       history_clear: "external",
       teach: "local-write",
       journal: "local-write",
+      upload: "external",
     });
     expect([...h.tools.values()].every((t) => t.source === true)).toBe(true);
     // The approval summary is a catalog reference: the hub resolves it in the hub language, then fills {field}s.
@@ -684,6 +697,52 @@ describe("browser plugin (headless Chromium)", () => {
     expect(await ok("journal", { action: "forget", day: "all" })).toMatch(/Forgotten: [1-9]/);
     expect(await ok("journal", { action: "list" })).toBe(await ok("journal", { action: "list" }));
     h.uiMessage({ type: "watch", on: false, id: "teach" });
+  });
+
+  it("saves a sharp copy of a screenshot for the person, to show in the chat", async () => {
+    await ok("open", { url: base + "/about" });
+    const r = await h.invoke("screenshot", { share: true }, { sessionId: "s1" });
+    expect(r.content[0]).toMatchObject({ type: "image", mimeType: "image/jpeg" });
+    const said = text(r);
+    const path = /A copy for the person is in your workspace: (downloads\/screenshot-[^ ]+\.png)\./.exec(said)?.[1];
+    expect(path, said).toBeTruthy();
+    expect(said).toContain(`show_images {images: [{path: "${path}"}]}`);
+    // A PNG, whole.
+    expect(readFileSync(join(workspace, path!)).subarray(1, 4).toString()).toBe("PNG");
+    // Not asked to share: nothing is saved.
+    expect(text(await h.invoke("screenshot", {}, { sessionId: "s1" }))).not.toContain("A copy for the person");
+  });
+
+  it("puts a file from the agent's workspace into a file field, and the person's own through the live view", async () => {
+    await ok("open", { url: base + "/upload" });
+    const ref = refOf(await ok("snapshot"), /Фото/);
+    const missing = await h.invoke("upload", { ref, files: ["secret.txt"], url: base + "/upload", description: "x" }, { sessionId: "s1" });
+    expect(text(missing)).toContain("Could not take secret.txt from your workspace");
+    const done = await h.invoke("upload", { ref, files: ["attachments/cat.jpg"], url: base + "/upload", description: "Фото кота" }, { sessionId: "s1" });
+    expect(text(done), text(done)).toContain("Chose «cat.jpg»");
+    expect(await ok("get_text")).toContain("cat.jpg:meow-jpeg");
+    expect(h.tools.get("upload")!.approvalSummary).toBe("%approval.upload%");
+
+    // The person clicks the field in the live view: no dialog can show there, so the view asks and the hub answers.
+    await ok("open", { url: base + "/upload" });
+    const all = () => h.coreCalls.filter((c) => c.method === "ui.emit").map((c) => c.params as { channel: string; payload: any });
+    const from = all().length;
+    const emits = () => all().slice(from);
+    h.uiMessage({ type: "watch", on: true, id: "files" });
+    const frame = await until(() => emits().find((e) => e.channel === "frame" && e.payload.url === base + "/upload"));
+    h.uiMessage({ type: "control", on: true });
+    await until(() => emits().find((e) => e.channel === "control" && e.payload.user === true));
+    for (const action of ["down", "up"]) h.uiMessage({ type: "input", event: "mouse", action, x: 0.1, y: 30 / frame.payload.height, button: "left", clickCount: 1 });
+    expect((await until(() => emits().find((e) => e.channel === "filechooser" && e.payload.open))).payload).toMatchObject({ open: true, multiple: false });
+    const r = await h.http({ method: "POST", path: "/upload/files", body: { files: [{ name: "мой.png", data: Buffer.from("png!").toString("base64") }] } });
+    expect(r.body).toEqual({ ok: true });
+    await until(() => emits().find((e) => e.channel === "filechooser" && e.payload.open === false));
+    // Nothing waits any more.
+    expect((await h.http({ method: "POST", path: "/upload/cancel", body: {} })).body).toMatchObject({ ok: false });
+    h.uiMessage({ type: "control", on: false });
+    await until(() => emits().find((e) => e.channel === "control" && e.payload.user === false));
+    expect(await ok("get_text")).toContain("мой.png:png!");
+    h.uiMessage({ type: "watch", on: false, id: "files" });
   });
 
   it("refuses an approved action when the amount it spends is not on the page", async () => {

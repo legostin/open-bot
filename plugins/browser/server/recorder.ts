@@ -29,6 +29,8 @@ export type Step =
   | { kind: "tab"; at: number; action: "new" | "switch" | "close" }
   | { kind: "scroll"; at: number; count: number }
   | { kind: "highlight"; at: number; text: string; controls: Control[]; image?: string }
+  /** Files the person chose for a page's file field (their names only; the files are not kept). */
+  | { kind: "file"; at: number; names: string[]; target?: Target }
   | { kind: "say"; at: number; text: string };
 
 export interface Recording {
@@ -177,6 +179,15 @@ export class Recorder {
     this.push({ kind: "scroll", at, count: 1 });
   }
 
+  /** The person chose files for the file field they just clicked. */
+  files(names: string[], at: number): void {
+    const last = this.last();
+    const target = last?.kind === "click" && last.target.role === "file" ? last.target : undefined;
+    // The click that opened the chooser is part of choosing.
+    if (target) this.steps.pop();
+    this.push({ kind: "file", at, names: names.slice(0, 20).map((n) => n.slice(0, 120)), ...(target ? { target } : {}) });
+  }
+
   /** The person framed a place on the page: what is there, and the picture of it (a file next to the recording). */
   highlight(h: { text: string; controls: Control[]; image?: string }, at: number): void {
     this.push({ kind: "highlight", at, text: norm(h.text).slice(0, 1500), controls: h.controls.slice(0, 15), ...(h.image ? { image: h.image } : {}) });
@@ -252,6 +263,8 @@ export function stepText(s: Step): string {
     }
     case "say":
       return `The person said: "${s.text}"`;
+    case "file":
+      return `Chose ${s.names.length === 1 ? "the file" : `${s.names.length} files`} ${s.names.map(q).join(", ")}${s.target ? ` for ${targetText(s.target)}` : ""} — an upload (browser_upload with a file from your workspace)`;
   }
 }
 

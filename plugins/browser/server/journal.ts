@@ -41,6 +41,8 @@ export function stepKey(s: Step): string | null {
       return `t:${s.target.role}:${name(s.target.name)}`;
     case "key":
       return s.key === "Enter" ? `k:${s.key}` : null;
+    case "file":
+      return `f:${s.target ? `${s.target.role}:${name(s.target.name)}` : ""}`;
     case "page": {
       try {
         const u = new URL(s.url);

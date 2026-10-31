@@ -135,6 +135,10 @@ const CSS = `
 .obb-teach{display:flex;align-items:center;gap:6px;min-height:42px;padding:5px 8px 5px 12px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--accent-soft) 55%,var(--surface))}
 .obb-teach.is-phone{margin:0 4px 8px;padding:4px 4px 4px 12px;border:0;border-radius:14px}
 .obb-teach.is-phone .obb-ib{width:38px;height:38px}
+.obb-files{display:flex;align-items:center;gap:8px;min-height:42px;padding:5px 8px 5px 12px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--warning) 14%,var(--surface))}
+.obb-files.is-phone{margin:0 4px 8px;border:0;border-radius:14px}
+.obb-files-icon{flex:none;width:16px;height:16px;color:var(--warning)}
+.obb-files-text{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .obb-rec{flex:none;width:9px;height:9px;border-radius:50%;background:var(--danger);animation:obb-rec 1.6s ease-out infinite}
 @keyframes obb-rec{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--danger) 55%,transparent)}70%,100%{box-shadow:0 0 0 6px transparent}}
 .obb-teach-text{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;margin-left:4px}

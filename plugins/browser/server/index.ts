@@ -3,7 +3,7 @@
 import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
 import { historyHttp } from "./history.ts";
 import { BrowserManager } from "./manager.ts";
-import { registerTools } from "./tools.ts";
+import { registerTools, uploadHttp } from "./tools.ts";
 
 let manager: BrowserManager | null = null;
 
@@ -20,6 +20,8 @@ const plugin: PluginModule = {
     ctx.http.handle((req) => {
       // The person's speech while showing a task (the live view records it in pieces).
       if (!req.public && req.method === "POST" && req.path === "/teach/speech") return mgr.learning.speech(req);
+      // Files the person picked in the live view for the page's file chooser (or none: they cancelled it).
+      if (!req.public && req.method === "POST" && (req.path === "/upload/files" || req.path === "/upload/cancel")) return uploadHttp(mgr, req);
       return historyHttp(mgr.history, req);
     });
     ctx.onSettingsChange((s) => mgr.updateSettings(s));

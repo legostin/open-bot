@@ -293,6 +293,14 @@ export class Learning {
     this.rec.page(url, title, Date.now());
   }
 
+  /** The person chose files for the page's file chooser. */
+  files(names: string[]): void {
+    if (this.rec && this.h.userControl) {
+      this.rec.files(names, Date.now());
+      this.h.changed();
+    }
+  }
+
   tab(action: "new" | "switch" | "close"): void {
     if (this.rec && this.h.userControl) this.rec.tab(action, Date.now());
   }

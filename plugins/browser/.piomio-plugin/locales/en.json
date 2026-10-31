@@ -140,5 +140,14 @@
   "ui.highlight.hint": "Draw a frame around what matters",
   "ui.highlight.failed": "The frame wasn't taken. Try again.",
   "integration.summary": "A real browser for the agent: websites, forms, screenshots, a live view you can take over",
-  "integration.example": "Open wikipedia.org and tell me what the article of the day is about"
+  "integration.example": "Open wikipedia.org and tell me what the article of the day is about",
+  "approval.upload": "Browser, {url|host}, files: {description}",
+  "ui.files.ask": "The page asks for a file",
+  "ui.files.askMany": "The page asks for files",
+  "ui.files.choose": "Choose a file…",
+  "ui.files.chooseMany": "Choose files…",
+  "ui.files.cancel": "Cancel",
+  "ui.files.sending": "Sending to the page…",
+  "ui.files.tooBig": "{name} is larger than 25 MB",
+  "ui.files.failed": "The file did not reach the page: {detail}"
 }

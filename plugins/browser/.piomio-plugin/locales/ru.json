@@ -140,5 +140,14 @@
   "ui.highlight.hint": "Обведите рамкой то, что важно",
   "ui.highlight.failed": "Рамка не сохранилась. Попробуйте ещё раз.",
   "integration.summary": "Настоящий браузер для агента: сайты, формы, скриншоты, живой экран, который можно перехватить",
-  "integration.example": "Открой ru.wikipedia.org и расскажи, о чём сегодняшняя избранная статья"
+  "integration.example": "Открой ru.wikipedia.org и расскажи, о чём сегодняшняя избранная статья",
+  "approval.upload": "Браузер, {url|host}, файлы: {description}",
+  "ui.files.ask": "Страница просит файл",
+  "ui.files.askMany": "Страница просит файлы",
+  "ui.files.choose": "Выбрать файл…",
+  "ui.files.chooseMany": "Выбрать файлы…",
+  "ui.files.cancel": "Отмена",
+  "ui.files.sending": "Отправляю на страницу…",
+  "ui.files.tooBig": "{name} больше 25 МБ",
+  "ui.files.failed": "Файл не дошёл до страницы: {detail}"
 }
