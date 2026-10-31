@@ -23,6 +23,12 @@ const MAX_POSTS_PER_RUN = 20;
 /** Posts a run is shown so it does not repeat them. */
 const RECENT_FOR_RUN = 30;
 const TICK_MS = 30_000;
+/** The wall clock ran on this much more than the timers: the computer slept (other replicas take the lead after 8 s). */
+const ASLEEP_MS = 5_000;
+/** After a wake, the replica that led meanwhile may lead a little longer: it checks every 2 s, then stands down. */
+const HANDOVER_MS = 15_000;
+/** Ticks a time that came while the computer slept waits for what another replica wrote (its pulls are 30 s long polls). */
+const SETTLE_TICKS = 2;
 const LANGUAGES: Record<string, string> = { en: "English", ru: "Russian" };
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -98,6 +104,12 @@ export interface FeedDeps {
 export class Feeds {
   d: FeedDeps;
   private timer?: NodeJS.Timeout;
+  /** Times that came while the computer slept (`settle`): channel id → the time, and the ticks it has waited. */
+  private settling = new Map<string, { slot: string; ticks: number }>();
+  /** Wall clock minus the timers' clock at the last tick: it grows by the time the computer slept. */
+  private clockGap = Date.now() - performance.now();
+  /** When a tick last found the computer had slept (ms). */
+  private wokeAt = -Infinity;
 
   constructor(d: FeedDeps) {
     this.d = d;
@@ -306,12 +318,13 @@ export class Feeds {
 
   /** Due channels start their run; a channel whose time passed while it was still gathering waits for the next one. */
   tick(now = new Date()): void {
+    this.noticeWake();
     for (const r of this.d.db.prepare("select * from feeds where enabled = 1").all() as unknown as Row[]) {
       if (!r.next_run_at) {
         this.schedule(r.id, now);
         continue;
       }
-      if (Date.parse(r.next_run_at) > now.getTime()) continue;
+      if (Date.parse(r.next_run_at) > now.getTime() || this.settle(r.id, r.next_run_at)) continue;
       try {
         if (!this.running(r.id)) this.run(r.id);
       } catch (e) {
@@ -322,6 +335,27 @@ export class Feeds {
   }
 
   // ---------- inside ----------
+
+  /** Remembers when the computer woke: its wall clock ran on while the timers stood still. */
+  private noticeWake(): void {
+    const now = Date.now();
+    const gap = now - performance.now();
+    if (gap - this.clockGap > ASLEEP_MS) this.wokeAt = now;
+    this.clockGap = gap;
+  }
+
+  /**
+   * A time that came while the computer slept, or right after it woke: another replica of the hub (cluster.ts) may have
+   * led meanwhile and gathered the channel, and what it wrote may still be on the way. The time waits SETTLE_TICKS ticks
+   * once, then runs unless the channel's row shows it ran. True while it waits.
+   */
+  private settle(id: string, slot: string): boolean {
+    const cur = this.settling.get(id);
+    if (cur?.slot === slot) return ++cur.ticks < SETTLE_TICKS;
+    if (Date.parse(slot) > this.wokeAt + HANDOVER_MS) return false;
+    this.settling.set(id, { slot, ticks: 0 });
+    return true;
+  }
 
   private row(id: string): Row | undefined {
     return this.d.db.prepare("select * from feeds where id = ?").get(id) as unknown as Row | undefined;

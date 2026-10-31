@@ -13,6 +13,12 @@ export const MAX_RUNS_KEPT = 20;
 const MAX_TIMER_MS = 60_000;
 const STORED_VALUE_LIMIT = 20_000;
 const CATCH_UP_GRACE_MS = 60_000;
+/** The wall clock ran on this much more than the timers: the computer slept (other replicas take the lead after 8 s). */
+const ASLEEP_MS = 5_000;
+/** After a wake, the replica that led meanwhile may lead a little longer: it checks every 2 s, then stands down. */
+const HANDOVER_MS = 15_000;
+/** How long a slot that came while the computer slept waits for what another replica wrote (its pulls are 30 s long polls). */
+const SETTLE_MS = 45_000;
 
 export interface EngineSettings {
   allowPrivateUrls: boolean;
@@ -69,11 +75,18 @@ export class TriggerEngine {
   private booted = false;
   private inflight = new Set<string>();
   private locks = new Map<string, Promise<unknown>>();
+  /** Slots that came while the computer slept (`settle`): trigger id → the slot, and the timer while it waits. */
+  private settling = new Map<string, { slot: string; timer?: NodeJS.Timeout }>();
+  /** Wall clock minus the timers' clock at the last tick: it grows by the time the computer slept. */
+  private clockGap: number;
+  /** When a tick last found the computer had slept (ms). */
+  private wokeAt = -Infinity;
 
   constructor(ctx: PluginContext, opts: { now?: () => number } = {}) {
     this.ctx = ctx;
     this.settings = readEngineSettings(ctx.settings);
     this.now = opts.now ?? Date.now;
+    this.clockGap = this.now() - performance.now();
   }
 
   // ---------- lifecycle ----------
@@ -109,6 +122,7 @@ export class TriggerEngine {
           cur.state.done = true;
           cur.enabled = false;
         }
+        cur.state.lastSlot = missedAt;
         cur.state.nextRunAt = undefined;
         await this.save(cur);
       });
@@ -127,6 +141,7 @@ export class TriggerEngine {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     if (this.settingsTimer) clearInterval(this.settingsTimer);
+    for (const s of this.settling.values()) if (s.timer) clearTimeout(s.timer);
   }
 
   updateSettings(raw: Record<string, any>): void {
@@ -223,7 +238,7 @@ export class TriggerEngine {
     if (this.stopped) return;
     let min = Infinity;
     for (const t of this.triggers.values()) {
-      if (!t.enabled || !t.state.nextRunAt || this.inflight.has(t.id)) continue;
+      if (!t.enabled || !t.state.nextRunAt || this.inflight.has(t.id) || this.settling.get(t.id)?.timer) continue;
       min = Math.min(min, Date.parse(t.state.nextRunAt));
     }
     if (!Number.isFinite(min)) return;
@@ -234,8 +249,9 @@ export class TriggerEngine {
   private tick(): void {
     this.timer = undefined;
     const now = this.now();
+    this.noticeWake(now);
     for (const t of [...this.triggers.values()]) {
-      if (!t.enabled || !t.state.nextRunAt || this.inflight.has(t.id) || Date.parse(t.state.nextRunAt) > now) continue;
+      if (!t.enabled || !t.state.nextRunAt || this.inflight.has(t.id) || this.settling.get(t.id)?.timer || Date.parse(t.state.nextRunAt) > now) continue;
       this.inflight.add(t.id);
       void this.withLock(t.id, () => this.runDue(t.id))
         .catch((e) => this.ctx.log.error(`trigger ${t.id} failed: ${e?.message ?? e}`))
@@ -247,19 +263,63 @@ export class TriggerEngine {
     this.arm();
   }
 
+  /** Remembers when the computer woke: its wall clock ran on while the timers stood still. */
+  private noticeWake(now: number): void {
+    const gap = now - performance.now();
+    if (gap - this.clockGap > ASLEEP_MS) this.wokeAt = now;
+    this.clockGap = gap;
+  }
+
+  /**
+   * A slot that came while the computer slept, or right after it woke: another replica of the hub (cluster.ts) may have
+   * led meanwhile and run it, and what it wrote may still be on the way. The slot waits SETTLE_MS once, then runs unless
+   * storage shows it ran. True while it waits.
+   */
+  private settle(id: string, slot: string): boolean {
+    const cur = this.settling.get(id);
+    if (cur?.slot === slot) return !!cur.timer;
+    if (Date.parse(slot) > this.wokeAt + HANDOVER_MS) return false;
+    const entry: { slot: string; timer?: NodeJS.Timeout } = { slot };
+    entry.timer = setTimeout(() => {
+      entry.timer = undefined;
+      this.arm();
+    }, SETTLE_MS);
+    this.settling.set(id, entry);
+    return true;
+  }
+
+  /** The trigger as storage has it (another replica of the hub may have written it), adopted; undefined when it is gone. */
+  private async reload(id: string): Promise<Trigger | undefined> {
+    const stored = await this.ctx.storage.get<Trigger>(`trigger:${id}`);
+    if (!stored?.id) {
+      this.triggers.delete(id);
+      this.emit(id);
+      return undefined;
+    }
+    const t = { ...stored, state: stored.state ?? {} };
+    this.triggers.set(id, t);
+    return t;
+  }
+
   private async runDue(id: string): Promise<void> {
-    const t = this.triggers.get(id);
-    if (!t || !t.enabled || this.stopped) return;
+    if (!this.triggers.has(id) || this.stopped) return;
+    const t = await this.reload(id);
+    if (!t || !t.enabled) return;
     const now = new Date(this.now());
-    if (!t.state.nextRunAt || Date.parse(t.state.nextRunAt) > now.getTime()) return; // rescheduled meanwhile
+    if (!t.state.nextRunAt || Date.parse(t.state.nextRunAt) > now.getTime()) return; // rescheduled or run meanwhile
+    const slot = t.state.nextRunAt;
+    if (t.kind !== "watch" && t.kind !== "event" && this.settle(id, slot)) return;
     switch (t.kind) {
       case "schedule":
-      case "heartbeat":
-        // Plan the next run first so a slow firing is never repeated.
+      case "heartbeat": {
+        const ran = !!t.state.lastSlot && Date.parse(t.state.lastSlot) >= Date.parse(slot);
+        // Plan the next run first so a slow firing is never repeated, and remember the slot so it never fires twice.
         t.state.nextRunAt = computeNextRun(t, this.tz, now)?.toISOString();
+        if (!ran) t.state.lastSlot = slot;
         await this.save(t);
-        await this.fire(t, t.kind, {}, { skipIfBusy: true });
+        if (!ran) await this.fire(t, t.kind, {}, { skipIfBusy: true });
         return;
+      }
       case "once":
         await this.fire(t, "once", {}, { force: true });
         t.state.done = true;

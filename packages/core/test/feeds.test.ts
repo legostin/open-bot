@@ -2,14 +2,18 @@
 // hub refuses (repeats, too many in a run), unread counts, and end to end through the API and the editor's tools:
 // the fake brain posts with feed_post inside the channel's run, in the channel's own folder.
 // Uses the scripted fake brain (test/fixtures/plugins/fakebrain): "CALL <tool> <json>".
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Feed, FeedPost, Task } from "@piomio/shared";
 import { Hub, loadConfig } from "../src/index.ts";
-import { nextRun } from "../src/feeds.ts";
+import { Feeds, nextRun } from "../src/feeds.ts";
+import { openDb } from "../src/db.ts";
+import { EventBus } from "../src/bus.ts";
+import { Settings } from "../src/settings.ts";
+import type { AgentRegistry } from "../src/agents.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -27,6 +31,96 @@ describe("a channel's schedule", () => {
     expect(nextRun(["08:00"], [], "Europe/Berlin", at("2026-10-24T12:00:00Z"))?.toISOString()).toBe("2026-10-25T07:00:00.000Z");
     expect(nextRun(["08:00"], [], "Europe/Berlin", at("2026-10-23T12:00:00Z"))?.toISOString()).toBe("2026-10-24T06:00:00.000Z");
     expect(nextRun([], [], "UTC", at("2026-10-28T00:00:00Z"))).toBeUndefined();
+  });
+});
+
+// The hub on several machines (cluster.ts): the Mac leads and sleeps, the VPS leads meanwhile and gathers the channel,
+// and the Mac wakes still leading. A sleeping computer's wall clock runs on while its timers stand still: here
+// `vi.setSystemTime` moves the wall clock alone, and advancing the timers moves both.
+describe("a channel's time on a replica that slept through it", () => {
+  const clocks = { toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] as Array<"setTimeout"> };
+  afterEach(() => vi.useRealTimers());
+
+  /** A channel gathered at 12:00 Almaty (07:00 UTC) on a Mac that sleeps from 11:59 to 12:02:54 and then ticks. */
+  function sleptThrough() {
+    vi.useFakeTimers(clocks);
+    vi.setSystemTime(new Date("2026-10-31T06:59:00Z"));
+    const db = openDb(":memory:");
+    const created: string[] = [];
+    const feeds = new Feeds({
+      db,
+      bus: new EventBus(),
+      settings: new Settings(db, "Asia/Almaty"),
+      agents: { get: (id: string) => ({ id }), list: () => [] } as unknown as AgentRegistry,
+      createTask: (t) => {
+        created.push(t.feedId);
+        return { id: `task_${created.length}`, createdAt: new Date().toISOString() } as Task;
+      },
+      getTask: () => undefined,
+    });
+    const f = feeds.create({ brief: "Video game news", times: ["12:00"] }, { run: false });
+    expect(f.nextRunAt).toBe("2026-10-31T07:00:00.000Z");
+    feeds.tick();
+    vi.setSystemTime(new Date("2026-10-31T07:02:54Z"));
+    feeds.tick();
+    const later = (ticks: number) => {
+      for (let i = 0; i < ticks; i++) {
+        vi.advanceTimersByTime(30_000);
+        feeds.tick();
+      }
+    };
+    return { db, feeds, created, id: f.id, later };
+  }
+
+  it("waits for what the replica that led meanwhile wrote, and does not gather it again", () => {
+    const { db, created, id, later } = sleptThrough();
+    expect(created).toHaveLength(0);
+    // The VPS's run, replicated seconds after the wake.
+    db.prepare("update feeds set last_run_at = ?, next_run_at = ? where id = ?").run("2026-10-31T07:00:21.000Z", "2026-11-01T07:00:00.000Z", id);
+    later(5);
+    expect(created).toHaveLength(0);
+  });
+
+  it("waits as well for a time that comes right after it woke, while the other replica may still lead", () => {
+    vi.useFakeTimers(clocks);
+    vi.setSystemTime(new Date("2026-10-31T06:58:00Z"));
+    const db = openDb(":memory:");
+    const created: string[] = [];
+    const feeds = new Feeds({
+      db,
+      bus: new EventBus(),
+      settings: new Settings(db, "Asia/Almaty"),
+      agents: { get: (id: string) => ({ id }), list: () => [] } as unknown as AgentRegistry,
+      createTask: (t) => {
+        created.push(t.feedId);
+        return { id: `task_${created.length}`, createdAt: new Date().toISOString() } as Task;
+      },
+      getTask: () => undefined,
+    });
+    const f = feeds.create({ brief: "Video game news", times: ["12:00"] }, { run: false });
+    feeds.tick();
+    vi.setSystemTime(new Date("2026-10-31T06:59:50Z")); // asleep until 11:59:50
+    feeds.tick();
+    vi.advanceTimersByTime(30_000);
+    feeds.tick(); // 12:00:20
+    expect(created).toHaveLength(0);
+    db.prepare("update feeds set next_run_at = ? where id = ?").run("2026-11-01T07:00:00.000Z", f.id);
+    for (let i = 0; i < 5; i++) {
+      vi.advanceTimersByTime(30_000);
+      feeds.tick();
+    }
+    expect(created).toHaveLength(0);
+  });
+
+  it("gathers a time it slept through once, after the wait, when no other replica did", () => {
+    const { feeds, created, id, later } = sleptThrough();
+    later(1);
+    expect(created).toHaveLength(0);
+    later(1);
+    expect(created).toEqual([id]);
+    later(5);
+    expect(created).toHaveLength(1);
+    expect(feeds.get(id)!.nextRunAt).toBe("2026-11-01T07:00:00.000Z");
   });
 });
 

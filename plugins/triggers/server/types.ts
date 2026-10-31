@@ -8,6 +8,8 @@ export type RunReason = "schedule" | "catch-up" | "once" | "change" | "webhook" 
 export interface TriggerState {
   /** Next planned firing (ISO). Persisted so missed runs can be detected after a restart. */
   nextRunAt?: string;
+  /** The planned time (ISO) of the last slot that fired, so a slot never fires twice. */
+  lastSlot?: string;
   lastRunAt?: string;
   lastStatus?: "ok" | "error" | "skipped";
   /** English text (tools, logs); the UI shows "error.<lastErrorCode>" from the catalog when there is a code. */
