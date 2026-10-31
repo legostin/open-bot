@@ -745,6 +745,24 @@ describe("browser plugin (headless Chromium)", () => {
     h.uiMessage({ type: "watch", on: false, id: "files" });
   });
 
+  it("keeps each agent in its own tab, so one cannot take the page another works on", async () => {
+    const as = (agentId: string, name: string, input: Record<string, unknown> = {}) => h.invoke(name, input, { agentId }).then(text);
+    // The photo critic fills a form; the news agent then searches in the same browser.
+    expect(await as("fotokritik", "open", { url: base + "/upload" })).toContain(`Page: Загрузка — ${base}/upload`);
+    expect(await as("newsdesk", "open", { url: base + "/about" })).toContain(`Page: О нас — ${base}/about`);
+    // The critic's next call is on its own page, not the news agent's: an upload approved for it still finds the form.
+    const ref = refOf(await as("fotokritik", "snapshot"), /Фото/);
+    expect(await as("fotokritik", "upload", { ref, files: ["attachments/cat.jpg"], url: base + "/upload", description: "Фото кота" })).toContain("Chose «cat.jpg»");
+    expect(await as("newsdesk", "get_text")).toContain("Мы продаём всё.");
+    expect(await as("fotokritik", "get_text")).toContain("cat.jpg:meow-jpeg");
+    // A tab opened for an agent of its own is no news to it.
+    expect(await as("newsdesk", "snapshot")).not.toContain("A new tab opened");
+    // Their tabs go; the rest of the tests work in the assistant's.
+    await as("newsdesk", "tabs", { action: "close" });
+    await as("fotokritik", "tabs", { action: "close" });
+    expect(await ok("tabs", { action: "list" })).not.toMatch(/^2 /m);
+  });
+
   it("refuses an approved action when the amount it spends is not on the page", async () => {
     await ok("open", { url: base + "/" });
     const snap = await ok("snapshot");

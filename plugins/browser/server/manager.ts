@@ -94,6 +94,13 @@ export class BrowserManager {
   private refSeq = 1;
   private lastUse = Date.now();
   private notes: string[] = [];
+  /**
+   * The tab each agent works in. Agents take turns in one browser: each keeps to its own page, so one reading news
+   * cannot take the form another is filling (an upload approved for one site found the other on the page).
+   */
+  private agentTabs = new Map<string, Page>();
+  /** A tab opened here for an agent of its own: not news for it ("a new tab opened"). */
+  private openingOwnTab = false;
   /** A page asked for files (a file field was clicked) and nobody has answered yet. */
   private chooser: { page: Page; fc: FileChooser; at: number } | null = null;
   /** browser_upload is clicking something that opens a file chooser: that one is the tool's. */
@@ -298,7 +305,7 @@ export class BrowserManager {
     context.on("page", (p) => {
       this.trackPage(p);
       if (this.context === context) {
-        if (this.active && !this.active.isClosed() && this.busy && this.busy !== "tabs") this.note("A new tab opened and became active.");
+        if (this.active && !this.active.isClosed() && this.busy && this.busy !== "tabs" && !this.openingOwnTab) this.note("A new tab opened and became active.");
         this.setActive(p);
       }
     });
@@ -481,6 +488,7 @@ export class BrowserManager {
   }
 
   private onPageClosed(p: Page): void {
+    for (const [id, tab] of this.agentTabs) if (tab === p) this.agentTabs.delete(id);
     if (this.active === p) {
       const rest = this.context?.pages().filter((x) => !x.isClosed()) ?? [];
       this.active = rest[rest.length - 1] ?? null;
@@ -503,6 +511,27 @@ export class BrowserManager {
 
   activePage(): Page | null {
     return this.active && !this.active.isClosed() ? this.active : null;
+  }
+
+  /** The tab `agentId` works in: its own, or the active one when no other agent has it, or a new one. */
+  private async pageFor(agentId: string | undefined): Promise<Page> {
+    if (!agentId) return this.ensurePage();
+    const context = await this.ensureContext();
+    const own = this.agentTabs.get(agentId);
+    if (own && !own.isClosed()) {
+      this.setActive(own);
+      return own;
+    }
+    const active = await this.ensurePage();
+    if (![...this.agentTabs].some(([id, tab]) => id !== agentId && tab === active)) return active;
+    this.openingOwnTab = true;
+    try {
+      const p = await context.newPage();
+      this.setActive(p);
+      return p;
+    } finally {
+      this.openingOwnTab = false;
+    }
   }
 
   async ensurePage(): Promise<Page> {
@@ -719,7 +748,7 @@ export class BrowserManager {
     this.scheduleState();
     let result: ToolResult;
     try {
-      const page = await this.ensurePage();
+      const page = await this.pageFor(agentId);
       const before = { page, url: page.url(), pages: new Set(this.pages()) };
       const out = await fn(page);
       result = typeof out === "string" ? { content: [{ type: "text", text: out }] } : out;
@@ -728,6 +757,9 @@ export class BrowserManager {
     } catch (e: any) {
       result = { content: [{ type: "text", text: friendlyError(e) }], isError: true };
     } finally {
+      // Where the agent ended up (a tab it opened or switched to) is its tab from now on.
+      const now = this.activePage();
+      if (agentId && now) this.agentTabs.set(agentId, now);
       this.busy = null;
       this.touch();
       this.scheduleState();
