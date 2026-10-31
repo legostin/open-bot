@@ -69,17 +69,17 @@ skills.ts`, `packages/core/src/tools/hub-tools.ts`, `packages/core/src/db.ts`, `
 `packages/core/src/runner.ts`, `packages/core/src/locales/{en,ru}.ts`, `plugins/triggers/server/*` (trigger `skill`),
 the security console's rule rendering if it lists ops; tests next to the existing ones in `packages/core/test`.
 
-- [ ] Rule op `max` in `conditionMatches` (finite number ≤ value; strings like "2400" count; missing → no match) and
+- [x] Rule op `max` in `conditionMatches` (finite number ≤ value; strings like "2400" count; missing → no match) and
   wherever rules are validated or shown. Test in the policy tests.
-- [ ] `Task.skill`: migration `alter table tasks add column skill text`, store read/write, `createTask({ skill })`,
+- [x] `Task.skill`: migration `alter table tasks add column skill text`, store read/write, `createTask({ skill })`,
   `tasks.create` param. PolicyInput `skillRun: boolean` (gateway: the session's task has a skill that is `taught`).
   `decide`: the background read-only rule does not apply when `skillRun`; local-write is then allowed, external goes
   to rules or a card. Tests: background initiative 1 + skillRun allows browser_click, asks browser_submit, a matching
   rule allows it.
-- [ ] `conversations.tell` and `speech.transcribe` in `core-call.ts` (temp file under `tmpdir()`, removed after).
+- [x] `conversations.tell` and `speech.transcribe` in `core-call.ts` (temp file under `tmpdir()`, removed after).
   Tests with a fake runner / transcriber in the core-call tests.
-- [ ] `Skill.taught` / `Skill.sites` from frontmatter.
-- [ ] `hub_skill_save`: validates (name `^[a-z0-9][a-z0-9-]{0,39}$`, description ≤ 300, instructions ≤ 20 000,
+- [x] `Skill.taught` / `Skill.sites` from frontmatter.
+- [x] `hub_skill_save`: validates (name `^[a-z0-9][a-z0-9-]{0,39}$`, description ≤ 300, instructions ≤ 20 000,
   ≤ 20 files inside the session's workspace, ≤ 5 MB each; a built-in or plugin skill name is refused; an existing
   taught skill needs `replaces` = its name). Always asks on its own approval card (like `permission_always`; add to
   OWN_CARD) with the summary from core locales: save/update line + one line per `allow` ("«label» on site, up to
@@ -90,9 +90,9 @@ the security console's rule rendering if it lists ops; tests next to the existin
   case), decision allow, `createdVia: "skill"`, note `skill:<name>` — adds the sites to known targets, reloads
   skills, audits. `hub_skill_delete` removes a taught skill's folder and its rules. Tests: card text, refused
   without yes, files and rules after yes, replaces, delete, names of other skills refused.
-- [ ] Triggers: optional `skill` on a trigger (types, validation, the create/update tool's schema with a one-line
+- [x] Triggers: optional `skill` on a trigger (types, validation, the create/update tool's schema with a one-line
   description, engine passes it to `tasks.create`). Test in the triggers tests.
-- [ ] `npm run typecheck` (errors in files of B/C may be theirs), the core + triggers tests, commit.
+- [x] `npm run typecheck` (errors in files of B/C may be theirs), the core + triggers tests, commit.
 
 ### Task B: browser plugin server — recorder, journal, teach sessions, hints, repeats, tools
 
@@ -102,29 +102,29 @@ the security console's rule rendering if it lists ops; tests next to the existin
 `manager.ts`, `tools.ts`, `index.ts`, `util.ts` (setting), `.piomio-plugin/plugin.json` (setting, core permissions),
 `test/browser.test.ts` (teach flow, submit amount).
 
-- [ ] Recorder (pure): `new Recorder({ kind: "teach" | "takeover", goal?, now })`, `pointer(info, at)`,
+- [x] Recorder (pure): `new Recorder({ kind: "teach" | "takeover", goal?, now })`, `pointer(info, at)`,
   `text(chars, field, at)`, `key(key, field, at)`, `page(url, title, at)`, `tab(action, at)`, `scroll(at)`,
   `highlight(area, crop?, at)`, `say(text, at)`, `finish(at): Recording`; `toMarkdown(rec)`; `hintText(rec)`.
   Tests first: click merge, typing merge + Backspace, secret fields, page steps deduped, speech placed by time,
   markdown shape.
-- [ ] Page-script ops in the isolated world: `at {x, y}` (the interactive ancestor's role/name/href/editable/
+- [x] Page-script ops in the isolated world: `at {x, y}` (the interactive ancestor's role/name/href/editable/
   secret/submit-like, or `{ frame: host }` for another site's frame), `area {x0, y0, x1, y1}` (text inside ≤ 1 500
   chars and up to 15 controls), `field` (the focused field's info and value; no value for secret fields). Test the
   names against `snapshot` on a real page in `browser.test.ts`.
-- [ ] Journal: `<dataDir>/journal/<id>.json` + `<id>-<n>.jpg`, prune after 30 days / beyond 500, `list`, `get`,
+- [x] Journal: `<dataDir>/journal/<id>.json` + `<id>-<n>.jpg`, prune after 30 days / beyond 500, `list`, `get`,
   `forget({ id } | { day: "today" | "all" })`, `findRepeats(all, rec)` (same origin, ≥ 3 steps, Jaccard of
   step keys ≥ 0.6 and same order of the shared keys; ≥ 2 earlier sessions on other days or ≥ 3 in all; dismissed
   signatures skipped). Tests first.
-- [ ] Manager: teach session state, recorder on takeover, input capture (await `at` ≤ 300 ms before dispatching a
+- [x] Manager: teach session state, recorder on takeover, input capture (await `at` ≤ 300 ms before dispatching a
   mouse down; `field` on the first key of a field), highlight (crop via `Page.captureScreenshot` clip), speech HTTP
   route, Done/Cancel/end on leaving the view (2 min without watchers), `state.teach` / `activity.teach`, files +
   `conversations.tell` at Done, hint notes after a takeover while an agent used the browser in the last 10 min,
   journal + repeats for free use when `rememberActions`.
-- [ ] Tools `browser_teach`, `browser_journal`, `browser_submit` amount (refused unless the number is on the page in
+- [x] Tools `browser_teach`, `browser_journal`, `browser_submit` amount (refused unless the number is on the page in
   any common format: `2400`, `2 400`, `2 400`, `2,400`, `2.400`, with decimals). Tool descriptions say when to use
   them and point to the `teach-by-demo` skill.
-- [ ] `skills/teach-by-demo/SKILL.md`.
-- [ ] Plugin tests + typecheck, commit.
+- [x] `skills/teach-by-demo/SKILL.md`.
+- [x] Plugin tests + typecheck, commit.
 
 ### Task C: browser plugin UI — teach bar, highlight, voice, menu
 
@@ -132,24 +132,31 @@ the security console's rule rendering if it lists ops; tests next to the existin
 (frame overlay); modify `view.tsx`, `screen.tsx`, `chrome.tsx` (⋯ menu "Teach", Highlight button), `host.ts`
 (`BrowserState.teach`, `Activity.teach`), `index.tsx` (attention while teaching), `styles.ts`, plugin locales.
 
-- [ ] Teach bar (desktop: above the page; phone: under the address): red dot, "Showing: {goal}" (or "Showing the
+- [x] Teach bar (desktop: above the page; phone: under the address): red dot, "Showing: {goal}" (or "Showing the
   agent" without one), steps count, mic toggle with a level ring, Highlight toggle, Done (primary), Cancel. The view
   calls `expand()` when `state.teach` appears in the mini mode.
-- [ ] Highlight mode: an overlay over the picture takes mouse/touch drags (stopPropagation so nothing reaches the
+- [x] Highlight mode: an overlay over the picture takes mouse/touch drags (stopPropagation so nothing reaches the
   page), draws the frame, sends `{type:"highlight", ...}` with coordinates relative to the image box (the zoom
   included, as `pos()` does), flashes on the `"highlight"` event, leaves the mode after one frame. The Highlight
   button also shows whenever the person is in control.
-- [ ] Voice: while teaching and `state.teach.speech`, getUserMedia audio; AudioContext analyser for the level and
+- [x] Voice: while teaching and `state.teach.speech`, getUserMedia audio; AudioContext analyser for the level and
   silence; MediaRecorder segments (end after 0.8 s silence or 20 s; drop segments without speech); POST
   `teach/speech`; on `error` show it once and turn the mic off. Mic off by tap. Stops on Done/Cancel/unmount.
-- [ ] ⋯ menu item "Teach" → `send({type:"teach", action:"start"})` (also takes control).
-- [ ] Locale keys (en + ru) for everything above and `settings.rememberActions.*`.
-- [ ] `npm run build` (UI plugins) and typecheck, commit.
+- [x] ⋯ menu item "Teach" → `send({type:"teach", action:"start"})` (also takes control).
+- [x] Locale keys (en + ru) for everything above and `settings.rememberActions.*`.
+- [x] `npm run build` (UI plugins) and typecheck, commit.
 
 ### Task D: integration, review, live check, merge
 
-- [ ] Review A and C diffs against this plan; full `npm run typecheck`, `npm test`, `npm run build`.
-- [ ] Live check on a throwaway hub with a scripted brain or a real one: teach start → steps → highlight → Done →
+- [x] Review A and C diffs against this plan; full `npm run typecheck`, `npm test`, `npm run build`.
+  A and C follow the Interfaces above. The review fixed: a taught skill's run may only drive the browser by itself
+  (`SKILL_RUN_TOOLS`), triggers ask after outside content, "Always allow" on lasting-grant cards counts as one yes,
+  codec parameters are stripped from the speech type. Typecheck clean, 1097 tests pass, build passes.
+- [x] Live check on a throwaway hub with a scripted brain or a real one: teach start → steps → highlight → Done →
   note + files in the workspace → `hub_skill_save` card → skill folder + rules; hint after a takeover; repeat offer.
-  Stop the hub and delete its data dir afterwards.
-- [ ] Merge into main, remove the worktree.
+  Stop the hub and delete its data dir afterwards. Done 2026-10-31 with fakebrain (desktop and 375 px): all of the
+  above, plus Teach from the ⋯ menu; the hubs and their data were deleted.
+- [x] Merge into main, remove the worktree. Local main 411b224 (not pushed); installed on the Mac from ac4d293.
+
+Not covered here: a real microphone (needs the person's voice), the iOS app on the phone (piomio-ios bff988e built
+for the simulator only).
