@@ -103,6 +103,8 @@ export function registerTools(ctx: PluginContext, e: TriggerEngine): void {
       "When the runs need a particular computer (its files, apps, hardware), set `machine`: every run happens there. " +
       "When each run should do a skill the person taught (\"order water every Friday\"), set `skill` to its name. Returns the trigger id.",
     effect: "local-write",
+    // A trigger outlives the session: after outside content (a page could ask for one) the person says yes on a card.
+    askWhenTainted: true,
     inputSchema: {
       type: "object",
       properties: { kind: { type: "string", enum: [...TRIGGER_KINDS], description: "Trigger kind." }, ...FIELDS },
@@ -132,6 +134,8 @@ export function registerTools(ctx: PluginContext, e: TriggerEngine): void {
     name: "update",
     description: "Change a trigger: name, prompt, agent, machine, skill, enabled, maxRunsPerDay and the kind-specific fields (cron, at, url, selector, jsonPath, intervalMinutes, times, weekdays). The kind cannot change.",
     effect: "local-write",
+    // As for create: after outside content the person says yes.
+    askWhenTainted: true,
     inputSchema: {
       type: "object",
       properties: { id: { type: "string", description: "Trigger id." }, enabled: { type: "boolean", description: "Turn the trigger on or off." }, ...FIELDS },

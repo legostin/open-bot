@@ -89,6 +89,8 @@ describe("policy engine", () => {
     // Without a taught skill, a background run below initiative 2 only reads.
     expect(decide(run({ tool: click }), [], unknownTargets).decision).toBe("deny");
     expect(decide(run({ tool: click, skillRun: true }), [], unknownTargets).decision).toBe("allow");
+    // Only the browser: a taught skill's run writes nothing else by itself.
+    expect(decide(run({ tool: tool("files_write", "local-write"), skillRun: true }), [], unknownTargets).decision).toBe("deny");
     const input = { ref: "e9", label: "Оформить заказ", url: "https://www.5vodi.kz/cart", amount: 2400, currency: "KZT", description: "Order water" };
     expect(decide(run({ tool: submit, input, skillRun: true }), [], unknownTargets).decision).toBe("ask");
     const pre = rule({

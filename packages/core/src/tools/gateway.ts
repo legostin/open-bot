@@ -10,7 +10,7 @@ import type { ApprovalService } from "../approvals.ts";
 import type { AuditLog } from "../audit.ts";
 import type { Redactor } from "../vault/redact.ts";
 import type { Settings } from "../settings.ts";
-import { BACKGROUND_ALWAYS_ALLOWED, decide } from "../policy/engine.ts";
+import { BACKGROUND_ALWAYS_ALLOWED, decide, SKILL_RUN_TOOLS } from "../policy/engine.ts";
 import { NATIVE_PERMISSION_TOOL } from "./native-permission.ts";
 import { HUB_TOOL_PREFIX, HUB_TOOLS_FOR_EVERY_AGENT } from "./hub-tools.ts";
 
@@ -86,7 +86,7 @@ export class ToolGateway {
     if (t.owner === "core" && t.name.startsWith(HUB_TOOL_PREFIX) && !everyAgent && agent.id !== this.d.settings.get().defaultAgent) return false;
     if (t.availability === "background" && !s.background) return false;
     if (t.availability === "interactive" && s.background) return false;
-    if (s.background && agent.initiative < 2 && !skillRun && t.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(t.name)) return false;
+    if (s.background && agent.initiative < 2 && !(skillRun && SKILL_RUN_TOOLS.test(t.name)) && t.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(t.name)) return false;
     return true;
   }
 

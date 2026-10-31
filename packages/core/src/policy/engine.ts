@@ -26,6 +26,9 @@ export interface PolicyResult {
   ruleId?: string;
 }
 
+/** What a run of a taught skill may do by itself beyond reading: drive the browser the person showed it in. */
+export const SKILL_RUN_TOOLS = /^browser_/;
+
 /** Tools background tasks may always use regardless of effect. */
 // memory_remember, memory_write: the nightly reflection is a background task; a remembered or updated fact is local,
 // shown and undoable.
@@ -102,7 +105,7 @@ export function decide(p: PolicyInput, rules: Rule[], isKnownTarget: (t: string)
     }
   }
 
-  if (p.background && p.initiative < 2 && !p.skillRun && tool.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(tool.name)) {
+  if (p.background && p.initiative < 2 && !(p.skillRun && SKILL_RUN_TOOLS.test(tool.name)) && tool.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(tool.name)) {
     return { decision: "deny", reason: t("policy.backgroundReadOnly") };
   }
 
