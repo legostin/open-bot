@@ -855,12 +855,14 @@ export class BrowserManager {
         this.touch();
         // One at a time and in order: the recorder looks at what is under the pointer before a press reaches the page,
         // and a release must not overtake its press meanwhile.
-        const job = this.inputChain.then(async () => {
+        const work = async () => {
           await this.learning.beforeInput(m);
           await this.dispatchInput(m);
           // A click or Tab may have moved the focus into (or out of) a text field: the phone's keyboard follows it.
           if ((m.event === "mouse" && m.action === "up") || (m.event === "key" && m.action === "up" && (m.key === "Tab" || m.key === "Enter"))) this.checkFocus();
-        });
+        };
+        // One stuck input (a page that hangs) must not hold up the ones after it.
+        const job = this.inputChain.then(() => withTimeout(work(), 5000));
         this.inputChain = job.catch(() => {});
         return run(() => job);
       }
