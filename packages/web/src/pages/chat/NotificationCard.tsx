@@ -1,5 +1,6 @@
-// A notification in the chat. A report or a digest is the agent speaking: a thin caption, the text in full and, under a
-// digest, what it drew on. An alert or a question is a compact card; a check's alert can be rated behind "⋯".
+// A notification in the chat. A report or a digest is the agent speaking: a thin caption, then its words as an ordinary
+// message bubble and, under a digest, what it drew on. An alert or a question is a compact card; a check's alert can be
+// rated behind "⋯".
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
@@ -33,11 +34,11 @@ export async function sendFeedback(id: string, value: Feedback): Promise<boolean
   }
 }
 
-/** What a digest drew on: chips that open the schedule's task, the agent or the channel. */
-export function Sources({ sources }: { sources: NotificationSource[] }) {
+/** What a digest drew on: chips that open the schedule's task, the agent or the channel. `bare`: under a chat bubble, not inside a card. */
+export function Sources({ sources, bare }: { sources: NotificationSource[]; bare?: boolean }) {
   const chip = "rounded-full border border-border px-2 py-0.5 text-muted";
   return (
-    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-hairline pt-2 text-[11.5px]">
+    <div className={cx("flex flex-wrap items-center gap-1.5 text-[11.5px]", bare ? "px-1" : "mt-2.5 border-t border-hairline pt-2")}>
       <span className="text-muted">{t("notifications.sources")}</span>
       {sources.map((s, i) =>
         s.href ? (
@@ -111,17 +112,18 @@ export function NotificationCard({ part, taskId }: { part: Part; taskId?: string
   const [all, setAll] = useState(false);
   if (kind === "report" || kind === "digest") {
     const Icon = kind === "report" ? Clock : Sparkles;
+    // The agent's words, so they sit straight under the message's parts like any other text: the same bubble, tail and
+    // grouping (index.css `.msg-parts > .md`). Parts saved before kinds are lines joined with single newlines, which
+    // assistant Markdown would run into one paragraph: those keep their breaks, as the old card showed them.
     return (
-      <div className="w-full max-w-xl">
-        <div className="mb-1 flex items-center gap-1.5 text-[12px] text-muted">
+      <>
+        <div className="flex items-center gap-1.5 px-0.5 text-[12px] text-muted">
           <Icon className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate">{part.caption ? `${part.title} · ${part.caption}` : part.title}</span>
         </div>
-        <div className="rounded-2xl border border-hairline bg-surface px-3.5 py-3 shadow-card">
-          <Markdown text={part.body} className="text-sm" />
-          {part.sources?.length ? <Sources sources={part.sources} /> : null}
-        </div>
-      </div>
+        <Markdown text={part.body} user={!part.kind} />
+        {part.sources?.length ? <Sources sources={part.sources} bare /> : null}
+      </>
     );
   }
   const long = part.body.split("\n").length > 6 || part.body.length > 420;

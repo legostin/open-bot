@@ -320,7 +320,7 @@
     padding: 0.5rem 0.875rem;
     box-shadow: 0 1px 2px rgb(70 45 10 / 0.05);
   }
-  .is-grouped .msg-parts > .md:first-child {
+  .is-grouped .msg-parts > .md {
     border-top-left-radius: 1.25rem;
   }
   .msg-parts > .md + .md,
