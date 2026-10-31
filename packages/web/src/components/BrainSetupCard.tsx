@@ -1,21 +1,22 @@
-// The hub's own answer while no brain of the agent works: sign Claude Code or Codex in (installing it first where the
-// hub can), or give a key. It shows where the hub put it after an unanswered message, and at the end of a dialog
-// that has none yet. Live from /api/setup; once a brain works it shrinks to one line and the agent takes over.
+// The hub's own answer while no brain works: sign Claude Code or Codex in (installing it first where the hub can), or
+// give a key. It shows where the hub put it after an unanswered message, at the end of a dialog that has none yet, and
+// alone on a new hub's first screen (FirstRun.tsx). Live from /api/setup; once a brain works it shrinks to one line and
+// the agent takes over. On a new hub the empty dialog of the default agent then asks the hub to open the intro.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, CircleCheck, RefreshCw } from "lucide-react";
 import type { SetupState } from "@owlbot/shared";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
-import { cliRows, showGate } from "../lib/setup";
-import { conversations, hubEvents, useConversationMessages } from "../state/app";
+import { cliRows, introDue, showGate } from "../lib/setup";
+import { conversations, hubEvents, session, useConversationMessages } from "../state/app";
 import { BrainLoginCard } from "./BrainLoginCard";
 import { PluginSetupCard, VaultGate } from "./SecretCards";
 import { Button, Spinner } from "./ui";
 import { t } from "../i18n";
 
 /** The setup state of an agent (the default agent when none is given), reloaded when brains, keys or plugins change. */
-function useSetupState(agentId: string | undefined) {
+export function useSetupState(agentId: string | undefined, enabled = true) {
   const [state, setState] = useState<SetupState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const query = agentId ? `?agent=${encodeURIComponent(agentId)}` : "";
@@ -29,12 +30,13 @@ function useSetupState(agentId: string | undefined) {
     );
   }, [query]);
   useEffect(() => {
+    if (!enabled) return;
     load();
     return hubEvents.on((e) => {
       // agents.updated: the user picked a brain for the agent in the chat header.
       if (e.type === "brains.updated" || e.type === "agents.updated" || e.type === "plugins.updated" || e.type === "vault.state" || (e.type === "brain.login" && e.data.status === "succeeded")) load();
     });
-  }, [load]);
+  }, [load, enabled]);
   const refresh = async () => {
     setState(await api.post<SetupState>("/api/setup/refresh", agentId ? { agent: agentId } : {}));
   };
@@ -49,15 +51,29 @@ export function BrainSetupCard({ conversationId }: { conversationId: string }) {
   return <SetupCardView state={state} refresh={refresh} />;
 }
 
-/** The card at the end of a dialog where nothing was written yet and no brain works. */
+/**
+ * The card at the end of a dialog where nothing was written yet and no brain works; on a new hub with a brain, the
+ * default agent's empty dialog asks the hub to open the intro, and the agent speaks first.
+ */
 export function SetupGate({ conversationId, agentId }: { conversationId: string; agentId?: string }) {
   const conv = useConversationMessages(conversationId);
   const { state, refresh } = useSetupState(agentId);
+  const main = useStore(session)?.mainConversationId === conversationId;
+  const due = conv.loaded && introDue(conv.messages, state, main);
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!due || asked.current) return;
+    asked.current = true;
+    api.post("/api/setup/intro", {}).catch(() => {
+      asked.current = false;
+    });
+  }, [due]);
   if (!conv.loaded || !state || !showGate(conv.messages, state)) return null;
   return <SetupCardView state={state} refresh={refresh} />;
 }
 
-function SetupCardView({ state, refresh }: { state: SetupState; refresh: () => Promise<void> }) {
+/** `bare`: without its own title and words, under a screen that says them (FirstRun.tsx). */
+export function SetupCardView({ state, refresh, bare }: { state: SetupState; refresh: () => Promise<void>; bare?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,8 +101,12 @@ function SetupCardView({ state, refresh }: { state: SetupState; refresh: () => P
   const rows = cliRows(state);
   return (
     <div className="animate-in w-full rounded-[22px] border border-accent/30 bg-surface p-4 shadow-card">
-      <div className="mb-1 font-semibold">{t("brainSetup.title")}</div>
-      <p className="mb-3 text-sm text-muted">{rows.length ? t("brainSetup.intro") : t("brainSetup.introKeys")}</p>
+      {!bare && (
+        <>
+          <div className="mb-1 font-semibold">{t("brainSetup.title")}</div>
+          <p className="mb-3 text-sm text-muted">{rows.length ? t("brainSetup.intro") : t("brainSetup.introKeys")}</p>
+        </>
+      )}
       <div className="flex flex-col gap-3">
         {rows.map((b) => (
           <div key={b.ref} className="flex flex-col gap-1 rounded-xl bg-surface-2/70 px-2.5 py-2">

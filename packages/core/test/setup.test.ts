@@ -1,13 +1,16 @@
 // First-run setup in the chat: with no working brain the hub answers with a setup card and keeps the message; signing
-// a brain in answers it; a fresh hub greets the user through the agent; the default agent leads the rest of the setup.
-// The agent runs on `gated@local` (fixtures/plugins/fakegated: signed in while HOME/.gated-ok exists) and the real
-// Codex brain on a fake CLI that is not signed in.
+// a brain in answers it; any brain the hub has counts, whichever agent asked; a new hub's assistant opens the intro when
+// its empty dialog is opened; the default agent leads the rest of the setup. The agent runs on `gated@local`
+// (fixtures/plugins/fakegated: signed in while HOME/.gated-ok exists) and the real Codex brain on a fake CLI that is not
+// signed in; the always-signed-in fake brains are turned off, so the hub starts with none.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { formatBrainRef, parseBrainRef, type ProbeResult } from "@owlbot/shared";
 import { Hub, loadConfig } from "../src/index.ts";
+import { SetupGuide } from "../src/setup.ts";
 
 const fixtures = join(import.meta.dirname, "fixtures");
 
@@ -46,6 +49,7 @@ async function startHub() {
   mkdirSync(agentHome, { recursive: true });
   const hub = new Hub(config);
   await hub.start();
+  await hub.plugins.setEnabled("fakebrain", false);
   const base = config.publicUrl;
   let cookie = "";
   let csrf = "";
@@ -69,7 +73,7 @@ async function startHub() {
     if (r.status >= 400) throw new Error(`${method} ${path} → ${r.status} ${JSON.stringify(r.json)}`);
     return r.json;
   };
-  await until(() => hub.brains.has("gated@local") && hub.brains.has("codex@local"), "brains");
+  await until(() => hub.brains.has("gated@local") && hub.brains.has("codex@local") && !hub.brains.has("fake@local"), "brains");
   await ok("POST", "/api/auth/setup", { token: hub.auth.setupToken, password: "integration-pass-1" });
   const boot = await ok("GET", "/api/bootstrap");
   csrf = boot.csrf;
@@ -86,6 +90,37 @@ const replies = (msgs: any[]) => msgs.filter((m) => m.role === "assistant" && m.
 const cards = (msgs: any[]) => msgs.filter((m) => m.parts.some((p: any) => p.type === "brain_setup"));
 const textOf = (m: any) => m.parts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("");
 
+/** A setup guide over brains given as ref → signed in, for an agent with these brains. */
+function guideOver(refs: Record<string, boolean>, agentBrains: string[]): SetupGuide {
+  const key = (r: string) => formatBrainRef(parseBrainRef(r));
+  return new SetupGuide({
+    brains: {
+      list: () => Object.keys(refs).map((ref) => ({ ref })),
+      has: (r: string) => key(r) in refs,
+      probe: async (r: string): Promise<ProbeResult> => ({ available: true, authenticated: refs[key(r)] }),
+    },
+    agents: { get: () => ({ brains: agentBrains }) },
+    settings: { get: () => ({ defaultAgent: "assistant" }), getKey: () => ({}), setKey: () => {} },
+    bus: { on: () => {}, emit: () => {} },
+  } as any);
+}
+
+describe("what counts as a brain", () => {
+  it("one API key is a brain for an agent on api:*", async () => {
+    const g = guideOver({ "api:anthropic@local": false, "api:deepseek@local": true }, ["claude-code@local", "codex@local", "api:*"]);
+    expect(await g.usable()).toBe(true);
+  });
+
+  it("any brain that works on the hub counts, also for an agent whose own brains are not set up", async () => {
+    expect(await guideOver({ "codex@local": false, "api:deepseek@local": true }, ["codex@local"]).usable()).toBe(true);
+    expect(await guideOver({ "codex@vps": true }, ["claude-code@local"]).usable()).toBe(true);
+  });
+
+  it("none when nothing on the hub works", async () => {
+    expect(await guideOver({ "codex@local": false, "api:anthropic@local": false }, ["codex@local", "api:*"]).usable()).toBe(false);
+  });
+});
+
 describe("setup with no working brain", () => {
   let h: Awaited<ReturnType<typeof startHub>>;
 
@@ -99,7 +134,7 @@ describe("setup with no working brain", () => {
 
   it("lists the agent's brains and the steps left", async () => {
     const s = await h.ok("GET", "/api/setup");
-    expect(s).toMatchObject({ agentId: "assistant", usable: false, vault: "absent", telegram: false, machines: 0 });
+    expect(s).toMatchObject({ agentId: "assistant", usable: false, firstRun: true, vault: "absent", telegram: false, machines: 0 });
     expect(s.brains).toEqual([
       expect.objectContaining({ ref: "gated@local", kind: "api", signedIn: false }),
       expect.objectContaining({ ref: "codex@local", kind: "cli", installed: true, signedIn: false, canInstall: false }),
@@ -126,7 +161,18 @@ describe("setup with no working brain", () => {
     await sleep(1000);
     expect(replies(await h.messages())).toHaveLength(1);
     expect(h.hub.setup.isHeld(h.conv)).toBe(false);
-    expect(h.hub.settings.getKey("setup", {} as any).kickoffDone).toBe(true);
+    // That answer was the hub's first words: the intro follows it from the setup section.
+    expect(h.hub.settings.getKey("setup", {} as any)).toMatchObject({ kickoffDone: true, intro: true });
+  });
+
+  it("lets an agent whose own brains are not set up think with the hub's", async () => {
+    await h.ok("PUT", "/api/agents/coder", { name: "Coder", brains: ["codex@local"], prompt: "You code." });
+    expect((await h.ok("GET", "/api/setup?agent=coder")).usable).toBe(true);
+    const conv = h.hub.store.agentConversation("coder").id;
+    await h.ok("POST", `/api/conversations/${conv}/messages`, { text: "hi coder" });
+    const reply = await until(async () => replies(await h.ok("GET", `/api/conversations/${conv}/messages`))[0], "the coder's answer");
+    expect(textOf(reply)).toBe("gated heard: hi coder");
+    expect(cards(await h.ok("GET", `/api/conversations/${conv}/messages`))).toEqual([]);
   });
 
   it("gives the default agent the setup section and its tools", async () => {
@@ -140,7 +186,7 @@ describe("setup with no working brain", () => {
       );
     };
     expect(await say("SETUP?")).toBe("setup section: yes");
-    expect(await say('CALL hub_setup_update {"step":"telegram","status":"skipped"}')).toMatch(/"remaining": \[\s*"backupBrain",\s*"machines",\s*"profile"\s*\]/);
+    expect(await say('CALL hub_setup_update {"step":"telegram","status":"skipped"}')).toMatch(/"remaining": \[\s*"identity",\s*"team",\s*"backupBrain",\s*"machines",\s*"profile"\s*\]/);
     expect((await h.ok("GET", "/api/setup")).skipped).toEqual(["telegram"]);
     expect(await say("CALL hub_setup_status {}")).toMatch(/"skipped": \[\s*"telegram"\s*\]/);
     expect(await say('CALL hub_setup_update {"step":"telegram","status":"todo"}')).toMatch(/"telegram"/);
@@ -160,16 +206,44 @@ describe("setup on a fresh hub", () => {
     await h?.hub.stop();
   });
 
-  it("greets the user through the agent when the first brain is signed in, once", async () => {
-    // The check after startup has seen that no brain works.
-    await until(() => (h.hub.setup as any).sawUnusable, "the first check");
+  it("opens the intro when the assistant's empty dialog is opened with a brain, once", async () => {
+    expect((await h.ok("GET", "/api/bootstrap")).firstRun).toBe(true);
+    // No brain yet: not the moment.
+    expect(await h.ok("POST", "/api/setup/intro", {})).toMatchObject({ usable: false, firstRun: true });
     await h.signIn();
+    const s = await h.ok("POST", "/api/setup/intro", {});
+    expect(s).toMatchObject({ usable: true, firstRun: false, remaining: ["identity", "team", "telegram", "backupBrain", "machines", "profile"] });
     const greeting = await until(async () => replies(await h.messages())[0], "the greeting");
-    expect(textOf(greeting)).toMatch(/^gated heard: \[System\] The hub has just connected its first brain/);
-    await h.ok("POST", "/api/setup/refresh", {});
+    expect(textOf(greeting)).toMatch(/^gated heard: \[System\] The person has just set up the hub/);
+    await h.ok("POST", "/api/setup/intro", {});
     await sleep(1000);
     expect(replies(await h.messages())).toHaveLength(1);
+    expect((await h.ok("GET", "/api/bootstrap")).firstRun).toBe(false);
     // Nobody wrote, so no card was stored.
     expect(cards(await h.messages())).toEqual([]);
+  });
+
+  it("shows the profile card when the assistant gets its name during the intro", async () => {
+    const sent = await h.ok("POST", `/api/conversations/${h.conv}/messages`, { text: 'CALL profile_update {"name":"Арчи"}' });
+    const reply = await until(async () => {
+      const msgs = await h.messages();
+      return replies(msgs.slice(msgs.findIndex((m) => m.id === sent.id) + 1))[0];
+    }, "the reply");
+    expect(textOf(reply)).toMatch(/profile card/);
+    expect(reply.parts).toContainEqual({ type: "agent_profile", agentId: "assistant" });
+    expect(h.hub.agents.get("assistant")?.name).toBe("Арчи");
+  });
+
+  it("leads the intro steps first in the setup section", async () => {
+    const block = await h.hub.setup.promptBlock("assistant");
+    expect(block).toMatch(/getting acquainted[\s\S]*- identity:[\s\S]*- team:/);
+    expect(block).toContain("`profile_show`");
+    // The rest of the setup waits until the intro is over.
+    expect(block).not.toMatch(/- telegram:/);
+    h.hub.setup.setStep("identity", "done");
+    h.hub.setup.setStep("team", "skipped");
+    const after = await h.hub.setup.promptBlock("assistant");
+    expect(after).not.toMatch(/getting acquainted/);
+    expect(after).toMatch(/- telegram:/);
   });
 });

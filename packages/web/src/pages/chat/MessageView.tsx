@@ -21,6 +21,7 @@ import { usePluginRegistry } from "../../plugins/slots";
 import { ToolCard } from "./ToolCard";
 import { PluginSetupCard, SecretRequestCard } from "../../components/SecretCards";
 import { AgentDraftCard } from "./AgentDraftCard";
+import { AgentProfileCard } from "./AgentProfileCard";
 import { BrainLoginCard } from "../../components/BrainLoginCard";
 import { BrainSetupCard } from "../../components/BrainSetupCard";
 import { IntegrationChatCard } from "../../components/IntegrationCard";
@@ -341,6 +342,8 @@ function Parts({ message }: { message: Message }) {
             return <PluginSetupCard key={it.key} pluginId={p.pluginId} />;
           case "agent_draft":
             return <AgentDraftCard key={it.key} draftId={p.draftId} messageId={message.id} />;
+          case "agent_profile":
+            return <AgentProfileCard key={it.key} agentId={p.agentId} />;
           case "brain_login":
             return <BrainLoginCard key={it.key} brainRef={p.ref} />;
           case "integration":

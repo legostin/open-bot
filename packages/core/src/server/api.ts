@@ -50,6 +50,8 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
       language: s.language,
       locales: LOCALES,
       vaultState: hub.vault.state(),
+      // A new hub: the app shows only the setup card until a brain works, then the assistant opens the intro.
+      firstRun: hub.setup.firstRun(),
       pendingApprovals: hub.approvals.pendingCount(),
       uiPlugins: hub.plugins.uiPlugins(requestLocale(req)),
       channels: hub.channels.list(),
@@ -370,6 +372,11 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   api.post("/api/setup/refresh", async (req) => {
     await hub.refreshBrains();
     return hub.setup.state(setupAgent(req));
+  });
+  // The person opened the assistant's empty dialog on a new hub: it speaks first (once per hub).
+  api.post("/api/setup/intro", async () => {
+    await hub.setup.startIntro();
+    return hub.setup.state();
   });
 
   // ----- plugins -----

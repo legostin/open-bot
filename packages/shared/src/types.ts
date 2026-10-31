@@ -223,6 +223,8 @@ export type MessagePart =
   | { type: "plugin_setup"; pluginId: string }
   /** A new agent being put together in the chat: its look, description and proactivity, live, with a button that creates it. */
   | { type: "agent_draft"; draftId: string }
+  /** An agent's own profile (profile_show): its look and proactivity as a live card, saved as the person picks them. */
+  | { type: "agent_profile"; agentId: string }
   /** A CLI brain's sign-in card (device code or browser code), live. */
   | { type: "brain_login"; ref: string }
   /** No brain of the agent works yet: the hub's own setup card (sign in, install, API key), live. */
@@ -647,8 +649,11 @@ export interface BrainLoginView {
 
 // ---------- First-run setup ----------
 
-/** What the default agent walks the user through once a brain works. */
-export type SetupStep = "telegram" | "backupBrain" | "machines" | "profile";
+/**
+ * What the default agent walks the user through once a brain works. "identity" (its name, look, proactivity) and
+ * "team" (who else to add) open a new hub's intro and exist only on hubs that went through it.
+ */
+export type SetupStep = "identity" | "team" | "telegram" | "backupBrain" | "machines" | "profile";
 
 /** One of the agent's brains on this hub, as the setup card shows it. */
 export interface SetupBrain {
@@ -667,8 +672,10 @@ export interface SetupBrain {
 export interface SetupState {
   agentId: string;
   brains: SetupBrain[];
-  /** Some brain of the agent works now (rate limits aside). */
+  /** The hub has a working brain (rate limits aside): the agent's own, or any other the agent falls back to. */
   usable: boolean;
+  /** The hub has not started talking with the person yet: no brain until now, or the intro has not begun. */
+  firstRun: boolean;
   vault: "absent" | "locked" | "open";
   telegram: boolean;
   machines: number;

@@ -4,7 +4,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ThinkingChoice, ToolResult, WorkKind } from "@owlbot/shared";
-import { brainsFor, expandBrains, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, sameBrain, taskThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
+import { brainSpeed, brainsFor, expandBrains, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, sameBrain, taskThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
 import { confinement } from "./native-permissions.ts";
 import { NATIVE_PERMISSION_TOOL } from "./tools/native-permission.ts";
 import type { Config } from "./config.ts";
@@ -1292,6 +1292,15 @@ export class SessionRunner {
     });
   }
 
+  /** Every other brain the hub lists, quickest first: what an agent none of whose own brains is set up thinks with. */
+  private otherBrains(order: readonly string[]): string[] {
+    return this.d.brains
+      .list()
+      .map((b) => b.ref)
+      .filter((r) => !order.some((o) => sameBrain(o, r)))
+      .sort((a, b) => brainSpeed(a) - brainSpeed(b));
+  }
+
   /** One setup card per wait: none while the last one still has no answer after it. */
   private addSetupCard(conversationId: string): void {
     const recent = this.d.store.listMessages(conversationId, { limit: 10 });
@@ -1478,7 +1487,8 @@ export class SessionRunner {
       const choice = thinkingFor(agent, "chat");
       const routes = await this.routeFor(agent, "chat", choice, "", undefined);
       const order = expandBrains(brainsFor(agent, "chat", choice), this.d.brains.list().map((b) => b.ref));
-      const { usable } = await this.candidates({ ...agent, brains: order }, choice.brain ? undefined : stay);
+      let { usable, setupOnly } = await this.candidates({ ...agent, brains: order }, choice.brain ? undefined : stay);
+      if (!usable.length && setupOnly) ({ usable } = await this.candidates({ ...agent, brains: [...order, ...this.otherBrains(order)] }));
       const ref = usable[0];
       if (!ref) return false;
       const key = formatBrainRef(parseBrainRef(ref));
@@ -1676,7 +1686,8 @@ export class SessionRunner {
     // A dialog stays with the agent's own brain (its chosen one, else its first): the router picks the model and
     // effort there, and other brains only take over when that one cannot. Work on the side goes where it fits best.
     const own = expandBrains(brainsFor(agent, kind, choice), this.d.brains.list().map((b) => b.ref));
-    const order = routes.length && task ? routes.map((r) => r.ref) : own;
+    let order = routes.length && task ? routes.map((r) => r.ref) : own;
+    let widened = false;
     // The brain the person chose for this kind comes before the one the conversation fell back to.
     const preferred = choice.brain ? undefined : stay;
     let waits = 0;
@@ -1692,6 +1703,16 @@ export class SessionRunner {
         if (task && this.d.store.getTask(task.id)?.status === "cancelled") return { text: "", error: t("chat.cannotStart", { agent: agentName(agent, hubLocale()), reason: reasons.join("; ") }), awaitingApproval: false };
         attempt--;
         continue;
+      }
+      // None of the agent's own brains is set up, but the hub has others: it thinks with those.
+      if (!ref && setupOnly && !tried.size && !pinned && !widened) {
+        widened = true;
+        const rest = this.otherBrains(order);
+        if (rest.length) {
+          order = [...order, ...rest];
+          attempt--;
+          continue;
+        }
       }
       // No brain of the agent is set up yet: the setup card instead of an error, and the message waits for a brain.
       // (A group chat's round goes on with the next member instead.)
@@ -1994,6 +2015,7 @@ function attachedKey(p: MessagePart): string | undefined {
   if (p.type === "feed") return `feed:${p.feedId}`;
   if (p.type === "page") return `page:${p.pageId}`;
   if (p.type === "thinking") return `thinking:${p.agentId}`;
+  if (p.type === "agent_profile") return `profile:${p.agentId}`;
   if (p.type === "integration") return `integration:${p.id}`;
   // Each message to a teammate has its own line, even in the same thread.
   if (p.type === "task") return p.text === undefined ? `task:${p.taskId}` : `task:${p.taskId}|${p.text}`;

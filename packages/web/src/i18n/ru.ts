@@ -447,6 +447,8 @@ export default {
   "brainSetup.checkAgain": "Проверить снова",
   "brainSetup.checkAgainHint": "Только что что-то установили? Хаб поищет ещё раз.",
   "brainSetup.connected": "Подключено: {name}",
+  "firstRun.title": "Привет! Я ваш ассистент",
+  "firstRun.intro": "Сначала подключите мне интеллект: войдите в Claude Code или Codex по своей подписке или дайте API-ключ. Потом познакомимся.",
   "brainSetup.ready": "Интеллект подключён.",
 
   // tasks
@@ -954,6 +956,9 @@ export default {
   "agentDraft.createdHint": "Его диалог — в списке команды.",
   "agentDraft.open": "Открыть диалог",
   "agentDraft.superseded": "Прежняя версия — актуальная ниже",
+  "agentProfile.title": "Как я выгляжу",
+  "agentProfile.hint": "Имя и характер — просто скажите мне в чате.",
+  "agentProfile.missing": "Этого агента больше нет в команде",
   "agentDraft.missing": "Этот черновик больше недоступен",
   "team.you": "Вы: {text}",
   "team.working": "Работает…",

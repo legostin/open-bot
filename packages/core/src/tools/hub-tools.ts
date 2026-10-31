@@ -14,7 +14,7 @@
 
 import { isAbsolute, relative, resolve } from "node:path";
 import type { AgentDef, AgentDraft, IntegrationView, JsonSchema, Locale, MachineSettings, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
-import { AVATAR_COLORS, AVATAR_SHAPES, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
+import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
 import { normalizeSettings, SetupError } from "../machine-setup.ts";
 import { siteDomain } from "../secrets.ts";
 import type { Hub } from "../app.ts";
@@ -986,7 +986,7 @@ export function registerHubTools(hub: Hub): void {
       name: "setup_status",
       effect: "read",
       description:
-        "What is left of the hub's first-run setup: the steps done, skipped and remaining (telegram, backupBrain, machines, profile), " +
+        "What is left of the hub's first-run setup: the steps done, skipped and remaining (identity and team on a new hub, then telegram, backupBrain, machines, profile), " +
         "the brains with their sign-in state, whether the vault exists and Telegram is connected. Check it before suggesting the next setup step.",
       inputSchema: obj({}),
     },
@@ -1001,7 +1001,7 @@ export function registerHubTools(hub: Hub): void {
       name: "setup_update",
       effect: "local-write",
       description:
-        'Record a first-run setup step: "done" when you finished it with the user (needed for profile; the others are detected), ' +
+        'Record a first-run setup step: "done" when you finished it with the user (needed for identity, team and profile; the others are detected), ' +
         '"skipped" when the user says not now (you will not be asked to offer it again), "todo" when they want a skipped step back.',
       inputSchema: obj(
         {
@@ -1062,10 +1062,39 @@ export function registerHubTools(hub: Hub): void {
           return json({ id, name, description, avatar, initiative, prompt });
         }
         hub.saveAgent({ ...patchAgent(me, patch, hubLocale()), source: "user" }, `agent:${me.id}`);
+        // Named during a new hub's intro: the look comes next, so its card is there without waiting for the model.
+        if (patch.name && me.id === hub.settings.get().defaultAgent && hub.setup.introLeft().includes("identity")) {
+          hub.runner.attachPart(ctx.conversationId, { type: "agent_profile", agentId: me.id });
+          return text(
+            `Saved: ${Object.keys(patch).join(", ")}. Your profile card (avatar, proactivity) is now in the chat, above your text: in one short sentence ask them to pick your look and how proactive you should be there, or tell you (do not list the options). Then go on with the identity step.`,
+          );
+        }
         return text(`Saved: ${Object.keys(patch).join(", ")}. The change applies from your next reply.`);
       } catch (e: any) {
         return text(e?.message ?? String(e), true);
       }
+    },
+  );
+
+  // The person picks the look and proactivity themselves: the card saves them, nothing goes through the model.
+  hub.tools.register(
+    {
+      name: "profile_show",
+      owner: "core",
+      effect: "read",
+      availability: "interactive",
+      description:
+        "Show the person your profile as a card in the chat: your avatar with shape and colour pickers, your name and how proactive you are (three levels). " +
+        "What they pick there is saved at once. Use it when they want to choose or change how you look or how proactive you are; " +
+        "say in one short sentence that the card is there, without listing the options. Your name and instructions change with profile_update.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    async (_input, ctx) => {
+      const me = hub.agents.get(ctx.agentId);
+      if (!me) return text(`Agent ${ctx.agentId} not found.`, true);
+      hub.runner.attachPart(ctx.conversationId, { type: "agent_profile", agentId: me.id });
+      const { name, avatar = defaultAvatar(me.id), initiative } = localizedAgent(me, hubLocale());
+      return text(`The person sees the card in the chat, above your text. Now: name “${name}”, avatar ${avatar.color} ${avatar.shape}, proactivity ${initiative}. Their picks come as agent updates; call profile_update with no fields to read them.`);
     },
   );
 }
