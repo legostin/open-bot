@@ -297,7 +297,8 @@ export function LiveViewWindow({ frame }: { frame?: HTMLElement }) {
           expanded
             ? framed
               ? "animate-in fixed inset-0 z-50 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
-              : "animate-in fixed inset-0 z-50 sm:inset-[3vh_3vw] sm:rounded-2xl sm:border sm:border-border sm:shadow-card"
+              : // On the Mac app's window the window buttons sit in the top-left corner: the view starts below them.
+                "animate-in fixed inset-0 z-50 titlebar:top-11! sm:inset-[3vh_3vw] sm:rounded-2xl sm:border sm:border-border sm:shadow-card"
             : "animate-in fixed z-30 w-[min(52vw,240px)] rounded-2xl border shadow-card sm:w-80",
           !expanded && (attention ? "border-warning ring-2 ring-warning/30" : "border-border"),
         )}
