@@ -1,6 +1,7 @@
 // The authenticated hub API, shared by the web UI (cookie sessions, port 8080) and the phones (device port, bearer
 // tokens). The caller adds its own auth hook first; everything here assumes the request comes from the owner.
 
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
@@ -15,7 +16,7 @@ import { applyThinking } from "../thinking.ts";
 import { pipeToLeader } from "./forward.ts";
 import { HttpError, safeFile, sendFile } from "./http.ts";
 import { MediaError } from "../media.ts";
-import { entryRef, googleScopes, listCatalog, listIntegrations } from "../integrations.ts";
+import { entryRef, googleScopes, listCatalog, listIntegrations, logoFile } from "../integrations.ts";
 import { callbackParams } from "../connections.ts";
 import { machineHubUrl, qrSvg } from "../pairing.ts";
 import { attachmentFromPath, formatSize, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, saveAttachment, type AttachmentPart } from "../attachments.ts";
@@ -532,6 +533,14 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
   // ----- integrations: the library's cards, the catalog (the same cards by situation), and the hub's Google sign-in -----
   api.get("/api/integrations", async (req) => listIntegrations(hub, requestLocale(req)));
   api.get("/api/catalog", async (req) => listCatalog(hub, requestLocale(req), { all: ["1", "true"].includes(String((req.query as any)?.all)) }));
+  // A card's logo: the PNG its plugin ships (the catalog draws it instead of the icon).
+  api.get("/api/integrations/:id/logo", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    const file = logoFile(hub, id);
+    if (!file) throw new HttpError(404, "connections.notFound", { id });
+    reply.header("content-type", "image/png").header("cache-control", "private, max-age=86400").header("x-content-type-options", "nosniff").header("content-security-policy", "default-src 'none'");
+    return reply.send(readFileSync(file));
+  });
   api.post("/api/integrations/:id/enabled", async (req) => {
     const id = (req.params as any).id as string;
     // One of a plugin's entries (composio:slack) turns its plugin on or off.

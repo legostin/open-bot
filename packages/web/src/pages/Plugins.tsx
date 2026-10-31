@@ -25,6 +25,7 @@ import { Icon } from "../components/icon";
 import { GoogleConnection, ServiceSignIn } from "../components/IntegrationCard";
 import { RemoteAccessCard } from "../components/RemoteAccessCard";
 import { SchemaForm } from "../components/SchemaForm";
+import { ServiceLogo } from "../components/ServiceLogo";
 import { ViaBadge } from "../components/ViaBadge";
 import { PluginSetupCard } from "../components/SecretCards";
 import { Badge, Button, cx, EmptyState, ErrorNote, Field, Input, Loading, Modal, Page, Spinner, Toggle } from "../components/ui";
@@ -114,10 +115,10 @@ function useAsk() {
   };
 }
 
-/** A plugin's icon on its category's tint. */
+/** A plugin's icon on its category's tint, or the service's own logo. */
 function PluginIcon({ v, situation, size = "md" }: { v: IntegrationView; situation: string; size?: "md" | "lg" }) {
   const hue = hueOf(situation);
-  return (
+  const icon = (
     <span
       className={cx("flex shrink-0 items-center justify-center", size === "lg" ? "size-14 rounded-2xl" : "size-10 rounded-xl")}
       style={{ background: `color-mix(in srgb, ${hue} ${isOn(v) ? 16 : 10}%, transparent)`, color: hue }}
@@ -126,6 +127,8 @@ function PluginIcon({ v, situation, size = "md" }: { v: IntegrationView; situati
       <Icon name={v.icon} className={size === "lg" ? "size-7" : "size-5"} />
     </span>
   );
+  // A real service shows its own logo; abilities (weather, currencies…) keep their icon.
+  return <ServiceLogo logo={v.logo} size={size} fallback={icon} />;
 }
 
 /** Whether a plugin is on, waiting for the person or broken; nothing for one that is off. `compact`: the dot alone. */

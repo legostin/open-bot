@@ -11,10 +11,11 @@
   "integration": {
     "category": "other",
     "icon": "plug",
+    "logo": "./logos/fake.png",
     "connect": "setup",
     "summary": "Apps through Outside",
     "via": { "name": "Outside", "about": "%via.about%", "link": "https://outside.example" },
-    "entries": [{ "id": "chat", "name": "Chat", "summary": "%entry.chat%", "category": "communication", "icon": "message-square", "example": "%example.chat%", "popular": 2 }]
+    "entries": [{ "id": "chat", "name": "Chat", "summary": "%entry.chat%", "category": "communication", "icon": "message-square", "logo": "./logos/chat.png", "example": "%example.chat%", "popular": 2 }]
   },
   "permissions": { "vault": ["outside_key"] }
 }

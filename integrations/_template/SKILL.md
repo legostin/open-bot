@@ -36,9 +36,10 @@ from sunrise-sunset.org): copy it and change what it does, keep its shape.
    - `id`; `name` and `description` stay `"%name%"` / `"%description%"` (the texts live in the locales);
    - delete `"builtin"` and `"defaultEnabled"`: an integration installed on a hub is turned on when it is installed;
    - `integration`: `category` (everyday, travel, money, work, reading, communication, home, assistant), `icon`
-     (a Lucide icon name, e.g. `cloud-sun`, `plane`, `wallet`), `connect` (`none`; `setup` when it needs a key or
-     setup; `signin` for a service's own MCP server with a browser sign-in, see below), `summary` and `example`
-     (`"%integration.summary%"`, `"%integration.example%"`); no `popular`;
+     (a Lucide icon name, e.g. `cloud-sun`, `plane`, `wallet`), `logo` for a real service (`"./logo.png"`: its logo
+     as a 128×128 PNG in the folder, at most 64 KB; the catalog draws it on a white tile instead of the icon),
+     `connect` (`none`; `setup` when it needs a key or setup; `signin` for a service's own MCP server with a browser
+     sign-in, see below), `summary` and `example` (`"%integration.summary%"`, `"%integration.example%"`); no `popular`;
    - `permissions.network`: the exact hosts it calls (`api.example.com`, `*.example.com`); never `"*"` unless the
      user gives the addresses at run time;
    - `contributes.widgets`: the card kinds the tools show (`[]` and no `ui` when there is no card);

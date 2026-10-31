@@ -110,6 +110,21 @@ Two general abilities, for any integration of this kind.
   its bot toolkit (`discordbot`) needs the person's own bot token, which Composio's own sign-in does not cover. The
   agent can still add a Discord app from the chat when Composio signs in to it by itself.
 
+## Logos (added 2026-10-31)
+
+- A real service's card shows its own logo on a white tile instead of the tinted icon; abilities (weather,
+  currencies…) keep their icon. Web catalog rows, popular tiles, the entry's page and the chat card; the iOS catalog.
+- `integration.logo` and `entries[].logo` in the manifest: a 128×128 PNG inside the plugin (`./logos/slack.png`),
+  committed to the repository: no request leaves the hub to draw one. The hub serves it at
+  `GET /api/integrations/:id/logo` only when it is a PNG (by its signature) inside the plugin's folder and at most
+  64 KB; `IntegrationView.logo` is that address with a version (`?v=`), so a new file is fetched again.
+- The PNGs were made from Composio's logo CDN (`logos.composio.dev/api/<slug>`, SVG) with AppKit; apps it only has a
+  placeholder for (Granola, Blender, Wikipedia, 2GIS, Google) keep their icon. Apps added from the chat keep the
+  plug icon for now.
+- A service that refuses a call for a permission not given at sign-in (Google's unticked boxes: "insufficient
+  authentication scopes") turns its card to Reconnect with "%detail.scopes%"; the sign-in card and the agent say up
+  front to allow everything the service's page asks for.
+
 ## Errors
 
 - The key is wrong or revoked (401): every entry is `broken` with a clear detail and the card asks for the key again;

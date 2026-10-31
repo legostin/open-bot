@@ -45,7 +45,7 @@
       }
     }
   },
-  "integration": {"category": "communication", "icon": "send", "connect": "setup", "summary": "%integration.summary%", "popular": 4},
+  "integration": {"category": "communication", "icon": "send", "logo": "./logo.png", "connect": "setup", "summary": "%integration.summary%", "popular": 4},
   "permissions": {
     "network": ["api.telegram.org"],
     "vault": ["telegram_bot_token"],

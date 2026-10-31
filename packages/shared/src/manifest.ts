@@ -64,6 +64,8 @@ export const IntegrationEntrySchema = z.object({
   summary: z.string().optional(),
   category: z.string().default("other"),
   icon: z.string().default("puzzle"),
+  /** The service's logo, a PNG in the plugin's folder ("./logos/slack.png", 128×128): drawn instead of the icon. */
+  logo: relPath.optional(),
   example: z.string().optional(),
   popular: z.number().int().positive().optional(),
 });
@@ -75,6 +77,8 @@ export const IntegrationSchema = z.object({
   category: z.string().default("other"),
   /** A lucide icon name. */
   icon: z.string().default("puzzle"),
+  /** The service's logo, a PNG in the plugin's folder ("./logo.png", 128×128): drawn instead of the icon. */
+  logo: relPath.optional(),
   /**
    * google: the hub's Google sign-in; setup: the plugin's setup card; signin: its MCP server's own sign-in in the
    * browser (OAuth, e.g. Granola); none: works as it is.
