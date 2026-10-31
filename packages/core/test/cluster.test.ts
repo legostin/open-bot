@@ -1,6 +1,7 @@
 // Two hubs as one: a replica joins with an invite and a snapshot, follows every change, takes the lead when the
 // leader goes away and gives it back when the leader returns; a sealed replica is unlocked with one approval.
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, onTestFailed } from "vitest";
+import { fork, type ChildProcess } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -180,5 +181,102 @@ describe("a leader nobody can reach", () => {
     expect(JSON.parse(first)).toMatchObject({ type: "challenge" });
     const mcp = await fetch(`http://127.0.0.1:${vps.env.PIOMIO_PORT}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     expect(mcp.status).toBe(401);
+  });
+});
+
+/** A hub in a child process (fixtures/replica-process.ts): SIGSTOP makes it sleep as a computer does, SIGCONT wakes it. */
+function processHub(): { child: ChildProcess; ask: <T>(op: string, args?: unknown) => Promise<T>; output: string[] } {
+  const child = fork(join(fixtures, "replica-process.ts"), [], { execArgv: ["--disable-warning=ExperimentalWarning"], stdio: ["ignore", "pipe", "pipe", "ipc"] });
+  const output: string[] = [];
+  child.stdout!.on("data", (d) => output.push(String(d)));
+  child.stderr!.on("data", (d) => output.push(String(d)));
+  const waiting = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+  child.on("message", (m: any) => {
+    const w = waiting.get(m.id);
+    waiting.delete(m.id);
+    if (m.error) w?.reject(new Error(m.error));
+    else w?.resolve(m.result);
+  });
+  let next = 0;
+  const ask = <T>(op: string, args?: unknown) =>
+    new Promise<T>((resolve, reject) => {
+      const id = ++next;
+      waiting.set(id, { resolve, reject });
+      child.send({ id, op, args });
+    });
+  return { child, ask, output };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// The Mac leads and sleeps (macOS DarkWake: every few minutes, all night); after GONE_MS the VPS takes the lead. The
+// Mac must not wake still leading on what it held before it slept (its plugins' memory, its stale copies of rows), and
+// must not take the lead back at every short wake either.
+describe.skipIf(process.platform === "win32")("a leader whose computer sleeps", () => {
+  const all: Machine[] = [];
+  let mac: ReturnType<typeof processHub> | undefined;
+  afterAll(async () => {
+    if (mac) {
+      mac.child.kill("SIGCONT");
+      await Promise.race([mac.ask("stop"), sleep(20_000)]).catch(() => {});
+      mac.child.kill("SIGKILL");
+    }
+    for (const m of all) await m.hub?.stop().catch(() => {});
+  }, 60_000);
+
+  it("stands down for the replica that led meanwhile, and takes the lead back once it stays awake", { timeout: 180_000 }, async () => {
+    const macM = await machine("mac");
+    const vps = await machine("vps");
+    all.push(vps);
+    mac = processHub();
+    onTestFailed(() => console.log(`--- the mac's output ---\n${mac?.output.join("")}`));
+    const awakeBeforeLead = 20_000;
+    await mac.ask("start", { env: macM.env, dataDir: macM.dir, cluster: { awakeBeforeLead } });
+    const { link, conversationId } = await mac.ask<{ link: string; conversationId: string }>("invite");
+    await joinCluster({ dataDir: vps.dir, link, name: "vps", urls: [vps.deviceUrl], nodeUrls: [] });
+    const b = await boot(vps);
+    const macRole = () => b.cluster.states().find((s) => s.name === "mac")?.role;
+    await until(() => macRole() === "leader", "the standby seeing the mac lead");
+
+    // The Mac sleeps past GONE_MS: the VPS takes the lead, and things change through it.
+    mac.child.kill("SIGSTOP");
+    await until(() => b.cluster.leads(), "the vps taking the lead", 30_000);
+    b.store.addMessage({ conversationId, role: "user", parts: [{ type: "text", text: "while the mac slept" }], status: "complete" });
+    await sleep(2_000);
+
+    // It wakes: the VPS keeps the lead, the Mac stands down (its main-only work stops) and catches up.
+    mac.child.kill("SIGCONT");
+    await until(() => macRole() === "standby", "the mac standing down after its sleep", 20_000);
+    expect(b.cluster.leads()).toBe(true);
+    await until(async () => (await mac!.ask<string[]>("texts", { conversationId })).includes("while the mac slept"), "the mac catching up");
+
+    // It naps again before it has stayed awake long enough: nothing changes hands.
+    mac.child.kill("SIGSTOP");
+    await sleep(10_000);
+    mac.child.kill("SIGCONT");
+    const woke = Date.now();
+    await until(() => macRole() === "standby", "the mac answering again after its nap", 20_000);
+    await sleep(4_000);
+    expect(b.cluster.leads()).toBe(true);
+    expect(macRole()).toBe("standby");
+
+    // Awake for long enough: it asks for the lead, gets it back and starts its main-only work afresh.
+    await until(() => macRole() === "leader" && !b.cluster.leads(), "the lead back on the mac", 60_000);
+    expect(Date.now() - woke).toBeGreaterThanOrEqual(awakeBeforeLead - 2_000);
+    expect(b.audit.list({ action: "cluster.*" }).map((e) => e.action).reverse()).toEqual(["cluster.leader", "cluster.standby"]);
+    expect(await mac.ask("switches")).toEqual([
+      { action: "cluster.standby", why: "another replica led while this one slept" },
+      { action: "cluster.leader", why: "no replica leads" },
+    ]);
+  });
+
+  it("leaves the tasks to the replica that led while it slept", async () => {
+    const m = await machine("solo");
+    all.push(m);
+    const h = await boot(m);
+    const task = h.store.createTask({ agentId: "assistant", title: "brief", goal: "brief", createdBy: "trigger", background: true, status: "running" });
+    // That replica queued this task when it took over and may have finished it: an old copy queued again would run it twice.
+    await h.standby({ stale: true });
+    expect(h.store.getTask(task.id)!.status).toBe("running");
   });
 });
