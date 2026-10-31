@@ -144,6 +144,7 @@
   "ui.card.onEvent": "on event",
   "ui.card.last": "Last:",
   "ui.card.machine": "On {machine}",
+  "ui.card.skill": "Skill «{skill}»",
   "ui.card.checked": "Checked:",
   "ui.card.value": "Current value:",
   "ui.card.copy": "Copy",

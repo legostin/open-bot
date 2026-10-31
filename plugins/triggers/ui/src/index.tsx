@@ -15,6 +15,8 @@ interface Trigger {
   agentId: string;
   machine?: string;
   machineName?: string;
+  /** A skill the person taught that each run follows. */
+  skill?: string;
   enabled: boolean;
   maxRunsPerDay: number;
   cron?: string;
@@ -420,7 +422,7 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: PiomioUI; t: Trigge
       }
     >
       <div style={{ display: "grid", gap: 4 }}>
-        <span style={s.muted}>{[t.whenText, t.machineName && tr("ui.card.machine", { machine: t.machineName })].filter(Boolean).join(" · ")}</span>
+        <span style={s.muted}>{[t.whenText, t.machineName && tr("ui.card.machine", { machine: t.machineName }), t.skill && tr("ui.card.skill", { skill: t.skill })].filter(Boolean).join(" · ")}</span>
         <span>
           {tr("ui.card.next")} <b>{t.kind === "event" ? tr("ui.card.onEvent") : fmt(t.nextRunAt, tz)}</b> · {tr("ui.card.last")} {fmt(t.state.lastRunAt, tz)}
           {t.kind === "watch" && t.state.lastCheckedAt && (

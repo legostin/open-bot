@@ -144,6 +144,7 @@
   "ui.card.onEvent": "по событию",
   "ui.card.last": "Последний:",
   "ui.card.machine": "На {machine}",
+  "ui.card.skill": "Навык «{skill}»",
   "ui.card.checked": "Проверено:",
   "ui.card.value": "Текущее значение:",
   "ui.card.copy": "Копировать",
