@@ -436,6 +436,30 @@ describe("hub (integration)", () => {
     expect(msgs.some((m) => m.parts.some((p: any) => p.type === "notification" && p.kind === "report" && p.notificationId === n.id))).toBe(true);
   });
 
+  it("has the assistant write the digest", async () => {
+    await hub.notifier.notify({ level: "digest", title: "E2E digest item", body: "something to tell", agentId: "assistant" });
+    expect((await web.req("POST", "/api/digest/flush", {})).sent).toBeGreaterThan(0);
+    const d = await until(() => hub.notifier.list(100).find((x) => x.kind === "digest" && x.deliveredAt), "the digest");
+    expect(d.body).toMatch(/fake heard/);
+    const msgs: any[] = await web.req("GET", `/api/conversations/${conv}/messages`);
+    expect(msgs.some((m) => m.parts.some((p: any) => p.type === "notification" && p.kind === "digest" && p.notificationId === d.id))).toBe(true);
+  });
+
+  it("sends the digest's card when its writer fails", async () => {
+    // A digest waiting for a writer that cannot start: pinned to a brain this hub does not have.
+    const task = hub.runner.createTask({ agentId: "assistant", goal: "Write the digest", title: "Digest", background: true, createdBy: "trigger", deliver: "digest", brainRef: "gone@local" });
+    const material = { partOfDay: "day", date: "2026-10-31", items: [{ id: "n_x", title: "Writer failure item", body: "kept whole", time: "10:00" }], sections: [], channels: [], told: [] };
+    hub.db
+      .prepare("insert into notifications(id, level, kind, title, body, agent_id, task_id, created_at) values ('n_digest_fail', 'digest', 'digest', 'Digest', ?, 'assistant', ?, ?)")
+      .run(JSON.stringify(material), task.id, new Date().toISOString());
+    const d = await until(() => hub.notifier.get("n_digest_fail")?.deliveredAt && hub.notifier.get("n_digest_fail"), "the card");
+    expect(d.body).toContain("**Writer failure item** · 10:00");
+    expect(d.body).toContain("kept whole");
+    expect(hub.store.getTask(task.id)?.status).toBe("failed");
+    // No alert about it: the card is the answer.
+    expect(hub.notifier.list(100).some((x) => x.taskId === task.id && x.kind !== "digest")).toBe(false);
+  });
+
   it("tells the person plainly when a schedule's report did not come", async () => {
     // Pinned to a brain this hub does not have: the run cannot start, and the agent has nothing set up to start it with.
     const task = hub.runner.createTask({ agentId: "assistant", goal: "Brief me", title: "Morning brief", background: true, createdBy: "trigger", triggerId: "t_brief_failing", deliver: "report", brainRef: "gone@local" });

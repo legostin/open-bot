@@ -785,6 +785,11 @@ export class SessionRunner {
         await this.tellStarter(cur, `[System] ${this.agentLabel(cur.agentId)} could not answer your message (thread ${cur.id}): ${r.error}`);
         return;
       }
+      // The digest's writer failed: the hub sends the card instead.
+      if (cur.deliver === "digest") {
+        await this.d.notifier.digestWritten(cur.id, undefined);
+        return;
+      }
       // A report that did not come is news too; other trigger runs keep quiet about failing.
       if (!cur.background || cur.createdBy !== "trigger" || cur.deliver === "report") {
         const who = this.d.agents.get(cur.agentId);
@@ -1130,6 +1135,10 @@ export class SessionRunner {
     const result = taskResult(task);
     if (task.deliver === "report") {
       await this.d.notifier.deliverReport(task);
+      return;
+    }
+    if (task.deliver === "digest") {
+      await this.d.notifier.digestWritten(task.id, task.result);
       return;
     }
     // A teammate's reply: under the sender's message line, and to the sender, who carries on with it.

@@ -1,14 +1,26 @@
 // "Is it worth interrupting you?" — levels, quiet hours, rate limits, dedup, digests, feedback.
 
-import type { Notification, NotificationKind, NotifyLevel, Task } from "@piomio/shared";
+import type { Notification, NotificationKind, NotificationSource, NotifyLevel, Task } from "@piomio/shared";
 import { newId, nowIso, truncate } from "@piomio/shared";
-import type { Db } from "./db.ts";
+import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
-import type { Settings } from "./settings.ts";
+import type { CoreSettings, Settings } from "./settings.ts";
 import type { ChannelRegistry } from "./channels.ts";
 import type { HookRegistry } from "./hooks.ts";
 import type { Store } from "./store.ts";
-import { LocalizedError, t } from "./i18n.ts";
+import { hubLocale, LocalizedError, t } from "./i18n.ts";
+import {
+  DIGEST_CHANNELS,
+  DIGEST_POSTS_PER_CHANNEL,
+  digestPrompt,
+  digestSources,
+  fallbackDigestBody,
+  hasDigestContent,
+  partOfDay,
+  type DigestChannel,
+  type DigestMaterial,
+  type DigestSection,
+} from "./digest.ts";
 
 /** What a routing level is for the person, when nothing more specific was said. */
 export const KIND_OF_LEVEL: Record<NotifyLevel, NotificationKind> = { silent: "item", digest: "item", notify: "alert", ask: "question" };
@@ -107,6 +119,8 @@ export class Notifier {
   digestWriteMs: number;
   private digestTimer?: NodeJS.Timeout;
   private lastDigestKey = "";
+  private digestTimers = new Map<string, NodeJS.Timeout>();
+  private flushing?: Promise<number>;
 
   constructor(d: {
     db: Db;
@@ -356,40 +370,180 @@ export class Notifier {
     return n;
   }
 
-  /** Sections plugins add to a digest going out now (digest.compose): the day's events and the like, lines kept. */
-  private async digestSections(timezone: string): Promise<string[]> {
+  /** Sections plugins add to a digest going out now (digest.compose): the day's events and the like, lines kept; a section with no text is left out. */
+  private async digestSections(timezone: string): Promise<DigestSection[]> {
     const now = new Date();
     const date = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
     const r = await this.hooks.run("digest.compose", { date, time: localHHMM(timezone, now), timezone }, (p) => p);
     return r.results
       .filter((x): x is { title: string; body: string } => !!x && typeof x.title === "string" && typeof x.body === "string" && !!x.body.trim())
-      .map((x) => `**${x.title.trim()}**\n${truncate(x.body.trim(), 1500)}`);
+      .map((x) => ({ title: x.title.trim(), body: truncate(x.body.trim(), 1500) }));
   }
 
-  /** Combine pending digest items, and the plugins' sections, into one message. */
-  async flushDigest(): Promise<number> {
-    const rows = this.db.prepare("select * from notifications where level = 'digest' and digested = 0 order by created_at").all().map(fromRow);
-    const s = this.settings.get();
+  /** What waits for the digest: items in full (oldest first), the plugins' sections, new channel posts, and what already reached the person. */
+  private async gather(s: CoreSettings): Promise<DigestMaterial> {
+    const now = new Date();
+    const date = new Intl.DateTimeFormat("en-CA", { timeZone: s.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    const last =
+      (this.db.prepare("select max(delivered_at) as at from notifications where kind = 'digest'").get() as { at: string | null }).at ??
+      new Date(now.getTime() - 24 * 3600_000).toISOString();
+    const rows = this.db.prepare("select * from notifications where kind = 'item' and level = 'digest' and digested = 0 and superseded_by is null order by created_at").all().map(fromRow);
+    const items = rows.map((n) => {
+      const task = n.taskId ? this.store.getTask(n.taskId) : undefined;
+      return {
+        id: n.id,
+        title: n.title,
+        body: n.body,
+        time: localHHMM(s.timezone, new Date(n.createdAt)),
+        ...(n.agentId ? { agentId: n.agentId, agentName: this.agentName(n.agentId) } : {}),
+        ...(n.taskId ? { taskId: n.taskId } : {}),
+        ...(n.triggerId ? { triggerId: n.triggerId, ...(task ? { trigger: task.title } : {}) } : {}),
+      };
+    });
     const sections = await this.digestSections(s.timezone);
-    if (rows.length === 0 && sections.length === 0) return 0;
-    const items = rows.map((n) => `• ${n.title}${n.body ? ` — ${truncate(n.body.replace(/\s+/g, " "), 300)}` : ""}`).join("\n");
-    const body = [...sections, items].filter(Boolean).join("\n\n");
-    const title = t("notify.digestTitle", { count: rows.length + sections.length });
-    // The digest gathers the whole team's items: it goes to the default agent's dialog.
+    const posts = this.db
+      .prepare("select p.feed_id as feedId, f.title as feed, p.title as post from feed_posts p join feeds f on f.id = p.feed_id where p.created_at > ? order by p.created_at desc")
+      .all(last) as Array<{ feedId: string; feed: string; post: string }>;
+    // The caps apply before the material is built; the totals stay true, so "and N more" is right.
+    const channels: DigestChannel[] = [];
+    for (const p of posts) {
+      let c = channels.find((x) => x.feedId === p.feedId);
+      if (!c) {
+        if (channels.length >= DIGEST_CHANNELS) continue;
+        c = { feedId: p.feedId, title: p.feed, posts: [], total: 0 };
+        channels.push(c);
+      }
+      c.total++;
+      // A headline is one line: a line break would break the list around it.
+      if (c.posts.length < DIGEST_POSTS_PER_CHANNEL) c.posts.push(p.post.replace(/\s+/g, " ").trim());
+    }
+    const told = (
+      this.db
+        .prepare("select title, created_at from notifications where kind in ('report', 'alert', 'question') and delivered_at is not null and created_at > ? order by created_at")
+        .all(last) as Array<{ title: string; created_at: string }>
+    ).map((r) => ({ title: r.title, time: localHHMM(s.timezone, new Date(r.created_at)) }));
+    return { partOfDay: partOfDay(localHHMM(s.timezone, now)), date, items, sections, channels, told };
+  }
+
+  /** "Утренняя сводка · 31 окт.": the part of the day and the date, in the hub language. */
+  private digestTitle(m: DigestMaterial): string {
+    const day = new Intl.DateTimeFormat(hubLocale(), { timeZone: this.settings.get().timezone, day: "numeric", month: "short" }).format(new Date());
+    return t(`notify.digest.${m.partOfDay}`, { date: day });
+  }
+
+  private materialOf(row: { body: string }): DigestMaterial {
+    return json<DigestMaterial>(row.body, { partOfDay: "day", date: "", items: [], sections: [], channels: [], told: [] });
+  }
+
+  /** Gather what waits for the digest and have the default agent write it; how many items and sections went in (0: nothing to say). */
+  flushDigest(): Promise<number> {
+    this.flushing ??= this.startDigest().finally(() => (this.flushing = undefined));
+    return this.flushing;
+  }
+
+  private async startDigest(): Promise<number> {
+    // One digest at a time: while one is being written, asking again returns it.
+    const open = this.db.prepare("select * from notifications where kind = 'digest' and delivered_at is null order by created_at desc limit 1").get() as { body: string } | undefined;
+    if (open) {
+      const m = this.materialOf(open);
+      return m.items.length + m.sections.length;
+    }
+    const s = this.settings.get();
+    const material = await this.gather(s);
+    if (!hasDigestContent(material)) return 0;
+    const id = newId("n_");
+    const title = this.digestTitle(material);
+    // Until it goes out, the digest's body holds its material (for the card, also after a restart).
+    this.db.prepare("insert into notifications(id, level, kind, title, body, agent_id, created_at) values (?, 'digest', 'digest', ?, ?, ?, ?)").run(id, title, JSON.stringify(material), s.defaultAgent, nowIso());
+    const mark = this.db.prepare("update notifications set digest_id = ?, digested = 1 where id = ?");
+    for (const it of material.items) mark.run(id, it.id);
+    let task: { id: string } | undefined;
+    if (this.startTask && this.hasAgent(s.defaultAgent)) {
+      try {
+        task = this.startTask({ agentId: s.defaultAgent, title, goal: digestPrompt(material), deliver: "digest" });
+      } catch {
+        // No writer could be started: the card goes out instead, the digest does not stay open.
+      }
+    }
+    if (task) {
+      this.db.prepare("update notifications set task_id = ? where id = ?").run(task.id, id);
+      this.armDigestTimer(id, this.digestWriteMs);
+    } else await this.deliverDigest(id, undefined);
+    return material.items.length + material.sections.length;
+  }
+
+  private armDigestTimer(id: string, ms: number): void {
+    const timer = setTimeout(() => void this.deliverDigest(id, undefined).catch((e) => console.log(`[piomio] digest: ${e?.message ?? e}`)), Math.max(0, ms));
+    timer.unref();
+    this.digestTimers.set(id, timer);
+  }
+
+  /** The digest task ended: its reply goes out, or the card when it failed or said nothing. A late reply after the card is dropped. */
+  async digestWritten(taskId: string, text: string | undefined): Promise<void> {
+    const row = this.db.prepare("select id from notifications where kind = 'digest' and task_id = ? and delivered_at is null").get(taskId) as { id: string } | undefined;
+    if (row) await this.deliverDigest(row.id, text?.trim() || undefined);
+  }
+
+  private async deliverDigest(id: string, text: string | undefined): Promise<void> {
+    const timer = this.digestTimers.get(id);
+    if (timer) clearTimeout(timer);
+    this.digestTimers.delete(id);
+    const row = this.db.prepare("select * from notifications where id = ? and delivered_at is null").get(id) as { title: string; body: string } | undefined;
+    if (!row) return;
+    const material = this.materialOf(row);
+    const body =
+      text ??
+      fallbackDigestBody(material, {
+        schedules: t("digest.section.schedules"),
+        agents: t("digest.section.agents"),
+        channels: t("digest.section.channels"),
+        more: (n) => t("digest.morePosts", { n }),
+      });
+    // Claimed first, so the timer and the reply arriving together send it once.
+    const claimed = this.db.prepare("update notifications set delivered_at = ?, body = ? where id = ? and delivered_at is null").run(nowIso(), body, id);
+    if (!Number(claimed.changes)) return;
+    const s = this.settings.get();
+    const sources = digestSources(material);
     const dialog = this.store.agentConversation(s.defaultAgent);
-    this.store.addMessage({
+    const m = this.store.addMessage({
       conversationId: dialog.id,
       role: "assistant",
-      parts: [{ type: "notification", level: "digest", title, body }],
+      parts: [{ type: "notification", level: "digest", kind: "digest", title: row.title, body, notificationId: id, ...(sources.length ? { sources } : {}) }],
       status: "complete",
+      agentId: s.defaultAgent,
     });
-    await this.channels.broadcast({ kind: "digest", text: `${title}\n\n${truncate(body, 3800)}`, link: this.publicUrl });
-    const st = this.db.prepare("update notifications set digested = 1, delivered_at = ? where id = ?");
-    for (const n of rows) st.run(nowIso(), n.id);
-    return rows.length + sections.length;
+    this.db.prepare("update notifications set message_id = ? where id = ?").run(m.id, id);
+    this.bus.emit("notification.created", fromRow(this.db.prepare("select * from notifications where id = ?").get(id)));
+    await this.channels.broadcast({
+      kind: "digest",
+      text: this.channelText(row.title, body, sources),
+      link: `${this.publicUrl}/agent/${encodeURIComponent(s.defaultAgent)}`,
+      notificationId: id,
+      silent: inQuietHours(s.quietHours, localHHMM(s.timezone)),
+    });
+    this.inboxChanged();
+  }
+
+  /** A digest for the channels: the title, the text and the sources on one line (links on a public HTTPS hub). */
+  private channelText(title: string, body: string, sources: NotificationSource[]): string {
+    const pub = /^https:\/\//.test(this.publicUrl) && !/\/\/(localhost|127\.0\.0\.1)\b/.test(this.publicUrl) ? this.publicUrl.replace(/\/+$/, "") : undefined;
+    const line = sources
+      .map((x) => {
+        const label = x.count && x.count > 1 ? `${x.label} (${x.count})` : x.label;
+        return pub && x.href ? `[${label}](${pub}${x.href})` : label;
+      })
+      .join(" · ");
+    return [title, truncate(body, 3600), line ? `${t("digest.from")} ${line}` : ""].filter(Boolean).join("\n\n");
+  }
+
+  /** Digests left unwritten (the hub restarted while the agent wrote): the card once their time is up. */
+  private recoverDigests(): void {
+    const rows = this.db.prepare("select id, created_at from notifications where kind = 'digest' and delivered_at is null").all() as Array<{ id: string; created_at: string }>;
+    for (const r of rows) if (!this.digestTimers.has(r.id)) this.armDigestTimer(r.id, Date.parse(r.created_at) + this.digestWriteMs - Date.now());
   }
 
   startDigestTimer(): void {
+    this.recoverDigests();
     this.digestTimer = setInterval(() => {
       const s = this.settings.get();
       const hhmm = localHHMM(s.timezone);
@@ -404,5 +558,7 @@ export class Notifier {
 
   stop(): void {
     if (this.digestTimer) clearInterval(this.digestTimer);
+    for (const timer of this.digestTimers.values()) clearTimeout(timer);
+    this.digestTimers.clear();
   }
 }

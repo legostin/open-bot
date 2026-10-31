@@ -172,6 +172,12 @@ export class Hub {
       sign: (p) => this.approvals.sign(p),
       publicUrl: config.publicUrl,
       hasAgent: (id) => !!this.agents.get(id),
+      // The default agent writes the digest: a quiet background task on a fast model.
+      startTask: (job) => this.runner.createTask({ ...job, background: true, createdBy: "trigger", thinking: { preset: "fast", skill: "writing" } }),
+      agentName: (id) => {
+        const a = this.agents.get(id);
+        return a ? agentName(a, hubLocale()) : id;
+      },
     });
     this.gateway = new ToolGateway({
       store: this.store,

@@ -171,6 +171,20 @@ export function registerCoreTools(d: CoreToolDeps): void {
 
   reg(
     {
+      name: "digest_now",
+      description:
+        "Send the user's digest now instead of waiting for the next digest time: the hub gathers what waits and the default agent writes it. Says how many items went in, or that there was nothing.",
+      effect: "local-write",
+      inputSchema: { type: "object", properties: {} },
+    },
+    async () => {
+      const n = await d.notifier.flushDigest();
+      return text(n ? `The digest is being written from ${n} item(s); it lands in the user's chat in a minute.` : "Nothing waits for a digest: nothing was sent.");
+    },
+  );
+
+  reg(
+    {
       name: "task_delegate",
       description:
         "Start a task for an agent (yourself or a teammate): it works on the side, in parallel, while you stay with the user, and its result comes back here as a message. One task per independent piece of work. Returns the task id. For a question or a small request to a teammate, write to them with team_message instead.",

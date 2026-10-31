@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { openDb } from "../src/db.ts";
 import { EventBus } from "../src/bus.ts";
 import { Store } from "../src/store.ts";
-import type { MessagePart, OutboundMessage, Task } from "@piomio/shared";
+import { nowIso, type MessagePart, type OutboundMessage, type Task } from "@piomio/shared";
 import { Settings, type CoreSettings } from "../src/settings.ts";
 import { HookRegistry } from "../src/hooks.ts";
 import type { ChannelRegistry } from "../src/channels.ts";
@@ -397,5 +397,243 @@ describe("scheduled reports", () => {
     );
     expect(humanFailure("The page did not load. Then it timed out.", undefined, "Assistant")).toBe("The page did not load.");
     expect(humanFailure("x".repeat(300), undefined, "Assistant")).toHaveLength(200);
+  });
+});
+
+describe("the digest", () => {
+  /** What waits: an item replaced by a newer one from the same schedule, the newer one, a silent note, a channel post and a calendar section. */
+  const seed = async (n: ReturnType<typeof setup>) => {
+    const brief = n.store.createTask({ agentId: "assistant", title: "Утренняя сводка по Алматы", goal: "g", background: true, createdBy: "trigger", triggerId: "t_brief" });
+    await n.notifier.notify({ level: "digest", title: "☀️ Алматы, утро", body: "старое", agentId: "assistant", triggerId: "t_brief", taskId: brief.id });
+    await n.notifier.notify({ level: "digest", title: "☀️ Алматы, сб 31 октября", body: "Сейчас +6°, туман.\nДнём +13°.", agentId: "assistant", triggerId: "t_brief", taskId: brief.id });
+    await n.notifier.notify({ level: "silent", title: "Ничего срочного", body: "", agentId: "assistant" });
+    n.db.prepare("insert into feeds(id, title, brief, agent_id, times, created_at, updated_at) values ('f_almaty', 'Новости Алматы', 'b', 'assistant', '[]', ?, ?)").run(nowIso(), nowIso());
+    n.db.prepare("insert into feed_posts(id, feed_id, title, text, created_at) values ('p1', 'f_almaty', 'Ботсад закрыт 2 ноября', 't', ?)").run(nowIso());
+    n.hooks.register("digest.compose", "calendar", async () => ({ title: "Calendar", body: "10:00 Dentist" }));
+  };
+  const digestRow = (n: ReturnType<typeof setup>) => n.db.prepare("select * from notifications where kind = 'digest'").get() as any;
+
+  it("sends nothing when nothing waits; channel posts alone make no digest", async () => {
+    const n = setup();
+    expect(await n.notifier.flushDigest()).toBe(0);
+    n.db.prepare("insert into feeds(id, title, brief, agent_id, times, created_at, updated_at) values ('f1', 'X', 'b', 'assistant', '[]', ?, ?)").run(nowIso(), nowIso());
+    n.db.prepare("insert into feed_posts(id, feed_id, title, text, created_at) values ('p1', 'f1', 'Post', 't', ?)").run(nowIso());
+    expect(await n.notifier.flushDigest()).toBe(0);
+    expect(n.started).toHaveLength(0);
+  });
+
+  it("gathers what waits and has the default agent write it, once", async () => {
+    const n = setup();
+    await seed(n);
+    expect(await n.notifier.flushDigest()).toBe(2);
+    expect(n.started).toHaveLength(1);
+    expect(n.started[0]).toMatchObject({ agentId: "assistant", deliver: "digest" });
+    expect(n.started[0].title).toMatch(/digest · /);
+    expect(n.started[0].goal).toContain("Сейчас +6°, туман.\nДнём +13°.");
+    expect(n.started[0].goal).not.toContain("старое");
+    expect(n.started[0].goal).toContain("Ботсад закрыт 2 ноября");
+    expect(n.started[0].goal).toContain("10:00 Dentist");
+    const d = digestRow(n);
+    expect(d).toMatchObject({ task_id: "t_digest_1", delivered_at: null });
+    expect((n.db.prepare("select count(*) as c from notifications where digest_id = ?").get(d.id) as { c: number }).c).toBe(1);
+    // Asked again while it is being written (the timer and "Collect now"): the same digest, no second task.
+    expect(await Promise.all([n.notifier.flushDigest(), n.notifier.flushDigest()])).toEqual([2, 2]);
+    expect(n.started).toHaveLength(1);
+    n.notifier.stop();
+  });
+
+  it("delivers what the assistant wrote, with the sources the hub knows, once", async () => {
+    const n = setup();
+    await seed(n);
+    await n.notifier.flushDigest();
+    const text = "Спокойный день.\n\n**Город**\n- Ботсад закрыт 2 ноября";
+    await n.notifier.digestWritten("t_digest_1", text);
+    await n.notifier.digestWritten("t_digest_1", "again");
+    const parts = n.notes().filter((p) => p.kind === "digest");
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({
+      body: text,
+      sources: [{ label: "Утренняя сводка по Алматы", href: expect.stringMatching(/^\/tasks\//) }, { label: "Calendar" }, { label: "Новости Алматы", count: 1, href: "/channels/f_almaty" }],
+    });
+    expect(digestRow(n)).toMatchObject({ body: text, agent_id: "assistant" });
+    expect(digestRow(n).delivered_at).toBeTruthy();
+    expect(digestRow(n).message_id).toBeTruthy();
+    const out = n.sent.find((m) => m.kind === "digest")!;
+    expect(out.text).toContain("Спокойный день.");
+    expect(out.text).toContain("From: [Утренняя сводка по Алматы](https://hub.example.com/tasks/");
+    expect(out.text).toContain("Calendar · [Новости Алматы](https://hub.example.com/channels/f_almaty)");
+    expect(n.events.at(-1)).toEqual({ unread: 1 });
+  });
+
+  it("sends the card when the assistant could not write it, every item whole with its line breaks", async () => {
+    const n = setup();
+    await seed(n);
+    await n.notifier.flushDigest();
+    await n.notifier.digestWritten("t_digest_1", undefined);
+    const body = n.notes().find((p) => p.kind === "digest")!.body;
+    expect(body).toContain("### Schedules and checks");
+    // Markdown hard break (two spaces) keeps the line break the brief had.
+    expect(body).toContain("Сейчас +6°, туман.  \nДнём +13°.");
+    expect(body).toContain("### Calendar\n\n10:00 Dentist");
+    expect(body).toContain("### Channels\n\n**Новости Алматы**\n- Ботсад закрыт 2 ноября");
+    expect(digestRow(n).body).toBe(body);
+  });
+
+  it("sends the card when the assistant says nothing", async () => {
+    const n = setup();
+    await seed(n);
+    await n.notifier.flushDigest();
+    await n.notifier.digestWritten("t_digest_1", "  \n ");
+    expect(n.notes().find((p) => p.kind === "digest")!.body).toContain("### Schedules and checks");
+  });
+
+  it("sends the card when no reply came in time, and drops a late reply", async () => {
+    const n = setup({ digestWriteMs: 20 });
+    await seed(n);
+    await n.notifier.flushDigest();
+    await new Promise((r) => setTimeout(r, 80));
+    await n.notifier.digestWritten("t_digest_1", "late");
+    const parts = n.notes().filter((p) => p.kind === "digest");
+    expect(parts).toHaveLength(1);
+    expect(parts[0].body).toContain("### Schedules and checks");
+  });
+
+  it("sends the card at once when there is nobody to write it", async () => {
+    const n = setup({ startTask: false });
+    await seed(n);
+    expect(await n.notifier.flushDigest()).toBe(2);
+    expect(n.notes().some((p) => p.kind === "digest")).toBe(true);
+    expect(digestRow(n).delivered_at).toBeTruthy();
+  });
+
+  it("sends the card at once when the writer could not be started, and does not stay open", async () => {
+    const n = setup({ startTask: false });
+    (n.notifier as any).startTask = () => {
+      throw new Error("no room");
+    };
+    await seed(n);
+    expect(await n.notifier.flushDigest()).toBe(2);
+    expect(digestRow(n).delivered_at).toBeTruthy();
+    expect(n.notes().filter((p) => p.kind === "digest")).toHaveLength(1);
+  });
+
+  it("after a restart, a digest left unwritten goes out as the card", async () => {
+    const n = setup({ digestWriteMs: 60_000 });
+    await seed(n);
+    await n.notifier.flushDigest();
+    n.notifier.stop();
+    const restarted = new Notifier({
+      db: n.db,
+      bus: n.bus,
+      settings: n.settings,
+      channels: { broadcast: async () => {} } as unknown as ChannelRegistry,
+      hooks: n.hooks,
+      store: n.store,
+      sign: (p) => p,
+      publicUrl: "http://localhost:8080",
+      hasAgent: () => true,
+      digestWriteMs: 20,
+    });
+    restarted.startDigestTimer();
+    await new Promise((r) => setTimeout(r, 80));
+    restarted.stop();
+    expect(digestRow(n).delivered_at).toBeTruthy();
+  });
+
+  it("hands the material over oldest first, a section with no text left out, and a post as one line", async () => {
+    const n = setup();
+    // Inserted newest first: the order comes from the time, not from the rows.
+    const ins = n.db.prepare("insert into notifications(id, level, kind, title, body, agent_id, created_at) values (?, 'digest', 'item', ?, ?, 'scout', ?)");
+    ins.run("n_late", "Second thing", "later", "2026-10-31T11:00:00.000Z");
+    ins.run("n_early", "First thing", "earlier", "2026-10-31T09:00:00.000Z");
+    n.hooks.register("digest.compose", "empty", async () => ({ title: "Empty section", body: "  \n " }));
+    n.hooks.register("digest.compose", "calendar", async () => ({ title: "Calendar", body: "10:00 Dentist" }));
+    n.db.prepare("insert into feeds(id, title, brief, agent_id, times, created_at, updated_at) values ('f1', 'News', 'b', 'assistant', '[]', ?, ?)").run(nowIso(), nowIso());
+    n.db.prepare("insert into feed_posts(id, feed_id, title, text, created_at) values ('p1', 'f1', 'A long\nheadline\r\n  in three lines', 't', ?)").run(nowIso());
+    expect(await n.notifier.flushDigest()).toBe(3);
+    const goal = n.started[0].goal;
+    expect(goal.indexOf("### First thing (09:00, Scout)")).toBeGreaterThan(-1);
+    expect(goal.indexOf("### First thing")).toBeLessThan(goal.indexOf("### Second thing"));
+    expect(goal).toContain("### Calendar");
+    expect(goal).not.toContain("Empty section");
+    expect(goal).toContain("- A long headline in three lines");
+    n.notifier.stop();
+  });
+
+  it("caps channels and posts but keeps the true totals, so \"and N more\" is right", async () => {
+    const n = setup({ startTask: false });
+    await n.notifier.notify({ level: "digest", title: "Something", body: "x", agentId: "assistant" });
+    const feed = n.db.prepare("insert into feeds(id, title, brief, agent_id, times, created_at, updated_at) values (?, ?, 'b', 'assistant', '[]', ?, ?)");
+    const post = n.db.prepare("insert into feed_posts(id, feed_id, title, text, created_at) values (?, ?, ?, 't', ?)");
+    // Channel f0 has 8 new posts, the other seven one each, every post a millisecond apart: newest first, 8 channels, two over the cap.
+    const base = Date.now();
+    const at = (ms: number) => new Date(base + ms).toISOString();
+    for (let i = 0; i < 8; i++) feed.run(`f${i}`, `Channel ${i}`, nowIso(), nowIso());
+    for (let i = 0; i < 8; i++) post.run(`p0_${i}`, "f0", `Headline ${i}`, at(100 + i));
+    for (let i = 1; i < 8; i++) post.run(`p${i}`, `f${i}`, `Only ${i}`, at(10 - i));
+    expect(await n.notifier.flushDigest()).toBe(1);
+    const body = digestRow(n).body as string;
+    expect(body).toContain("**Channel 0**");
+    // The newest five headlines, the rest counted.
+    expect(body).toContain("- Headline 7\n- Headline 6\n- Headline 5\n- Headline 4\n- Headline 3");
+    expect(body).not.toContain("Headline 2");
+    expect(body).toContain("and 3 more");
+    expect(body.match(/\*\*Channel \d\*\*/g)).toHaveLength(6);
+    expect(body).toContain("**Channel 5**");
+    expect(body).not.toContain("Channel 6");
+    expect(body).not.toContain("Channel 7");
+  });
+
+  it("does not bring a delivered digest's items again, and the next one reaches back only to the last", async () => {
+    const n = setup({ startTask: false });
+    await n.notifier.notify({ level: "digest", title: "First news", body: "one", agentId: "assistant" });
+    expect(await n.notifier.flushDigest()).toBe(1);
+    expect(await n.notifier.flushDigest()).toBe(0);
+    await n.notifier.notify({ level: "digest", title: "Second news", body: "two", agentId: "assistant" });
+    expect(await n.notifier.flushDigest()).toBe(1);
+    const bodies = (n.db.prepare("select body from notifications where kind = 'digest' order by created_at").all() as Array<{ body: string }>).map((r) => r.body);
+    expect(bodies[0]).toContain("First news");
+    expect(bodies[1]).toContain("Second news");
+    expect(bodies[1]).not.toContain("First news");
+  });
+
+  it("tells the assistant what already reached the person since the last digest", async () => {
+    const n = setup();
+    await n.notifier.notify({ level: "notify", title: "Ботсад закрыт 2 ноября", body: "Весь день.", agentId: "assistant" });
+    await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+    await n.notifier.flushDigest();
+    expect(n.started[0].goal).toMatch(/Already told[^\n]*\n- \d\d:\d\d Ботсад закрыт 2 ноября/);
+    n.notifier.stop();
+  });
+
+  it("clears its timers when stopped", async () => {
+    vi.useFakeTimers();
+    try {
+      const n = setup({ digestWriteMs: 1000 });
+      await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+      await n.notifier.flushDigest();
+      expect(vi.getTimerCount()).toBe(1);
+      n.notifier.stop();
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(digestRow(n).delivered_at).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("the digest_now tool", () => {
+  it("sends the digest now, and says so when nothing waits", async () => {
+    const h = setup();
+    const registry = new ToolRegistry();
+    registerCoreTools({ registry, store: h.store, notifier: h.notifier } as unknown as CoreToolDeps);
+    const call = () => registry.get("digest_now")!.invoke({}, { agentId: "assistant", conversationId: "c_1" } as never);
+    const textOf = (r: { content: Array<{ type: string; text?: string }> }) => r.content.map((c) => c.text ?? "").join("");
+    expect(textOf(await call())).toBe("Nothing waits for a digest: nothing was sent.");
+    await h.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+    expect(textOf(await call())).toMatch(/being written from 1 item\(s\)/);
+    expect(h.started).toHaveLength(1);
+    h.notifier.stop();
   });
 });
