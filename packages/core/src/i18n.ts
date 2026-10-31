@@ -15,7 +15,7 @@ import {
   type Params,
   type PluginLayout,
   type Translate,
-} from "@owlbot/shared";
+} from "@piomio/shared";
 import en from "./locales/en.ts";
 import ru from "./locales/ru.ts";
 
@@ -68,7 +68,7 @@ export class LocalizedError extends Error {
 
 /** Locale of an HTTP request: the UI's explicit choice, then Accept-Language, then the hub language. */
 export function requestLocale(req: Pick<FastifyRequest, "headers">): Locale {
-  return normalizeLocale(req.headers["x-owlbot-locale"]) ?? localeFromAcceptLanguage(String(req.headers["accept-language"] ?? "")) ?? hubLocale();
+  return normalizeLocale(req.headers["x-piomio-locale"]) ?? localeFromAcceptLanguage(String(req.headers["accept-language"] ?? "")) ?? hubLocale();
 }
 
 /** Text of any error for a reader in `locale`. */

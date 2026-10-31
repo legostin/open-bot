@@ -7,8 +7,8 @@ import { chromium } from "playwright";
 import type { BrowserContext, CDPSession, Dialog, Download, Frame, LaunchOptions, Locator, Page } from "playwright";
 import { mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { ToolResult } from "@owlbot/shared";
-import type { PluginContext } from "@owlbot/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
+import type { PluginContext } from "@piomio/plugin-sdk";
 import { HistoryStore } from "./history.ts";
 import { createChromiumInstaller, INSTALL_WAIT_MS, isMissingExecutableError, type ChromiumInstaller } from "./install.ts";
 import { pageCall } from "./page-script.ts";
@@ -905,7 +905,7 @@ export class BrowserManager {
       let world = this.touchWorld;
       if (world?.page !== page) {
         const { frameTree } = await cdp.send("Page.getFrameTree");
-        const { executionContextId } = await cdp.send("Page.createIsolatedWorld", { frameId: frameTree.frame.id, worldName: "owlbot-touch" });
+        const { executionContextId } = await cdp.send("Page.createIsolatedWorld", { frameId: frameTree.frame.id, worldName: "piomio-touch" });
         world = this.touchWorld = { page, contextId: executionContextId };
       }
       try {

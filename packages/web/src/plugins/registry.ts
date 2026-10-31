@@ -2,8 +2,8 @@
 // State is an immutable snapshot so React can subscribe with useSyncExternalStore.
 
 import type { ComponentType } from "react";
-import type { Message } from "@owlbot/shared";
-import type { LiveViewContribution, LiveViewHandle, LiveViewProps, MapAppContribution, SlotContribution, SlotName, SlotProps, WidgetProps } from "@owlbot/ui";
+import type { Message } from "@piomio/shared";
+import type { LiveViewContribution, LiveViewHandle, LiveViewProps, MapAppContribution, SlotContribution, SlotName, SlotProps, WidgetProps } from "@piomio/ui";
 import { createStore } from "../lib/store";
 import { globSpecificity, matchesGlob } from "../lib/glob";
 import { applyActivity, IDLE_VIEW, type LiveViewState } from "./liveview";

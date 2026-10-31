@@ -1,6 +1,6 @@
 // The machines block: turns in progress by machine, what each is doing, approvals it waits for, and the event.
 import { describe, expect, it } from "vitest";
-import type { Approval, Machine, MachineActivity } from "@owlbot/shared";
+import type { Approval, Machine, MachineActivity } from "@piomio/shared";
 import { EventBus } from "../src/bus.ts";
 import { detailOfTool, MachineActivityFeed, stepOfTool } from "../src/activity.ts";
 import type { MachineHub } from "../src/machines.ts";

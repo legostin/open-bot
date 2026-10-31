@@ -32,7 +32,7 @@ jobs:
         with:
           workspaces: packages/desktop/src-tauri
       - run: npm ci
-      - run: npm run build:ui -w @owlbot/desktop
+      - run: npm run build:ui -w @piomio/desktop
       - run: cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml
       # The update files are signed with the project's key; without the secret (a fork's PR) they are left out.
       - run: npm run package:desktop
@@ -43,25 +43,25 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $setup = (Get-ChildItem dist/desktop/owlbot-setup-*-x64.exe | Select-Object -First 1).FullName
+          $setup = (Get-ChildItem dist/desktop/piomio-setup-*-x64.exe | Select-Object -First 1).FullName
           $p = Start-Process $setup -ArgumentList "/S", "/NOSTART" -PassThru
           $p.WaitForExit(600000) | Out-Null
           if ($p.ExitCode -ne 0) { throw "setup exited with $($p.ExitCode)" }
-          $app = "$env:LOCALAPPDATA\Owlbot"
-          if (-not (Test-Path "$app\Owlbot.exe")) { throw "Owlbot.exe is missing" }
+          $app = "$env:LOCALAPPDATA\Piomio"
+          if (-not (Test-Path "$app\Piomio.exe")) { throw "Piomio.exe is missing" }
           if (-not (Test-Path "$app\app\packaging\desktop\launch.mjs")) { throw "the hub is missing" }
 
-          Start-Process "$app\Owlbot.exe" -ArgumentList "--mode", "hub", "--background"
+          Start-Process "$app\Piomio.exe" -ArgumentList "--mode", "hub", "--background"
           $state = $null
           for ($i = 0; $i -lt 120 -and -not $state; $i++) {
             try { $state = Invoke-RestMethod http://127.0.0.1:41780/api/auth/state } catch { Start-Sleep 1 }
           }
           if (-not $state) { Get-Content "$app\logs\*.log" -ErrorAction SilentlyContinue; throw "the hub did not answer" }
           if ($state.hasPassword) { throw "a fresh hub has a password" }
-          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."Owlbot"
-          if ($run -ne "`"$app\Owlbot.exe`" --background") { throw "Run value: $run" }
+          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."Piomio"
+          if ($run -ne "`"$app\Piomio.exe`" --background") { throw "Run value: $run" }
 
-          Start-Process "$app\Owlbot.exe" -ArgumentList "--quit" -Wait
+          Start-Process "$app\Piomio.exe" -ArgumentList "--quit" -Wait
           $down = $false
           for ($i = 0; $i -lt 30 -and -not $down; $i++) {
             try { Invoke-RestMethod http://127.0.0.1:41780/api/auth/state | Out-Null; Start-Sleep 1 } catch { $down = $true }
@@ -69,10 +69,10 @@ jobs:
           if (-not $down) { throw "the hub still answers after --quit" }
 
           Start-Process "$app\uninstall.exe" -ArgumentList "/S" -Wait
-          for ($i = 0; $i -lt 60 -and (Test-Path "$app\Owlbot.exe"); $i++) { Start-Sleep 1 }
-          if (Test-Path "$app\Owlbot.exe") { throw "not uninstalled" }
-          if (-not (Test-Path "$app\owlbot.db")) { throw "the data is gone" }
-          $left = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue)."Owlbot"
+          for ($i = 0; $i -lt 60 -and (Test-Path "$app\Piomio.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$app\Piomio.exe") { throw "not uninstalled" }
+          if (-not (Test-Path "$app\piomio.db")) { throw "the data is gone" }
+          $left = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue)."Piomio"
           if ($left) { throw "the Run value is still there" }
           "ok"
       - uses: actions/upload-artifact@v4
@@ -80,8 +80,8 @@ jobs:
         with:
           name: windows-installer
           path: |
-            dist/desktop/owlbot-setup-*.exe
-            dist/desktop/owlbot-setup-*.exe.sig
+            dist/desktop/piomio-setup-*.exe
+            dist/desktop/piomio-setup-*.exe.sig
           if-no-files-found: ignore
 
   macos:
@@ -105,7 +105,7 @@ jobs:
         with:
           workspaces: packages/desktop/src-tauri
       - run: npm ci
-      - run: npm run build:ui -w @owlbot/desktop
+      - run: npm run build:ui -w @piomio/desktop
       - run: cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml
       # The update files are signed with the project's key; without the secret (a fork's PR) they are left out.
       - run: npm run package:desktop
@@ -115,62 +115,62 @@ jobs:
       - name: "Disk image: drag to Applications, run, quit"
         run: |
           set -eu
-          data="$HOME/Library/Application Support/Owlbot"
+          data="$HOME/Library/Application Support/Piomio"
           up() { curl -fsS http://127.0.0.1:41780/api/auth/state >state.json 2>/dev/null; }
           down() { ! up; }
           wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 120 ]; then echo "timed out: $*"; cat "$data/logs/"*.log || true; exit 1; fi; sleep 1; done; }
 
-          dmg=$(ls dist/desktop/owlbot-*.dmg | head -n 1)
+          dmg=$(ls dist/desktop/piomio-*.dmg | head -n 1)
           hdiutil attach -nobrowse -readonly -mountpoint /tmp/owl-image "$dmg"
           test "$(readlink /tmp/owl-image/Applications)" = /Applications
-          codesign --verify --strict /tmp/owl-image/Owlbot.app
-          codesign -dv /tmp/owl-image/Owlbot.app/Contents/Resources/app/runtime/arm64/bin/node 2>&1 | grep -q "TeamIdentifier=HX7739G8FX"
-          lipo -archs /tmp/owl-image/Owlbot.app/Contents/MacOS/Owlbot | grep -q x86_64
-          ditto /tmp/owl-image/Owlbot.app /Applications/Owlbot.app
+          codesign --verify --strict /tmp/owl-image/Piomio.app
+          codesign -dv /tmp/owl-image/Piomio.app/Contents/Resources/app/runtime/arm64/bin/node 2>&1 | grep -q "TeamIdentifier=HX7739G8FX"
+          lipo -archs /tmp/owl-image/Piomio.app/Contents/MacOS/Piomio | grep -q x86_64
+          ditto /tmp/owl-image/Piomio.app /Applications/Piomio.app
           hdiutil detach /tmp/owl-image
 
-          /Applications/Owlbot.app/Contents/MacOS/Owlbot --mode hub --background &
+          /Applications/Piomio.app/Contents/MacOS/Piomio --mode hub --background &
           wait_for up
           grep -q '"hasPassword":false' state.json
-          node /Applications/Owlbot.app/Contents/Resources/app/packaging/desktop/launch.mjs url | grep -Eq '^http://localhost:41780/#setup=[A-Za-z0-9_-]+$'
-          grep -q "/Applications/Owlbot.app/Contents/MacOS/Owlbot" "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
+          node /Applications/Piomio.app/Contents/Resources/app/packaging/desktop/launch.mjs url | grep -Eq '^http://localhost:41780/#setup=[A-Za-z0-9_-]+$'
+          grep -q "/Applications/Piomio.app/Contents/MacOS/Piomio" "$HOME/Library/LaunchAgents/ai.piomio.app.plist"
 
-          /Applications/Owlbot.app/Contents/MacOS/Owlbot --quit
+          /Applications/Piomio.app/Contents/MacOS/Piomio --quit
           wait_for down
-          test -f "$data/owlbot.db"
+          test -f "$data/piomio.db"
           # The package check starts from a first run again (the data stays).
-          rm -rf /Applications/Owlbot.app "$HOME/Library/Application Support/ai.owlbot.app" "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
+          rm -rf /Applications/Piomio.app "$HOME/Library/Application Support/ai.piomio.app" "$HOME/Library/LaunchAgents/ai.piomio.app.plist"
           echo ok
       - name: "Package: silent install, run, uninstall"
         run: |
           set -eu
-          data="$HOME/Library/Application Support/Owlbot"
+          data="$HOME/Library/Application Support/Piomio"
           up() { curl -fsS http://127.0.0.1:41780/api/auth/state >state.json 2>/dev/null; }
           down() { ! up; }
           wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 120 ]; then echo "timed out: $*"; cat "$data/logs/"*.log || true; exit 1; fi; sleep 1; done; }
 
-          pkg=$(ls dist/desktop/owlbot-*.pkg | head -n 1)
-          pkgutil --payload-files "$pkg" | grep -q "Applications/Owlbot.app/Contents/Resources/uninstall.sh"
+          pkg=$(ls dist/desktop/piomio-*.pkg | head -n 1)
+          pkgutil --payload-files "$pkg" | grep -q "Applications/Piomio.app/Contents/Resources/uninstall.sh"
           sudo installer -pkg "$pkg" -target /
-          test -x /Applications/Owlbot.app/Contents/MacOS/Owlbot
+          test -x /Applications/Piomio.app/Contents/MacOS/Piomio
           # The postinstall opened the app at its first run; this makes the choice through it (or starts it).
-          /Applications/Owlbot.app/Contents/MacOS/Owlbot --mode hub --background &
+          /Applications/Piomio.app/Contents/MacOS/Piomio --mode hub --background &
           wait_for up
 
-          sudo /bin/sh /Applications/Owlbot.app/Contents/Resources/uninstall.sh "$(id -u)" "$HOME"
+          sudo /bin/sh /Applications/Piomio.app/Contents/Resources/uninstall.sh "$(id -u)" "$HOME"
           wait_for down
-          test ! -e /Applications/Owlbot.app
-          test ! -e "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
-          if pkgutil --pkg-info ai.owlbot.pkg >/dev/null 2>&1; then echo "the package receipt is still there"; exit 1; fi
-          test -f "$data/owlbot.db"
+          test ! -e /Applications/Piomio.app
+          test ! -e "$HOME/Library/LaunchAgents/ai.piomio.app.plist"
+          if pkgutil --pkg-info ai.piomio.pkg >/dev/null 2>&1; then echo "the package receipt is still there"; exit 1; fi
+          test -f "$data/piomio.db"
           echo ok
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: macos-installers
           path: |
-            dist/desktop/owlbot-*.dmg
-            dist/desktop/owlbot-*.pkg
-            dist/desktop/owlbot-*-mac.app.tar.gz
-            dist/desktop/owlbot-*-mac.app.tar.gz.sig
+            dist/desktop/piomio-*.dmg
+            dist/desktop/piomio-*.pkg
+            dist/desktop/piomio-*-mac.app.tar.gz
+            dist/desktop/piomio-*-mac.app.tar.gz.sig
           if-no-files-found: ignore

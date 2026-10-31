@@ -2,7 +2,7 @@
 // place), the one file it holds, and context the model would otherwise miss (a forward's origin, the message it
 // replies to). The context is English text for the model, not shown in the chat.
 
-import type { AttachmentKind } from "@owlbot/shared";
+import type { AttachmentKind } from "@piomio/shared";
 import type { TgMessage, TgUser } from "./api.ts";
 
 /** Bots can download files up to 20 MB (getFile). */

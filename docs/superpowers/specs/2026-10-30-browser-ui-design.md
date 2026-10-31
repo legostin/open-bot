@@ -31,7 +31,7 @@ in the corner stays as it is. Everything below is about the expanded view.
   keyboard only inside a touch: while the finger is down the hub checks what is under it (an isolated world, no
   script in the page's own world), and if it is a text field the keyboard opens as the finger lifts. When the
   answer comes too late the keyboard button lights up (Android opens it anyway). Opening it always on iOS needs a
-  change in owlbot-ios (later, separately).
+  change in piomio-ios (later, separately).
 
 ## Hub side
 

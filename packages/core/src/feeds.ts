@@ -3,8 +3,8 @@
 // in the channel's own folder (scripts and notes stay for the next runs) and publishes with feed_post. The hub keeps the
 // schedule, refuses repeats and counts what the user has not read yet. The code says feed: "channels" are where
 // messages travel (Telegram).
-import type { Feed, FeedPost, Task, TaskStatus } from "@owlbot/shared";
-import { newId, nowIso, truncate } from "@owlbot/shared";
+import type { Feed, FeedPost, Task, TaskStatus } from "@piomio/shared";
+import { newId, nowIso, truncate } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import { json } from "./db.ts";
 import type { EventBus } from "./bus.ts";

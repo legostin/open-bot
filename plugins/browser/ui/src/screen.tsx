@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
-import { Spinner } from "@owlbot/ui";
+import { Spinner } from "@piomio/ui";
 import { host, send, t, touchScreen, viewerId } from "./host.ts";
 import { NO_ZOOM, clampZoom, pan, pinch, zoomAt, type Bounds, type Zoom } from "./zoom.ts";
 

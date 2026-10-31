@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// owlbot-node CLI: pair | run | status | policy
+// piomio-node CLI: pair | run | status | policy
 
 import { existsSync, readFileSync } from "node:fs";
 import { configFile, keyFile, loadConfig, nodeHome, normalizeHubUrl, NotPairedError, parseInviteLink, UserError } from "./home.ts";
@@ -86,7 +86,7 @@ async function cmdRun(): Promise<void> {
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGHUP", () => void shutdown("SIGHUP"));
-  if (process.env.OWLBOT_DESKTOP === "1") stopOnDesktopStdin(process.stdin, () => void shutdown("stop"));
+  if (process.env.PIOMIO_DESKTOP === "1") stopOnDesktopStdin(process.stdin, () => void shutdown("stop"));
   process.on("unhandledRejection", (e: any) => log(t("cli.unhandledRejection", { error: String(e?.stack ?? e) })));
   process.on("uncaughtException", (e: any) => log(t("cli.uncaughtException", { error: String(e?.stack ?? e) })));
   daemon.client.start();
@@ -156,7 +156,7 @@ async function main(): Promise<void> {
       return cmdPolicy();
     case "mcp-bridge":
       // Internal: the stdio MCP bridge brain CLIs spawn (keeps the single-file download self-contained).
-      await import("@owlbot/mcp-bridge");
+      await import("@piomio/mcp-bridge");
       return;
     default:
       throw new PairError(t("cli.unknownCommand", { command: cmd, help: help() }));

@@ -1,4 +1,4 @@
-// Access from anywhere: the hub's own Tailscale node (packages/tailnet, owlbot-tailnet) and the permanent Funnel link
+// Access from anywhere: the hub's own Tailscale node (packages/tailnet, piomio-tailnet) and the permanent Funnel link
 // it serves. The node is a child process speaking JSON lines: the hub sends where it keeps its keys and where to
 // proxy, the node reports sign-in, Funnel and the link. Funnel traffic reaches the hub only through two loopback
 // gateways (server/main-app.ts and server/device-app.ts in remote mode), never the computer's own ports.
@@ -7,7 +7,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import type { Locale, RemoteState, RemoteView } from "@owlbot/shared";
+import type { Locale, RemoteState, RemoteView } from "@piomio/shared";
 import type { Config } from "./config.ts";
 import type { EventBus } from "./bus.ts";
 import type { DeviceTls } from "./devices-tls.ts";

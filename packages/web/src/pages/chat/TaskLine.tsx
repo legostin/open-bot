@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ArrowRight, ChevronDown } from "lucide-react";
-import type { AgentDef, Task } from "@owlbot/shared";
+import type { AgentDef, Task } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { taskStatus, threadStatus, type Tone } from "../../lib/format";
 import { agents, ensureAgents, ensureMachineActivity, ensureTasks, machineActivity, tasks } from "../../state/app";

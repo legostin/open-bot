@@ -1,5 +1,5 @@
 {
-  "name": "@owlbot/core",
+  "name": "@piomio/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",

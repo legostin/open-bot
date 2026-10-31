@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Message } from "@owlbot/shared";
+import type { Message } from "@piomio/shared";
 import { chatMedia, fileHref, imageDownload, indexOfKey, mediaKind } from "./gallery";
 
 const msg = (id: string, parts: Message["parts"]): Message => ({ id, conversationId: "c", role: "user", parts, status: "complete", createdAt: "2026-10-31T00:00:00Z" }) as Message;

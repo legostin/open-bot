@@ -95,7 +95,7 @@ export function saveMedia(item: MediaItem): void {
 
 // The desktop app saves downloads into the Downloads folder by itself and says when one is done (window.rs).
 if (typeof window !== "undefined" && desktopApp()) {
-  window.addEventListener("owlbot-desktop", (e) => {
+  window.addEventListener("piomio-desktop", (e) => {
     const d = (e as CustomEvent<{ type?: string; name?: string; ok?: boolean }>).detail;
     if (d?.type !== "download") return;
     if (d.ok) toast(t("viewer.saved", { name: d.name ?? "" }), "success");

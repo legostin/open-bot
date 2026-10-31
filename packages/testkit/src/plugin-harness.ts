@@ -6,13 +6,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, CatalogEntryState, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@owlbot/shared";
-import { createRpcPeer, ndjsonTransport, readPluginLayout, type RpcPeer } from "@owlbot/shared";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, CatalogEntryState, Locale, OutboundMessage, ProbeResult, ToolCallContext, ToolResult, ToolSpec } from "@piomio/shared";
+import { createRpcPeer, ndjsonTransport, readPluginLayout, type RpcPeer } from "@piomio/shared";
 
 const APP_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..", "..", "..");
 
 export interface HarnessOptions {
-  /** Plugin directory (contains .owlbot-plugin/plugin.json). */
+  /** Plugin directory (contains .piomio-plugin/plugin.json). */
   dir: string;
   settings?: Record<string, unknown>;
   /** Vault items by id → fields. */

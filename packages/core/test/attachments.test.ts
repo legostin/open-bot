@@ -22,7 +22,7 @@ const at = new Date(2026, 9, 27, 9, 15, 0);
 describe("attachments", () => {
   let root: string;
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "owlbot-att-"));
+    root = mkdtempSync(join(tmpdir(), "piomio-att-"));
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 

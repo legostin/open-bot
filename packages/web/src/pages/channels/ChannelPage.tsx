@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { RotateCw, SlidersHorizontal } from "lucide-react";
-import type { FeedPost } from "@owlbot/shared";
+import type { FeedPost } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { errorText } from "../../lib/api";
 import { formatTime } from "../../lib/format";

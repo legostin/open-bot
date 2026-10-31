@@ -160,7 +160,7 @@ export async function stage({ target, skipBuild = false }) {
   for (const f of ["package.json", "package-lock.json"]) cpSync(join(ROOT, f), join(app, f));
   for (const d of ["agents", "packages", "plugins", "integrations"]) cpSync(join(ROOT, d), join(app, d), { recursive: true, filter: wanted });
   for (const f of ["launch.mjs", "resolve.mjs"]) cpSync(join(ROOT, "packaging", "desktop", f), join(app, "packaging", "desktop", f));
-  for (const need of ["packages/web/dist/index.html", "packages/console/dist/index.html", "packages/pages-kit/dist/kit.js", "packages/node/dist/owlbot-node.mjs"]) {
+  for (const need of ["packages/web/dist/index.html", "packages/console/dist/index.html", "packages/pages-kit/dist/kit.js", "packages/node/dist/piomio-node.mjs"]) {
     if (!existsSync(join(app, need))) throw new Error(`${need} is missing: run npm run build`);
   }
   for (const t of TAILNET_TARGETS[target]) {

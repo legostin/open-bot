@@ -37,8 +37,8 @@ describe("integration cards", () => {
   });
 
   it("knows when the page came through the link", () => {
-    expect(openedThroughLink("https://owlbot.tail1234.ts.net", "owlbot.tail1234.ts.net")).toBe(true);
-    expect(openedThroughLink("https://owlbot.tail1234.ts.net", "127.0.0.1:8080")).toBe(false);
-    expect(openedThroughLink(undefined, "owlbot.tail1234.ts.net")).toBe(false);
+    expect(openedThroughLink("https://piomio.tail1234.ts.net", "piomio.tail1234.ts.net")).toBe(true);
+    expect(openedThroughLink("https://piomio.tail1234.ts.net", "127.0.0.1:8080")).toBe(false);
+    expect(openedThroughLink(undefined, "piomio.tail1234.ts.net")).toBe(false);
   });
 });

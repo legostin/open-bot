@@ -1,7 +1,7 @@
 import { ShieldCheck } from "lucide-react";
 import { cx } from "./kit.tsx";
 
-/** The 0_0 mark with a shield: Owlbot's security console. */
+/** The 0_0 mark with a shield: Piomio's security console. */
 export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
   return (
     <span className={cx("relative inline-flex shrink-0", size === "lg" ? "size-12" : "size-8")} aria-hidden>

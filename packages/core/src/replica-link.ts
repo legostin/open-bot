@@ -4,8 +4,8 @@
 
 import type { TLSSocket } from "node:tls";
 import WebSocket from "ws";
-import { createRpcPeer, wsTransport, type RpcPeer, type WsLike } from "@owlbot/shared";
-import { pinMatches, pinnedAgent, pinnedRequest, signRequest, type ReplicaKey } from "@owlbot/replica";
+import { createRpcPeer, wsTransport, type RpcPeer, type WsLike } from "@piomio/shared";
+import { pinMatches, pinnedAgent, pinnedRequest, signRequest, type ReplicaKey } from "@piomio/replica";
 
 export const LINK_PATH = "/api/replica/link";
 

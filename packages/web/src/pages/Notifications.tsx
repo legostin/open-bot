@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { BellOff, Send, ThumbsDown, ThumbsUp } from "lucide-react";
-import type { Notification } from "@owlbot/shared";
+import type { Notification } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { notifyLevel, relativeTime } from "../lib/format";
 import { hubEvents, reconnected } from "../state/app";

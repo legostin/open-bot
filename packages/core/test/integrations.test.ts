@@ -90,17 +90,17 @@ describe("integrations and the Google sign-in", () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
       {
-        OWLBOT_PORT: String(port),
-        OWLBOT_DEVICES: "0",
-        OWLBOT_CONSOLE_PORT: String(consolePort),
-        OWLBOT_EGRESS_PORT: String(egressPort),
+        PIOMIO_PORT: String(port),
+        PIOMIO_DEVICES: "0",
+        PIOMIO_CONSOLE_PORT: String(consolePort),
+        PIOMIO_EGRESS_PORT: String(egressPort),
         TZ: "UTC",
-        OWLBOT_GOOGLE_CLIENT_ID: "test-client",
-        OWLBOT_GOOGLE_CLIENT_SECRET: "test-secret",
-        OWLBOT_GOOGLE_AUTH_URL: `${base}/auth`,
-        OWLBOT_GOOGLE_TOKEN_URL: `${base}/token`,
-        OWLBOT_GOOGLE_REVOKE_URL: `${base}/revoke`,
-        OWLBOT_GOOGLE_USERINFO_URL: `${base}/userinfo`,
+        PIOMIO_GOOGLE_CLIENT_ID: "test-client",
+        PIOMIO_GOOGLE_CLIENT_SECRET: "test-secret",
+        PIOMIO_GOOGLE_AUTH_URL: `${base}/auth`,
+        PIOMIO_GOOGLE_TOKEN_URL: `${base}/token`,
+        PIOMIO_GOOGLE_REVOKE_URL: `${base}/revoke`,
+        PIOMIO_GOOGLE_USERINFO_URL: `${base}/userinfo`,
       },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-int-")), builtinPluginsDirs: [plugins], builtinAgentsDir: join(fixtures, "agents") },
     );

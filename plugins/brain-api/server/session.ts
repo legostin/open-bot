@@ -4,8 +4,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { extname, isAbsolute, resolve } from "node:path";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, Params } from "@owlbot/shared";
-import type { BrainSessionImpl, PluginContext } from "@owlbot/plugin-sdk";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, Params } from "@piomio/shared";
+import type { BrainSessionImpl, PluginContext } from "@piomio/plugin-sdk";
 import { anthropicStream } from "./anthropic.ts";
 import {
   compacted,
@@ -240,7 +240,7 @@ export class ApiBrainSession implements BrainSessionImpl {
       label: this.providerLabel(),
       vision: v.vision(s),
       maxTokensField: v.id === "openai" ? ("max_completion_tokens" as const) : ("max_tokens" as const),
-      extraHeaders: v.id === "openrouter" ? { "X-Title": "Owlbot" } : undefined,
+      extraHeaders: v.id === "openrouter" ? { "X-Title": "Piomio" } : undefined,
       proxyEnv,
       effortField: v.id === "openai" ? ("reasoning_effort" as const) : v.id === "openrouter" ? ("reasoning" as const) : undefined,
     };

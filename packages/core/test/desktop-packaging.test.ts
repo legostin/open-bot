@@ -27,13 +27,13 @@ describe("desktop launcher", () => {
   it("stages the hub without the desktop app's own sources", () => {
     expect(wanted(join(ROOT, "packages", "core", "src", "cli.ts"))).toBe(true);
     expect(wanted(join(ROOT, "packages", "desktop", "package.json"))).toBe(true);
-    expect(wanted(join(ROOT, "packages", "desktop", "src-tauri", "target", "release", "owlbot"))).toBe(false);
+    expect(wanted(join(ROOT, "packages", "desktop", "src-tauri", "target", "release", "piomio"))).toBe(false);
     expect(wanted(join(ROOT, "packages", "desktop", "ui", "src", "main.ts"))).toBe(false);
     expect(wanted(join(ROOT, "packages", "core", "test", "hub.test.ts"))).toBe(false);
     // The Tailscale node ships as the target's binaries only (stage() copies them), not its Go sources.
     expect(wanted(join(ROOT, "packages", "tailnet"))).toBe(true);
     expect(wanted(join(ROOT, "packages", "tailnet", "main.go"))).toBe(false);
-    expect(wanted(join(ROOT, "packages", "tailnet", "bin", "linux-x64", "owlbot-tailnet"))).toBe(false);
+    expect(wanted(join(ROOT, "packages", "tailnet", "bin", "linux-x64", "piomio-tailnet"))).toBe(false);
     // Integrations ship built, like plugins; their template is the agents' skill and ships whole.
     expect(wanted(join(ROOT, "integrations", "weather", "ui", "dist", "index.js"))).toBe(true);
     expect(wanted(join(ROOT, "integrations", "weather", "ui", "src", "index.tsx"))).toBe(false);
@@ -43,8 +43,17 @@ describe("desktop launcher", () => {
   });
 
   it("keeps data in the user's profile", () => {
-    expect(defaultDataDir({ LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local" }, "win32", "C:\\Users\\u")).toBe(join("C:\\Users\\u\\AppData\\Local", "Owlbot"));
-    expect(defaultDataDir({}, "darwin", "/Users/u")).toBe(join("/Users/u", "Library", "Application Support", "Owlbot"));
+    expect(defaultDataDir({ LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local" }, "win32", "C:\\Users\\u")).toBe(join("C:\\Users\\u\\AppData\\Local", "Piomio"));
+    expect(defaultDataDir({}, "darwin", "/Users/u")).toBe(join("/Users/u", "Library", "Application Support", "Piomio"));
+  });
+
+  it("keeps an Owlbot install's data folder, where agents' messages point", () => {
+    const home = tmp();
+    const support = join(home, "Library", "Application Support");
+    mkdirSync(join(support, "Owlbot"), { recursive: true });
+    expect(defaultDataDir({}, "darwin", home)).toBe(join(support, "Owlbot"));
+    mkdirSync(join(support, "Piomio"));
+    expect(defaultDataDir({}, "darwin", home)).toBe(join(support, "Piomio"));
   });
 
   it("reads ports from desktop.json and keeps one setup code", () => {
@@ -52,9 +61,9 @@ describe("desktop launcher", () => {
     expect(desktopPorts(data)).toEqual({ port: 41780, consolePort: 41781, egressPort: 41789 });
     writeFileSync(join(data, "desktop.json"), JSON.stringify({ port: 18080 }));
     expect(desktopPorts(data)).toEqual({ port: 18080, consolePort: 18081, egressPort: 18089 });
-    // The test build's ports (OWLBOT_DESKTOP_PORT from the app) come only when desktop.json has none.
-    expect(desktopPorts(data, { OWLBOT_DESKTOP_PORT: "41790" }).port).toBe(18080);
-    expect(desktopPorts(tmp(), { OWLBOT_DESKTOP_PORT: "41790" })).toEqual({ port: 41790, consolePort: 41791, egressPort: 41799 });
+    // The test build's ports (PIOMIO_DESKTOP_PORT from the app) come only when desktop.json has none.
+    expect(desktopPorts(data, { PIOMIO_DESKTOP_PORT: "41790" }).port).toBe(18080);
+    expect(desktopPorts(tmp(), { PIOMIO_DESKTOP_PORT: "41790" })).toEqual({ port: 41790, consolePort: 41791, egressPort: 41799 });
     const code = setupCode(data);
     expect(code).toMatch(/^[\w-]{12,64}$/);
     expect(setupCode(data)).toBe(code);
@@ -62,14 +71,14 @@ describe("desktop launcher", () => {
 
   it("gives the hub its settings without overriding the caller's, and loads the resolve hook once", () => {
     const data = tmp();
-    const env = hubEnv({ OWLBOT_PORT: "9999", NODE_OPTIONS: "--max-old-space-size=512" }, data);
-    expect(env.OWLBOT_PORT).toBe("9999");
-    expect(env.OWLBOT_DATA_DIR).toBe(data);
-    expect(env.OWLBOT_PUBLIC_URL).toBe("http://localhost:41780");
-    expect(env.OWLBOT_INSTALL_CLIS).toBe("1");
-    expect(env.OWLBOT_DESKTOP).toBe("1");
-    expect(env.OWLBOT_BRAIN_HOME).toBe(homedir());
-    expect(env.OWLBOT_SETUP_TOKEN).toBe(readFileSync(join(data, "setup-code"), "utf8").trim());
+    const env = hubEnv({ PIOMIO_PORT: "9999", NODE_OPTIONS: "--max-old-space-size=512" }, data);
+    expect(env.PIOMIO_PORT).toBe("9999");
+    expect(env.PIOMIO_DATA_DIR).toBe(data);
+    expect(env.PIOMIO_PUBLIC_URL).toBe("http://localhost:41780");
+    expect(env.PIOMIO_INSTALL_CLIS).toBe("1");
+    expect(env.PIOMIO_DESKTOP).toBe("1");
+    expect(env.PIOMIO_BRAIN_HOME).toBe(homedir());
+    expect(env.PIOMIO_SETUP_TOKEN).toBe(readFileSync(join(data, "setup-code"), "utf8").trim());
     expect(env.NODE_OPTIONS).toBe(`--max-old-space-size=512 --import=${RESOLVE_HOOK}`);
     expect(hubEnv(env, data).NODE_OPTIONS).toBe(env.NODE_OPTIONS);
   });
@@ -86,11 +95,11 @@ describe("desktop launcher", () => {
     expect(await openUrl(data, { fetchImpl: down, timeoutMs: 600 })).toEqual({ ready: false, url: "http://localhost:41780/" });
   });
 
-  it("resolves @owlbot/* to the workspace folders without node_modules links", () => {
+  it("resolves @piomio/* to the workspace folders without node_modules links", () => {
     const table = workspaces(ROOT);
-    const shared = resolveWorkspace("@owlbot/shared", table);
-    expect(shared && fileURLToPath(shared)).toBe(join(ROOT, "packages", "shared", table.get("@owlbot/shared").exports["."] ?? table.get("@owlbot/shared").exports));
-    expect(resolveWorkspace("@owlbot/no-such-package", table)).toBeUndefined();
+    const shared = resolveWorkspace("@piomio/shared", table);
+    expect(shared && fileURLToPath(shared)).toBe(join(ROOT, "packages", "shared", table.get("@piomio/shared").exports["."] ?? table.get("@piomio/shared").exports));
+    expect(resolveWorkspace("@piomio/no-such-package", table)).toBeUndefined();
     expect(resolveWorkspace("react", table)).toBeUndefined();
   });
 
@@ -118,21 +127,21 @@ describe("installer text", () => {
     const hooks: string = nsisHooks(catalogs);
     expect(hooks).toContain("!macro NSIS_HOOK_POSTUNINSTALL");
     expect(hooks).toContain("${If} $LANGUAGE == 1049");
-    expect(hooks).toContain("$LOCALAPPDATA\\Owlbot");
-    expect(hooks).toContain("Удалить и ваши данные Owlbot");
-    expect(hooks).toContain('Exec \'"$INSTDIR\\Owlbot.exe" --background\'');
+    expect(hooks).toContain("$LOCALAPPDATA\\Piomio");
+    expect(hooks).toContain("Удалить и ваши данные Piomio");
+    expect(hooks).toContain('Exec \'"$INSTDIR\\Piomio.exe" --background\'');
     expect(hooks).not.toContain("{dir}");
-    const test: string = nsisHooks(catalogs, "Owlbot Test");
-    expect(test).toContain('Exec \'"$INSTDIR\\Owlbot Test.exe" --background\'');
-    expect(test).toContain('RMDir /r "$LOCALAPPDATA\\Owlbot Test"');
+    const test: string = nsisHooks(catalogs, "Piomio Test");
+    expect(test).toContain('Exec \'"$INSTDIR\\Piomio Test.exe" --background\'');
+    expect(test).toContain('RMDir /r "$LOCALAPPDATA\\Piomio Test"');
   });
 
   it("builds the Installer pages and distribution", () => {
     const page = installerPage(catalogs, "ru", "welcome");
     expect(page).toContain('<html lang="ru">');
-    expect(page).toContain("<h1>Добро пожаловать в Owlbot</h1>");
-    const xml = distributionXml({ version: "1.2.3", componentPkg: "owlbot-app.pkg" });
-    expect(xml).toContain('<pkg-ref id="ai.owlbot.pkg" version="1.2.3" onConclusion="none">owlbot-app.pkg</pkg-ref>');
+    expect(page).toContain("<h1>Добро пожаловать в Piomio</h1>");
+    const xml = distributionXml({ version: "1.2.3", componentPkg: "piomio-app.pkg" });
+    expect(xml).toContain('<pkg-ref id="ai.piomio.pkg" version="1.2.3" onConclusion="none">piomio-app.pkg</pkg-ref>');
     expect(xml).toContain('hostArchitectures="arm64,x86_64"');
   });
 });
@@ -140,20 +149,20 @@ describe("installer text", () => {
 describe("desktop updates", () => {
   it("lists the signed update files of a release in latest.json", () => {
     const dir = tmp();
-    writeFileSync(join(dir, "owlbot-0.2.0-mac.app.tar.gz"), "app");
-    writeFileSync(join(dir, "owlbot-0.2.0-mac.app.tar.gz.sig"), "mac-signature\n");
-    writeFileSync(join(dir, "owlbot-setup-0.2.0-x64.exe"), "exe");
-    writeFileSync(join(dir, "owlbot-setup-0.2.0-x64.exe.sig"), "win-signature\n");
-    const mac = { signature: "mac-signature", url: "https://github.com/legostin/open-bot/releases/download/v0.2.0/owlbot-0.2.0-mac.app.tar.gz" };
-    expect(latestJson(dir, "0.2.0", "legostin/open-bot", new Date("2026-10-30T12:00:00Z"))).toEqual({
+    writeFileSync(join(dir, "piomio-0.2.0-mac.app.tar.gz"), "app");
+    writeFileSync(join(dir, "piomio-0.2.0-mac.app.tar.gz.sig"), "mac-signature\n");
+    writeFileSync(join(dir, "piomio-setup-0.2.0-x64.exe"), "exe");
+    writeFileSync(join(dir, "piomio-setup-0.2.0-x64.exe.sig"), "win-signature\n");
+    const mac = { signature: "mac-signature", url: "https://github.com/legostin/piomio/releases/download/v0.2.0/piomio-0.2.0-mac.app.tar.gz" };
+    expect(latestJson(dir, "0.2.0", "legostin/piomio", new Date("2026-10-30T12:00:00Z"))).toEqual({
       version: "0.2.0",
       pub_date: "2026-10-30T12:00:00.000Z",
       platforms: {
         "darwin-aarch64": mac,
         "darwin-x86_64": mac,
-        "windows-x86_64": { signature: "win-signature", url: "https://github.com/legostin/open-bot/releases/download/v0.2.0/owlbot-setup-0.2.0-x64.exe" },
+        "windows-x86_64": { signature: "win-signature", url: "https://github.com/legostin/piomio/releases/download/v0.2.0/piomio-setup-0.2.0-x64.exe" },
       },
     });
-    expect(() => latestJson(dir, "0.3.0", "legostin/open-bot")).toThrow(/missing owlbot-0.3.0-mac.app.tar.gz/);
+    expect(() => latestJson(dir, "0.3.0", "legostin/piomio")).toThrow(/missing piomio-0.3.0-mac.app.tar.gz/);
   });
 });

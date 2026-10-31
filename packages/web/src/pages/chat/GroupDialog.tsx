@@ -4,8 +4,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Check, Crown } from "lucide-react";
-import type { AgentDef, Conversation } from "@owlbot/shared";
-import { GROUP_MAX_MEMBERS, GROUP_MIN_MEMBERS } from "@owlbot/shared/group";
+import type { AgentDef, Conversation } from "@piomio/shared";
+import { GROUP_MAX_MEMBERS, GROUP_MIN_MEMBERS } from "@piomio/shared/group";
 import { useStore } from "../../lib/store";
 import { errorText } from "../../lib/api";
 import { groupPath, suggestedTitle } from "../../lib/team";

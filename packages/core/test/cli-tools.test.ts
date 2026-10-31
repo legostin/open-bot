@@ -59,8 +59,8 @@ describe("brain CLI installs", () => {
     expect(bundledNpmCli(join(unix, "bin", "node"))).toBe(join(unix, "bin", "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"));
 
     expect(withPath({ Path: "a", X: undefined }, ["b"], ["c"])).toEqual({ Path: ["b", "a", "c"].join(delimiter) });
-    const env = npmEnv({ PATH: "p", OWLBOT_DATA_DIR: "/secret", HOME: "/h" }, exe);
-    expect(env.OWLBOT_DATA_DIR).toBeUndefined();
+    const env = npmEnv({ PATH: "p", PIOMIO_DATA_DIR: "/secret", HOME: "/h" }, exe);
+    expect(env.PIOMIO_DATA_DIR).toBeUndefined();
     expect(env.PATH).toBe([node, "p"].join(delimiter));
     expect(env.HOME).toBe("/h");
   });
@@ -71,7 +71,7 @@ describe("brain CLI installs", () => {
     const npm = fakeNpm(data);
     await tools.install(tools.forBrain("claude-code")!, { npm });
     await tools.install(tools.forBrain("codex")!, { npm });
-    expect(JSON.parse(readFileSync(join(data, "tools", "package.json"), "utf8")).name).toBe("owlbot-tools");
+    expect(JSON.parse(readFileSync(join(data, "tools", "package.json"), "utf8")).name).toBe("piomio-tools");
     const calls = readFileSync(join(data, "tools", "calls.log"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(calls.map((c: string[]) => c.at(-1))).toEqual(["@anthropic-ai/claude-code@latest", "@openai/codex@latest"]);
     expect(calls[0]).toContain("--ignore-scripts");

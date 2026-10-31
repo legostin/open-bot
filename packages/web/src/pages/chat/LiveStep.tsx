@@ -3,7 +3,7 @@
 // shows the same words for its own turn.
 
 import { useEffect } from "react";
-import type { MachineWork } from "@owlbot/shared";
+import type { MachineWork } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { ensureMachineActivity, machineActivity } from "../../state/app";
 import { cx } from "../../components/ui";

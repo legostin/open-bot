@@ -5,7 +5,7 @@ describe("pairing link", () => {
   it("carries the code, name, fingerprint and every address, and parses back", () => {
     const p = { code: "K7QF2M9X", hubName: "MacBook & co", fingerprint: "abc_-123", urls: ["https://192.168.1.2:8082", "https://100.83.162.114:8082"] };
     const link = pairingLink(p);
-    expect(link.startsWith("owlbot://pair?v=1&")).toBe(true);
+    expect(link.startsWith("piomio://pair?v=1&")).toBe(true);
     expect(parsePairingLink(link)).toEqual(p);
     expect(parsePairingLink("https://example.com/pair?c=1")).toBeUndefined();
   });
@@ -34,7 +34,7 @@ describe("pairing link", () => {
 
 describe("machine pairing address", () => {
   it("is the link when the hub's own address works only on this computer, never the phones' port", () => {
-    const link = "https://owlbot.tail1234.ts.net";
+    const link = "https://piomio.tail1234.ts.net";
     expect(machineHubUrl("http://localhost:8080", link)).toBe(link);
     expect(machineHubUrl("http://127.0.0.1:8080", link)).toBe(link);
     expect(machineHubUrl("https://bot.example.com", link)).toBe("https://bot.example.com");
@@ -42,8 +42,8 @@ describe("machine pairing address", () => {
   });
 
   it("makes an invite link only where other devices can open it, and the desktop app's link", () => {
-    expect(inviteUrl("https://owlbot.tail1234.ts.net", "AB12CD34")).toBe("https://owlbot.tail1234.ts.net/join/AB12CD34");
+    expect(inviteUrl("https://piomio.tail1234.ts.net", "AB12CD34")).toBe("https://piomio.tail1234.ts.net/join/AB12CD34");
     expect(inviteUrl("http://localhost:8080", "AB12CD34")).toBeUndefined();
-    expect(desktopPairLink("https://owlbot.tail1234.ts.net", "AB12CD34")).toBe("owlbot://pair?hub=https%3A%2F%2Fowlbot.tail1234.ts.net&code=AB12CD34");
+    expect(desktopPairLink("https://piomio.tail1234.ts.net", "AB12CD34")).toBe("piomio://pair?hub=https%3A%2F%2Fpiomio.tail1234.ts.net&code=AB12CD34");
   });
 });

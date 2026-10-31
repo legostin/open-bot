@@ -1,6 +1,6 @@
 // Builtin browser plugin: Google Chrome (or Playwright's Chromium) with a persistent profile, agent tools, live view and user takeover.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
 import { historyHttp } from "./history.ts";
 import { BrowserManager } from "./manager.ts";
 import { registerTools } from "./tools.ts";

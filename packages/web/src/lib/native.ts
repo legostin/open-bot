@@ -1,11 +1,11 @@
-// The Owlbot iOS app's bridge (docs/superpowers/specs/2026-10-26-ios-client-design.md, "Chat in a WebView").
+// The Piomio iOS app's bridge (docs/superpowers/specs/2026-10-26-ios-client-design.md, "Chat in a WebView").
 //
-// The app adds a WKScriptMessageHandlerWithReply named "owlbot": the page is in native mode when
-// window.webkit.messageHandlers.owlbot exists. A call is postMessage({ type, ... }), a Promise of the reply object
-// (rejected with the app's reason). The app talks back with `owlbot-native` CustomEvents on window.
-// Also exported to UI plugins as `native` from "@owlbot/ui" (undefined in a browser).
+// The app adds a WKScriptMessageHandlerWithReply named "piomio": the page is in native mode when
+// window.webkit.messageHandlers.piomio exists. A call is postMessage({ type, ... }), a Promise of the reply object
+// (rejected with the app's reason). The app talks back with `piomio-native` CustomEvents on window.
+// Also exported to UI plugins as `native` from "@piomio/ui" (undefined in a browser).
 
-import type { NativeBridge, NativeEvent } from "@owlbot/ui";
+import type { NativeBridge, NativeEvent } from "@piomio/ui";
 import { toast } from "../state/toast";
 import { t } from "../i18n";
 
@@ -13,12 +13,12 @@ export type { NativeBridge, NativeEvent };
 
 /** The part of `window` the bridge needs (a parameter, so tests can hand in their own). */
 export interface NativeHost {
-  webkit?: { messageHandlers?: { owlbot?: { postMessage(message: unknown): unknown } } };
+  webkit?: { messageHandlers?: { piomio?: { postMessage(message: unknown): unknown } } };
   addEventListener(type: string, listener: (e: Event) => void): void;
   removeEventListener(type: string, listener: (e: Event) => void): void;
 }
 
-export const NATIVE_EVENT = "owlbot-native";
+export const NATIVE_EVENT = "piomio-native";
 
 /** The reason a bridge call failed, as text (WebKit rejects with an Error carrying the app's message). */
 export function nativeErrorText(e: unknown): string {
@@ -34,7 +34,7 @@ function asError(e: unknown): Error {
 
 /** The bridge over `host`, or undefined when the page is not inside the app. */
 export function createNative(host: NativeHost | undefined): NativeBridge | undefined {
-  const handler = host?.webkit?.messageHandlers?.owlbot;
+  const handler = host?.webkit?.messageHandlers?.piomio;
   if (!host || !handler || typeof handler.postMessage !== "function") return undefined;
 
   const call = <T = Record<string, unknown>>(type: string, payload: Record<string, unknown> = {}): Promise<T> => {
@@ -78,7 +78,7 @@ export function createNative(host: NativeHost | undefined): NativeBridge | undef
   };
 }
 
-/** This page's bridge: set when the page runs inside the Owlbot app, undefined in a browser. */
+/** This page's bridge: set when the page runs inside the Piomio app, undefined in a browser. */
 export const native: NativeBridge | undefined = createNative(typeof window === "undefined" ? undefined : (window as unknown as NativeHost));
 
 /**

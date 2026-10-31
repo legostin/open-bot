@@ -9,7 +9,7 @@ address + code the user typed by hand (and got wrong: the phones' `:8443` addres
 | Question | Choice |
 |---|---|
 | How the link reaches the device | Both: forwarded from the chat or a page, or opened on the device itself ("This computer"). |
-| Handoff to the app | A small page on the hub (`/join/<code>`) opens the app through `owlbot://`. No Universal Links: every hub has its own `*.ts.net` domain, desktops have no equivalent, and the iPhone app would have to change. |
+| Handoff to the app | A small page on the hub (`/join/<code>`) opens the app through `piomio://`. No Universal Links: every hub has its own `*.ts.net` domain, desktops have no equivalent, and the iPhone app would have to change. |
 | Which devices | One invite for any device: a computer becomes a machine, an iPhone a phone. |
 | Lifetime | One use, one hour. A phone gets full access to the chats, so a leaked link must expire soon. |
 | No app yet | The hub hands out the installer: `/download/desktop/<os>` redirects to the GitHub release of the hub's own version. The repository becomes public; installers are built and attached by CI on a version tag. |
@@ -18,7 +18,7 @@ address + code the user typed by hand (and got wrong: the phones' `:8443` addres
 ## Invites (`packages/core/src/invites.ts`)
 
 - Table `invites(code primary key, expires_at, used_at, used_by)`, a new migration. Code: 8 characters `[A-Z0-9]`, the
-  format the phone already accepts, so `owlbot-ios` needs no change.
+  format the phone already accepts, so `piomio-ios` needs no change.
 - `create() → { code, expiresAt }` (1 hour, audit `invite.create`), `consume(code, by)` marks it used in one
   `update … where used_at is null and expires_at > now` (one winner), `valid(code)`, `revoke(code)` (audit).
 - `MachineHub.pair` and `DeviceRegistry.pair` consume invites; their `createPairingCode` now create invites. The old
@@ -36,8 +36,8 @@ from anywhere; the phone's QR still works on the home network.
 ## API (web session)
 
 - `POST /api/invites` → `Invite { code, expiresAt, url?, appLink?, phoneLink?, qrSvg? }`:
-  `url` the shareable `https://…/join/<code>`; `appLink` `owlbot://pair?hub=<hubUrl>&code=<code>` for "This computer";
-  `phoneLink` the phone's `owlbot://pair?v=1&c=…&n=…&fp=…&u=…` while phones can reach the hub, and `qrSvg` of it.
+  `url` the shareable `https://…/join/<code>`; `appLink` `piomio://pair?hub=<hubUrl>&code=<code>` for "This computer";
+  `phoneLink` the phone's `piomio://pair?v=1&c=…&n=…&fp=…&u=…` while phones can reach the hub, and `qrSvg` of it.
 - `DELETE /api/invites/:code` revokes it.
 - `POST /api/machines/pairing-code` and `POST /api/devices/pairing` stay (CLI, older clients) and return invites.
 
@@ -46,21 +46,21 @@ from anywhere; the phone's QR still works on the home network.
 Server-rendered, no script (`default-src 'none'`), `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, in the
 browser's language. The User-Agent picks the variant:
 
-- **Windows / macOS:** "Open Owlbot" → `owlbot://pair?hub=<the origin the page was opened at>&code=<code>` (that
+- **Windows / macOS:** "Open Piomio" → `piomio://pair?hub=<the origin the page was opened at>&code=<code>` (that
   address demonstrably works from this computer). Below: "No app yet? Download for Windows / macOS" (the detected OS
   first), then a note on the unsigned installer (SmartScreen: More info → Run anyway; macOS: System Settings →
-  Privacy & Security → Open Anyway), then "After installing, press Open Owlbot again".
-- **Linux and servers:** the one command: `curl -fsSLo owlbot-node.mjs <origin>/download/owlbot-node.mjs && node
-  owlbot-node.mjs pair <origin>/join/<code>` (shown on every desktop variant too, folded).
-- **iPhone / iPad:** "Open in Owlbot" → the phone link. When phones cannot reach the hub, the page says so.
-- **Android:** there is no Owlbot app for Android yet.
+  Privacy & Security → Open Anyway), then "After installing, press Open Piomio again".
+- **Linux and servers:** the one command: `curl -fsSLo piomio-node.mjs <origin>/download/piomio-node.mjs && node
+  piomio-node.mjs pair <origin>/join/<code>` (shown on every desktop variant too, folded).
+- **iPhone / iPad:** "Open in Piomio" → the phone link. When phones cannot reach the hub, the page says so.
+- **Android:** there is no Piomio app for Android yet.
 - **Used, expired or unknown code:** "This link has expired or was already used. Ask for a new one in the chat."
   Unknown codes count against the same per-address budget as failed pairings (10 per 15 minutes).
 
 ## Installers (`GET /download/desktop/:os`, public)
 
-302 to `https://github.com/<OWLBOT_RELEASES_REPO, default legostin/open-bot>/releases/download/v<version>/<asset>`:
-Windows `owlbot-setup-<version>-x64.exe`, macOS `owlbot-<version>.dmg` (universal). The version is the root
+302 to `https://github.com/<PIOMIO_RELEASES_REPO, default legostin/piomio>/releases/download/v<version>/<asset>`:
+Windows `piomio-setup-<version>-x64.exe`, macOS `piomio-<version>.dmg` (universal). The version is the root
 `package.json`'s, which `config.version` now reads. `.github/workflows/release.yml` (tag `v*`, the tag must equal that
 version) builds both installers on clean runners, runs the existing install checks and attaches them to the release.
 Before the repository goes public, its history is scanned for secrets.
@@ -75,10 +75,10 @@ Before the repository goes public, its history is scanned for secrets.
 
 ## The devices
 
-- **Desktop app:** the manual form is one field, "Invite link" (an `https://…/join/<code>` or `owlbot://pair?…` link),
-  plus the machine name; it parses hub and code and pairs as before. `owlbot://pair` links keep working.
-- **Node CLI:** `owlbot-node pair <link>` takes the same link; `pair <hub> <code>` still works.
-- **iPhone:** unchanged; it gets the same `owlbot://pair?v=1…` link it already handles.
+- **Desktop app:** the manual form is one field, "Invite link" (an `https://…/join/<code>` or `piomio://pair?…` link),
+  plus the machine name; it parses hub and code and pairs as before. `piomio://pair` links keep working.
+- **Node CLI:** `piomio-node pair <link>` takes the same link; `pair <hub> <code>` still works.
+- **iPhone:** unchanged; it gets the same `piomio://pair?v=1…` link it already handles.
 
 ## Errors
 

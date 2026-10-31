@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { ArrowUp, Mic, Paperclip, Square, UsersRound } from "lucide-react";
-import type { AgentDef } from "@owlbot/shared";
+import type { AgentDef } from "@piomio/shared";
 import { api, errorText } from "../../lib/api";
 import { mobileMode } from "../../lib/mobile";
 import { native, nativeErrorText, type NativeBridge } from "../../lib/native";

@@ -1,4 +1,4 @@
-// owlbot-tailnet: the Owlbot hub's own Tailscale node. The hub starts it, sends the start line on stdin and reads its
+// piomio-tailnet: the Piomio hub's own Tailscale node. The hub starts it, sends the start line on stdin and reads its
 // state lines on stdout; once Funnel is allowed it serves https://<hostname>.<tailnet>.ts.net (the web UI) and
 // :8443 (the phones) by proxying to the hub's loopback gateways. Closing stdin stops it; {"type":"logout"} signs the
 // node out first.
@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	// Owlbot does not send Tailscale its node logs.
+	// Piomio does not send Tailscale its node logs.
 	os.Setenv("TS_NO_LOGS_NO_SUPPORT", "true")
 	log.SetFlags(0)
 	log.SetOutput(os.Stderr)

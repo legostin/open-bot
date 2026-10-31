@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { catalogProblems } from "@owlbot/shared/i18n";
+import { catalogProblems } from "@piomio/shared/i18n";
 import { brainsCatalog } from "../../brains-cli/src/messages.ts";
 import { hubLocale, nodeCatalog, setHubLocale, setNodeLocale, t, tHub } from "../src/messages.ts";
 import { policySummary, defaultPolicy } from "../src/policy.ts";

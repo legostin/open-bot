@@ -95,7 +95,7 @@ export class McpClient {
       this.init = (async () => {
         const r = await this.rpc<{ protocolVersion?: string }>(
           "initialize",
-          { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "owlbot-brain-api", version: "0.1.0" } },
+          { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "piomio-brain-api", version: "0.1.0" } },
           signal,
         );
         if (r?.protocolVersion) this.protocolVersion = r.protocolVersion;

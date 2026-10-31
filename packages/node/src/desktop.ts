@@ -1,4 +1,4 @@
-// Run by the desktop app (OWLBOT_DESKTOP=1): a `stop` line on stdin, or the app closing the pipe, stops the daemon.
+// Run by the desktop app (PIOMIO_DESKTOP=1): a `stop` line on stdin, or the app closing the pipe, stops the daemon.
 // Windows has no SIGTERM for a windowless child.
 
 import { createInterface } from "node:readline";

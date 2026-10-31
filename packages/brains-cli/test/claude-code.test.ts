@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
+import type { BrainEvent, BrainSessionOptions } from "@piomio/shared";
 import { claudePresets, ClaudeStreamParser, codexThinking, createClaudeCodeProvider, createCodexProvider, CodexStreamParser, listCodexModels, parseClaudeHelp, parseCodexReset } from "../src/index.ts";
 import { approvalAnswer } from "../src/codex-app.ts";
 import { askHub } from "../src/hub-permission.ts";
@@ -41,7 +41,7 @@ describe("ClaudeStreamParser", () => {
     const p = new ClaudeStreamParser();
     const ev = [
       ...p.push({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "hi" } }, parent_tool_use_id: null, api_message_id: "m1" }),
-      ...p.push({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "hi" }, { type: "tool_use", id: "t", name: "mcp__owlbot__memory_search", input: { q: 1 } }] }, parent_tool_use_id: null }),
+      ...p.push({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "hi" }, { type: "tool_use", id: "t", name: "mcp__piomio__memory_search", input: { q: 1 } }] }, parent_tool_use_id: null }),
       ...p.push({ type: "assistant", message: { id: "m9", content: [{ type: "text", text: "inner" }] }, parent_tool_use_id: "t" }),
     ];
     expect(ev).toEqual([
@@ -264,7 +264,7 @@ describe("CodexStreamParser", () => {
     const p = new CodexStreamParser();
     const ev = [
       ...p.push({ type: "thread.started", thread_id: "th1" }),
-      ...p.push({ type: "item.started", item: { id: "i1", type: "mcp_tool_call", server: "owlbot", tool: "notify", arguments: { title: "x" } } }),
+      ...p.push({ type: "item.started", item: { id: "i1", type: "mcp_tool_call", server: "piomio", tool: "notify", arguments: { title: "x" } } }),
       ...p.push({ type: "item.completed", item: { id: "i1", type: "mcp_tool_call", status: "completed", result: { content: [{ type: "text", text: "ok" }] } } }),
       ...p.push({ type: "item.completed", item: { id: "i2", type: "agent_message", text: "Готово" } }),
       ...p.push({ type: "turn.completed", usage: { input_tokens: 5, cached_input_tokens: 1, output_tokens: 2 } }),
@@ -389,8 +389,8 @@ describe("confined brains (BrainSessionOptions.confine)", () => {
     const args = JSON.parse(readFileSync(argsFile, "utf8").trim().split("\n")[0]) as string[];
     const after = (flag: string) => args[args.indexOf(flag) + 1];
     expect(after("--permission-mode")).toBe("acceptEdits");
-    expect(after("--permission-prompt-tool")).toBe("mcp__owlbot__native_permission");
-    expect(after("--allowedTools").split(",")).toEqual(["WebFetch", "WebSearch", "TodoWrite", "Task", "Skill", "mcp__owlbot"]);
+    expect(after("--permission-prompt-tool")).toBe("mcp__piomio__native_permission");
+    expect(after("--allowedTools").split(",")).toEqual(["WebFetch", "WebSearch", "TodoWrite", "Task", "Skill", "mcp__piomio"]);
     const settings = JSON.parse(readFileSync(after("--settings"), "utf8"));
     expect(settings.sandbox).toMatchObject({ enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: true, filesystem: { denyRead: confine.denyRead, allowRead: confine.allowRead }, network: { allowedDomains: [] } });
     // Unconfined, as before.
@@ -408,11 +408,11 @@ describe("confined brains (BrainSessionOptions.confine)", () => {
     await collect((await claude.createSession(opts({ confine, frontDesk: true, env: { FAKE_ARGS_FILE: argsFile } }))).send({ text: "hi" }));
     const args = JSON.parse(readFileSync(argsFile, "utf8").trim().split("\n")[0]) as string[];
     expect(args[args.indexOf("--disallowedTools") + 1].split(",")).toEqual(expect.arrayContaining(["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"]));
-    const plain = createClaudeCodeProvider({ command: () => fake, stateDir, allowedTools: () => ["Bash", "Read", "WebSearch", "mcp__owlbot"] });
+    const plain = createClaudeCodeProvider({ command: () => fake, stateDir, allowedTools: () => ["Bash", "Read", "WebSearch", "mcp__piomio"] });
     const plainFile = join(mkdtempSync(join(tmpdir(), "owl-cc-args-")), "args.jsonl");
     await collect((await plain.createSession(opts({ frontDesk: true, env: { FAKE_ARGS_FILE: plainFile } }))).send({ text: "hi" }));
     const pa = JSON.parse(readFileSync(plainFile, "utf8").trim().split("\n")[0]) as string[];
-    expect(pa[pa.indexOf("--allowedTools") + 1]).toBe("Read,WebSearch,mcp__owlbot");
+    expect(pa[pa.indexOf("--allowedTools") + 1]).toBe("Read,WebSearch,mcp__piomio");
 
     const codex = createCodexProvider({ command: () => join(import.meta.dirname, "fixtures", "fake-codex.mjs"), stateDir, sandbox: () => "workspace-write" });
     const codexFile = join(mkdtempSync(join(tmpdir(), "owl-cx-args-")), "args.jsonl");

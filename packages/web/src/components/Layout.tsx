@@ -36,9 +36,9 @@ function Brand() {
   const s = useStore(session);
   const mood: OwlMood = c === "open" ? "awake" : c === "offline" ? "asleep" : "sleepy";
   return (
-    <Link href="/" className="flex items-center gap-2.5 px-4 pt-4 pb-3" title={s?.version ? `Owlbot ${s.version}` : "Owlbot"}>
+    <Link href="/" className="flex items-center gap-2.5 px-4 pt-4 pb-3" title={s?.version ? `Piomio ${s.version}` : "Piomio"}>
       <OwlMark size={28} mood={mood} />
-      <span className="font-display text-[16px] font-semibold">Owlbot</span>
+      <span className="font-display text-[16px] font-semibold">Piomio</span>
     </Link>
   );
 }

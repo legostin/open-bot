@@ -76,7 +76,7 @@ describe("resolveAllowedPath", () => {
   });
 
   it("refuses denied dirs inside allowed ones (the daemon's home)", () => {
-    const home = join(allowed, ".owlbot-node");
+    const home = join(allowed, ".piomio-node");
     mkdirSync(home, { recursive: true });
     expect(() => resolveAllowedPath(join(home, "policy.json"), dirs, { deny: [home] })).toThrow(/state folder/);
     expect(resolveAllowedPath(join(allowed, "a.txt"), dirs, { deny: [home] })).toBe(join(allowed, "a.txt"));

@@ -36,7 +36,7 @@ const framed = (): boolean => {
 /** Tells the chat the page sits in; nothing happens when the page is open on its own. */
 export function post(message: Record<string, unknown>): boolean {
   if (!framed()) return false;
-  window.parent.postMessage({ owlbot: true, page: info.id, ...message }, "*");
+  window.parent.postMessage({ piomio: true, page: info.id, ...message }, "*");
   return true;
 }
 

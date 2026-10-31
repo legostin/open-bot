@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { ExternalLink, Plug } from "lucide-react";
-import type { IntegrationVia } from "@owlbot/shared";
+import type { IntegrationVia } from "@piomio/shared";
 import { openExternal } from "../lib/external";
 import { t } from "../i18n";
 import { cx } from "./ui";

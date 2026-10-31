@@ -1,7 +1,7 @@
 [package]
-name = "owlbot"
+name = "piomio"
 version = "0.1.0"
-description = "Owlbot desktop app"
+description = "Piomio desktop app"
 edition = "2021"
 rust-version = "1.85"
 publish = false

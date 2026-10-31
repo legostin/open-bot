@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createServer, type IncomingMessage, type IncomingHttpHeaders, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { KEY_PROVIDERS, type KeyProvider, type MachineUsage } from "@owlbot/shared";
+import { KEY_PROVIDERS, type KeyProvider, type MachineUsage } from "@piomio/shared";
 import { ModelGateway, type GatewaySetup } from "../src/gateway.ts";
 
 type Handler = (req: IncomingMessage, body: string, res: ServerResponse) => void | Promise<void>;

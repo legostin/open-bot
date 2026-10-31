@@ -2,8 +2,8 @@
 
 import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AttachmentKind, CoreMethod } from "@owlbot/shared";
-import { parseBrainRef } from "@owlbot/shared";
+import type { AttachmentKind, CoreMethod } from "@piomio/shared";
+import { parseBrainRef } from "@piomio/shared";
 import type { Hub } from "./app.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, safeFileName, saveAttachment, type IncomingFile } from "./attachments.ts";
 

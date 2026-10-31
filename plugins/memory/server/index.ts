@@ -5,8 +5,8 @@
 // in its history, and the user sees each one in the chat and on the Memory page, where it can be undone.
 // Design: docs/superpowers/specs/2026-10-29-memory-design.md
 
-import type { PluginContext, PluginHttpRequest, PluginHttpResponse, PluginModule } from "@owlbot/plugin-sdk";
-import type { Locale, ToolCallContext, ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginHttpRequest, PluginHttpResponse, PluginModule } from "@piomio/plugin-sdk";
+import type { Locale, ToolCallContext, ToolResult } from "@piomio/shared";
 import { factNotFound, Memory, type Actor, type RememberResult } from "./memory.ts";
 import { INDEX_FILE, KINDS, isCurrent, isKind, visibleTo, type Fact, type FactKind } from "./store.ts";
 import { MemoryError, NotFoundError, PathError } from "./paths.ts";
@@ -439,7 +439,7 @@ const plugin: PluginModule = {
             const date = new Date().toISOString().slice(0, 10);
             return {
               status: 200,
-              headers: { "content-disposition": `attachment; filename="owlbot-memory-${date}.json"` },
+              headers: { "content-disposition": `attachment; filename="piomio-memory-${date}.json"` },
               body: { exportedAt: new Date().toISOString(), version: 2, facts: all.map((f) => ({ ...view(f), sources: sourceView(f), raw: mem.serialize(f) })) },
             };
           }

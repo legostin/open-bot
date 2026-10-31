@@ -2,7 +2,7 @@
 // conversations, messages, tasks.
 
 import { useSyncExternalStore } from "react";
-import type { AgentDef, Catalog, Conversation, GroupChat, Locale, MachineActivity, Message, Task, TeamMember, UiEvent, VaultState } from "@owlbot/shared";
+import type { AgentDef, Catalog, Conversation, GroupChat, Locale, MachineActivity, Message, Task, TeamMember, UiEvent, VaultState } from "@piomio/shared";
 import { api, ApiError, onUnauthorized, request, setCsrf } from "../lib/api";
 import { createStore, Emitter, type Store } from "../lib/store";
 import { HubSocket, type ConnectionState } from "../lib/socket";

@@ -1,5 +1,5 @@
 {
-  "name": "@owlbot/plugin-weather",
+  "name": "@piomio/plugin-weather",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -39,13 +39,13 @@ describe("the note after an update", () => {
     asked.push(String(url));
     return new Response(JSON.stringify({ body: "## What's Changed\n* The agents' browser is an ordinary browser by @legostin" }), { status: 200 });
   }) as unknown as typeof fetch;
-  const notes = () => hub.store.listMessages(conv, { limit: 500 }).filter((m) => m.role === "system" && (m.parts[0] as { text?: string })?.text?.startsWith("[System] Owlbot was updated"));
+  const notes = () => hub.store.listMessages(conv, { limit: 500 }).filter((m) => m.role === "system" && (m.parts[0] as { text?: string })?.text?.startsWith("[System] Piomio was updated"));
   const seen = (v: string) => hub.db.prepare("insert into meta(key, value) values ('app_version', ?) on conflict(key) do update set value = excluded.value").run(v);
 
   beforeAll(async () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-updates-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
@@ -68,7 +68,7 @@ describe("the note after an update", () => {
   it("asks the default agent to tell the person, in their language, with the release's notes", async () => {
     seen("0.0.9");
     expect(await announceUpdate(hub, github)).toBe(true);
-    expect(asked).toEqual([`https://api.github.com/repos/legostin/open-bot/releases/tags/v${hub.config.version}`]);
+    expect(asked).toEqual([`https://api.github.com/repos/legostin/piomio/releases/tags/v${hub.config.version}`]);
     const [note] = notes();
     const text = (note.parts[0] as { text: string }).text;
     expect(text).toContain(`from 0.0.9 to ${hub.config.version}.`);

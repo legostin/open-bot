@@ -13,8 +13,8 @@
 // The one exception is profile_update at the end: every agent may change its own profile when the user asks.
 
 import { isAbsolute, relative, resolve } from "node:path";
-import type { AgentDef, AgentDraft, IntegrationView, JsonSchema, Locale, MachineSettings, ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
-import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@owlbot/shared";
+import type { AgentDef, AgentDraft, IntegrationView, JsonSchema, Locale, MachineSettings, ToolCallContext, ToolDescriptor, ToolResult } from "@piomio/shared";
+import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@piomio/shared";
 import { normalizeSettings, SetupError } from "../machine-setup.ts";
 import { siteDomain } from "../secrets.ts";
 import type { Hub } from "../app.ts";
@@ -603,7 +603,7 @@ export function registerHubTools(hub: Hub): void {
       effect: "external",
       approvalSummary: "%cluster.inviteApproval%",
       description:
-        "A one-time link (10 minutes) that makes another machine a replica of this hub: on that machine run `owlbot replica join <link> --name <name> --url https://<its address>:<device port>`. Needs the person's approval.",
+        "A one-time link (10 minutes) that makes another machine a replica of this hub: on that machine run `piomio replica join <link> --name <name> --url https://<its address>:<device port>`. Needs the person's approval.",
       inputSchema: obj({}),
     },
     () => {
@@ -737,7 +737,7 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         "Show an integration's card in this chat so the user can connect it (e.g. Google Calendar: a Connect button that signs in with Google; " +
-        "Telegram: its setup steps; Granola, Notion, Linear: a Sign in button that opens the service's own sign-in; remote-access: a permanent link to Owlbot from anywhere, through Tailscale; " +
+        "Telegram: its setup steps; Granola, Notion, Linear: a Sign in button that opens the service's own sign-in; remote-access: a permanent link to Piomio from anywhere, through Tailscale; " +
         "composio:<app> (Slack, GitHub, Gmail…): its key field first if Composio has no key yet, then a Sign in button on Composio's page). " +
         "Use it whenever the user wants to connect a service, or a tool says it is not connected. Ids: see hub_integrations_list.",
       inputSchema: obj({ id: { type: "string", description: "Integration id" } }, ["id"]),
@@ -954,7 +954,7 @@ export function registerHubTools(hub: Hub): void {
       effect: "local-write",
       description:
         "Show a card in this chat for connecting one of the user's devices: a computer (it becomes a machine whose Claude Code, Codex and " +
-        "allowed folders agents can use) or a phone (the Owlbot iPhone app). The card makes one link for any device, valid once for an " +
+        "allowed folders agents can use) or a phone (the Piomio iPhone app). The card makes one link for any device, valid once for an " +
         "hour: the user forwards it to the device or opens it there, and the device asks to connect. Use it whenever the user wants to " +
         "connect a computer or a phone; never send them to settings pages or give them commands for it.",
       inputSchema: obj({}),

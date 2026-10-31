@@ -1,7 +1,7 @@
-// Composition root for `owlbot-node run` (also used by tests).
+// Composition root for `piomio-node run` (also used by tests).
 
 import { join } from "node:path";
-import { FileSync } from "@owlbot/replica";
+import { FileSync } from "@piomio/replica";
 import { loadConfig, loadKey, saveHubUrls, type NodeConfig } from "./home.ts";
 import { PolicyStore } from "./policy.ts";
 import { BrainHost } from "./brains.ts";

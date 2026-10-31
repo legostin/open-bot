@@ -50,7 +50,7 @@ func newProxy(target string) http.Handler {
 		},
 		FlushInterval: -1,
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
-			http.Error(w, "Owlbot is not answering on this computer right now.", http.StatusBadGateway)
+			http.Error(w, "Piomio is not answering on this computer right now.", http.StatusBadGateway)
 		},
 	}
 }

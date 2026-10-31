@@ -1,7 +1,7 @@
 # iOS client: devices, pairing and the phone app
 
 Approved 2026-10-26. The phone has no brains of its own: it connects to an existing hub. The iOS app lives in its own
-repository (`owlbot-ios`); this repository gets the hub side: devices, pairing, the device API.
+repository (`piomio-ios`); this repository gets the hub side: devices, pairing, the device API.
 
 ## Decisions
 
@@ -27,7 +27,7 @@ leaves the phone and signs only with Face ID (or the passcode).
 
 ### Device port
 
-A second Fastify server, `OWLBOT_DEVICE_PORT` (default web port + 2: 8082), for phones only:
+A second Fastify server, `PIOMIO_DEVICE_PORT` (default web port + 2: 8082), for phones only:
 
 - HTTPS with the hub's own self-signed ECDSA P-256 certificate in `<data>/devices/` (generated on first use, DER built
   by the hub, no dependency). The phone pins SHA-256 of the certificate (DER), which the QR carries, so no CA is
@@ -36,19 +36,19 @@ A second Fastify server, `OWLBOT_DEVICE_PORT` (default web port + 2: 8082), for 
   `/mcp`, no SPA, no UI plugin assets. Host and Origin checks do not apply (no browser, addresses vary).
 - Listens on `0.0.0.0` (home network and Tailscale), while the web UI (8080) and the security console (8081) keep
   their own host (`127.0.0.1` by default). It runs while the "devices on the network" switch is on (core setting
-  `devicesLan`, toggled from the web UI without a restart) or when `OWLBOT_DEVICES=1`.
+  `devicesLan`, toggled from the web UI without a restart) or when `PIOMIO_DEVICES=1`.
 
 The authenticated web API moves from `main-app.ts` into `server/api.ts` and is registered by both servers, so the phone
 sees exactly what the web UI sees (chat, team, tasks, cards, notifications, settings). Device-only routes:
 
 | Route | What |
 |---|---|
-| `GET /api/device/hello` | Public: `{ owlbot, name, version }`, for the phone's reachability probe |
+| `GET /api/device/hello` | Public: `{ piomio, name, version }`, for the phone's reachability probe |
 | `POST /api/devices/pair` | Public, rate limited: `{ code, name, platform, model, publicKey }` → `{ deviceId, token, hub }` |
 | `GET /api/devices/me`, `DELETE /api/devices/me` | This device; unpair itself |
 | `GET /api/approvals` | Pending approvals with agent name and full input |
 | `POST /api/approvals/:id/challenge` | One-time nonce (2 minutes) for this device and approval |
-| `POST /api/approvals/:id/resolve` | `{ decision, nonce, signature }`: approve needs an ECDSA signature over `owlbot-approval\n<id>\napprove\n<nonce>`; deny needs none |
+| `POST /api/approvals/:id/resolve` | `{ decision, nonce, signature }`: approve needs an ECDSA signature over `piomio-approval\n<id>\napprove\n<nonce>`; deny needs none |
 
 A stolen token therefore cannot approve anything without the phone's Face ID. "Always allow" rules, the vault's items and
 the audit stay in the security console.
@@ -56,21 +56,21 @@ the audit stay in the security console.
 ### Pairing from the web UI and the chat
 
 - `POST /api/devices/pairing` (web session) → `{ code, expiresAt, link, qrSvg, urls, fingerprint, network }`.
-- The link: `owlbot://pair?v=1&c=<code>&n=<hub name>&fp=<base64url sha256>&u=<url>&u=<url>…`, one `u` per address:
+- The link: `piomio://pair?v=1&c=<code>&n=<hub name>&fp=<base64url sha256>&u=<url>&u=<url>…`, one `u` per address:
   every private IPv4 interface and the Tailscale address (100.64.0.0/10), as `https://<ip>:<device port>`.
 - Settings panel section "Devices": the network switch, "Connect a phone" (QR, link with Copy, the code), the paired
   devices with last seen and Revoke. Realtime `device.updated` closes the QR once the phone is in.
 - Chat card `device_pairing` (hub tool `hub_device_pairing`) with the same QR, so "connect my phone" works in the chat.
-- CLI: `owlbot devices pair` prints the QR and the link in the terminal (Docker, headless).
+- CLI: `piomio devices pair` prints the QR and the link in the terminal (Docker, headless).
 
-## The app (`owlbot-ios`)
+## The app (`piomio-ios`)
 
-- `OwlbotKit` (Swift package, tested with `swift test`): models (`Message` parts decoded by `type`, unknown parts kept),
+- `PiomioKit` (Swift package, tested with `swift test`): models (`Message` parts decoded by `type`, unknown parts kept),
   pairing link parsing, the pinned `URLSession` delegate, endpoint selection (probe every address, take the first that
   answers, re-probe on network changes), the REST client, the realtime WebSocket with backoff, credential storage.
 - App target: SwiftUI views per the approved mockups; Secure Enclave key and `LocalAuthentication`; on-device speech
   recognition for the hold-to-talk mic; String Catalog with English (source) and Russian.
-- The phone sends `x-owlbot-locale` so the hub answers in the phone's language.
+- The phone sends `x-piomio-locale` so the hub answers in the phone's language.
 
 ## Errors
 
@@ -87,7 +87,7 @@ the audit stay in the security console.
   fingerprint stable across restarts), the device server serves the API over TLS with a bearer token and refuses without,
   approval signatures (valid, wrong key, replayed nonce, deny without signature), the switch starts and stops the server,
   catalog parity for the new strings.
-- App: `swift test` for OwlbotKit (link parsing, decoding recorded hub JSON, event reducer, catalog parity); the app on the
+- App: `swift test` for PiomioKit (link parsing, decoding recorded hub JSON, event reducer, catalog parity); the app on the
   simulator against a dev hub, then on a real iPhone.
 
 ## Chat in a WebView (revised 2026-10-27)
@@ -99,7 +99,7 @@ WKWebView, served by the hub; everything around it stays native (pairing, tabs, 
 ### Hub (device port)
 
 - `POST /api/devices/web-ticket` (bearer) → `{ ticket, expiresAt }`: one-time, 60 seconds.
-- `GET /m/session?ticket=…&to=/m/chat/<id>`: spends the ticket, sets `owlbot_device` (HttpOnly, Secure, SameSite=Strict,
+- `GET /m/session?ticket=…&to=/m/chat/<id>`: spends the ticket, sets `piomio_device` (HttpOnly, Secure, SameSite=Strict,
   path /) and redirects to `to` (must start with `/m/`). The session belongs to the device and ends with it (revocation,
   hub restart: the page asks the app to sign in again).
 - The device port serves the SPA under `/m/*` (same index, import map and CSP as the web UI, `connect-src 'self' wss://<host>`),
@@ -116,8 +116,8 @@ WKWebView, served by the hub; everything around it stays native (pairing, tabs, 
 
 ### The bridge
 
-The app adds a `WKScriptMessageHandlerWithReply` named `owlbot`; the page is in native mode when
-`window.webkit?.messageHandlers?.owlbot` exists. A call is `window.webkit.messageHandlers.owlbot.postMessage({ type, ... })`,
+The app adds a `WKScriptMessageHandlerWithReply` named `piomio`; the page is in native mode when
+`window.webkit?.messageHandlers?.piomio` exists. A call is `window.webkit.messageHandlers.piomio.postMessage({ type, ... })`,
 a Promise of the reply object (rejected with a message string on failure).
 
 | type | payload | reply |
@@ -134,7 +134,7 @@ a Promise of the reply object (rejected with a message string on failure).
 | `haptic` | `{ kind: "light" \| "success" \| "warning" }` | `{ ok: true }` |
 | `reauth` | `{}` | none: the app gets a new ticket and reloads the page |
 
-App → page: `window.dispatchEvent(new CustomEvent("owlbot-native", { detail }))`, with `detail` one of:
+App → page: `window.dispatchEvent(new CustomEvent("piomio-native", { detail }))`, with `detail` one of:
 
 | detail | when |
 |---|---|
@@ -146,5 +146,5 @@ The composer keeps unsent text in `sessionStorage`, so a `reauth` reload does no
 new line; the send button sends.
 
 In native mode the approval card shows Approve / Deny (calling the bridge), and the composer's mic is hold-to-talk through
-`dictation.start` / `dictation.stop` (words appear in the field while held; letting go sends them). `@owlbot/ui` exports
+`dictation.start` / `dictation.stop` (words appear in the field while held; letting go sends them). `@piomio/ui` exports
 `native`, the same bridge for plugins (`undefined` in a browser). Links that leave the hub open in Safari.

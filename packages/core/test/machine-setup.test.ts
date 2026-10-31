@@ -17,7 +17,7 @@ const usage = (usd: number, at = "2026-10-30T10:00:00.000Z") =>
   ({ brainId: "codex", provider: "openai", model: "gpt-6-luna", inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheWriteTokens: 0, usd, at }) as const;
 
 describe("machine setup", () => {
-  const db = openDb(join(dir, "owlbot.db"));
+  const db = openDb(join(dir, "piomio.db"));
   const bus = new EventBus();
   const vault = new VaultService(join(dir, "vault.db"));
   vault.init("correct horse battery staple");

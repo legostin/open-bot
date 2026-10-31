@@ -3,8 +3,8 @@
 // requests its sandbox raises ("codex.command", "codex.fileChange", "codex.permissions"). The answer is Claude Code's
 // format, a JSON text: {"behavior":"allow","updatedInput":…} or {"behavior":"deny","message":…}. When the person
 // has to say yes, the hub shows the same approval card as for an external action and waits for it.
-import type { ApprovalAsk, ToolResult } from "@owlbot/shared";
-import { truncate } from "@owlbot/shared";
+import type { ApprovalAsk, ToolResult } from "@piomio/shared";
+import { truncate } from "@piomio/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { ApprovalService } from "../approvals.ts";
 import type { RuleStore } from "../policy/rules.ts";

@@ -105,7 +105,7 @@ export function resolveAllowedPath(input: unknown, allowedDirs: string[], opts: 
     } catch {
       /* not created yet */
     }
-    if (isInside(resolved, dr) || isInside(resolved, d)) throw new PathDenied(`The owlbot-node state folder is off limits: ${raw}`);
+    if (isInside(resolved, dr) || isInside(resolved, d)) throw new PathDenied(`The piomio-node state folder is off limits: ${raw}`);
   }
   if (!real.some((d) => isInside(resolved, d))) {
     throw new PathDenied(`The path ${raw} is outside the allowed folders (${allowedDirs.join(", ")})`);

@@ -1,7 +1,7 @@
 // The world clock & units plugin: places to time zones, clocks now and at a converted time, unit conversion.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { join } from "node:path";
-import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import { startPlugin, type PluginHarness } from "@piomio/testkit";
 import { cityOf, describe as describeCard, instantOf, offsetMinutes, zoneOf, type ClocksCard } from "../server/index.ts";
 import { convert } from "../server/units.ts";
 

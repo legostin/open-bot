@@ -2,7 +2,7 @@
 // a task, a thread with a teammate) is one person: the `[You now]` block tells each of them where this session runs,
 // what else the agent is doing, what each teammate is busy with, the computers and where the user is. The runner puts
 // it before a turn's input whenever it changed since the session last saw it (the first turn always gets it).
-import type { MachineActivity, Task, TaskStatus } from "@owlbot/shared";
+import type { MachineActivity, Task, TaskStatus } from "@piomio/shared";
 
 /** How an open task stands, for the model. */
 export const TASK_STATE: Partial<Record<TaskStatus, string>> = {

@@ -1,4 +1,4 @@
-module owlbot/tailnet
+module piomio/tailnet
 
 go 1.27.3
 

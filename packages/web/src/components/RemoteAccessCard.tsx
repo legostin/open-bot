@@ -3,7 +3,7 @@
 
 import { useState, type ReactNode } from "react";
 import { ExternalLink, QrCode } from "lucide-react";
-import type { RemoteView } from "@owlbot/shared";
+import type { RemoteView } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { openExternal } from "../lib/external";
 import { formatDateTime } from "../lib/format";

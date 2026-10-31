@@ -1,6 +1,6 @@
 // The integrations library (GET /api/integrations), shared by the page and the cards in the chat; refreshed live.
 
-import type { IntegrationView } from "@owlbot/shared";
+import type { IntegrationView } from "@piomio/shared";
 import { api } from "../lib/api";
 import { createStore, useStore } from "../lib/store";
 import { hubEvents } from "./app";

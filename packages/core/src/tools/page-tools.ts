@@ -1,6 +1,6 @@
 // The tools agents make pages with (pages.ts): any agent makes one when an answer deserves more than a message,
 // changes it, reads it back with what broke in the user's browser, and shows it in the chat again.
-import type { MessagePart, PageView, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import type { MessagePart, PageView, ToolDescriptor, ToolResult } from "@piomio/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { AgentRegistry } from "../agents.ts";
 import { agentName } from "../agents.ts";
@@ -26,7 +26,7 @@ const UI =
 const GUIDE =
   "Write the page as one React component in TSX with a default export: `export default function Page({ data }) { … }`. " +
   `Style it with Tailwind v4 classes and shadcn/ui components, imported as in shadcn ("@/components/ui/card" etc.: ${UI}); ` +
-  'icons from "lucide-react"; hooks from "react"; `cn` from "@/lib/utils". Owlbot\'s blocks and helpers come from "@owlbot/page": ' +
+  'icons from "lucide-react"; hooks from "react"; `cn` from "@/lib/utils". Piomio\'s blocks and helpers come from "@piomio/page": ' +
   "<Map places={[{ lat, lon, label, note }]} route=\"walk\"|\"drive\"|\"bike\" (along real roads, with km and time) numbered selected onSelect height />, " +
   "<Weather lat lon days title /> (live forecast), <Gallery images={[url or { src, caption }]} />, <Video src /> (YouTube, Vimeo or a file), " +
   "<Hero title subtitle eyebrow image />, <Place name index image description why address hours price rating tags lat lon url /> (a card with " +
@@ -75,7 +75,7 @@ export function registerPageTools(d: PageToolDeps): void {
           code: {
             type: "string",
             description:
-              'The page: TSX, e.g. import { Hero, Map, Place, useData } from "@owlbot/page"; export default function Page() { const { stops } = useData(); ' +
+              'The page: TSX, e.g. import { Hero, Map, Place, useData } from "@piomio/page"; export default function Page() { const { stops } = useData(); ' +
               'return <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8"><Hero title="…" image={stops[0].image} /><Map places={stops} route="walk" />' +
               "{stops.map((s, i) => <Place key={i} index={i + 1} {...s} />)}</main>; }",
           },

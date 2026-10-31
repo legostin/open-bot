@@ -2,7 +2,7 @@
 // plugin's UI module registered for the kind (ui.widgets.add). While that module loads the frame waits; without it
 // (the plugin was turned off since) the card shows nothing: the agent's words carry the answer.
 
-import type { Message, MessagePart } from "@owlbot/shared";
+import type { Message, MessagePart } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { PluginBoundary } from "../../plugins/boundary";
 import { pluginLoad } from "../../plugins/host";

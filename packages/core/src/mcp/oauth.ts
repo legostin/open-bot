@@ -48,7 +48,7 @@ export class McpOAuth implements OAuthClientProvider {
 
   get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: "Owlbot",
+      client_name: "Piomio",
       redirect_uris: [this.d.redirectUri],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

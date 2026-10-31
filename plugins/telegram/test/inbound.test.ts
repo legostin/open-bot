@@ -33,7 +33,7 @@ describe("telegram inbound", () => {
     expect(messageContext(msg({ forward_origin: { type: "channel", chat: { title: "Новости" } } }))).toEqual(['[Forwarded from the channel "Новости"]']);
     expect(messageContext(msg({ forward_origin: { type: "hidden_user", sender_user_name: "Аноним" } }))).toEqual(["[Forwarded from Аноним]"]);
     expect(messageContext(msg({ forward_sender_name: "Старый клиент" }))).toEqual(["[Forwarded from Старый клиент]"]);
-    const reply = msg({ reply_to_message: msg({ from: { id: 4242, first_name: "Owlbot" }, text: "Созвон в 10:00, напомнить?" }) });
+    const reply = msg({ reply_to_message: msg({ from: { id: 4242, first_name: "Piomio" }, text: "Созвон в 10:00, напомнить?" }) });
     expect(messageContext(reply, 4242)).toEqual(['[In reply to your message: "Созвон в 10:00, напомнить?"]']);
     expect(messageContext(msg({ reply_to_message: msg({ from: { id: 1 }, text: "x".repeat(400) }) }), 4242)).toEqual([`[In reply to the message: "${"x".repeat(300)}…"]`]);
     expect(messageContext(msg({ reply_to_message: msg({ voice: { file_id: "v" } }) }))).toEqual(["[In reply to the message: a voice message]"]);

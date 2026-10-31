@@ -3,8 +3,8 @@
 // newer one is marked. Asked through the plugin's egress proxy, kept for six hours per provider and key; the
 // built-in list (settings.ts) stands in until the first answer, and whenever the provider cannot be asked.
 
-import type { ModelMeta, ModelProfile } from "@owlbot/shared";
-import { markLegacy, profileFrom } from "@owlbot/shared/models";
+import type { ModelMeta, ModelProfile } from "@piomio/shared";
+import { markLegacy, profileFrom } from "@piomio/shared/models";
 import { proxyEnvFrom, request, trimSlash } from "./http.ts";
 import type { ApiSettings, VariantInfo } from "./settings.ts";
 

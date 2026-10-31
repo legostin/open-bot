@@ -1,5 +1,5 @@
 // The user's channels (/api/feeds) and their posts, kept current by "feed.updated", "feed.deleted" and "feed.post".
-import type { Feed, FeedPost, UiEvent } from "@owlbot/shared";
+import type { Feed, FeedPost, UiEvent } from "@piomio/shared";
 import { api } from "../lib/api";
 import { createStore } from "../lib/store";
 

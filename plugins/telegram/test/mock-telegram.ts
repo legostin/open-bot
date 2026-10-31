@@ -58,7 +58,7 @@ export async function startMockTelegram(token: string, opts: { maxPollSec?: numb
     }
     switch (method) {
       case "getMe":
-        return ok({ id: 4242, is_bot: true, first_name: "Owlbot", username: "owlbot_test_bot" });
+        return ok({ id: 4242, is_bot: true, first_name: "Piomio", username: "piomio_test_bot" });
       case "getUpdates": {
         const offset = Number(params.offset ?? 0);
         const pending = () => updates.filter((u) => u.update_id >= offset);

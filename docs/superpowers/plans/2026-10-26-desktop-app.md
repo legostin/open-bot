@@ -1,10 +1,10 @@
-# Owlbot desktop app (Tauri 2) Implementation Plan
+# Piomio desktop app (Tauri 2) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the Inno Setup / AppleScript desktop installers with one Tauri 2 app for macOS and Windows that shows the hub's web UI in its own window, lives in the menu bar / tray, runs the hub (or this computer's machine daemon) in the background, and ships as a drag-and-drop `.dmg`, a silent `.pkg` and a per-user NSIS installer.
 
-**Architecture:** `packages/desktop` holds a Rust/Tauri app (`src-tauri`) and its own small setup screens (`ui`, TypeScript + esbuild). The app supervises one child process on the bundled Node from `packaging/desktop/stage.mjs`: the hub (`launch.mjs run`) or the machine daemon (`owlbot-node.mjs run`), talking to it over stdin (`stop`, `ticket <t>`). The hub window loads the hub's own web UI and signs in with a one-time ticket the app hands the hub over that stdin; the core accepts it at `POST /api/auth/desktop`.
+**Architecture:** `packages/desktop` holds a Rust/Tauri app (`src-tauri`) and its own small setup screens (`ui`, TypeScript + esbuild). The app supervises one child process on the bundled Node from `packaging/desktop/stage.mjs`: the hub (`launch.mjs run`) or the machine daemon (`piomio-node.mjs run`), talking to it over stdin (`stop`, `ticket <t>`). The hub window loads the hub's own web UI and signs in with a one-time ticket the app hands the hub over that stdin; the core accepts it at `POST /api/auth/desktop`.
 
 **Tech Stack:** Rust 1.85+ with Tauri 2.12 (`tauri`, `tauri-build`, `tauri-plugin-single-instance`, `tauri-plugin-deep-link`, `tauri-plugin-opener`), `@tauri-apps/cli` and `@tauri-apps/api` 2.12, TypeScript (Node 24 type stripping for the backend, esbuild for the setup screens), vitest, `cargo test`, pkgbuild/productbuild (macOS), NSIS through the Tauri bundler (Windows).
 
@@ -14,13 +14,13 @@
 
 - Node ≥ 24 runs backend TypeScript directly: import local files with `.ts`, only erasable syntax (no enums, parameter properties, namespaces), `import type` for types (`verbatimModuleSyntax`).
 - Every user-facing string goes through a catalog: app, tray and installer texts in `packaging/desktop/locales/{en,ru}.json`; web UI in `packages/web/src/i18n/{en,ru}.ts`; core in `packages/core/src/locales/{en,ru}.ts`. English is the source of truth; the i18n tests check parity. Code, comments, logs for developers and text for the model are English.
-- Data dirs and ports stay as they are: `~/Library/Application Support/Owlbot` (macOS), `%LOCALAPPDATA%\Owlbot` (Windows), ports from `<data>/desktop.json` (default 8080/8081/8089). Machine daemon state stays in `~/.owlbot-node` (`OWLBOT_NODE_HOME` overrides).
-- Bundle identifier `ai.owlbot.app`; deep-link scheme `owlbot`; product and binary name `Owlbot`.
+- Data dirs and ports stay as they are: `~/Library/Application Support/Piomio` (macOS), `%LOCALAPPDATA%\Piomio` (Windows), ports from `<data>/desktop.json` (default 8080/8081/8089). Machine daemon state stays in `~/.piomio-node` (`PIOMIO_NODE_HOME` overrides).
+- Bundle identifier `ai.piomio.app`; deep-link scheme `piomio`; product and binary name `Piomio`.
 - macOS 13.5 or later (universal: Apple silicon and Intel); Windows 10/11 x64.
 - Unsigned builds: macOS ad hoc (`signingIdentity: "-"`), never `--deep`, so the bundled Node keeps its Developer ID signature.
-- `OWLBOT_DATA_DIR` set means a dev or test run: the app then never writes start-at-login entries and never touches the AppleScript build's LaunchAgent (`ai.owlbot.hub`). `OWLBOT_APP_ROOT` points a dev run at a staged app tree, `OWLBOT_NODE_HOME` moves the node state.
-- **Never run the app against the default data dir or port on this Mac while developing**: the user's own hub runs here (the pre-rename open-bot 0.1.0: LaunchAgent `ai.openbot.hub`, port 8080, data in `~/Library/Application Support/open-bot`). Dev runs use `OWLBOT_DATA_DIR=<scratch>` with `{"port":18080}` in its `desktop.json`, and `OWLBOT_NODE_HOME=<scratch>`.
-- Names after the Owlbot rename (commit f67ca09): display name `Owlbot`, `@owlbot/*`, `OWLBOT_*`, `owlbot-node`, `~/.owlbot-node`, data dir `Owlbot`, outputs `owlbot-<version>.dmg|.pkg` and `owlbot-setup-<version>-x64.exe`. No migration from the pre-rename open-bot.
+- `PIOMIO_DATA_DIR` set means a dev or test run: the app then never writes start-at-login entries and never touches the AppleScript build's LaunchAgent (`ai.owlbot.hub`). `PIOMIO_APP_ROOT` points a dev run at a staged app tree, `PIOMIO_NODE_HOME` moves the node state.
+- **Never run the app against the default data dir or port on this Mac while developing**: the user's own hub runs here (the pre-rename open-bot 0.1.0: LaunchAgent `ai.openbot.hub`, port 8080, data in `~/Library/Application Support/open-bot`). Dev runs use `PIOMIO_DATA_DIR=<scratch>` with `{"port":18080}` in its `desktop.json`, and `PIOMIO_NODE_HOME=<scratch>`.
+- Names after the Owlbot rename (commit f67ca09; Piomio since 2026-10-31, same scheme): display name `Piomio`, `@piomio/*`, `PIOMIO_*`, `piomio-node`, `~/.piomio-node`, data dir `Piomio`, outputs `piomio-<version>.dmg|.pkg` and `piomio-setup-<version>-x64.exe`. No migration from the pre-rename open-bot.
 - Brain detection, the login-shell PATH in the core (`packages/core/src/user-path.ts`, `setup.ts`) and the chat's setup card belong to another workstream (merged in 7a3e620): do not change them. Start Task 1 from the current `main`.
 - Commit only when the user asks for commits. The "Commit" steps below describe the commit to make once they do; until then leave the changes in the working tree.
 - Ask the user before installing anything (Rust targets, tools). `rustup target add x86_64-apple-darwin` is needed for the universal macOS build.
@@ -30,15 +30,15 @@
 | File | Responsibility |
 |---|---|
 | `packages/core/src/desktop-login.ts` (new) | One-time sign-in tickets and the app's stdin commands |
-| `packages/core/src/cli.ts` | `start` reads the app's stdin when `OWLBOT_DESKTOP=1` |
+| `packages/core/src/cli.ts` | `start` reads the app's stdin when `PIOMIO_DESKTOP=1` |
 | `packages/core/src/app.ts` | `Hub.desktopTickets` |
 | `packages/core/src/server/main-app.ts` | `POST /api/auth/desktop` |
 | `packages/core/src/locales/{en,ru}.ts` | `auth.badDesktopTicket` |
 | `packages/node/src/desktop.ts` (new), `packages/node/src/cli.ts` | `run` stops on the app's stdin |
-| `packages/web/src/lib/desktop.ts` (new) | Ticket fragment parsing, `owlbot://pair` link |
+| `packages/web/src/lib/desktop.ts` (new) | Ticket fragment parsing, `piomio://pair` link |
 | `packages/web/src/state/app.ts` | Uses the ticket before deciding login vs app |
 | `packages/web/src/pages/Machines.tsx`, `packages/web/src/i18n/{en,ru}.ts` | "Connect with the app" link |
-| `packaging/desktop/launch.mjs` | Sets `OWLBOT_DESKTOP=1`; no stdin reader of its own |
+| `packaging/desktop/launch.mjs` | Sets `PIOMIO_DESKTOP=1`; no stdin reader of its own |
 | `packaging/desktop/stage.mjs` | Excludes `packages/desktop`, drops Node's `bin/npm`/`npx` links and dangling links |
 | `packaging/desktop/locales/{en,ru}.json` | App, tray and installer texts |
 | `packaging/desktop/build.mjs` (new) | `npm run package:desktop`: stage, UI, `tauri build`, outputs |
@@ -51,7 +51,7 @@
 | `packaging/assets/png/*` (new) | PNG icons for Tauri |
 | `.github/workflows/desktop.yml`, `README.md`, `README.ru.md` | CI and docs |
 
-Removed in Task 11: `packaging/windows/{owlbot.iss,build.mjs,tray/}`, `packaging/macos/{build.mjs,bin/}`.
+Removed in Task 11: `packaging/windows/{piomio.iss,build.mjs,tray/}`, `packaging/macos/{build.mjs,bin/}`.
 
 ---
 
@@ -115,7 +115,7 @@ Expected: FAIL, `Cannot find module '../src/desktop-login.ts'`.
 
 ```ts
 // The desktop app signs its own window in: it hands the hub one-time tickets over the hub's stdin, a pipe only the
-// app that started the hub holds (OWLBOT_DESKTOP=1). The window then posts its ticket to POST /api/auth/desktop.
+// app that started the hub holds (PIOMIO_DESKTOP=1). The window then posts its ticket to POST /api/auth/desktop.
 
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -240,15 +240,15 @@ and the field next to `auth: AuthService;`:
 
 ```ts
       // Run by the desktop app: its stdin carries `stop` and sign-in tickets; closing it stops the hub.
-      if (process.env.OWLBOT_DESKTOP === "1") readDesktopCommands(process.stdin, { stop: () => void shutdown("stop"), ticket: (t) => hub.desktopTickets.add(t) });
+      if (process.env.PIOMIO_DESKTOP === "1") readDesktopCommands(process.stdin, { stop: () => void shutdown("stop"), ticket: (t) => hub.desktopTickets.add(t) });
 ```
 
 - [ ] **Step 7: Move the stdin reader out of `launch.mjs`**
 
 In `packaging/desktop/launch.mjs`:
-- header comment: replace the line `// A "stop" line on stdin stops the hub cleanly: a windowless child on Windows gets no SIGTERM.` with `// The desktop app talks to the hub over its stdin (OWLBOT_DESKTOP=1, read by the core: packages/core/src/desktop-login.ts).`
+- header comment: replace the line `// A "stop" line on stdin stops the hub cleanly: a windowless child on Windows gets no SIGTERM.` with `// The desktop app talks to the hub over its stdin (PIOMIO_DESKTOP=1, read by the core: packages/core/src/desktop-login.ts).`
 - delete `import { createInterface } from "node:readline";`
-- in `hubEnv`, add `OWLBOT_DESKTOP: "1",` right after `OWLBOT_INSTALL_CLIS: "1",`
+- in `hubEnv`, add `PIOMIO_DESKTOP: "1",` right after `PIOMIO_INSTALL_CLIS: "1",`
 - in `run()`, delete the block
 
 ```js
@@ -259,10 +259,10 @@ In `packaging/desktop/launch.mjs`:
   }
 ```
 
-In `packages/core/test/desktop-packaging.test.ts`, test `"gives the hub its settings without overriding the caller's, and loads the resolve hook once"`, add after the `OWLBOT_INSTALL_CLIS` expectation:
+In `packages/core/test/desktop-packaging.test.ts`, test `"gives the hub its settings without overriding the caller's, and loads the resolve hook once"`, add after the `PIOMIO_INSTALL_CLIS` expectation:
 
 ```ts
-    expect(env.OWLBOT_DESKTOP).toBe("1");
+    expect(env.PIOMIO_DESKTOP).toBe("1");
 ```
 
 - [ ] **Step 8: Run the tests and the typecheck**
@@ -287,7 +287,7 @@ git commit -m "Desktop app sign-in: one-time tickets over the hub's stdin"
 - Test: `packages/node/test/desktop.test.ts` (new)
 
 **Interfaces:**
-- Produces: `stopOnDesktopStdin(input: Readable, stop: () => void): void`; `owlbot-node run` with `OWLBOT_DESKTOP=1` stops on a `stop` line or EOF.
+- Produces: `stopOnDesktopStdin(input: Readable, stop: () => void): void`; `piomio-node run` with `PIOMIO_DESKTOP=1` stops on a `stop` line or EOF.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -320,7 +320,7 @@ Expected: FAIL, module not found.
 `packages/node/src/desktop.ts`:
 
 ```ts
-// Run by the desktop app (OWLBOT_DESKTOP=1): a `stop` line on stdin, or the app closing the pipe, stops the daemon.
+// Run by the desktop app (PIOMIO_DESKTOP=1): a `stop` line on stdin, or the app closing the pipe, stops the daemon.
 // Windows has no SIGTERM for a windowless child.
 
 import { createInterface } from "node:readline";
@@ -338,19 +338,19 @@ export function stopOnDesktopStdin(input: Readable, stop: () => void): void {
 In `packages/node/src/cli.ts`, add `import { stopOnDesktopStdin } from "./desktop.ts";` after the `messages.ts` import, and in `cmdRun()` after `process.on("SIGHUP", …)`:
 
 ```ts
-  if (process.env.OWLBOT_DESKTOP === "1") stopOnDesktopStdin(process.stdin, () => void shutdown("stop"));
+  if (process.env.PIOMIO_DESKTOP === "1") stopOnDesktopStdin(process.stdin, () => void shutdown("stop"));
 ```
 
 - [ ] **Step 3: Run the tests, the typecheck and the bundle**
 
 Run: `npx vitest run packages/node/test && npm run typecheck && npm run build:node`
-Expected: PASS; `packages/node/dist/owlbot-node.mjs` rebuilt.
+Expected: PASS; `packages/node/dist/piomio-node.mjs` rebuilt.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add packages/node/src/desktop.ts packages/node/src/cli.ts packages/node/test/desktop.test.ts
-git commit -m "owlbot-node run stops on the desktop app's stdin"
+git commit -m "piomio-node run stops on the desktop app's stdin"
 ```
 
 ---
@@ -364,7 +364,7 @@ git commit -m "owlbot-node run stops on the desktop app's stdin"
 
 **Interfaces:**
 - Consumes: `POST /api/auth/desktop {ticket}` (Task 1).
-- Produces: `desktopTicketFrom(hash: string): string | undefined`, `pairLink(hubUrl: string, code: string): string` (`owlbot://pair?hub=…&code=…`, parsed by the app in Task 7).
+- Produces: `desktopTicketFrom(hash: string): string | undefined`, `pairLink(hubUrl: string, code: string): string` (`piomio://pair?hub=…&code=…`, parsed by the app in Task 7).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -384,7 +384,7 @@ describe("desktop app links", () => {
   });
 
   it("builds the pairing link the app opens", () => {
-    expect(pairLink("https://bot.example.com", "AB12CD34")).toBe("owlbot://pair?hub=https%3A%2F%2Fbot.example.com&code=AB12CD34");
+    expect(pairLink("https://bot.example.com", "AB12CD34")).toBe("piomio://pair?hub=https%3A%2F%2Fbot.example.com&code=AB12CD34");
   });
 });
 ```
@@ -396,7 +396,7 @@ Expected: FAIL, module not found.
 
 ```ts
 // The desktop app (packages/desktop) opens its window at `/#desktop=<ticket>`, a one-time sign-in ticket (see
-// packages/core/src/desktop-login.ts), and connects its computer to a hub from an `owlbot://pair` link.
+// packages/core/src/desktop-login.ts), and connects its computer to a hub from an `piomio://pair` link.
 
 /** The sign-in ticket in an address fragment, if any. */
 export function desktopTicketFrom(hash: string): string | undefined {
@@ -405,7 +405,7 @@ export function desktopTicketFrom(hash: string): string | undefined {
 
 /** The link that makes the desktop app connect its computer to this hub as a machine. */
 export function pairLink(hubUrl: string, code: string): string {
-  return `owlbot://pair?${new URLSearchParams({ hub: hubUrl, code })}`;
+  return `piomio://pair?${new URLSearchParams({ hub: hubUrl, code })}`;
 }
 ```
 
@@ -436,18 +436,18 @@ In `init()`, between `phase.set({ kind: "loading" });` and `try {`, insert:
 `packages/web/src/i18n/en.ts`, after `"machines.step2"`:
 
 ```ts
-  "machines.orApp": "Is the Owlbot app installed on that computer?",
+  "machines.orApp": "Is the Piomio app installed on that computer?",
   "machines.openInApp": "Connect with the app",
 ```
 
 `packages/web/src/i18n/ru.ts`, after `"machines.step2"`:
 
 ```ts
-  "machines.orApp": "На том компьютере стоит приложение Owlbot?",
+  "machines.orApp": "На том компьютере стоит приложение Piomio?",
   "machines.openInApp": "Подключить через приложение",
 ```
 
-`packages/web/src/pages/Machines.tsx`: add `import { pairLink } from "../lib/desktop";` after the `../lib/format` import, and right after the `<div>` that holds `machines.step2` and `<CodeLine>npx owlbot-node run</CodeLine>`:
+`packages/web/src/pages/Machines.tsx`: add `import { pairLink } from "../lib/desktop";` after the `../lib/format` import, and right after the `<div>` that holds `machines.step2` and `<CodeLine>npx piomio-node run</CodeLine>`:
 
 ```tsx
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
@@ -460,7 +460,7 @@ In `init()`, between `phase.set({ kind: "loading" });` and `try {`, insert:
 
 - [ ] **Step 5: Run the tests, the typecheck and the build**
 
-Run: `npx vitest run packages/web/src && npm run typecheck -w @owlbot/web && npm run build -w @owlbot/web`
+Run: `npx vitest run packages/web/src && npm run typecheck -w @piomio/web && npm run build -w @piomio/web`
 Expected: PASS (`desktop.test.ts` and `i18n.test.ts`), typecheck clean, Vite build succeeds.
 
 - [ ] **Step 6: Commit**
@@ -489,7 +489,7 @@ In `packages/core/test/desktop-packaging.test.ts`, change the stage import to `i
   it("stages the hub without the desktop app's own sources", () => {
     expect(wanted(join(ROOT, "packages", "core", "src", "cli.ts"))).toBe(true);
     expect(wanted(join(ROOT, "packages", "desktop", "package.json"))).toBe(true);
-    expect(wanted(join(ROOT, "packages", "desktop", "src-tauri", "target", "release", "owlbot"))).toBe(false);
+    expect(wanted(join(ROOT, "packages", "desktop", "src-tauri", "target", "release", "piomio"))).toBe(false);
     expect(wanted(join(ROOT, "packages", "desktop", "ui", "src", "main.ts"))).toBe(false);
     expect(wanted(join(ROOT, "packages", "core", "test", "hub.test.ts"))).toBe(false);
   });
@@ -554,13 +554,13 @@ Append to `packaging/desktop/locales/en.json` (before the closing brace; keep va
   "tray.status.node": "Machine of {hub}",
   "tray.setupAgain": "Set up again…",
   "app.welcome.title": "How will you use this computer?",
-  "app.welcome.hub.title": "A new Owlbot on this computer",
+  "app.welcome.hub.title": "A new Piomio on this computer",
   "app.welcome.hub.body": "Your agent runs here. Chats, agents and the vault stay on this computer.",
-  "app.welcome.node.title": "Connect to my Owlbot",
-  "app.welcome.node.body": "Your Owlbot already runs elsewhere. This computer becomes one of its machines: agents can use its Claude Code, Codex and the folders you allow.",
+  "app.welcome.node.title": "Connect to my Piomio",
+  "app.welcome.node.body": "Your Piomio already runs elsewhere. This computer becomes one of its machines: agents can use its Claude Code, Codex and the folders you allow.",
   "app.pair.title": "Connect this computer",
   "app.pair.hub": "Hub address",
-  "app.pair.hubHint": "The address you open Owlbot at.",
+  "app.pair.hubHint": "The address you open Piomio at.",
   "app.pair.code": "Code",
   "app.pair.codeHint": "On the hub's Machines page choose Connect a machine and copy the code.",
   "app.pair.name": "Machine name",
@@ -569,13 +569,13 @@ Append to `packaging/desktop/locales/en.json` (before the closing brace; keep va
   "app.pair.useExisting": "Use the existing connection to {hub}",
   "app.link.title": "Connect to {hub}?",
   "app.link.body": "This computer becomes a machine of {hub}.",
-  "app.link.hubMode": "This computer runs its own Owlbot now. It stops, and its data stays here: Set up again… in the menu brings it back.",
+  "app.link.hubMode": "This computer runs its own Piomio now. It stops, and its data stays here: Set up again… in the menu brings it back.",
   "app.link.cancel": "Cancel",
-  "app.error.title": "Owlbot did not start",
-  "app.error.notStarted": "Owlbot did not answer in time. Show the log to see why, or try again.",
-  "app.error.failed": "Owlbot keeps stopping. Show the log to see why, or try again.",
-  "app.error.portBusy": "Port {port} is taken by another program, so Owlbot cannot start. Close that program and try again.",
-  "app.error.noRuntime": "Owlbot's files are damaged. Install Owlbot again.",
+  "app.error.title": "Piomio did not start",
+  "app.error.notStarted": "Piomio did not answer in time. Show the log to see why, or try again.",
+  "app.error.failed": "Piomio keeps stopping. Show the log to see why, or try again.",
+  "app.error.portBusy": "Port {port} is taken by another program, so Piomio cannot start. Close that program and try again.",
+  "app.error.noRuntime": "Piomio's files are damaged. Install Piomio again.",
   "app.error.retry": "Try again"
 ```
 
@@ -591,13 +591,13 @@ Append to `packaging/desktop/locales/ru.json`:
   "tray.status.node": "Машина хаба {hub}",
   "tray.setupAgain": "Настроить заново…",
   "app.welcome.title": "Как вы будете пользоваться этим компьютером?",
-  "app.welcome.hub.title": "Новый Owlbot на этом компьютере",
+  "app.welcome.hub.title": "Новый Piomio на этом компьютере",
   "app.welcome.hub.body": "Ваш агент работает здесь. Чаты, агенты и хранилище секретов остаются на этом компьютере.",
-  "app.welcome.node.title": "Подключить к моему Owlbot",
-  "app.welcome.node.body": "Ваш Owlbot уже работает в другом месте. Этот компьютер станет одной из его машин: агенты смогут пользоваться его Claude Code, Codex и папками, которые вы разрешите.",
+  "app.welcome.node.title": "Подключить к моему Piomio",
+  "app.welcome.node.body": "Ваш Piomio уже работает в другом месте. Этот компьютер станет одной из его машин: агенты смогут пользоваться его Claude Code, Codex и папками, которые вы разрешите.",
   "app.pair.title": "Подключить этот компьютер",
   "app.pair.hub": "Адрес хаба",
-  "app.pair.hubHint": "Адрес, по которому вы открываете Owlbot.",
+  "app.pair.hubHint": "Адрес, по которому вы открываете Piomio.",
   "app.pair.code": "Код",
   "app.pair.codeHint": "На странице «Машины» хаба нажмите «Подключить машину» и скопируйте код.",
   "app.pair.name": "Имя машины",
@@ -606,13 +606,13 @@ Append to `packaging/desktop/locales/ru.json`:
   "app.pair.useExisting": "Использовать готовое подключение к {hub}",
   "app.link.title": "Подключиться к {hub}?",
   "app.link.body": "Этот компьютер станет машиной хаба {hub}.",
-  "app.link.hubMode": "Сейчас на этом компьютере работает свой Owlbot. Он остановится, а его данные останутся здесь: «Настроить заново…» в меню вернёт его.",
+  "app.link.hubMode": "Сейчас на этом компьютере работает свой Piomio. Он остановится, а его данные останутся здесь: «Настроить заново…» в меню вернёт его.",
   "app.link.cancel": "Отмена",
-  "app.error.title": "Owlbot не запустился",
-  "app.error.notStarted": "Owlbot не ответил вовремя. Откройте журнал, чтобы узнать причину, или попробуйте ещё раз.",
-  "app.error.failed": "Owlbot снова и снова останавливается. Откройте журнал, чтобы узнать причину, или попробуйте ещё раз.",
-  "app.error.portBusy": "Порт {port} занят другой программой, поэтому Owlbot не может запуститься. Закройте эту программу и попробуйте ещё раз.",
-  "app.error.noRuntime": "Файлы Owlbot повреждены. Установите Owlbot заново.",
+  "app.error.title": "Piomio не запустился",
+  "app.error.notStarted": "Piomio не ответил вовремя. Откройте журнал, чтобы узнать причину, или попробуйте ещё раз.",
+  "app.error.failed": "Piomio снова и снова останавливается. Откройте журнал, чтобы узнать причину, или попробуйте ещё раз.",
+  "app.error.portBusy": "Порт {port} занят другой программой, поэтому Piomio не может запуститься. Закройте эту программу и попробуйте ещё раз.",
+  "app.error.noRuntime": "Файлы Piomio повреждены. Установите Piomio заново.",
   "app.error.retry": "Попробовать ещё раз"
 ```
 
@@ -646,11 +646,11 @@ git commit -m "Desktop app texts: tray status, first run, pairing, errors"
 
 ```json
 {
-  "name": "@owlbot/desktop",
+  "name": "@piomio/desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Owlbot desktop app (Tauri): a window for the hub's UI, a tray icon, the hub or a machine in the background",
+  "description": "Piomio desktop app (Tauri): a window for the hub's UI, a tray icon, the hub or a machine in the background",
   "scripts": {
     "build:ui": "node ui/build.mjs",
     "typecheck": "tsc -p ui/tsconfig.json",
@@ -683,7 +683,7 @@ packages/desktop/src-tauri/gen/
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Owlbot</title>
+    <title>Piomio</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -782,7 +782,7 @@ for (const f of ["index.html", "style.css"]) copyFileSync(join(here, f), join(ou
 
 ```ts
 // The app's own screens (window "setup"): how this computer is used, connecting it to a hub (also from an
-// owlbot://pair link), "starting" and "did not start". The hub's UI opens in its own window and gets no app commands.
+// piomio://pair link), "starting" and "did not start". The hub's UI opens in its own window and gets no app commands.
 
 import { invoke } from "@tauri-apps/api/core";
 import en from "../../../../packaging/desktop/locales/en.json";
@@ -867,7 +867,7 @@ function welcome(state: UiState): void {
   );
 }
 
-/** Hub address, code and machine name; prefilled from an owlbot://pair link. */
+/** Hub address, code and machine name; prefilled from an piomio://pair link. */
 function pairForm(state: UiState, link?: { hub: string; code: string }): void {
   const hub = input(link?.hub ?? "", { type: "url", placeholder: "https://bot.example.com", required: "" });
   const code = input(link?.code ?? "", { autocomplete: "one-time-code", required: "" });
@@ -926,7 +926,7 @@ void render();
 
 - [ ] **Step 4: Build and typecheck**
 
-Run: `npm run build:ui -w @owlbot/desktop && npm run typecheck -w @owlbot/desktop && ls packages/desktop/ui/dist`
+Run: `npm run build:ui -w @piomio/desktop && npm run typecheck -w @piomio/desktop && ls packages/desktop/ui/dist`
 Expected: no errors; `index.html main.js style.css`.
 
 - [ ] **Step 5: Commit**
@@ -956,15 +956,15 @@ git commit -m "Desktop app: setup screens (first run, pairing, errors)"
 
 ```bash
 S=$(mktemp -d)
-iconutil -c iconset packaging/assets/owlbot.icns -o "$S/owlbot.iconset"
+iconutil -c iconset packaging/assets/piomio.icns -o "$S/piomio.iconset"
 mkdir -p packaging/assets/png
-cp "$S/owlbot.iconset/icon_32x32.png" packaging/assets/png/32x32.png
-cp "$S/owlbot.iconset/icon_128x128.png" packaging/assets/png/128x128.png
-cp "$S/owlbot.iconset/icon_128x128@2x.png" packaging/assets/png/128x128@2x.png
-cp "$S/owlbot.iconset/icon_512x512.png" packaging/assets/png/icon.png
+cp "$S/piomio.iconset/icon_32x32.png" packaging/assets/png/32x32.png
+cp "$S/piomio.iconset/icon_128x128.png" packaging/assets/png/128x128.png
+cp "$S/piomio.iconset/icon_128x128@2x.png" packaging/assets/png/128x128@2x.png
+cp "$S/piomio.iconset/icon_512x512.png" packaging/assets/png/icon.png
 ```
 
-In `packaging/desktop/make-icons.mjs` (renders the same favicon, so future logo changes keep these in sync): change the header comment's first line to `// Renders the web UI's favicon into the desktop icons: packaging/assets/owlbot.ico (Windows, PNG entries),` / `// Owlbot.icns (macOS) and png/ (Tauri bundle icons). Run by hand when the logo changes; the outputs are committed so` / `// builds need no browser.`, and before `console.log(...)` add:
+In `packaging/desktop/make-icons.mjs` (renders the same favicon, so future logo changes keep these in sync): change the header comment's first line to `// Renders the web UI's favicon into the desktop icons: packaging/assets/piomio.ico (Windows, PNG entries),` / `// Piomio.icns (macOS) and png/ (Tauri bundle icons). Run by hand when the logo changes; the outputs are committed so` / `// builds need no browser.`, and before `console.log(...)` add:
 
 ```js
 // PNGs for the Tauri bundle (tauri.conf.json "bundle.icon"; the tray uses the app icon).
@@ -978,9 +978,9 @@ for (const [file, size] of [["32x32.png", 32], ["128x128.png", 128], ["128x128@2
 
 ```toml
 [package]
-name = "owlbot"
+name = "piomio"
 version = "0.1.0"
-description = "Owlbot desktop app"
+description = "Piomio desktop app"
 edition = "2021"
 rust-version = "1.85"
 publish = false
@@ -1036,10 +1036,10 @@ fn main() {
 ```json
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Owlbot",
-  "mainBinaryName": "Owlbot",
+  "productName": "Piomio",
+  "mainBinaryName": "Piomio",
   "version": "../../../package.json",
-  "identifier": "ai.owlbot.app",
+  "identifier": "ai.piomio.app",
   "build": {
     "frontendDist": "../ui/dist"
   },
@@ -1057,8 +1057,8 @@ fn main() {
       "../../../packaging/assets/png/128x128.png",
       "../../../packaging/assets/png/128x128@2x.png",
       "../../../packaging/assets/png/icon.png",
-      "../../../packaging/assets/owlbot.icns",
-      "../../../packaging/assets/owlbot.ico"
+      "../../../packaging/assets/piomio.icns",
+      "../../../packaging/assets/piomio.ico"
     ],
     "macOS": {
       "minimumSystemVersion": "13.5",
@@ -1074,7 +1074,7 @@ fn main() {
   },
   "plugins": {
     "deep-link": {
-      "desktop": { "schemes": ["owlbot"] }
+      "desktop": { "schemes": ["piomio"] }
     }
   }
 }
@@ -1106,7 +1106,7 @@ fn main() {
 
 ```rust
 //! The app's own settings (<app config dir>/settings.json; no file means the first run) and the machine daemon's
-//! pairing in ~/.owlbot-node, written by `owlbot-node pair`.
+//! pairing in ~/.piomio-node, written by `piomio-node pair`.
 
 use std::fs;
 use std::io;
@@ -1234,7 +1234,7 @@ mod tests {
 `packages/desktop/src-tauri/src/deeplink.rs`:
 
 ```rust
-//! `owlbot://pair?hub=<url>&code=<code>`: the link the hub's Machines page offers to connect this computer.
+//! `piomio://pair?hub=<url>&code=<code>`: the link the hub's Machines page offers to connect this computer.
 
 use serde::Serialize;
 use tauri::Url;
@@ -1246,10 +1246,10 @@ pub struct PairLink {
 }
 
 pub fn parse(link: &Url) -> Option<PairLink> {
-  if link.scheme() != "owlbot" {
+  if link.scheme() != "piomio" {
     return None;
   }
-  // owlbot://pair?… has "pair" as its host; owlbot:pair?… as its path.
+  // piomio://pair?… has "pair" as its host; piomio:pair?… as its path.
   let what = link.host_str().unwrap_or_else(|| link.path()).trim_matches('/');
   if what != "pair" {
     return None;
@@ -1284,18 +1284,18 @@ mod tests {
   #[test]
   fn reads_a_pairing_link() {
     assert_eq!(
-      p("owlbot://pair?hub=https%3A%2F%2Fbot.example.com&code=AB12CD34"),
+      p("piomio://pair?hub=https%3A%2F%2Fbot.example.com&code=AB12CD34"),
       Some(PairLink { hub: "https://bot.example.com".into(), code: "AB12CD34".into() })
     );
-    assert_eq!(p("owlbot:pair?hub=http://192.168.1.5:8080&code=x-1").map(|l| l.hub), Some("http://192.168.1.5:8080".into()));
+    assert_eq!(p("piomio:pair?hub=http://192.168.1.5:8080&code=x-1").map(|l| l.hub), Some("http://192.168.1.5:8080".into()));
   }
 
   #[test]
   fn refuses_anything_else() {
-    assert_eq!(p("owlbot://other?hub=https://a.b&code=x"), None);
-    assert_eq!(p("owlbot://pair?hub=file:///etc/passwd&code=x"), None);
-    assert_eq!(p("owlbot://pair?hub=https://a.b"), None);
-    assert_eq!(p("owlbot://pair?hub=https://a.b&code=a%20b"), None);
+    assert_eq!(p("piomio://other?hub=https://a.b&code=x"), None);
+    assert_eq!(p("piomio://pair?hub=file:///etc/passwd&code=x"), None);
+    assert_eq!(p("piomio://pair?hub=https://a.b"), None);
+    assert_eq!(p("piomio://pair?hub=https://a.b&code=a%20b"), None);
     assert_eq!(p("https://pair?hub=https://a.b&code=x"), None);
   }
 }
@@ -1356,10 +1356,10 @@ mod tests {
   fn picks_the_language_and_falls_back_to_english() {
     let ru = Texts::for_locale(Some("ru-RU"));
     assert_eq!(ru.lang(), "ru");
-    assert_eq!(ru.t("tray.quit"), "Выйти из Owlbot");
+    assert_eq!(ru.t("tray.quit"), "Выйти из Piomio");
     let en = Texts::for_locale(Some("de-DE"));
     assert_eq!(en.lang(), "en");
-    assert_eq!(en.t("tray.quit"), "Quit Owlbot");
+    assert_eq!(en.t("tray.quit"), "Quit Piomio");
     assert_eq!(en.t("no.such.key"), "no.such.key");
   }
 
@@ -1415,7 +1415,7 @@ mod tests {
 `packages/desktop/src-tauri/src/main.rs` (temporary; Task 10 replaces it):
 
 ```rust
-// Owlbot desktop app. Spec: docs/superpowers/specs/2026-10-26-desktop-app-design.md
+// Piomio desktop app. Spec: docs/superpowers/specs/2026-10-26-desktop-app-design.md
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod deeplink;
@@ -1424,13 +1424,13 @@ mod login;
 mod settings;
 
 fn main() {
-  tauri::Builder::default().run(tauri::generate_context!()).expect("Owlbot failed to start");
+  tauri::Builder::default().run(tauri::generate_context!()).expect("Piomio failed to start");
 }
 ```
 
 - [ ] **Step 4: Build and test**
 
-Run: `npm run build:ui -w @owlbot/desktop && cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml`
+Run: `npm run build:ui -w @piomio/desktop && cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml`
 Expected: compiles (the first build downloads and compiles Tauri, several minutes; unused-code warnings are fine at this step); tests PASS (settings 5, deeplink 2, i18n 2, login 2).
 
 - [ ] **Step 5: Commit**
@@ -1754,7 +1754,7 @@ fn note(log: &Path, text: &str) {
     let _ = fs::create_dir_all(dir);
   }
   if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(log) {
-    let _ = writeln!(f, "[owlbot] {text}");
+    let _ = writeln!(f, "[piomio] {text}");
   }
 }
 
@@ -1885,10 +1885,10 @@ git commit -m "Desktop app: supervise the hub or machine process"
 ```rust
 //! macOS gives a GUI app a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin), so brain CLIs installed with Homebrew, npm or
 //! the Claude installer are not found. The hub reads the login shell's PATH itself (packages/core/src/user-path.ts);
-//! for owlbot-node the app asks the login shell once and passes it on.
+//! for piomio-node the app asks the login shell once and passes it on.
 
 /// Marks the PATH in the shell's output: startup files may print other text.
-const MARK: &str = "__OWLBOT_PATH__";
+const MARK: &str = "__PIOMIO_PATH__";
 
 pub fn between_marks(out: &str) -> Option<&str> {
   let start = out.find(MARK)? + MARK.len();
@@ -1950,9 +1950,9 @@ mod tests {
 
   #[test]
   fn finds_the_path_among_shell_chatter() {
-    assert_eq!(between_marks("Welcome!\n__OWLBOT_PATH__/a:/b__OWLBOT_PATH__"), Some("/a:/b"));
+    assert_eq!(between_marks("Welcome!\n__PIOMIO_PATH__/a:/b__PIOMIO_PATH__"), Some("/a:/b"));
     assert_eq!(between_marks("no marks"), None);
-    assert_eq!(between_marks("__OWLBOT_PATH____OWLBOT_PATH__"), None);
+    assert_eq!(between_marks("__PIOMIO_PATH____PIOMIO_PATH__"), None);
   }
 
   #[test]
@@ -1971,7 +1971,7 @@ mod tests {
 - [ ] **Step 2: Write `autostart.rs` with its tests**
 
 ```rust
-//! Start at login with `--background` (no window): a LaunchAgent on macOS, the HKCU Run value `Owlbot` on Windows
+//! Start at login with `--background` (no window): a LaunchAgent on macOS, the HKCU Run value `Piomio` on Windows
 //! (the uninstaller of the Tauri bundle removes that value by its product name). Both point at the app's current path;
 //! the app applies its setting at every start, which also repairs them after a move or an upgrade.
 
@@ -1993,10 +1993,10 @@ pub fn launch_agent(exe: &str, plist: &str) -> String {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>ai.owlbot.app</string>
-  <key>AssociatedBundleIdentifiers</key><array><string>ai.owlbot.app</string></array>
+  <key>Label</key><string>ai.piomio.app</string>
+  <key>AssociatedBundleIdentifiers</key><array><string>ai.piomio.app</string></array>
   <key>ProgramArguments</key>
-  <array><string>/bin/sh</string><string>-c</string><string>{}</string><string>Owlbot</string><string>{}</string><string>{}</string></array>
+  <array><string>/bin/sh</string><string>-c</string><string>{}</string><string>Piomio</string><string>{}</string><string>{}</string></array>
   <key>RunAtLoad</key><true/>
   <key>ProcessType</key><string>Interactive</string>
 </dict>
@@ -2011,7 +2011,7 @@ pub fn launch_agent(exe: &str, plist: &str) -> String {
 #[cfg(target_os = "macos")]
 pub fn set(exe: &Path, on: bool) -> io::Result<()> {
   use std::fs;
-  let plist = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/LaunchAgents/ai.owlbot.app.plist");
+  let plist = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/LaunchAgents/ai.piomio.app.plist");
   if !on {
     return match fs::remove_file(&plist) {
       Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
@@ -2033,9 +2033,9 @@ pub fn set(exe: &Path, on: bool) -> io::Result<()> {
   use winreg::RegKey;
   let (key, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Run")?;
   if on {
-    key.set_value("Owlbot", &format!("\"{}\" {ARG}", exe.display()))
+    key.set_value("Piomio", &format!("\"{}\" {ARG}", exe.display()))
   } else {
-    match key.delete_value("Owlbot") {
+    match key.delete_value("Piomio") {
       Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
       _ => Ok(()),
     }
@@ -2053,8 +2053,8 @@ mod tests {
 
   #[test]
   fn the_launch_agent_starts_the_app_or_removes_itself() {
-    let a = launch_agent("/Applications/open & bot.app/Contents/MacOS/Owlbot", "/Users/u/Library/LaunchAgents/ai.owlbot.app.plist");
-    assert!(a.contains("<string>/Applications/open &amp; bot.app/Contents/MacOS/Owlbot</string>"));
+    let a = launch_agent("/Applications/open & bot.app/Contents/MacOS/Piomio", "/Users/u/Library/LaunchAgents/ai.piomio.app.plist");
+    assert!(a.contains("<string>/Applications/open &amp; bot.app/Contents/MacOS/Piomio</string>"));
     assert!(a.contains(r#"exec "$1" --background; fi; rm -f "$2""#));
     assert!(a.contains("<key>AssociatedBundleIdentifiers</key>"));
     assert!(!a.contains("KeepAlive"));
@@ -2065,7 +2065,7 @@ mod tests {
 - [ ] **Step 3: Write `migration.rs`**
 
 ```rust
-//! The AppleScript build of Owlbot (on main before this app) ran the hub from a LaunchAgent of its own (ai.owlbot.hub,
+//! The AppleScript build of Owlbot (as Piomio was called then) (on main before this app) ran the hub from a LaunchAgent of its own (ai.owlbot.hub,
 //! same data dir, same port). The app runs the hub itself now, so that agent goes before the app starts its hub.
 
 use std::path::Path;
@@ -2107,7 +2107,7 @@ git commit -m "Desktop app: login-shell PATH, start at login, the AppleScript bu
 - Test: unit tests in `app.rs`, `tray.rs`, `window.rs`; a run on this Mac in isolation (Step 6)
 
 **Interfaces:**
-- Consumes: everything of Tasks 7–9; core stdin commands and `POST /api/auth/desktop` (Task 1); `launch.mjs url` (prints the address, exit 0, or exit 3 when the hub did not answer in 90 s); `owlbot-node.mjs pair <hub> <code> [--name n]` (exit 0 on success, localized text on failure).
+- Consumes: everything of Tasks 7–9; core stdin commands and `POST /api/auth/desktop` (Task 1); `launch.mjs url` (prints the address, exit 0, or exit 3 when the hub did not answer in 90 s); `piomio-node.mjs pair <hub> <code> [--name n]` (exit 0 on success, localized text on failure).
 - Produces: the Tauri commands of Task 6 with the `UiState` shape there; CLI flags `--background`, `--mode hub|node`, `--quit`.
 
 - [ ] **Step 1: `window.rs`**
@@ -2152,7 +2152,7 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
   let browser = app.clone();
   let popups = app.clone();
   WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
-    .title("Owlbot")
+    .title("Piomio")
     .inner_size(1200.0, 820.0)
     .min_inner_size(420.0, 520.0)
     .on_navigation(move |u| {
@@ -2179,7 +2179,7 @@ pub fn open_setup(app: &AppHandle) -> tauri::Result<()> {
     w.set_focus()?;
   } else {
     WebviewWindowBuilder::new(app, SETUP, WebviewUrl::App("index.html".into()))
-      .title("Owlbot")
+      .title("Piomio")
       .inner_size(560.0, 660.0)
       .resizable(false)
       .center()
@@ -2298,7 +2298,7 @@ pub fn build(app: &AppHandle, autostart: bool) -> tauri::Result<Tray> {
     ],
   )?;
   let mut builder = TrayIconBuilder::with_id("main")
-    .tooltip("Owlbot")
+    .tooltip("Piomio")
     .menu(&menu)
     .show_menu_on_left_click(cfg!(target_os = "macos"))
     .on_menu_event(|app, e| crate::app::on_menu(app, e.id().as_ref()))
@@ -2391,24 +2391,24 @@ impl Args {
 
 pub struct Paths {
   pub config_dir: PathBuf,
-  /// The staged app tree: the app's resource "app" (OWLBOT_APP_ROOT in a dev run).
+  /// The staged app tree: the app's resource "app" (PIOMIO_APP_ROOT in a dev run).
   pub app_root: PathBuf,
   pub node: PathBuf,
   pub hub_data: PathBuf,
   pub hub_log: PathBuf,
   pub node_home: PathBuf,
   pub node_log: PathBuf,
-  /// OWLBOT_DATA_DIR is set: a dev or test run, which leaves start at login and the AppleScript build's agent alone.
+  /// PIOMIO_DATA_DIR is set: a dev or test run, which leaves start at login and the AppleScript build's agent alone.
   pub dev: bool,
 }
 
 impl Paths {
   fn resolve(app: &AppHandle) -> tauri::Result<Paths> {
     let p = app.path();
-    let app_root = std::env::var_os("OWLBOT_APP_ROOT").map(PathBuf::from).unwrap_or(p.resource_dir()?.join("app"));
-    let data_override = std::env::var_os("OWLBOT_DATA_DIR").map(PathBuf::from);
-    let hub_data = data_override.clone().unwrap_or(p.local_data_dir()?.join("Owlbot"));
-    let node_home = std::env::var_os("OWLBOT_NODE_HOME").map(PathBuf::from).unwrap_or(p.home_dir()?.join(".owlbot-node"));
+    let app_root = std::env::var_os("PIOMIO_APP_ROOT").map(PathBuf::from).unwrap_or(p.resource_dir()?.join("app"));
+    let data_override = std::env::var_os("PIOMIO_DATA_DIR").map(PathBuf::from);
+    let hub_data = data_override.clone().unwrap_or(p.local_data_dir()?.join("Piomio"));
+    let node_home = std::env::var_os("PIOMIO_NODE_HOME").map(PathBuf::from).unwrap_or(p.home_dir()?.join(".piomio-node"));
     Ok(Paths {
       config_dir: p.app_config_dir()?,
       node: supervisor::node_binary(&app_root),
@@ -2436,7 +2436,7 @@ impl Paths {
   }
 
   fn node_cli(&self) -> PathBuf {
-    self.app_root.join("packages").join("node").join("dist").join("owlbot-node.mjs")
+    self.app_root.join("packages").join("node").join("dist").join("piomio-node.mjs")
   }
 }
 
@@ -2457,7 +2457,7 @@ pub struct AppState {
   /// The hub window's address is being fetched: the setup window says "starting".
   pub starting: Mutex<bool>,
   pub tray: Mutex<Option<tray::Tray>>,
-  /// macOS: the login shell's PATH for owlbot-node (a GUI app gets a bare one; the hub reads it itself).
+  /// macOS: the login shell's PATH for piomio-node (a GUI app gets a bare one; the hub reads it itself).
   pub path_env: Option<String>,
 }
 
@@ -2532,24 +2532,24 @@ pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error:
 fn apply_autostart(on: bool) {
   if let Ok(exe) = std::env::current_exe() {
     if let Err(e) = autostart::set(&exe, on) {
-      eprintln!("owlbot: start at login: {e}");
+      eprintln!("piomio: start at login: {e}");
     }
   }
 }
 
 fn spec(st: &AppState, mode: Mode) -> Spec {
   let p = &st.paths;
-  let mut env = vec![("OWLBOT_DESKTOP".to_string(), "1".to_string())];
+  let mut env = vec![("PIOMIO_DESKTOP".to_string(), "1".to_string())];
   let delay = Duration::from_secs(2);
   match mode {
     Mode::Hub => {
-      env.push(("OWLBOT_DATA_DIR".into(), arg(&p.hub_data)));
+      env.push(("PIOMIO_DATA_DIR".into(), arg(&p.hub_data)));
       Spec { program: p.node.clone(), args: vec![arg(&p.launch()), "run".into()], env, log: p.hub_log.clone(), port: Some(p.hub_port()), restart_delay: delay }
     }
     Mode::Node => {
-      env.push(("OWLBOT_LANG".into(), texts().lang().into()));
-      env.push(("OWLBOT_NODE_HOME".into(), arg(&p.node_home)));
-      // The hub finds the user's CLIs itself (packages/core/src/user-path.ts); owlbot-node needs this PATH.
+      env.push(("PIOMIO_LANG".into(), texts().lang().into()));
+      env.push(("PIOMIO_NODE_HOME".into(), arg(&p.node_home)));
+      // The hub finds the user's CLIs itself (packages/core/src/user-path.ts); piomio-node needs this PATH.
       if let Some(path) = &st.path_env {
         env.push(("PATH".into(), path.clone()));
       }
@@ -2589,7 +2589,7 @@ fn on_status(app: &AppHandle, status: Status) {
 /// password is set), else the hub with a fresh one-time sign-in ticket.
 fn hub_window_url(st: &AppState) -> Option<Url> {
   let p = &st.paths;
-  let out = supervisor::command(&p.node).arg(p.launch()).arg("url").env("OWLBOT_DATA_DIR", &p.hub_data).output().ok()?;
+  let out = supervisor::command(&p.node).arg(p.launch()).arg("url").env("PIOMIO_DATA_DIR", &p.hub_data).output().ok()?;
   if !out.status.success() {
     return None;
   }
@@ -2664,12 +2664,12 @@ pub fn choose(app: &AppHandle, mode: Mode) -> Result<(), String> {
   Ok(())
 }
 
-/// `owlbot-node pair` with the bundled Node; on success this computer becomes a machine of that hub.
+/// `piomio-node pair` with the bundled Node; on success this computer becomes a machine of that hub.
 pub fn pair(app: &AppHandle, hub: &str, code: &str, name: &str) -> Result<(), String> {
   let st = app.state::<AppState>();
   let p = &st.paths;
   let mut cmd = supervisor::command(&p.node);
-  cmd.arg(p.node_cli()).args(["pair", hub.trim(), code.trim()]).env("OWLBOT_LANG", texts().lang()).env("OWLBOT_NODE_HOME", &p.node_home);
+  cmd.arg(p.node_cli()).args(["pair", hub.trim(), code.trim()]).env("PIOMIO_LANG", texts().lang()).env("PIOMIO_NODE_HOME", &p.node_home);
   if !name.trim().is_empty() {
     cmd.args(["--name", name.trim()]);
   }
@@ -2702,7 +2702,7 @@ fn on_link(app: &AppHandle, url: &Url) -> bool {
 /// A second launch hands its arguments to this one: `--quit` stops the app, `--mode` makes the first-run choice when
 /// none was made, anything else shows the window. Links arrive through the deep-link plugin.
 pub fn second_instance(app: &AppHandle, argv: Vec<String>) {
-  let link = argv.iter().any(|a| a.starts_with("owlbot:"));
+  let link = argv.iter().any(|a| a.starts_with("piomio:"));
   let args = Args::parse(argv.into_iter().skip(1));
   if args.quit {
     app.exit(0);
@@ -2808,7 +2808,7 @@ mod tests {
     assert_eq!(args(&["--mode", "hub", "--background"]), Args { background: true, mode: Some(Mode::Hub), quit: false });
     assert_eq!(args(&["--quit"]).quit, true);
     assert_eq!(args(&["--mode", "x"]).mode, None);
-    assert_eq!(args(&["owlbot://pair?hub=x&code=y"]), Args::default());
+    assert_eq!(args(&["piomio://pair?hub=x&code=y"]), Args::default());
   }
 
   #[test]
@@ -2905,7 +2905,7 @@ pub fn dismiss(app: AppHandle) {
 `packages/desktop/src-tauri/src/main.rs` (final):
 
 ```rust
-// Owlbot desktop app: a window for the hub's web UI, a menu bar / tray icon, and the hub (or this computer's
+// Piomio desktop app: a window for the hub's web UI, a menu bar / tray icon, and the hub (or this computer's
 // machine daemon) running in the background on the bundled Node.
 // Spec: docs/superpowers/specs/2026-10-26-desktop-app-design.md
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -2943,14 +2943,14 @@ fn main() {
     .on_window_event(window::on_event)
     .setup(move |app| app::setup(app, args))
     .build(tauri::generate_context!())
-    .expect("Owlbot failed to start")
+    .expect("Piomio failed to start")
     .run(app::on_run_event);
 }
 ```
 
 - [ ] **Step 5: Build and run the unit tests**
 
-Run: `npm run build:ui -w @owlbot/desktop && cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml && cargo clippy --manifest-path packages/desktop/src-tauri/Cargo.toml -- -D warnings`
+Run: `npm run build:ui -w @piomio/desktop && cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml && cargo clippy --manifest-path packages/desktop/src-tauri/Cargo.toml -- -D warnings`
 Expected: all tests PASS; clippy clean (fix what it reports: unused imports, needless borrows).
 
 - [ ] **Step 6: Run the app on this Mac in isolation**
@@ -2960,20 +2960,20 @@ Never against the default data dir (see Global Constraints). Stage once, then:
 ```bash
 node packaging/desktop/stage.mjs --target darwin --skip-build
 D=$(mktemp -d); mkdir -p "$D/data" "$D/node"; echo '{"port":18080}' > "$D/data/desktop.json"
-OWLBOT_APP_ROOT="$PWD/dist/desktop/stage-darwin/app" OWLBOT_DATA_DIR="$D/data" OWLBOT_NODE_HOME="$D/node" \
-  npm run tauri -w @owlbot/desktop -- dev
+PIOMIO_APP_ROOT="$PWD/dist/desktop/stage-darwin/app" PIOMIO_DATA_DIR="$D/data" PIOMIO_NODE_HOME="$D/node" \
+  npm run tauri -w @piomio/desktop -- dev
 ```
 
 Check, in order:
 1. The setup window asks how the computer is used; the menu bar icon shows "Stopped".
-2. "A new Owlbot on this computer": the status turns "Running", the hub window opens with the setup form and its code filled in; set a password.
+2. "A new Piomio on this computer": the status turns "Running", the hub window opens with the setup form and its code filled in; set a password.
 3. Close the hub window: the Dock icon goes, the menu bar icon stays; `curl -s http://127.0.0.1:18080/api/auth/state` still answers.
-4. "Open Owlbot" in the menu: the window comes back without a sign-in form.
-5. Quit the app (menu), run the same command again with `-- --background`: no window; "Open Owlbot": the hub's UI opens signed in (ticket).
+4. "Open Piomio" in the menu: the window comes back without a sign-in form.
+5. Quit the app (menu), run the same command again with `-- --background`: no window; "Open Piomio": the hub's UI opens signed in (ticket).
 6. "Restart": the status goes "Starting…" then "Running".
 7. A link outside the hub (for example a link in a chat message) opens in the default browser.
-8. `open "owlbot://pair?hub=http://127.0.0.1:18080&code=WRONG"` while the dev app runs: the link screen appears; "Connect" shows the CLI's error text; "Cancel" closes it.
-9. Quit: `curl` gets no answer within 15 s; `ls ~/Library/LaunchAgents` has no `ai.owlbot.app.plist` (dev runs never write it), and `launchctl print gui/$(id -u)/ai.openbot.hub` still shows the user's own (pre-rename) hub running.
+8. `open "piomio://pair?hub=http://127.0.0.1:18080&code=WRONG"` while the dev app runs: the link screen appears; "Connect" shows the CLI's error text; "Cancel" closes it.
+9. Quit: `curl` gets no answer within 15 s; `ls ~/Library/LaunchAgents` has no `ai.piomio.app.plist` (dev runs never write it), and `launchctl print gui/$(id -u)/ai.openbot.hub` still shows the user's own (pre-rename) hub running.
 
 - [ ] **Step 7: Commit**
 
@@ -2989,7 +2989,7 @@ git commit -m "Desktop app: hub window with automatic sign-in, tray, first run, 
 **Files:**
 - Create: `packaging/desktop/build.mjs`, `packaging/macos/pkg.mjs`, `packaging/macos/uninstall.sh`, `packaging/windows/generate.mjs`
 - Modify: `packaging/macos/generate.mjs`, `packaging/macos/scripts/preinstall`, `packaging/macos/scripts/postinstall`, `packaging/desktop/locales/{en,ru}.json`, `package.json`
-- Delete: `packaging/windows/owlbot.iss`, `packaging/windows/build.mjs`, `packaging/windows/tray/`, `packaging/macos/build.mjs`, `packaging/macos/bin/`
+- Delete: `packaging/windows/piomio.iss`, `packaging/windows/build.mjs`, `packaging/windows/tray/`, `packaging/macos/build.mjs`, `packaging/macos/bin/`
 - Test: `packages/core/test/desktop-packaging.test.ts`, `packages/core/test/i18n.test.ts`
 
 **Interfaces:**
@@ -3000,7 +3000,7 @@ git commit -m "Desktop app: hub window with automatic sign-in, tray, first run, 
 
 In `packages/core/test/desktop-packaging.test.ts`:
 - replace the import of `packaging/macos/generate.mjs` with `import { distributionXml, installerPage } from "../../../packaging/macos/generate.mjs";` and add `// @ts-ignore` + `import { nsisHooks, nsisString } from "../../../packaging/windows/generate.mjs";`
-- delete the tests `"writes AppleScript strings in ASCII"`, `"Owlbot.app: ASCII source, and every message it shows is defined"` and `"Owlbot.app runs the scripts inside itself and asks to be moved out of the disk image"` (and any loop over AppleScript apps left from earlier work)
+- delete the tests `"writes AppleScript strings in ASCII"`, `"Piomio.app: ASCII source, and every message it shows is defined"` and `"Piomio.app runs the scripts inside itself and asks to be moved out of the disk image"` (and any loop over AppleScript apps left from earlier work)
 - rename `describe("macOS installer text")` to `describe("installer text")` and add:
 
 ```ts
@@ -3012,9 +3012,9 @@ In `packages/core/test/desktop-packaging.test.ts`:
     const hooks: string = nsisHooks(catalogs);
     expect(hooks).toContain("!macro NSIS_HOOK_POSTUNINSTALL");
     expect(hooks).toContain("${If} $LANGUAGE == 1049");
-    expect(hooks).toContain("$LOCALAPPDATA\\Owlbot");
-    expect(hooks).toContain("Удалить и ваши данные Owlbot");
-    expect(hooks).toContain('Exec \'"$INSTDIR\\Owlbot.exe" --background\'');
+    expect(hooks).toContain("$LOCALAPPDATA\\Piomio");
+    expect(hooks).toContain("Удалить и ваши данные Piomio");
+    expect(hooks).toContain('Exec \'"$INSTDIR\\Piomio.exe" --background\'');
     expect(hooks).not.toContain("{dir}");
   });
 ```
@@ -3038,11 +3038,11 @@ export function nsisString(s) {
 }
 
 /**
- * The installer goes per user into $LOCALAPPDATA\Owlbot (the template's default), where the hub keeps its data too.
+ * The installer goes per user into $LOCALAPPDATA\Piomio (the template's default), where the hub keeps its data too.
  * The uninstaller removes only the files it installed, so the data stays unless the user deletes it here.
  */
 export function nsisHooks(catalogs) {
-  const ask = (locale) => nsisString(text(catalogs, locale, "setup.deleteData")).replace("{dir}", "$LOCALAPPDATA\\Owlbot");
+  const ask = (locale) => nsisString(text(catalogs, locale, "setup.deleteData")).replace("{dir}", "$LOCALAPPDATA\\Piomio");
   return `; Generated by packaging/desktop/build.mjs from packaging/desktop/locales/*.json. Do not edit.
 
 !macro NSIS_HOOK_POSTINSTALL
@@ -3051,7 +3051,7 @@ export function nsisHooks(catalogs) {
     ClearErrors
     \${GetOptions} $CMDLINE "/NOSTART" $R0
     \${If} \${Errors}
-      Exec '"$INSTDIR\\Owlbot.exe" --background'
+      Exec '"$INSTDIR\\Piomio.exe" --background'
     \${EndIf}
   \${EndIf}
 !macroend
@@ -3065,7 +3065,7 @@ export function nsisHooks(catalogs) {
     \${Else}
       MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 ${ask("en")} IDNO owl_keep_data
     \${EndIf}
-    RMDir /r "$LOCALAPPDATA\\Owlbot"
+    RMDir /r "$LOCALAPPDATA\\Piomio"
     owl_keep_data:
   \${EndIf}
 !macroend
@@ -3084,13 +3084,13 @@ export function nsisHooks(catalogs) {
 import { text } from "../desktop/locales.mjs";
 ```
 
-and delete `appleScriptText`, `handlerName`, `appleScriptMessages`, `PRELUDE`, `call`, `launcherScript` and `uninstallerScript` (and `SUPPORT_DIR` if still present). Keep `export const PKG_ID = "ai.owlbot.pkg";` and `export const MIN_MACOS = "13.5";`.
+and delete `appleScriptText`, `handlerName`, `appleScriptMessages`, `PRELUDE`, `call`, `launcherScript` and `uninstallerScript` (and `SUPPORT_DIR` if still present). Keep `export const PKG_ID = "ai.piomio.pkg";` and `export const MIN_MACOS = "13.5";`.
 
 `packaging/macos/pkg.mjs`:
 
 ```js
-// The silent macOS package around the desktop app: the same Owlbot.app into /Applications, for installs over SSH
-// or MDM (`sudo installer -pkg owlbot-<version>.pkg -target /`). pkgbuild and productbuild ship with macOS.
+// The silent macOS package around the desktop app: the same Piomio.app into /Applications, for installs over SSH
+// or MDM (`sudo installer -pkg piomio-<version>.pkg -target /`). pkgbuild and productbuild ship with macOS.
 
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
@@ -3122,7 +3122,7 @@ export function buildPkg({ appBundle, build, out }) {
     copyFileSync(join(HERE, "scripts", f), join(scripts, f));
     chmodSync(join(scripts, f), 0o755);
   }
-  const componentPkg = "owlbot-app.pkg";
+  const componentPkg = "piomio-app.pkg";
   run("pkgbuild", ["--root", root, "--install-location", "/", "--identifier", PKG_ID, "--version", VERSION, "--scripts", scripts, "--component-plist", comp, join(build, componentPkg)]);
 
   // Product archive with the English and Russian Installer pages.
@@ -3147,14 +3147,14 @@ export function buildPkg({ appBundle, build, out }) {
 # Runs as root before the files are copied: quits the app of the user at the console (it stops its hub) and removes
 # the previous copy, so an upgrade never mixes old and new files. The AppleScript build's LaunchAgent (ai.owlbot.hub)
 # goes too. The data in the user's home stays.
-APP=/Applications/Owlbot.app
+APP=/Applications/Piomio.app
 USER_NAME="$(stat -f %Su /dev/console)"
 if [ -n "$USER_NAME" ] && [ "$USER_NAME" != root ] && [ "$USER_NAME" != loginwindow ]; then
   USER_ID="$(id -u "$USER_NAME")"
-  if [ -x "$APP/Contents/MacOS/Owlbot" ]; then
-    launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H "$APP/Contents/MacOS/Owlbot" --quit 2>/dev/null
+  if [ -x "$APP/Contents/MacOS/Piomio" ]; then
+    launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H "$APP/Contents/MacOS/Piomio" --quit 2>/dev/null
     i=0
-    while pgrep -f "$APP/Contents/MacOS/Owlbot" >/dev/null && [ "$i" -lt 40 ]; do sleep 0.5; i=$((i + 1)); done
+    while pgrep -f "$APP/Contents/MacOS/Piomio" >/dev/null && [ "$i" -lt 40 ]; do sleep 0.5; i=$((i + 1)); done
   fi
   launchctl bootout "gui/$USER_ID/ai.owlbot.hub" 2>/dev/null
   rm -f "$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory | awk '{ print $2 }')/Library/LaunchAgents/ai.owlbot.hub.plist"
@@ -3167,9 +3167,9 @@ exit 0
 
 ```sh
 #!/bin/sh
-# Runs as root once the files are in place: opens Owlbot for the user at the console; its first run asks what this
+# Runs as root once the files are in place: opens Piomio for the user at the console; its first run asks what this
 # computer is. With nobody at the console (SSH, MDM) it starts when the user opens it.
-APP=/Applications/Owlbot.app
+APP=/Applications/Piomio.app
 USER_NAME="$(stat -f %Su /dev/console)"
 if [ -z "$USER_NAME" ] || [ "$USER_NAME" = root ] || [ "$USER_NAME" = loginwindow ]; then exit 0; fi
 launchctl asuser "$(id -u "$USER_NAME")" sudo -u "$USER_NAME" -H open "$APP"
@@ -3180,28 +3180,28 @@ exit 0
 
 ```sh
 #!/bin/sh
-# Removes Owlbot without the Finder (a package install over SSH or MDM); run as root:
-#   sudo /Applications/Owlbot.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]
-# Moving Owlbot.app to the Trash does the same for its user (its start-at-login agent then removes itself). The data
-# (~/Library/Application Support/Owlbot) stays unless --delete-data is given.
+# Removes Piomio without the Finder (a package install over SSH or MDM); run as root:
+#   sudo /Applications/Piomio.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]
+# Moving Piomio.app to the Trash does the same for its user (its start-at-login agent then removes itself). The data
+# (~/Library/Application Support/Piomio) stays unless --delete-data is given.
 set -u
 USER_ID="$1"
 USER_HOME="$2"
 BUNDLE="$(cd "$(dirname "$0")/../.." && pwd)"
 case "$BUNDLE" in
   *.app) [ -f "$BUNDLE/Contents/Resources/uninstall.sh" ] || exit 1 ;;
-  *) echo "uninstall.sh runs from inside Owlbot.app, not from $BUNDLE" >&2; exit 1 ;;
+  *) echo "uninstall.sh runs from inside Piomio.app, not from $BUNDLE" >&2; exit 1 ;;
 esac
 # The app stops its hub when it quits.
-launchctl asuser "$USER_ID" sudo -u "#$USER_ID" "$BUNDLE/Contents/MacOS/Owlbot" --quit 2>/dev/null
+launchctl asuser "$USER_ID" sudo -u "#$USER_ID" "$BUNDLE/Contents/MacOS/Piomio" --quit 2>/dev/null
 i=0
-while pgrep -f "$BUNDLE/Contents/MacOS/Owlbot" >/dev/null && [ "$i" -lt 40 ]; do sleep 0.5; i=$((i + 1)); done
-rm -f "$USER_HOME/Library/LaunchAgents/ai.owlbot.app.plist"
+while pgrep -f "$BUNDLE/Contents/MacOS/Piomio" >/dev/null && [ "$i" -lt 40 ]; do sleep 0.5; i=$((i + 1)); done
+rm -f "$USER_HOME/Library/LaunchAgents/ai.piomio.app.plist"
 if [ "${3:-}" = --delete-data ]; then
-  rm -rf "$USER_HOME/Library/Application Support/Owlbot" "$USER_HOME/Library/Application Support/ai.owlbot.app"
+  rm -rf "$USER_HOME/Library/Application Support/Piomio" "$USER_HOME/Library/Application Support/ai.piomio.app"
 fi
 rm -rf "$BUNDLE"
-pkgutil --forget ai.owlbot.pkg >/dev/null 2>&1
+pkgutil --forget ai.piomio.pkg >/dev/null 2>&1
 exit 0
 ```
 
@@ -3212,11 +3212,11 @@ Run: `chmod 755 packaging/macos/scripts/preinstall packaging/macos/scripts/posti
 `packaging/desktop/build.mjs`:
 
 ```js
-// Builds the Owlbot desktop app (packages/desktop, Tauri) and its installers on this OS:
+// Builds the Piomio desktop app (packages/desktop, Tauri) and its installers on this OS:
 //   npm run package:desktop [-- --skip-build] [-- --skip-stage]
-// macOS:   dist/desktop/owlbot-<version>.dmg (drag to Applications) and owlbot-<version>.pkg (silent installs).
+// macOS:   dist/desktop/piomio-<version>.dmg (drag to Applications) and piomio-<version>.pkg (silent installs).
 //          Universal: needs the aarch64-apple-darwin and x86_64-apple-darwin Rust targets.
-// Windows: dist/desktop/owlbot-setup-<version>-x64.exe (NSIS, per user; /S silent, /NOSTART).
+// Windows: dist/desktop/piomio-setup-<version>-x64.exe (NSIS, per user; /S silent, /NOSTART).
 // The staged hub (stage.mjs) is the app's resource "app".
 
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -3236,7 +3236,7 @@ const target = mac ? "darwin" : "win-x64";
 const { values } = parseArgs({ options: { "skip-build": { type: "boolean" }, "skip-stage": { type: "boolean" } } });
 const app = values["skip-stage"] ? join(OUT, `stage-${target}`, "app") : await stage({ target, skipBuild: !!values["skip-build"] });
 if (!existsSync(join(app, "packaging", "desktop", "launch.mjs"))) throw new Error(`no staged app in ${app}`);
-npm(["run", "build:ui", "-w", "@owlbot/desktop"], { cwd: ROOT });
+npm(["run", "build:ui", "-w", "@piomio/desktop"], { cwd: ROOT });
 
 const build = join(OUT, mac ? "build-mac" : "build-win");
 rmSync(build, { recursive: true, force: true });
@@ -3255,17 +3255,17 @@ const configFile = join(build, "tauri.build.json");
 writeFileSync(configFile, JSON.stringify(config, null, 2));
 
 const triple = mac ? "universal-apple-darwin" : undefined;
-npm(["run", "tauri", "-w", "@owlbot/desktop", "--", "build", "--config", configFile, "--bundles", mac ? "app,dmg" : "nsis", ...(triple ? ["--target", triple] : [])], { cwd: ROOT });
+npm(["run", "tauri", "-w", "@piomio/desktop", "--", "build", "--config", configFile, "--bundles", mac ? "app,dmg" : "nsis", ...(triple ? ["--target", triple] : [])], { cwd: ROOT });
 
 const bundle = join(TAURI, "target", ...(triple ? [triple] : []), "release", "bundle");
 if (mac) {
-  const dmg = join(OUT, `owlbot-${VERSION}.dmg`);
-  copyFileSync(join(bundle, "dmg", `Owlbot_${VERSION}_universal.dmg`), dmg);
-  const pkg = buildPkg({ appBundle: join(bundle, "macos", "Owlbot.app"), build, out: join(OUT, `owlbot-${VERSION}.pkg`) });
+  const dmg = join(OUT, `piomio-${VERSION}.dmg`);
+  copyFileSync(join(bundle, "dmg", `Piomio_${VERSION}_universal.dmg`), dmg);
+  const pkg = buildPkg({ appBundle: join(bundle, "macos", "Piomio.app"), build, out: join(OUT, `piomio-${VERSION}.pkg`) });
   console.log(`disk image: ${dmg}\npackage:    ${pkg}`);
 } else {
-  const setup = join(OUT, `owlbot-setup-${VERSION}-x64.exe`);
-  copyFileSync(join(bundle, "nsis", `Owlbot_${VERSION}_x64-setup.exe`), setup);
+  const setup = join(OUT, `piomio-setup-${VERSION}-x64.exe`);
+  copyFileSync(join(bundle, "nsis", `Piomio_${VERSION}_x64-setup.exe`), setup);
   console.log(`installer: ${setup}`);
 }
 ```
@@ -3279,17 +3279,17 @@ Root `package.json` scripts: delete `"package:win"` and `"package:mac"`, add:
 - [ ] **Step 5: Remove the old installers and their texts**
 
 ```bash
-git rm -r packaging/windows/owlbot.iss packaging/windows/build.mjs packaging/windows/tray packaging/macos/build.mjs packaging/macos/bin
+git rm -r packaging/windows/piomio.iss packaging/windows/build.mjs packaging/windows/tray packaging/macos/build.mjs packaging/macos/bin
 ```
 
 `packaging/desktop/locales/en.json` and `ru.json`: delete the keys no code uses any more: `tray.tooltip`, `tray.running`, `tray.restarting`, `tray.failed`, `tray.portBusy`, `tray.noRuntime`, `setup.autostart`, `setup.open`, `mac.notStarted`, `mac.ok`, `mac.moveFirst`, and any `mac.uninstall.*`. Keep `tray.open`, `tray.autostart`, `tray.logs`, `tray.restart`, `tray.quit`, `tray.starting`, `setup.deleteData`, `mac.welcome.*`, `mac.conclusion.*` and the Task 5 keys. Set the package's final page to:
 
 ```json
-  "mac.conclusion.body": "Owlbot is opening now: choose how this computer is used. Later, open it from Applications or the menu bar.\n\nTo remove it, move Owlbot from Applications to the Trash. Your data stays in ~/Library/Application Support/Owlbot.",
+  "mac.conclusion.body": "Piomio is opening now: choose how this computer is used. Later, open it from Applications or the menu bar.\n\nTo remove it, move Piomio from Applications to the Trash. Your data stays in ~/Library/Application Support/Piomio.",
 ```
 
 ```json
-  "mac.conclusion.body": "Owlbot сейчас откроется: выберите, как будет работать этот компьютер. Потом открывайте его из «Программ» или из строки меню.\n\nЧтобы удалить его, перетащите Owlbot из «Программ» в Корзину. Ваши данные останутся в ~/Library/Application Support/Owlbot.",
+  "mac.conclusion.body": "Piomio сейчас откроется: выберите, как будет работать этот компьютер. Потом открывайте его из «Программ» или из строки меню.\n\nЧтобы удалить его, перетащите Piomio из «Программ» в Корзину. Ваши данные останутся в ~/Library/Application Support/Piomio.",
 ```
 
 Run: `grep -rn "tray.tooltip\|tray.noRuntime\|setup.autostart\|mac.notStarted\|mac.moveFirst\|mac.uninstall" packaging packages --include=*.mjs --include=*.ts --include=*.rs`
@@ -3309,21 +3309,21 @@ npm run package:desktop
 
 The disk image step arranges its Finder window through AppleScript: macOS asks once whether the terminal may control Finder. Allow it, or build with `CI=true npm run package:desktop` (the bundler then skips the styling, as on the CI runners).
 
-Expected (several minutes): `disk image: …/dist/desktop/owlbot-0.1.0.dmg` and `package: …/dist/desktop/owlbot-0.1.0.pkg`. Check without installing anything over the user's own install:
+Expected (several minutes): `disk image: …/dist/desktop/piomio-0.1.0.dmg` and `package: …/dist/desktop/piomio-0.1.0.pkg`. Check without installing anything over the user's own install:
 
 ```bash
-hdiutil attach -nobrowse -readonly -mountpoint /tmp/owl-image dist/desktop/owlbot-0.1.0.dmg
+hdiutil attach -nobrowse -readonly -mountpoint /tmp/owl-image dist/desktop/piomio-0.1.0.dmg
 ls /tmp/owl-image
-codesign --verify --strict /tmp/owl-image/Owlbot.app && echo signed
-codesign -dv /tmp/owl-image/Owlbot.app/Contents/Resources/app/runtime/arm64/bin/node 2>&1 | grep TeamIdentifier
-lipo -archs /tmp/owl-image/Owlbot.app/Contents/MacOS/Owlbot
+codesign --verify --strict /tmp/owl-image/Piomio.app && echo signed
+codesign -dv /tmp/owl-image/Piomio.app/Contents/Resources/app/runtime/arm64/bin/node 2>&1 | grep TeamIdentifier
+lipo -archs /tmp/owl-image/Piomio.app/Contents/MacOS/Piomio
 hdiutil detach /tmp/owl-image
-pkgutil --payload-files dist/desktop/owlbot-0.1.0.pkg | grep -c "Owlbot.app/Contents/Resources/app/"
+pkgutil --payload-files dist/desktop/piomio-0.1.0.pkg | grep -c "Piomio.app/Contents/Resources/app/"
 ```
 
-Expected: `Applications Owlbot.app`; `signed`; `TeamIdentifier=HX7739G8FX`; `x86_64 arm64`; a count in the thousands.
+Expected: `Applications Piomio.app`; `signed`; `TeamIdentifier=HX7739G8FX`; `x86_64 arm64`; a count in the thousands.
 
-Then run the built app once in isolation (as in Task 10 Step 6, without `OWLBOT_APP_ROOT`): copy it to a scratch folder and start `<scratch>/Owlbot.app/Contents/MacOS/Owlbot` with `OWLBOT_DATA_DIR`/`OWLBOT_NODE_HOME` set; choose the hub; check `curl -s http://127.0.0.1:18080/api/auth/state`; quit from the menu.
+Then run the built app once in isolation (as in Task 10 Step 6, without `PIOMIO_APP_ROOT`): copy it to a scratch folder and start `<scratch>/Piomio.app/Contents/MacOS/Piomio` with `PIOMIO_DATA_DIR`/`PIOMIO_NODE_HOME` set; choose the hub; check `curl -s http://127.0.0.1:18080/api/auth/state`; quit from the menu.
 
 - [ ] **Step 7: Commit**
 
@@ -3374,32 +3374,32 @@ jobs:
         with:
           workspaces: packages/desktop/src-tauri
       - run: npm ci
-      - run: npm run build:ui -w @owlbot/desktop
+      - run: npm run build:ui -w @piomio/desktop
       - run: cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml
       - run: npm run package:desktop
       - name: Install, start, check, quit, uninstall
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $setup = (Get-ChildItem dist/desktop/owlbot-setup-*-x64.exe | Select-Object -First 1).FullName
+          $setup = (Get-ChildItem dist/desktop/piomio-setup-*-x64.exe | Select-Object -First 1).FullName
           $p = Start-Process $setup -ArgumentList "/S", "/NOSTART" -PassThru
           $p.WaitForExit(600000) | Out-Null
           if ($p.ExitCode -ne 0) { throw "setup exited with $($p.ExitCode)" }
-          $app = "$env:LOCALAPPDATA\Owlbot"
-          if (-not (Test-Path "$app\Owlbot.exe")) { throw "Owlbot.exe is missing" }
+          $app = "$env:LOCALAPPDATA\Piomio"
+          if (-not (Test-Path "$app\Piomio.exe")) { throw "Piomio.exe is missing" }
           if (-not (Test-Path "$app\app\packaging\desktop\launch.mjs")) { throw "the hub is missing" }
 
-          Start-Process "$app\Owlbot.exe" -ArgumentList "--mode", "hub", "--background"
+          Start-Process "$app\Piomio.exe" -ArgumentList "--mode", "hub", "--background"
           $state = $null
           for ($i = 0; $i -lt 120 -and -not $state; $i++) {
             try { $state = Invoke-RestMethod http://127.0.0.1:8080/api/auth/state } catch { Start-Sleep 1 }
           }
           if (-not $state) { Get-Content "$app\logs\*.log" -ErrorAction SilentlyContinue; throw "the hub did not answer" }
           if ($state.hasPassword) { throw "a fresh hub has a password" }
-          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."Owlbot"
-          if ($run -ne "`"$app\Owlbot.exe`" --background") { throw "Run value: $run" }
+          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."Piomio"
+          if ($run -ne "`"$app\Piomio.exe`" --background") { throw "Run value: $run" }
 
-          Start-Process "$app\Owlbot.exe" -ArgumentList "--quit" -Wait
+          Start-Process "$app\Piomio.exe" -ArgumentList "--quit" -Wait
           $down = $false
           for ($i = 0; $i -lt 30 -and -not $down; $i++) {
             try { Invoke-RestMethod http://127.0.0.1:8080/api/auth/state | Out-Null; Start-Sleep 1 } catch { $down = $true }
@@ -3407,17 +3407,17 @@ jobs:
           if (-not $down) { throw "the hub still answers after --quit" }
 
           Start-Process "$app\uninstall.exe" -ArgumentList "/S" -Wait
-          for ($i = 0; $i -lt 60 -and (Test-Path "$app\Owlbot.exe"); $i++) { Start-Sleep 1 }
-          if (Test-Path "$app\Owlbot.exe") { throw "not uninstalled" }
-          if (-not (Test-Path "$app\owlbot.db")) { throw "the data is gone" }
-          $left = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue)."Owlbot"
+          for ($i = 0; $i -lt 60 -and (Test-Path "$app\Piomio.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$app\Piomio.exe") { throw "not uninstalled" }
+          if (-not (Test-Path "$app\piomio.db")) { throw "the data is gone" }
+          $left = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue)."Piomio"
           if ($left) { throw "the Run value is still there" }
           "ok"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-installer
-          path: dist/desktop/owlbot-setup-*.exe
+          path: dist/desktop/piomio-setup-*.exe
           if-no-files-found: ignore
 
   macos:
@@ -3436,68 +3436,68 @@ jobs:
         with:
           workspaces: packages/desktop/src-tauri
       - run: npm ci
-      - run: npm run build:ui -w @owlbot/desktop
+      - run: npm run build:ui -w @piomio/desktop
       - run: cargo test --manifest-path packages/desktop/src-tauri/Cargo.toml
       - run: npm run package:desktop
       - name: "Disk image: drag to Applications, run, quit"
         run: |
           set -eu
-          data="$HOME/Library/Application Support/Owlbot"
+          data="$HOME/Library/Application Support/Piomio"
           up() { curl -fsS http://127.0.0.1:8080/api/auth/state >state.json 2>/dev/null; }
           down() { ! up; }
           wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 120 ]; then echo "timed out: $*"; cat "$data/logs/"*.log || true; exit 1; fi; sleep 1; done; }
 
-          dmg=$(ls dist/desktop/owlbot-*.dmg | head -n 1)
+          dmg=$(ls dist/desktop/piomio-*.dmg | head -n 1)
           hdiutil attach -nobrowse -readonly -mountpoint /tmp/owl-image "$dmg"
           test "$(readlink /tmp/owl-image/Applications)" = /Applications
-          codesign --verify --strict /tmp/owl-image/Owlbot.app
-          codesign -dv /tmp/owl-image/Owlbot.app/Contents/Resources/app/runtime/arm64/bin/node 2>&1 | grep -q "TeamIdentifier=HX7739G8FX"
-          lipo -archs /tmp/owl-image/Owlbot.app/Contents/MacOS/Owlbot | grep -q x86_64
-          ditto /tmp/owl-image/Owlbot.app /Applications/Owlbot.app
+          codesign --verify --strict /tmp/owl-image/Piomio.app
+          codesign -dv /tmp/owl-image/Piomio.app/Contents/Resources/app/runtime/arm64/bin/node 2>&1 | grep -q "TeamIdentifier=HX7739G8FX"
+          lipo -archs /tmp/owl-image/Piomio.app/Contents/MacOS/Piomio | grep -q x86_64
+          ditto /tmp/owl-image/Piomio.app /Applications/Piomio.app
           hdiutil detach /tmp/owl-image
 
-          /Applications/Owlbot.app/Contents/MacOS/Owlbot --mode hub --background &
+          /Applications/Piomio.app/Contents/MacOS/Piomio --mode hub --background &
           wait_for up
           grep -q '"hasPassword":false' state.json
-          node /Applications/Owlbot.app/Contents/Resources/app/packaging/desktop/launch.mjs url | grep -Eq '^http://localhost:8080/#setup=[A-Za-z0-9_-]+$'
-          grep -q "/Applications/Owlbot.app/Contents/MacOS/Owlbot" "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
+          node /Applications/Piomio.app/Contents/Resources/app/packaging/desktop/launch.mjs url | grep -Eq '^http://localhost:8080/#setup=[A-Za-z0-9_-]+$'
+          grep -q "/Applications/Piomio.app/Contents/MacOS/Piomio" "$HOME/Library/LaunchAgents/ai.piomio.app.plist"
 
-          /Applications/Owlbot.app/Contents/MacOS/Owlbot --quit
+          /Applications/Piomio.app/Contents/MacOS/Piomio --quit
           wait_for down
-          test -f "$data/owlbot.db"
+          test -f "$data/piomio.db"
           # The package check starts from a first run again (the data stays).
-          rm -rf /Applications/Owlbot.app "$HOME/Library/Application Support/ai.owlbot.app" "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
+          rm -rf /Applications/Piomio.app "$HOME/Library/Application Support/ai.piomio.app" "$HOME/Library/LaunchAgents/ai.piomio.app.plist"
           echo ok
       - name: "Package: silent install, run, uninstall"
         run: |
           set -eu
-          data="$HOME/Library/Application Support/Owlbot"
+          data="$HOME/Library/Application Support/Piomio"
           up() { curl -fsS http://127.0.0.1:8080/api/auth/state >state.json 2>/dev/null; }
           down() { ! up; }
           wait_for() { i=0; until "$@"; do i=$((i + 1)); if [ "$i" -ge 120 ]; then echo "timed out: $*"; cat "$data/logs/"*.log || true; exit 1; fi; sleep 1; done; }
 
-          pkg=$(ls dist/desktop/owlbot-*.pkg | head -n 1)
-          pkgutil --payload-files "$pkg" | grep -q "Applications/Owlbot.app/Contents/Resources/uninstall.sh"
+          pkg=$(ls dist/desktop/piomio-*.pkg | head -n 1)
+          pkgutil --payload-files "$pkg" | grep -q "Applications/Piomio.app/Contents/Resources/uninstall.sh"
           sudo installer -pkg "$pkg" -target /
-          test -x /Applications/Owlbot.app/Contents/MacOS/Owlbot
+          test -x /Applications/Piomio.app/Contents/MacOS/Piomio
           # The postinstall opened the app at its first run; this makes the choice through it (or starts it).
-          /Applications/Owlbot.app/Contents/MacOS/Owlbot --mode hub --background &
+          /Applications/Piomio.app/Contents/MacOS/Piomio --mode hub --background &
           wait_for up
 
-          sudo /bin/sh /Applications/Owlbot.app/Contents/Resources/uninstall.sh "$(id -u)" "$HOME"
+          sudo /bin/sh /Applications/Piomio.app/Contents/Resources/uninstall.sh "$(id -u)" "$HOME"
           wait_for down
-          test ! -e /Applications/Owlbot.app
-          test ! -e "$HOME/Library/LaunchAgents/ai.owlbot.app.plist"
-          if pkgutil --pkg-info ai.owlbot.pkg >/dev/null 2>&1; then echo "the package receipt is still there"; exit 1; fi
-          test -f "$data/owlbot.db"
+          test ! -e /Applications/Piomio.app
+          test ! -e "$HOME/Library/LaunchAgents/ai.piomio.app.plist"
+          if pkgutil --pkg-info ai.piomio.pkg >/dev/null 2>&1; then echo "the package receipt is still there"; exit 1; fi
+          test -f "$data/piomio.db"
           echo ok
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: macos-installers
           path: |
-            dist/desktop/owlbot-*.dmg
-            dist/desktop/owlbot-*.pkg
+            dist/desktop/piomio-*.dmg
+            dist/desktop/piomio-*.pkg
           if-no-files-found: ignore
 ```
 
@@ -3508,19 +3508,19 @@ Replace the section `### On your computer (Windows, macOS)` up to (not including
 ```markdown
 ### On your computer (Windows, macOS)
 
-Get the app: `owlbot-setup-<version>-x64.exe` for Windows 10 and 11, `owlbot-<version>.dmg` for macOS 13.5 or later (Apple silicon and Intel). It brings everything it needs: no Node.js, Docker or WSL. To build it yourself, see [Desktop app](#desktop-app).
+Get the app: `piomio-setup-<version>-x64.exe` for Windows 10 and 11, `piomio-<version>.dmg` for macOS 13.5 or later (Apple silicon and Intel). It brings everything it needs: no Node.js, Docker or WSL. To build it yourself, see [Desktop app](#desktop-app).
 
-1. On Windows, run the installer: it installs for your user only and needs no administrator rights. On macOS, open the disk image, drag Owlbot to Applications and open it from there.
+1. On Windows, run the installer: it installs for your user only and needs no administrator rights. On macOS, open the disk image, drag Piomio to Applications and open it from there.
 2. The app asks how you will use this computer:
-   - **A new Owlbot on this computer**: the hub starts here and opens in the app's window. Choose a password and you are in (no setup code to copy). From then on the app signs its window in by itself.
-   - **Connect to my Owlbot**: your hub runs elsewhere and this computer becomes one of its machines. Paste the hub's address and the code from its **Machines** page, or click **Connect with the app** there. The window then shows that hub.
-3. Closing the window keeps Owlbot running in the background (Telegram, tasks, reminders); its icon in the menu bar or tray has Open, Start at login, Show log, Restart, Set up again… and Quit. It starts by itself when you sign in to your computer.
+   - **A new Piomio on this computer**: the hub starts here and opens in the app's window. Choose a password and you are in (no setup code to copy). From then on the app signs its window in by itself.
+   - **Connect to my Piomio**: your hub runs elsewhere and this computer becomes one of its machines. Paste the hub's address and the code from its **Machines** page, or click **Connect with the app** there. The window then shows that hub.
+3. Closing the window keeps Piomio running in the background (Telegram, tasks, reminders); its icon in the menu bar or tray has Open, Start at login, Show log, Restart, Set up again… and Quit. It starts by itself when you sign in to your computer.
 
-Claude Code and Codex: if one is already installed on the computer, Owlbot uses it. If not, pressing **Sign in** on its card installs it for Owlbot (a one-time download of a few hundred MB), then the sign-in starts.
+Claude Code and Codex: if one is already installed on the computer, Piomio uses it. If not, pressing **Sign in** on its card installs it for Piomio (a one-time download of a few hundred MB), then the sign-in starts.
 
-Your data stays in `%LOCALAPPDATA%\Owlbot` (Windows) or `~/Library/Application Support/Owlbot` (macOS); upgrading keeps it. To upgrade on macOS, drag the new Owlbot to Applications and replace the old one. To uninstall, use **Settings → Apps** on Windows (it asks before deleting your data) or move Owlbot from Applications to the Trash on macOS (the data stays; delete `~/Library/Application Support/Owlbot` to remove it too). The hub is reachable from this computer only; for your phone, see [Remote access](#remote-access).
+Your data stays in `%LOCALAPPDATA%\Piomio` (Windows) or `~/Library/Application Support/Piomio` (macOS); upgrading keeps it. To upgrade on macOS, drag the new Piomio to Applications and replace the old one. To uninstall, use **Settings → Apps** on Windows (it asks before deleting your data) or move Piomio from Applications to the Trash on macOS (the data stays; delete `~/Library/Application Support/Piomio` to remove it too). The hub is reachable from this computer only; for your phone, see [Remote access](#remote-access).
 
-The desktop version runs the hub, plugins and CLI brains as your own user: the Docker image's separate Unix users and its kernel-level network block are not there. For the strongest isolation, run Owlbot in Docker.
+The desktop version runs the hub, plugins and CLI brains as your own user: the Docker image's separate Unix users and its kernel-level network block are not there. For the strongest isolation, run Piomio in Docker.
 
 The app is not signed yet. Windows SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**. If macOS refuses to open it, choose **Open Anyway** in **System Settings → Privacy & Security** (on macOS 13 and 14, Control-clicking the app and choosing **Open** works too).
 ```
@@ -3531,15 +3531,15 @@ Replace the section `### Desktop installers` up to (not including) `## License` 
 ### Desktop app
 
 ```bash
-npm run package:desktop   # on Windows: dist/desktop/owlbot-setup-<version>-x64.exe
-                          # on macOS:   dist/desktop/owlbot-<version>.dmg and .pkg
+npm run package:desktop   # on Windows: dist/desktop/piomio-setup-<version>-x64.exe
+                          # on macOS:   dist/desktop/piomio-<version>.dmg and .pkg
 ```
 
 The app lives in `packages/desktop` (Tauri 2: Rust in `src-tauri`, its setup screens in `ui`). The build compiles the UIs, stages the hub with its production `node_modules` and the official Node 24 build, checked against the release's SHA-256 (`packaging/desktop/stage.mjs`; `NODE_VERSION` picks another release), and bundles it into the app. It needs Rust from [rustup](https://rustup.rs); on macOS also the Intel target for the universal build (`rustup target add x86_64-apple-darwin`) and Xcode's command line tools. App and installer texts live in `packaging/desktop/locales/{en,ru}.json`.
 
-Silent installs: `owlbot-setup-<version>-x64.exe /S` (add `/NOSTART` to leave it stopped) on Windows; `sudo installer -pkg owlbot-<version>.pkg -target /` on macOS (over SSH or MDM), and `sudo /Applications/Owlbot.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]` removes it again. `Owlbot --mode hub --background` makes the first-run choice without a window, `Owlbot --quit` stops the running app. `.github/workflows/desktop.yml` builds both on clean runners and checks that they install, start the hub, quit and uninstall.
+Silent installs: `piomio-setup-<version>-x64.exe /S` (add `/NOSTART` to leave it stopped) on Windows; `sudo installer -pkg piomio-<version>.pkg -target /` on macOS (over SSH or MDM), and `sudo /Applications/Piomio.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]` removes it again. `Piomio --mode hub --background` makes the first-run choice without a window, `Piomio --quit` stops the running app. `.github/workflows/desktop.yml` builds both on clean runners and checks that they install, start the hub, quit and uninstall.
 
-To run the app from source without touching an installed Owlbot: stage once (`node packaging/desktop/stage.mjs --skip-build`), then `OWLBOT_APP_ROOT=$PWD/dist/desktop/stage-darwin/app OWLBOT_DATA_DIR=/tmp/owl-data npm run tauri -w @owlbot/desktop -- dev` with `{"port":18080}` in `/tmp/owl-data/desktop.json`. With `OWLBOT_DATA_DIR` set the app writes no start-at-login entries.
+To run the app from source without touching an installed Piomio: stage once (`node packaging/desktop/stage.mjs --skip-build`), then `PIOMIO_APP_ROOT=$PWD/dist/desktop/stage-darwin/app PIOMIO_DATA_DIR=/tmp/owl-data npm run tauri -w @piomio/desktop -- dev` with `{"port":18080}` in `/tmp/owl-data/desktop.json`. With `PIOMIO_DATA_DIR` set the app writes no start-at-login entries.
 ```
 
 In the anchor link of the first section (`[Desktop app](#desktop-app)`) the target is this new heading.
@@ -3551,19 +3551,19 @@ Replace `### На вашем компьютере (Windows, macOS)` up to `### �
 ```markdown
 ### На вашем компьютере (Windows, macOS)
 
-Возьмите приложение: `owlbot-setup-<version>-x64.exe` для Windows 10 и 11, `owlbot-<version>.dmg` для macOS 13.5 и новее (Apple silicon и Intel). В нём есть всё нужное: Node.js, Docker и WSL не понадобятся. Как собрать его самому, описано в разделе [Приложение для компьютера](#приложение-для-компьютера).
+Возьмите приложение: `piomio-setup-<version>-x64.exe` для Windows 10 и 11, `piomio-<version>.dmg` для macOS 13.5 и новее (Apple silicon и Intel). В нём есть всё нужное: Node.js, Docker и WSL не понадобятся. Как собрать его самому, описано в разделе [Приложение для компьютера](#приложение-для-компьютера).
 
-1. В Windows запустите установщик: он ставит Owlbot только для вашего пользователя и не просит прав администратора. В macOS откройте образ диска, перетащите Owlbot в «Программы» и откройте его оттуда.
+1. В Windows запустите установщик: он ставит Piomio только для вашего пользователя и не просит прав администратора. В macOS откройте образ диска, перетащите Piomio в «Программы» и откройте его оттуда.
 2. Приложение спросит, как вы будете пользоваться этим компьютером:
-   - **Новый Owlbot на этом компьютере**: хаб запустится здесь и откроется в окне приложения. Придумайте пароль, и всё готово (код установки копировать не нужно). Дальше приложение входит в своё окно само.
-   - **Подключить к моему Owlbot**: ваш хаб работает в другом месте, а этот компьютер станет одной из его машин. Вставьте адрес хаба и код со страницы **Машины** или нажмите там **Подключить через приложение**. Окно покажет тот хаб.
-3. Если закрыть окно, Owlbot продолжит работать в фоне (Telegram, задачи, напоминания); у его значка в строке меню или трее есть пункты «Открыть», «Запускать при входе в систему», «Показать журнал», «Перезапустить», «Настроить заново…» и «Выйти». При входе в систему он запускается сам.
+   - **Новый Piomio на этом компьютере**: хаб запустится здесь и откроется в окне приложения. Придумайте пароль, и всё готово (код установки копировать не нужно). Дальше приложение входит в своё окно само.
+   - **Подключить к моему Piomio**: ваш хаб работает в другом месте, а этот компьютер станет одной из его машин. Вставьте адрес хаба и код со страницы **Машины** или нажмите там **Подключить через приложение**. Окно покажет тот хаб.
+3. Если закрыть окно, Piomio продолжит работать в фоне (Telegram, задачи, напоминания); у его значка в строке меню или трее есть пункты «Открыть», «Запускать при входе в систему», «Показать журнал», «Перезапустить», «Настроить заново…» и «Выйти». При входе в систему он запускается сам.
 
-Claude Code и Codex: если один из них уже установлен на компьютере, Owlbot возьмёт его. Если нет, кнопка **Войти** на его карточке установит его для Owlbot (разовая загрузка на несколько сотен МБ), а потом начнётся вход.
+Claude Code и Codex: если один из них уже установлен на компьютере, Piomio возьмёт его. Если нет, кнопка **Войти** на его карточке установит его для Piomio (разовая загрузка на несколько сотен МБ), а потом начнётся вход.
 
-Данные лежат в `%LOCALAPPDATA%\Owlbot` (Windows) или `~/Library/Application Support/Owlbot` (macOS); обновление их сохраняет. Чтобы обновить Owlbot в macOS, перетащите новую версию в «Программы» и замените старую. Удалить Owlbot можно в **Параметры → Приложения** в Windows (он спросит, удалять ли ваши данные) или перетащив Owlbot из «Программ» в Корзину в macOS (данные останутся; чтобы удалить и их, удалите `~/Library/Application Support/Owlbot`). Хаб доступен только с этого компьютера; как открыть его с телефона, описано в разделе [Доступ извне](#доступ-извне).
+Данные лежат в `%LOCALAPPDATA%\Piomio` (Windows) или `~/Library/Application Support/Piomio` (macOS); обновление их сохраняет. Чтобы обновить Piomio в macOS, перетащите новую версию в «Программы» и замените старую. Удалить Piomio можно в **Параметры → Приложения** в Windows (он спросит, удалять ли ваши данные) или перетащив Piomio из «Программ» в Корзину в macOS (данные останутся; чтобы удалить и их, удалите `~/Library/Application Support/Piomio`). Хаб доступен только с этого компьютера; как открыть его с телефона, описано в разделе [Доступ извне](#доступ-извне).
 
-На компьютере хаб, плагины и CLI-мозги работают от вашего пользователя: отдельных Unix-пользователей и блокировки сети на уровне ядра, как в Docker-образе, здесь нет. Для самой строгой изоляции запускайте Owlbot в Docker.
+На компьютере хаб, плагины и CLI-мозги работают от вашего пользователя: отдельных Unix-пользователей и блокировки сети на уровне ядра, как в Docker-образе, здесь нет. Для самой строгой изоляции запускайте Piomio в Docker.
 
 Приложение пока не подписано. Windows SmartScreen может написать «Система Windows защитила ваш компьютер»: нажмите **Подробнее → Выполнить в любом случае**. Если macOS не открывает приложение, нажмите **Все равно открыть** в **Системные настройки → Конфиденциальность и безопасность** (в macOS 13 и 14 можно и щёлкнуть приложение с Control и выбрать **Открыть**).
 ```
@@ -3574,20 +3574,20 @@ Replace `### Установщики для компьютера` up to `## Ли�
 ### Приложение для компьютера
 
 ```bash
-npm run package:desktop   # в Windows: dist/desktop/owlbot-setup-<version>-x64.exe
-                          # в macOS:   dist/desktop/owlbot-<version>.dmg и .pkg
+npm run package:desktop   # в Windows: dist/desktop/piomio-setup-<version>-x64.exe
+                          # в macOS:   dist/desktop/piomio-<version>.dmg и .pkg
 ```
 
 Приложение лежит в `packages/desktop` (Tauri 2: Rust в `src-tauri`, его экраны настройки в `ui`). Сборка собирает интерфейсы, складывает хаб с production-зависимостями и официальной сборкой Node 24, сверенной с SHA-256 из релиза (`packaging/desktop/stage.mjs`; другой релиз задаёт `NODE_VERSION`), и упаковывает его в приложение. Нужен Rust из [rustup](https://rustup.rs); в macOS ещё цель Intel для универсальной сборки (`rustup target add x86_64-apple-darwin`) и инструменты командной строки Xcode. Тексты приложения и установщиков лежат в `packaging/desktop/locales/{en,ru}.json`.
 
-Тихая установка: `owlbot-setup-<version>-x64.exe /S` (с `/NOSTART` приложение не запустится) в Windows; `sudo installer -pkg owlbot-<version>.pkg -target /` в macOS (по SSH или через MDM), а `sudo /Applications/Owlbot.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]` удаляет его. `Owlbot --mode hub --background` делает выбор первого запуска без окна, `Owlbot --quit` останавливает работающее приложение. `.github/workflows/desktop.yml` собирает обе версии на чистых машинах и проверяет, что они ставятся, запускают хаб, выходят и удаляются.
+Тихая установка: `piomio-setup-<version>-x64.exe /S` (с `/NOSTART` приложение не запустится) в Windows; `sudo installer -pkg piomio-<version>.pkg -target /` в macOS (по SSH или через MDM), а `sudo /Applications/Piomio.app/Contents/Resources/uninstall.sh <uid> <home> [--delete-data]` удаляет его. `Piomio --mode hub --background` делает выбор первого запуска без окна, `Piomio --quit` останавливает работающее приложение. `.github/workflows/desktop.yml` собирает обе версии на чистых машинах и проверяет, что они ставятся, запускают хаб, выходят и удаляются.
 
-Чтобы запустить приложение из исходников, не трогая установленный Owlbot: один раз подготовьте сборку (`node packaging/desktop/stage.mjs --skip-build`), затем `OWLBOT_APP_ROOT=$PWD/dist/desktop/stage-darwin/app OWLBOT_DATA_DIR=/tmp/owl-data npm run tauri -w @owlbot/desktop -- dev`, а в `/tmp/owl-data/desktop.json` положите `{"port":18080}`. С заданным `OWLBOT_DATA_DIR` приложение не прописывает себя в автозапуск.
+Чтобы запустить приложение из исходников, не трогая установленный Piomio: один раз подготовьте сборку (`node packaging/desktop/stage.mjs --skip-build`), затем `PIOMIO_APP_ROOT=$PWD/dist/desktop/stage-darwin/app PIOMIO_DATA_DIR=/tmp/owl-data npm run tauri -w @piomio/desktop -- dev`, а в `/tmp/owl-data/desktop.json` положите `{"port":18080}`. С заданным `PIOMIO_DATA_DIR` приложение не прописывает себя в автозапуск.
 ```
 
 - [ ] **Step 4: Check the docs and the workflow**
 
-Run: `grep -n "package:win\|package:mac\|Uninstall Owlbot\|Inno Setup 6\|osacompile" README.md README.ru.md .github/workflows/desktop.yml`
+Run: `grep -n "package:win\|package:mac\|Uninstall Piomio\|Inno Setup 6\|osacompile" README.md README.ru.md .github/workflows/desktop.yml`
 Expected: no matches.
 
 Run: `ruby -ryaml -e 'YAML.load_file(".github/workflows/desktop.yml"); puts "ok"'`

@@ -1,7 +1,7 @@
 // Codex through `codex app-server` (JSON-RPC over stdio, one process per turn): thread/start or thread/resume, then
 // turn/start; turn/steer adds the user's input to the turn in progress, which takes it at its next step.
 
-import type { BrainEvent, BrainTurn } from "@owlbot/shared";
+import type { BrainEvent, BrainTurn } from "@piomio/shared";
 import { EventQueue, runLines, type RunningProcess } from "./proc.ts";
 
 /** Codex's v2 notifications as BrainEvents. Pure: easy to test with recorded frames. */
@@ -110,7 +110,7 @@ export async function listCodexModels(command: string, env: Record<string, strin
   const write = (o: unknown) => proc.write(`${JSON.stringify(o)}\n`);
   const timer = setTimeout(() => proc.child.kill("SIGKILL"), timeoutMs);
   try {
-    write({ id: 1, method: "initialize", params: { clientInfo: { name: "owlbot", title: "Owlbot", version: "1" }, capabilities: null } });
+    write({ id: 1, method: "initialize", params: { clientInfo: { name: "piomio", title: "Piomio", version: "1" }, capabilities: null } });
     write({ method: "initialized" });
     write({ id: 2, method: "model/list", params: {} });
     for await (const line of proc.lines) {
@@ -259,7 +259,7 @@ export class CodexAppTurn {
     if (m.id !== undefined && m.method) {
       const approval = /requestApproval|Approval$/.test(m.method);
       if (!approval) {
-        this.proc?.write(`${JSON.stringify({ id: m.id, error: { code: -32601, message: "not supported by Owlbot" } })}\n`);
+        this.proc?.write(`${JSON.stringify({ id: m.id, error: { code: -32601, message: "not supported by Piomio" } })}\n`);
         return;
       }
       // Confined, the hub decides (and may ask the person); otherwise approval_policy is "never" and this is a no.
@@ -297,7 +297,7 @@ export class CodexAppTurn {
     })();
     try {
       try {
-        await this.request("initialize", { clientInfo: { name: "owlbot", title: "Owlbot", version: "1" }, capabilities: null });
+        await this.request("initialize", { clientInfo: { name: "piomio", title: "Piomio", version: "1" }, capabilities: null });
       } catch {
         const exit = await Promise.race([proc.exited, new Promise<null>((r) => setTimeout(() => r(null), 2000))]);
         throw new AppServerUnsupported(exit ? proc.stderr().trim().split("\n").slice(-3).join("\n") : "codex app-server did not answer");

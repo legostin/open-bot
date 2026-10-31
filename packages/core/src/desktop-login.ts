@@ -1,5 +1,5 @@
 // The desktop app signs its own window in: it hands the hub one-time tickets over the hub's stdin, a pipe only the
-// app that started the hub holds (OWLBOT_DESKTOP=1). The window then posts its ticket to POST /api/auth/desktop.
+// app that started the hub holds (PIOMIO_DESKTOP=1). The window then posts its ticket to POST /api/auth/desktop.
 
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";

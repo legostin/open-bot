@@ -5,7 +5,7 @@
 // No dialogs: everything happens in place.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { definePluginUI, Markdown, native, Spinner, type OwlbotUI, type ToolResultProps } from "@owlbot/ui";
+import { definePluginUI, Markdown, native, Spinner, type PiomioUI, type ToolResultProps } from "@piomio/ui";
 import { plainText, withBreaks } from "./plain.ts";
 
 type Kind = "self" | "preference" | "person" | "place" | "project" | "event" | "howto" | "note";
@@ -59,8 +59,8 @@ interface ReviewItem extends FactView {
   current?: FactView;
 }
 
-let UI: OwlbotUI;
-let t: OwlbotUI["i18n"]["t"] = (key) => key;
+let UI: PiomioUI;
+let t: PiomioUI["i18n"]["t"] = (key) => key;
 const http = <T,>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown) => UI.plugin.http<T>(method, path, body);
 const enc = encodeURIComponent;
 
@@ -514,7 +514,7 @@ function MemoryPage() {
       const blob = new Blob([JSON.stringify(body, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `owlbot-memory-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `piomio-memory-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     } catch (e) {

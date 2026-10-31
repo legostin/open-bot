@@ -1,7 +1,7 @@
 // What every part of the browser's UI shares: the host, translations, the backend's messages and their types.
 
-import { mediaSrc, native } from "@owlbot/ui";
-import type { OwlbotUI } from "@owlbot/ui";
+import { mediaSrc, native } from "@piomio/ui";
+import type { PiomioUI } from "@piomio/ui";
 
 export interface Tab {
   index: number;
@@ -64,10 +64,10 @@ export interface Site {
   visits: number;
 }
 
-export let host: OwlbotUI;
-export let t: OwlbotUI["i18n"]["t"] = (key) => key;
+export let host: PiomioUI;
+export let t: PiomioUI["i18n"]["t"] = (key) => key;
 
-export function setHost(ui: OwlbotUI): void {
+export function setHost(ui: PiomioUI): void {
   host = ui;
   t = (key, params) => ui.i18n.t(key, params);
 }

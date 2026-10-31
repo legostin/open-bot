@@ -27,7 +27,7 @@ pub fn launch_agent(label: &str, exe: &str, plist: &str) -> String {
   <key>Label</key><string>{label}</string>
   <key>AssociatedBundleIdentifiers</key><array><string>{label}</string></array>
   <key>ProgramArguments</key>
-  <array><string>/bin/sh</string><string>-c</string><string>{}</string><string>Owlbot</string><string>{}</string><string>{}</string></array>
+  <array><string>/bin/sh</string><string>-c</string><string>{}</string><string>Piomio</string><string>{}</string><string>{}</string></array>
   <key>RunAtLoad</key><true/>
   <key>ProcessType</key><string>Interactive</string>
 </dict>
@@ -85,11 +85,11 @@ mod tests {
 
   #[test]
   fn the_launch_agent_starts_the_app_or_removes_itself() {
-    let a = launch_agent("ai.owlbot.app", "/Applications/open & bot.app/Contents/MacOS/Owlbot", "/Users/u/Library/LaunchAgents/ai.owlbot.app.plist");
-    assert!(a.contains("<string>/Applications/open &amp; bot.app/Contents/MacOS/Owlbot</string>"));
+    let a = launch_agent("ai.piomio.app", "/Applications/open & bot.app/Contents/MacOS/Piomio", "/Users/u/Library/LaunchAgents/ai.piomio.app.plist");
+    assert!(a.contains("<string>/Applications/open &amp; bot.app/Contents/MacOS/Piomio</string>"));
     assert!(a.contains(r#"exec "$1" --background; fi; rm -f "$2""#));
     assert!(a.contains("<key>AssociatedBundleIdentifiers</key>"));
     assert!(!a.contains("KeepAlive"));
-    assert!(launch_agent("ai.owlbot.test", "/x", "/y").contains("<key>Label</key><string>ai.owlbot.test</string>"));
+    assert!(launch_agent("ai.piomio.test", "/x", "/y").contains("<key>Label</key><string>ai.piomio.test</string>"));
   }
 }

@@ -1,9 +1,9 @@
-// Machines: connected owlbot-node daemons, pairing, rename, revoke.
+// Machines: connected piomio-node daemons, pairing, rename, revoke.
 
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Check, Laptop, Link2, Pencil, Server, SlidersHorizontal, Trash2, X } from "lucide-react";
-import type { Machine, MachineSetupView, ReplicaState } from "@owlbot/shared";
+import type { Machine, MachineSetupView, ReplicaState } from "@piomio/shared";
 import { askInChat } from "../state/ask";
 import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";

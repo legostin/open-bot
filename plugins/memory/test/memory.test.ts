@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { readPluginLayout, translator } from "@owlbot/shared";
-import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import { readPluginLayout, translator } from "@piomio/shared";
+import { startPlugin, type PluginHarness } from "@piomio/testkit";
 
 const DIR = join(import.meta.dirname, "..");
 
@@ -229,7 +229,7 @@ describe("memory plugin (v1 compatibility)", () => {
 
   it.skipIf(!hasGit())("commits every change to git", async () => {
     const log = gitLog(join(h.dataDir, "memory"));
-    expect(log.every((l) => l.startsWith("Owlbot <memory@owlbot.local>|memory: "))).toBe(true);
+    expect(log.every((l) => l.startsWith("Piomio <memory@piomio.local>|memory: "))).toBe(true);
     const subjects = log.map((l) => l.split("|")[1]);
     expect(subjects).toEqual(
       expect.arrayContaining([
@@ -518,7 +518,7 @@ describe("control and consolidation over HTTP", () => {
     expect((await post(h, "/restore", { path: a })).status).toBe(404);
 
     const exp = await h.http({ method: "GET", path: "/export" });
-    expect(exp.headers?.["content-disposition"]).toMatch(/^attachment; filename="owlbot-memory-\d{4}-\d{2}-\d{2}\.json"$/);
+    expect(exp.headers?.["content-disposition"]).toMatch(/^attachment; filename="piomio-memory-\d{4}-\d{2}-\d{2}\.json"$/);
     const body = exp.body as any;
     expect(body.version).toBe(2);
     expect(body.facts.find((f: any) => f.path === b).raw).toContain("Maya is eight");

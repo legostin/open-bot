@@ -1,7 +1,7 @@
 // Live view: when the floating window shows, which view and how (pure logic, unit-tested).
 // The window itself is components/LiveViewWindow.tsx; views are registered in registry.ts (ui.liveView.register).
 
-import type { LiveViewActivity } from "@owlbot/ui";
+import type { LiveViewActivity } from "@piomio/ui";
 import { createStore } from "../lib/store";
 
 /** After the work stops the compact window stays this long (short gaps between tool calls do not flicker). */

@@ -5,7 +5,7 @@ import { cpSync, mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MessagePart } from "@owlbot/shared";
+import type { MessagePart } from "@piomio/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { listCatalog, listIntegrations, situationOf } from "../src/integrations.ts";
 
@@ -40,7 +40,7 @@ describe("the catalog and plugin widgets", () => {
     for (const id of ["cardy", "legacy", "plain"]) cpSync(join(fixtures, "catalog-plugins", id), join(plugins, id), { recursive: true });
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-catalog-")), builtinPluginsDirs: [plugins], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);

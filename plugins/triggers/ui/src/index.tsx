@@ -1,8 +1,8 @@
 // "Triggers" page: list, enable toggle, create/edit per kind, run now, run history.
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, EmptyState, Spinner, definePluginUI } from "@owlbot/ui";
-import type { OwlbotUI } from "@owlbot/ui";
+import { Badge, Button, Card, EmptyState, Spinner, definePluginUI } from "@piomio/ui";
+import type { PiomioUI } from "@piomio/ui";
 
 type Kind = "schedule" | "once" | "watch" | "event" | "heartbeat";
 type ErrorParams = Record<string, string | number>;
@@ -64,7 +64,7 @@ interface ListResponse {
 }
 
 // Set in definePluginUI; the page reloads when the language changes.
-let i18n: OwlbotUI["i18n"];
+let i18n: PiomioUI["i18n"];
 const tr = (key: string, params?: ErrorParams) => i18n.t(key, params);
 
 const KINDS: Kind[] = ["schedule", "once", "watch", "event", "heartbeat"];
@@ -130,7 +130,7 @@ function statusBadge(t: Trigger) {
 // ---------- form ----------
 
 interface FormProps {
-  ui: OwlbotUI;
+  ui: PiomioUI;
   initial: Trigger | null;
   agents: ListResponse["agents"];
   computers: NonNullable<ListResponse["computers"]>;
@@ -310,7 +310,7 @@ function TriggerForm({ ui, initial, agents, computers, tz, onDone }: FormProps) 
 
 // ---------- history ----------
 
-function History({ ui, trigger, tz, onClose }: { ui: OwlbotUI; trigger: Trigger; tz: string; onClose: () => void }) {
+function History({ ui, trigger, tz, onClose }: { ui: PiomioUI; trigger: Trigger; tz: string; onClose: () => void }) {
   const [runs, setRuns] = useState<Run[] | null>(null);
   const load = useCallback(() => {
     ui.plugin
@@ -381,7 +381,7 @@ function History({ ui, trigger, tz, onClose }: { ui: OwlbotUI; trigger: Trigger;
 
 // ---------- list ----------
 
-function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OwlbotUI; t: Trigger; tz: string; onEdit: () => void; onHistory: () => void }) {
+function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: PiomioUI; t: Trigger; tz: string; onEdit: () => void; onHistory: () => void }) {
   const [busy, setBusy] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
 
@@ -516,7 +516,7 @@ function TriggerCard({ ui, t, tz, onEdit, onHistory }: { ui: OwlbotUI; t: Trigge
   );
 }
 
-function TriggersPage({ ui }: { ui: OwlbotUI }) {
+function TriggersPage({ ui }: { ui: PiomioUI }) {
   const [data, setData] = useState<ListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Trigger | "new" | null>(null);

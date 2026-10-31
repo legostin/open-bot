@@ -3,7 +3,7 @@
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { PluginHttpRequest, PluginHttpResponse } from "@owlbot/plugin-sdk";
+import type { PluginHttpRequest, PluginHttpResponse } from "@piomio/plugin-sdk";
 
 export interface Visit {
   id: string;

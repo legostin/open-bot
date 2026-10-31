@@ -1,9 +1,9 @@
-// UI plugin host: builds the per-plugin OwlbotUI object and loads plugin modules listed in /api/bootstrap.
+// UI plugin host: builds the per-plugin PiomioUI object and loads plugin modules listed in /api/bootstrap.
 
 import { useEffect, type ComponentType } from "react";
-import type { Catalog } from "@owlbot/shared";
-import type { LiveViewContribution, OwlbotUI, SlotContribution, SlotName, SlotProps } from "@owlbot/ui";
-import { translator } from "@owlbot/shared/i18n";
+import type { Catalog } from "@piomio/shared";
+import type { LiveViewContribution, PiomioUI, SlotContribution, SlotName, SlotProps } from "@piomio/ui";
+import { translator } from "@piomio/shared/i18n";
 import { navigate } from "wouter/use-browser-location";
 import { api, request, type Method } from "../lib/api";
 import { createStore, useStore } from "../lib/store";
@@ -26,7 +26,7 @@ function setLoad(id: string, s: PluginLoadState): void {
 }
 
 /** `messages`: the plugin's own catalog from /api/bootstrap (English plus the interface language). */
-export function createOwlbotUI(pluginId: string, messages: Catalog = {}): OwlbotUI {
+export function createPiomioUI(pluginId: string, messages: Catalog = {}): PiomioUI {
   const register = <P = any>(slot: SlotName, c: SlotContribution<P>): (() => void) => {
     switch (slot) {
       case "route":
@@ -113,7 +113,7 @@ async function load(entry: UiPluginEntry): Promise<void> {
     const mod = await import(/* @vite-ignore */ url);
     const activate = resolveActivate(mod);
     if (!activate) throw new Error(t("plugins.noActivate"));
-    const ret = await activate(createOwlbotUI(entry.id, entry.messages));
+    const ret = await activate(createPiomioUI(entry.id, entry.messages));
     const cur = loaded.get(entry.id);
     if (cur) cur.cleanup = typeof ret === "function" ? ret : undefined;
     setLoad(entry.id, { name: entry.name, status: "active" });

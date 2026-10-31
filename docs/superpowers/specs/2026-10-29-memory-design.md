@@ -2,7 +2,7 @@
 
 2026-10-29. The memory plugin (`plugins/memory`) becomes structured, time-aware and self-maintaining, and the person gets
 a memory manager on the web and on the phone. Markdown files with git history stay the record: people can read them,
-edit them and roll them back without Owlbot.
+edit them and roll them back without Piomio.
 
 ## What the best systems do, and what we take
 

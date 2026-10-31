@@ -3,8 +3,8 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ThinkingChoice, ToolResult, WorkKind } from "@owlbot/shared";
-import { brainSpeed, brainsFor, expandBrains, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, sameBrain, taskThinking, thinkingFor, truncate, workKind } from "@owlbot/shared";
+import type { AgentDef, Approval, BrainEvent, BrainTurn, Conversation, Machine, Message, MessagePart, OutboundMedia, OutboundMessage, SecretRequest, Task, TaskStatus, ThinkingChoice, ToolResult, WorkKind } from "@piomio/shared";
+import { brainSpeed, brainsFor, expandBrains, formatBrainRef, newId, nowIso, parseBrainRef, resolveThinking, sameBrain, taskThinking, thinkingFor, truncate, workKind } from "@piomio/shared";
 import { confinement } from "./native-permissions.ts";
 import { NATIVE_PERMISSION_TOOL } from "./tools/native-permission.ts";
 import type { Config } from "./config.ts";

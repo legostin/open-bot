@@ -1,7 +1,7 @@
 {
-  "name": "@owlbot/plugin-telegram",
+  "name": "@piomio/plugin-telegram",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Telegram channel for Owlbot: chat, notifications, approvals"
+  "description": "Telegram channel for Piomio: chat, notifications, approvals"
 }

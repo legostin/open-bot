@@ -1,6 +1,6 @@
 // Interface between the agent loop and the provider adapters (Anthropic Messages, OpenAI Responses, Chat Completions).
 
-import type { BrainEvent } from "@owlbot/shared";
+import type { BrainEvent } from "@piomio/shared";
 import type { HistoryMessage, Part } from "./history.ts";
 import type { McpTool } from "./mcp.ts";
 

@@ -317,7 +317,7 @@ export class MediaService {
 
   constructor(o: MediaServiceOptions) {
     this.o = o;
-    this.userAgent = `Owlbot/${o.version} (+https://github.com/legostin/open-bot)`;
+    this.userAgent = `Piomio/${o.version} (+https://github.com/legostin/piomio)`;
     this.media = new FileCache(join(o.dataDir, "cache", "media"), MEDIA_TTL_MS);
     this.tiles = new FileCache(join(o.dataDir, "cache", "tiles"), TILE_TTL_MS);
     this.apis = new FileCache(join(o.dataDir, "cache", "api"), API_TTL_MS);

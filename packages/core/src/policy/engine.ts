@@ -1,7 +1,7 @@
 // Policy decisions for tool calls. Pure functions: easy to test, no I/O.
 
-import type { PolicyDecision, Rule, RuleCondition, ToolDescriptor } from "@owlbot/shared";
-import { globToRegExp, hostMatches, hostOf } from "@owlbot/shared";
+import type { PolicyDecision, Rule, RuleCondition, ToolDescriptor } from "@piomio/shared";
+import { globToRegExp, hostMatches, hostOf } from "@piomio/shared";
 import { t } from "../i18n.ts";
 import { commandRule } from "../native-permissions.ts";
 

@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, LayoutTemplate, X } from "lucide-react";
-import type { PageView } from "@owlbot/shared";
+import type { PageView } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { mediaSrc } from "../../lib/media";
 import { native } from "../../lib/native";
@@ -81,8 +81,8 @@ function PageViewer({ page, conversationId, onClose }: { page: PageView; convers
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow) return;
-      const d = e.data as { owlbot?: boolean; type?: string; text?: unknown; url?: unknown } | null;
-      if (!d?.owlbot) return;
+      const d = e.data as { piomio?: boolean; type?: string; text?: unknown; url?: unknown } | null;
+      if (!d?.piomio) return;
       if (d.type === "ask" && typeof d.text === "string" && d.text.trim()) {
         close.current();
         sendMessage(conversationId, d.text.trim().slice(0, 4000)).catch((err) => toast(errorText(err), "error"));

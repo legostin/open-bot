@@ -1,21 +1,28 @@
-// Owlbot desktop launcher: what the Windows tray app and the macOS LaunchAgent run in an installed app.
+// Piomio desktop launcher: what the Windows tray app and the macOS LaunchAgent run in an installed app.
 //   node launch.mjs        run the hub (data in the user's profile, ports from <data>/desktop.json)
 //   node launch.mjs url    wait for the hub and print the address to open (with the setup code until the first run is done)
-// The desktop app talks to the hub over its stdin (OWLBOT_DESKTOP=1, read by the core: packages/core/src/desktop-login.ts).
+// The desktop app talks to the hub over its stdin (PIOMIO_DESKTOP=1, read by the core: packages/core/src/desktop-login.ts).
 
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** Where a desktop install keeps its data: the user's profile, never the app folder. */
+/**
+ * Where a desktop install keeps its data: the user's profile, never the app folder. An install from before 2026-10-31,
+ * when Piomio was Owlbot, keeps its "Owlbot" folder (agents' messages hold absolute paths into it), as the app does.
+ */
 export function defaultDataDir(env = process.env, platform = process.platform, home = homedir()) {
-  if (platform === "win32") return join(env.LOCALAPPDATA || join(home, "AppData", "Local"), "Owlbot");
-  if (platform === "darwin") return join(home, "Library", "Application Support", "Owlbot");
-  return join(env.XDG_DATA_HOME || join(home, ".local", "share"), "owlbot");
+  const [root, name, old] =
+    platform === "win32"
+      ? [env.LOCALAPPDATA || join(home, "AppData", "Local"), "Piomio", "Owlbot"]
+      : platform === "darwin"
+        ? [join(home, "Library", "Application Support"), "Piomio", "Owlbot"]
+        : [env.XDG_DATA_HOME || join(home, ".local", "share"), "piomio", "owlbot"];
+  return !existsSync(join(root, name)) && existsSync(join(root, old)) ? join(root, old) : join(root, name);
 }
 
 /** The desktop hub's port: away from 8080 (servers, dev tools) and 18789 (OpenClaw's gateway), with +1 and +9 free too. */
@@ -23,7 +30,7 @@ export const DESKTOP_PORT = 41780;
 
 /**
  * `<data>/desktop.json`: `{ "port": 41780 }` (console port+1, egress proxy port+9 unless given). Without one the port is
- * OWLBOT_DESKTOP_PORT (the test build's 41790, set by the app) or DESKTOP_PORT.
+ * PIOMIO_DESKTOP_PORT (the test build's 41790, set by the app) or DESKTOP_PORT.
  */
 export function desktopPorts(dataDir, env = process.env) {
   let s = {};
@@ -32,7 +39,7 @@ export function desktopPorts(dataDir, env = process.env) {
   } catch {
     /* defaults */
   }
-  const port = Number(s.port) || Number(env.OWLBOT_DESKTOP_PORT) || DESKTOP_PORT;
+  const port = Number(s.port) || Number(env.PIOMIO_DESKTOP_PORT) || DESKTOP_PORT;
   return { port, consolePort: Number(s.consolePort) || port + 1, egressPort: Number(s.egressPort) || port + 9 };
 }
 
@@ -50,7 +57,7 @@ export function setupCode(dataDir) {
   return code;
 }
 
-/** The hook that finds @owlbot/* without node_modules links (resolve.mjs), for this process's Node children. */
+/** The hook that finds @piomio/* without node_modules links (resolve.mjs), for this process's Node children. */
 export const RESOLVE_HOOK = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "resolve.mjs")).href;
 
 /** The environment the hub runs with; what the caller already set wins. */
@@ -58,29 +65,29 @@ export function hubEnv(env, dataDir) {
   const { port, consolePort, egressPort } = desktopPorts(dataDir, env);
   const nodeOptions = env.NODE_OPTIONS ?? "";
   return {
-    OWLBOT_APP_ROOT: APP_ROOT,
-    OWLBOT_PORT: String(port),
-    OWLBOT_CONSOLE_PORT: String(consolePort),
-    OWLBOT_EGRESS_PORT: String(egressPort),
+    PIOMIO_APP_ROOT: APP_ROOT,
+    PIOMIO_PORT: String(port),
+    PIOMIO_CONSOLE_PORT: String(consolePort),
+    PIOMIO_EGRESS_PORT: String(egressPort),
     // Passkeys need a host name, not 127.0.0.1.
-    OWLBOT_PUBLIC_URL: `http://localhost:${port}`,
-    OWLBOT_INSTALL_CLIS: "1",
-    OWLBOT_DESKTOP: "1",
+    PIOMIO_PUBLIC_URL: `http://localhost:${port}`,
+    PIOMIO_INSTALL_CLIS: "1",
+    PIOMIO_DESKTOP: "1",
     // The user's own home for claude and codex: the logins they already have, and on macOS the login keychain.
-    OWLBOT_BRAIN_HOME: homedir(),
+    PIOMIO_BRAIN_HOME: homedir(),
     NODE_ENV: "production",
     // The hub installs the brain CLIs; they must not try to update themselves in its folder.
     DISABLE_AUTOUPDATER: "1",
     ...env,
     // Plugins are Node processes too: they load the same hook.
     NODE_OPTIONS: nodeOptions.includes(RESOLVE_HOOK) ? nodeOptions : `${nodeOptions} --import=${RESOLVE_HOOK}`.trim(),
-    OWLBOT_DATA_DIR: dataDir,
-    OWLBOT_SETUP_TOKEN: env.OWLBOT_SETUP_TOKEN || setupCode(dataDir),
+    PIOMIO_DATA_DIR: dataDir,
+    PIOMIO_SETUP_TOKEN: env.PIOMIO_SETUP_TOKEN || setupCode(dataDir),
   };
 }
 
 async function run() {
-  const dataDir = process.env.OWLBOT_DATA_DIR || defaultDataDir();
+  const dataDir = process.env.PIOMIO_DATA_DIR || defaultDataDir();
   mkdirSync(dataDir, { recursive: true });
   await import("./resolve.mjs");
   Object.assign(process.env, hubEnv(process.env, dataDir));
@@ -118,7 +125,7 @@ export async function openUrl(dataDir, { timeoutMs = 90_000, fetchImpl = fetch }
 if (import.meta.main) {
   const cmd = process.argv[2] ?? "run";
   if (cmd === "url") {
-    const r = await openUrl(process.env.OWLBOT_DATA_DIR || defaultDataDir());
+    const r = await openUrl(process.env.PIOMIO_DATA_DIR || defaultDataDir());
     process.stdout.write(r.url + "\n");
     process.exitCode = r.ready ? 0 : 3;
   } else if (cmd === "run") {

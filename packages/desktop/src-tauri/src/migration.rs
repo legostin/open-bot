@@ -1,5 +1,5 @@
-//! The AppleScript build of Owlbot (on main before this app) ran the hub from a LaunchAgent of its own (ai.owlbot.hub,
-//! same data dir, same port). The app runs the hub itself now, so that agent goes before the app starts its hub.
+//! The AppleScript build (on main before this app, when Piomio was Owlbot) ran the hub from a LaunchAgent of its own
+//! (ai.owlbot.hub, same data dir, same port). The app runs the hub itself now, so that agent goes before the app starts its hub.
 
 use std::path::Path;
 use std::process::Command;

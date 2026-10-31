@@ -3,8 +3,8 @@
 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { ArrowDown, Check, Paperclip, Pencil, X } from "lucide-react";
-import type { Message } from "@owlbot/shared";
-import { AVATAR_PALETTE, defaultAvatar } from "@owlbot/shared/avatar";
+import type { Message } from "@piomio/shared";
+import { AVATAR_PALETTE, defaultAvatar } from "@piomio/shared/avatar";
 import { useStore } from "../../lib/store";
 import { stickAfterScroll } from "../../lib/stick";
 import { errorText } from "../../lib/api";

@@ -10,7 +10,7 @@ import {
   type AuthenticationResponseJSON,
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
-import { nowIso } from "@owlbot/shared";
+import { nowIso } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import { hashToken } from "./store.ts";
 import { hashPassword, verifyPassword } from "./vault/crypto.ts";
@@ -204,10 +204,10 @@ export class AuthService {
   async passkeyRegistrationOptions(): Promise<unknown> {
     const existing = this.db.prepare("select id, transports from passkeys").all() as Array<{ id: string; transports: string | null }>;
     const opts = await generateRegistrationOptions({
-      rpName: "Owlbot",
+      rpName: "Piomio",
       rpID: this.rpId,
       userName: "owner",
-      userDisplayName: "Owlbot owner",
+      userDisplayName: "Piomio owner",
       attestationType: "none",
       excludeCredentials: existing.map((e) => ({ id: e.id, transports: e.transports ? JSON.parse(e.transports) : undefined })),
       authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },

@@ -1,10 +1,10 @@
-// Phones paired with the hub (the Owlbot app): one-time pairing codes, bearer tokens (the hub keeps only their hash)
+// Phones paired with the hub (the Piomio app): one-time pairing codes, bearer tokens (the hub keeps only their hash)
 // and each phone's P-256 key from its Secure Enclave. Approvals from a phone carry a signature by that key over a
 // one-time nonce, so a stolen token cannot approve anything without the phone's Face ID.
 
 import { createPublicKey, randomBytes, verify, type KeyObject } from "node:crypto";
-import type { Device } from "@owlbot/shared";
-import { newId, nowIso } from "@owlbot/shared";
+import type { Device } from "@piomio/shared";
+import { newId, nowIso } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";
@@ -17,13 +17,13 @@ const TICKET_TTL = 60_000;
 const WEB_SESSION_TTL = 30 * 24 * 3600_000;
 
 /** The chat page's session cookie on the device port. */
-export const DEVICE_COOKIE = "owlbot_device";
+export const DEVICE_COOKIE = "piomio_device";
 /** last_seen_at is written at most this often per device. */
 const SEEN_EVERY = 60_000;
 
 /** What the phone signs to approve: one line each for the purpose, the approval, the decision and the nonce. */
 export function approvalPayload(approvalId: string, decision: "approve" | "deny", nonce: string): string {
-  return `owlbot-approval\n${approvalId}\n${decision}\n${nonce}`;
+  return `piomio-approval\n${approvalId}\n${decision}\n${nonce}`;
 }
 
 /** A P-256 public key as the phone sends it (the X9.63 point 0x04 ‖ X ‖ Y, base64); undefined if it is not one. */

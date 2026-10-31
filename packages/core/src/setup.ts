@@ -5,8 +5,8 @@
 // brain, other computers, getting to know the user) from a short block in its system prompt and two hub tools. Nothing
 // here needs a model.
 
-import type { SetupBrain, SetupState, SetupStep, VaultState } from "@owlbot/shared";
-import { expandBrains, formatBrainRef, parseBrainRef } from "@owlbot/shared";
+import type { SetupBrain, SetupState, SetupStep, VaultState } from "@piomio/shared";
+import { expandBrains, formatBrainRef, parseBrainRef } from "@piomio/shared";
 import type { AgentRegistry } from "./agents.ts";
 import type { AttachmentPart } from "./attachments.ts";
 import type { BrainRegistry } from "./brains.ts";

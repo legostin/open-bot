@@ -1,12 +1,12 @@
 // The template's card (widget "day"): the place, then sunrise and sunset side by side and the day's length.
-// A UI module is one file that imports only react and @owlbot/ui (types from the server are fine): the hub compiles
+// A UI module is one file that imports only react and @piomio/ui (types from the server are fine): the hub compiles
 // it when an agent installs the integration, and `npm run build:ui-plugins` does for the ones in the repository.
 
-import { definePluginUI } from "@owlbot/ui";
-import type { OwlbotUI, WidgetProps } from "@owlbot/ui";
+import { definePluginUI } from "@piomio/ui";
+import type { PiomioUI, WidgetProps } from "@piomio/ui";
 import type { DayCard } from "../../server/index.ts";
 
-let t: OwlbotUI["i18n"]["t"] = (k) => k;
+let t: PiomioUI["i18n"]["t"] = (k) => k;
 
 function Time({ label, time, glyph }: { label: string; time: string; glyph: string }) {
   return (

@@ -6,14 +6,14 @@
 
 import { mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@owlbot/shared";
-import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
-import type { Locale, Translate } from "@owlbot/shared/i18n";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@piomio/shared";
+import type { BrainProviderImpl, BrainSessionImpl } from "@piomio/plugin-sdk";
+import type { Locale, Translate } from "@piomio/shared/i18n";
 import { capture, childEnv, runLines, textOfToolContent, type RunningProcess } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseClaudeBrowserLogin, runCliLogin } from "./login.ts";
 
-const MCP_PREFIX = "mcp__owlbot__";
+const MCP_PREFIX = "mcp__piomio__";
 
 export const DEFAULT_CLAUDE_TOOLS = [
   "Bash",
@@ -30,7 +30,7 @@ export const DEFAULT_CLAUDE_TOOLS = [
   "Task",
   "Skill",
   "NotebookEdit",
-  "mcp__owlbot",
+  "mcp__piomio",
 ];
 
 export interface ClaudeCodeOptions {
@@ -78,7 +78,7 @@ export class ClaudeStreamParser {
     switch (msg.type) {
       case "system": {
         if (msg.subtype === "init" && Array.isArray(msg.mcp_servers)) {
-          const ob = msg.mcp_servers.find((s: any) => s.name === "owlbot");
+          const ob = msg.mcp_servers.find((s: any) => s.name === "piomio");
           if (ob && ob.status !== "connected") {
             this.mcpFailed = true;
             out.push({ type: "error", message: this.t("claude.mcpUnavailable", { status: ob.status }) });
@@ -224,7 +224,7 @@ export function claudePresets(efforts?: string[]): NonNullable<ProbeResult["pres
 const FRONT_DESK_DENIED = ["Bash", "BashOutput", "KillShell", "Write", "Edit", "MultiEdit", "NotebookEdit"];
 
 /** Tools a confined session may use without asking: the web (through the hub's proxy), planning, subagents, skills, the hub. */
-const CONFINED_ALLOWED = /^(WebFetch|WebSearch|TodoWrite|Task|Agent|Skill|ToolSearch|mcp__owlbot)$/;
+const CONFINED_ALLOWED = /^(WebFetch|WebSearch|TodoWrite|Task|Agent|Skill|ToolSearch|mcp__piomio)$/;
 
 /**
  * Claude Code's sandbox for a confined session (macOS Seatbelt): commands write in the workspace and the temp folders,
@@ -334,12 +334,12 @@ class ClaudeCodeSession implements BrainSessionImpl {
     this.resumeId = opts.resume;
     this.dir = join(p.stateDir, "sessions", opts.sessionId.replace(/[^\w-]/g, "_"));
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-    const [command, ...args] = opts.mcp.bridgeCommand.length ? opts.mcp.bridgeCommand : ["owlbot-mcp-bridge"];
+    const [command, ...args] = opts.mcp.bridgeCommand.length ? opts.mcp.bridgeCommand : ["piomio-mcp-bridge"];
     const tokenFile = join(this.dir, "token");
     writePrivate(tokenFile, opts.mcp.token);
     writePrivate(
       join(this.dir, "mcp.json"),
-      JSON.stringify({ mcpServers: { owlbot: { type: "stdio", command, args, env: { OWLBOT_URL: opts.mcp.url, OWLBOT_TOKEN_FILE: tokenFile } } } }),
+      JSON.stringify({ mcpServers: { piomio: { type: "stdio", command, args, env: { PIOMIO_URL: opts.mcp.url, PIOMIO_TOKEN_FILE: tokenFile } } } }),
     );
     writePrivate(join(this.dir, "prompt.md"), opts.systemPrompt);
     if (opts.confine) writePrivate(join(this.dir, "settings.json"), JSON.stringify(sandboxSettings(opts.confine)));
@@ -353,7 +353,7 @@ class ClaudeCodeSession implements BrainSessionImpl {
     const all = this.p.allowedTools?.() ?? DEFAULT_CLAUDE_TOOLS;
     const tools = (confine ? all.filter((x) => CONFINED_ALLOWED.test(x)) : all).filter((x) => !this.o.frontDesk || !FRONT_DESK_DENIED.includes(x));
     const mode = confine
-      ? ["--permission-mode", "acceptEdits", "--permission-prompt-tool", `mcp__owlbot__${confine.permissionTool}`, "--settings", join(this.dir, "settings.json")]
+      ? ["--permission-mode", "acceptEdits", "--permission-prompt-tool", `mcp__piomio__${confine.permissionTool}`, "--settings", join(this.dir, "settings.json")]
       : ["--permission-mode", "dontAsk"];
     const a = [
       "-p",

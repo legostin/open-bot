@@ -2,8 +2,8 @@
 // local policy and logged as one line (never with file contents).
 
 import type { ChildProcess } from "node:child_process";
-import type { MachineUsage, NodeSetup, RpcPeer } from "@owlbot/shared";
-import type { FileSync } from "@owlbot/replica";
+import type { MachineUsage, NodeSetup, RpcPeer } from "@piomio/shared";
+import type { FileSync } from "@piomio/replica";
 import type { PolicyStore } from "./policy.ts";
 import type { BrainHost } from "./brains.ts";
 import type { GuardOptions } from "./guard.ts";

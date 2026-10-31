@@ -40,8 +40,8 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
   let popups = app.clone();
   let flavor = app.state::<AppState>().paths.flavor.clone();
   let scheme = flavor.scheme();
-  // The hub's settings page offers "Quit" and "Reset Owlbot…" when it runs in this window (deeplink.rs).
-  let hello = format!("window.owlbotDesktop = Object.freeze({{ scheme: {scheme:?}, test: {} }});", flavor.test);
+  // The hub's settings page offers "Quit" and "Reset Piomio…" when it runs in this window (deeplink.rs).
+  let hello = format!("window.piomioDesktop = Object.freeze({{ scheme: {scheme:?}, test: {} }});", flavor.test);
   WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
     .title(&app.package_info().name)
     .initialization_script(hello)
@@ -69,7 +69,7 @@ pub fn open_main(app: &AppHandle, url: Url) -> tauri::Result<()> {
       DownloadEvent::Finished { path, success, .. } => {
         let name = path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let detail = serde_json::json!({ "type": "download", "ok": success, "name": name });
-        let _ = webview.eval(format!("window.dispatchEvent(new CustomEvent('owlbot-desktop', {{ detail: {detail} }}))"));
+        let _ = webview.eval(format!("window.dispatchEvent(new CustomEvent('piomio-desktop', {{ detail: {detail} }}))"));
         true
       }
       _ => true,

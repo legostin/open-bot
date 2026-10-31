@@ -2,8 +2,8 @@
 // receives for its turn. Every brain session resumes only its own history, so each turn starts with what the member
 // has not seen yet: the user's and the other members' messages since its last reply, as "[Name]: text" lines.
 
-import type { Message } from "@owlbot/shared";
-import { parseMentions, truncate, type Mentionable } from "@owlbot/shared";
+import type { Message } from "@piomio/shared";
+import { parseMentions, truncate, type Mentionable } from "@piomio/shared";
 
 /** At most this many hand-offs (an agent mentioning another member) per user message. */
 export const MAX_HANDOFFS = 3;

@@ -3,8 +3,8 @@
 // ExchangeRate-API's open endpoint, today's rate only. currency_convert shows a card (widget "rates"): the sum in
 // each currency, with a sparkline of the last weeks where there is history.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
 
 interface Settings {
   /** The services' addresses (tests point them at a fake). */

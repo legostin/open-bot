@@ -1,11 +1,11 @@
-// After Owlbot is updated, the default agent tells the person which version they are on now and what changed, in
+// After Piomio is updated, the default agent tells the person which version they are on now and what changed, in
 // their language, from the release's notes on GitHub. The replica that leads does it once per version: the note it
 // leaves in the dialog is replicated, so another replica starting on the same version stays quiet.
 
 import type { Hub } from "./app.ts";
 
 const SEEN = "app_version";
-const MARK = "[System] Owlbot was updated";
+const MARK = "[System] Piomio was updated";
 const NOTES_MAX = 8_000;
 
 /** -1, 0 or 1 for dotted versions ("0.10.0" after "0.9.2"); a pre-release suffix is ignored. */
@@ -23,7 +23,7 @@ export function compareVersions(a: string, b: string): number {
 export async function releaseNotes(repo: string, version: string, fetchImpl: typeof fetch = fetch): Promise<string> {
   try {
     const r = await fetchImpl(`https://api.github.com/repos/${repo}/releases/tags/v${version}`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": `Owlbot/${version}` },
+      headers: { accept: "application/vnd.github+json", "user-agent": `Piomio/${version}` },
       signal: AbortSignal.timeout(10_000),
     });
     if (!r.ok) return "";

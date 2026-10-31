@@ -1,7 +1,7 @@
-// Where the daemon keeps its state: ~/.owlbot-node (override with OWLBOT_NODE_HOME).
+// Where the daemon keeps its state: ~/.piomio-node (override with PIOMIO_NODE_HOME).
 // config.json {hubUrl, machineId, name} and key.json (Ed25519 private key) are written by `pair`.
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { t } from "./messages.ts";
@@ -22,8 +22,13 @@ export interface NodeKey {
   publicKey: string;
 }
 
-export function nodeHome(env: NodeJS.ProcessEnv = process.env): string {
-  return resolve(env.OWLBOT_NODE_HOME || join(homedir(), ".owlbot-node"));
+export function nodeHome(env: NodeJS.ProcessEnv = process.env, userHome = homedir()): string {
+  if (env.PIOMIO_NODE_HOME) return resolve(env.PIOMIO_NODE_HOME);
+  const home = join(userHome, ".piomio-node");
+  // The project was Owlbot until 2026-10-31: a machine paired then keeps its pairing and policy.
+  const old = join(userHome, ".owlbot-node");
+  if (!existsSync(home) && existsSync(old)) renameSync(old, home);
+  return home;
 }
 
 export const configFile = (home: string) => join(home, "config.json");
@@ -105,7 +110,7 @@ export function normalizeHubUrl(input: string): string {
 
 /**
  * An invite link → the hub and the code: the hub's page `https://<hub>/join/<code>`, or the desktop app's
- * `owlbot://pair?hub=…&code=…` that page opens. Undefined when it is neither.
+ * `piomio://pair?hub=…&code=…` that page opens. Undefined when it is neither.
  */
 export function parseInviteLink(input: string): { hubUrl: string; code: string } | undefined {
   let u: URL;
@@ -114,7 +119,7 @@ export function parseInviteLink(input: string): { hubUrl: string; code: string }
   } catch {
     return undefined;
   }
-  if (/^owlbot(-test)?:$/.test(u.protocol)) {
+  if (/^piomio(-test)?:$/.test(u.protocol)) {
     const hub = u.searchParams.get("hub");
     const code = u.searchParams.get("code");
     return hub && code ? { hubUrl: normalizeHubUrl(hub), code } : undefined;

@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, localeFromEnv, type Locale } from "@owlbot/shared";
+import { DEFAULT_LOCALE, localeFromEnv, type Locale } from "@piomio/shared";
 import { json, type Db } from "./db.ts";
 import { DEFAULT_TRANSCRIPTION, type TranscriptionSettings } from "./transcribe.ts";
 

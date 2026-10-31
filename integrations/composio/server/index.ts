@@ -13,8 +13,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { CatalogEntryState, ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { CatalogEntryState, ToolResult } from "@piomio/shared";
 import { ComposioError, composioApi, DEFAULT_API, type ComposioTool } from "./api.ts";
 import { effectOf, resultText, specOf, toolName } from "./tools.ts";
 
@@ -36,14 +36,14 @@ interface App {
 
 // Composio's address and the polling pace come from the environment, not from settings an agent could change: the
 // key is only ever sent to Composio.
-const API = process.env.OWLBOT_COMPOSIO_API || DEFAULT_API;
-const POLL_MS = Math.max(20, Number(process.env.OWLBOT_COMPOSIO_POLL_MS) || 3000);
+const API = process.env.PIOMIO_COMPOSIO_API || DEFAULT_API;
+const POLL_MS = Math.max(20, Number(process.env.PIOMIO_COMPOSIO_POLL_MS) || 3000);
 /** Main tools one app gets as tools of its own, at most; and with those composio_tools_search added. */
 const MAX_TOOLS = 30;
 const MAX_APP_TOOLS = 60;
 /** How long a sign-in link is waited for when Composio does not say, and how long after it runs out. */
 const LINK_MS = 10 * 60_000;
-const GRACE_MS = Number(process.env.OWLBOT_COMPOSIO_GRACE_MS) || 2 * 60_000;
+const GRACE_MS = Number(process.env.PIOMIO_COMPOSIO_GRACE_MS) || 2 * 60_000;
 const PENDING = new Set(["INITIATED", "INITIALIZING"]);
 const APP_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 /** How a service says its token lacks a permission (Google: "Request had insufficient authentication scopes"). */
@@ -53,7 +53,7 @@ const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "t
 
 /** The manifest's entries: the apps that are in the catalog from the start. */
 function manifestApps(pluginDir: string): Array<{ id: string; name: string }> {
-  const m = JSON.parse(readFileSync(join(pluginDir, ".owlbot-plugin", "plugin.json"), "utf8"));
+  const m = JSON.parse(readFileSync(join(pluginDir, ".piomio-plugin", "plugin.json"), "utf8"));
   return (m?.integration?.entries ?? []).map((e: any) => ({ id: String(e.id), name: String(e.name) }));
 }
 
@@ -64,7 +64,7 @@ const plugin: PluginModule & { stop?: () => void } = {
     let userId = await ctx.storage.get<string>("userId");
     if (!userId) {
       // The hub is one person: one Composio user, whatever its machines.
-      userId = `owlbot-${randomUUID()}`;
+      userId = `piomio-${randomUUID()}`;
       await ctx.storage.set("userId", userId);
     }
     const user = userId;

@@ -1,7 +1,7 @@
 // Agent tools: create / list / update / delete / run_now (exposed as trigger_<name>).
 
-import type { PluginContext } from "@owlbot/plugin-sdk";
-import type { JsonSchema, ToolResult } from "@owlbot/shared";
+import type { PluginContext } from "@piomio/plugin-sdk";
+import type { JsonSchema, ToolResult } from "@piomio/shared";
 import { NotFoundError, type TriggerEngine } from "./engine.ts";
 import { describeSchedule, formatLocal } from "./schedule.ts";
 import { TRIGGER_KINDS, type Trigger, type TriggerInput } from "./types.ts";
@@ -62,8 +62,8 @@ function describeCreated(e: TriggerEngine, t: Trigger, verb: string): string {
     const url = e.webhookUrl(t);
     lines.push(
       `Webhook URL: ${url}`,
-      `Secret: ${t.secret} — send it in the "x-owlbot-secret" header (or as ?secret=...). Give both to the user; the request body becomes the event payload.`,
-      `Example: curl -X POST -H "x-owlbot-secret: ${t.secret}" -H "content-type: application/json" -d '{"text":"hello"}' ${url}`,
+      `Secret: ${t.secret} — send it in the "x-piomio-secret" header (or as ?secret=...). Give both to the user; the request body becomes the event payload.`,
+      `Example: curl -X POST -H "x-piomio-secret: ${t.secret}" -H "content-type: application/json" -d '{"text":"hello"}' ${url}`,
     );
   }
   return lines.join("\n");

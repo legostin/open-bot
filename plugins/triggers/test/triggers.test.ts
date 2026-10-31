@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import { startPlugin, type PluginHarness } from "@piomio/testkit";
 
 const dir = join(import.meta.dirname, "..");
 
@@ -175,14 +175,14 @@ describe("triggers plugin", () => {
     const secret = /Secret: (\S+)/.exec(out)![1];
 
     const post = (extra: Record<string, unknown>) => h.http({ method: "POST", path: `/${id}`, public: true, body: { status: "failed", service: "api" }, ...extra });
-    expect((await post({ headers: { "x-owlbot-secret": "wrong" } })).status).toBe(401);
+    expect((await post({ headers: { "x-piomio-secret": "wrong" } })).status).toBe(401);
     expect((await post({})).status).toBe(401);
-    expect((await h.http({ method: "POST", path: "/t_doesnotexist", public: true, headers: { "x-owlbot-secret": secret } })).status).toBe(404);
+    expect((await h.http({ method: "POST", path: "/t_doesnotexist", public: true, headers: { "x-piomio-secret": secret } })).status).toBe(404);
     expect((await h.http({ method: "GET", path: `/${id}`, public: true, query: { secret } })).status).toBe(405);
     expect((await h.http({ path: "/triggers", public: true })).status).toBe(404); // the UI API is not public
     expect(createdFor(id)).toHaveLength(0);
 
-    const ok = await post({ headers: { "X-Owlbot-Secret": secret, "content-type": "application/json" } });
+    const ok = await post({ headers: { "X-Piomio-Secret": secret, "content-type": "application/json" } });
     expect(ok.status).toBe(202);
     expect((ok.body as any).taskId).toBe(createdFor(id)[0].id);
     const goal = createdFor(id)[0].goal;
@@ -200,7 +200,7 @@ describe("triggers plugin", () => {
 
     // Disabled triggers refuse webhooks.
     await h.http({ method: "PATCH", path: `/triggers/${id}`, body: { enabled: false } });
-    expect((await post({ headers: { "x-owlbot-secret": secret } })).status).toBe(409);
+    expect((await post({ headers: { "x-piomio-secret": secret } })).status).toBe(409);
   });
 
   it("runs now, updates and deletes through tools", async () => {

@@ -4,8 +4,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
-import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
-import { startMockLlm, startPlugin, type MockLlm, type PluginHarness } from "@owlbot/testkit";
+import type { BrainEvent, BrainSessionOptions } from "@piomio/shared";
+import { startMockLlm, startPlugin, type MockLlm, type PluginHarness } from "@piomio/testkit";
 import { ECHO_TOOL, startFakeMcp, type FakeMcp } from "./fake-mcp.ts";
 
 const PLUGIN_DIR = join(import.meta.dirname, "..");

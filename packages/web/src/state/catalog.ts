@@ -1,7 +1,7 @@
 // The Plugins catalog (GET /api/catalog?all=1): every plugin and what the person can turn on, by situation, with the
 // popular ones; refreshed live like the integrations library, whose cards it shares.
 
-import type { CatalogView } from "@owlbot/shared";
+import type { CatalogView } from "@piomio/shared";
 import { api } from "../lib/api";
 import { createStore, useStore } from "../lib/store";
 import { hubEvents } from "./app";

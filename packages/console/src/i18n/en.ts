@@ -3,7 +3,7 @@
 
 export const en = {
   // ---------- app ----------
-  "app.title": "Security console · Owlbot",
+  "app.title": "Security console · Piomio",
   "app.name": "Security console",
 
   // ---------- common ----------
@@ -93,7 +93,7 @@ export const en = {
   "vault.identity.tax_id": "Tax ID",
 
   // ---------- notifications ----------
-  "notify.title": "Owlbot: approval needed",
+  "notify.title": "Piomio: approval needed",
   "notify.body": "Agent {agent} asks to approve an action ({tool}). Open the console to see the details.",
 
   // ---------- session ----------
@@ -108,9 +108,9 @@ export const en = {
   // ---------- passkeys (browser) ----------
   "webauthn.insecure": "Passkeys work only over HTTPS or on localhost.",
   "webauthn.unsupported": "This browser does not support passkeys.",
-  "webauthn.ipHost": "Passkeys do not work on an IP address. Open the console by host name (for example http://localhost:{port}) and set that name in OWLBOT_PUBLIC_URL.",
+  "webauthn.ipHost": "Passkeys do not work on an IP address. Open the console by host name (for example http://localhost:{port}) and set that name in PIOMIO_PUBLIC_URL.",
   "webauthn.aborted": "Passkey operation cancelled",
-  "webauthn.badDomain": "Passkeys are unavailable at this address: open the console on the same host name as in OWLBOT_PUBLIC_URL",
+  "webauthn.badDomain": "Passkeys are unavailable at this address: open the console on the same host name as in PIOMIO_PUBLIC_URL",
   "webauthn.alreadyRegistered": "This key is already registered",
   "webauthn.timeout": "Passkey operation cancelled or timed out",
 
@@ -137,7 +137,7 @@ export const en = {
   "live.hint": "Live updates of approvals and vault state",
 
   // ---------- login ----------
-  "login.subtitle": "Owlbot · approvals, vault, rules and audit",
+  "login.subtitle": "Piomio · approvals, vault, rules and audit",
   "login.noPassword.title": "No password set yet",
   "login.noPassword.body": "Finish the initial setup in the main app: set a password using the one-time code from the hub logs. Then come back here.",
   "login.openMainApp": "Open the main app",
@@ -423,7 +423,7 @@ export const en = {
   "vault.passphrase.repeat": "Repeat the password",
   "vault.passphrase.mismatch": "Passwords do not match",
   "vault.passphrase.warn.title": "This password cannot be recovered",
-  "vault.passphrase.warn.body": "Neither Owlbot nor anyone else can decrypt the vault without it. If you forget it, all items are lost forever. Keep it in a password manager, or write it down and store it somewhere safe.",
+  "vault.passphrase.warn.body": "Neither Piomio nor anyone else can decrypt the vault without it. If you forget it, all items are lost forever. Keep it in a password manager, or write it down and store it somewhere safe.",
   "vault.passphrase.ack": "I have saved the password and understand it cannot be recovered",
   "vault.create.submit": "Create vault",
   "vault.unlocked": "Vault unlocked",

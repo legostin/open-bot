@@ -3,7 +3,7 @@
 // see the refresh token. One account per provider.
 
 import { createHash, randomBytes } from "node:crypto";
-import type { ConnectionAccount } from "@owlbot/shared";
+import type { ConnectionAccount } from "@piomio/shared";
 import { LocalizedError } from "./i18n.ts";
 import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";
@@ -20,8 +20,8 @@ export interface GoogleClientConfig {
 }
 
 /**
- * Owlbot's own Google client (type "Desktop app"): Google treats an installed app's secret as public. Empty until the
- * project's client exists; OWLBOT_GOOGLE_CLIENT_ID / OWLBOT_GOOGLE_CLIENT_SECRET override it.
+ * Piomio's own Google client (type "Desktop app"): Google treats an installed app's secret as public. Empty until the
+ * project's client exists; PIOMIO_GOOGLE_CLIENT_ID / PIOMIO_GOOGLE_CLIENT_SECRET override it.
  */
 export const BUILTIN_GOOGLE_CLIENT = { clientId: "", clientSecret: "" };
 

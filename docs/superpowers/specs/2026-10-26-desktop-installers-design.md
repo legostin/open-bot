@@ -4,7 +4,7 @@ Approved 2026-10-26. Docker stays the server install; desktop users get a normal
 
 Superseded by `2026-10-26-desktop-app-design.md` (a Tauri app). The launcher, data dir and stage below still apply.
 
-> **Renamed:** the project is now **Owlbot**. This spec predates the rename and keeps the old names: open-bot.app / open-bot.exe → Owlbot.app / Owlbot.exe, the data folder `open-bot` → `Owlbot` (`owlbot` on Linux), `openbot.db` → `owlbot.db`, `ai.openbot.*` → `ai.owlbot.*`, `OPENBOT_*` → `OWLBOT_*`.
+> **Renamed:** the project is now **Piomio**. This spec predates the rename and keeps the old names: open-bot.app / open-bot.exe → Piomio.app / Piomio.exe, the data folder `open-bot` → `Piomio` (`piomio` on Linux), `openbot.db` → `piomio.db`, `ai.openbot.*` → `ai.piomio.*`, `OPENBOT_*` → `PIOMIO_*`.
 
 ## Goal
 

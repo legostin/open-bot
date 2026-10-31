@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Owlbot",
-  "mainBinaryName": "Owlbot",
+  "productName": "Piomio",
+  "mainBinaryName": "Piomio",
   "version": "../../../package.json",
-  "identifier": "ai.owlbot.app",
+  "identifier": "ai.piomio.app",
   "build": {
     "frontendDist": "../ui/dist"
   },
@@ -21,8 +21,8 @@
       "../../../packaging/assets/png/128x128.png",
       "../../../packaging/assets/png/128x128@2x.png",
       "../../../packaging/assets/png/icon.png",
-      "../../../packaging/assets/owlbot.icns",
-      "../../../packaging/assets/owlbot.ico"
+      "../../../packaging/assets/piomio.icns",
+      "../../../packaging/assets/piomio.ico"
     ],
     "macOS": {
       "minimumSystemVersion": "13.5",
@@ -44,11 +44,11 @@
   },
   "plugins": {
     "deep-link": {
-      "desktop": { "schemes": ["owlbot"] }
+      "desktop": { "schemes": ["piomio"] }
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI3NTJCNDM2RjNDOTMyQzYKUldUR01zbnpOclJTSjQvaWhSbDRGOXdYZURoVU8rUWFUblhMQlM3RDY2TmVLa0p6emo5Umt4VVoK",
-      "endpoints": ["https://github.com/legostin/open-bot/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/legostin/piomio/releases/latest/download/latest.json"],
       "windows": { "installMode": "passive" }
     }
   }

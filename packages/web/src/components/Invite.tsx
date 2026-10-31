@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleCheck, Laptop, RefreshCw, Share2 } from "lucide-react";
-import type { Invite, InviteUsed } from "@owlbot/shared";
+import type { Invite, InviteUsed } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { countdown } from "../lib/format";
 import { onAnotherComputer, pairLink } from "../lib/desktop";

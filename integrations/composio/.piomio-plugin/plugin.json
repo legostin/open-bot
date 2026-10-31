@@ -1,0 +1,56 @@
+{
+  "id": "composio",
+  "name": "%name%",
+  "version": "0.1.0",
+  "author": "Piomio",
+  "description": "%description%",
+  "builtin": true,
+  "defaultEnabled": false,
+  "server": "./server/index.ts",
+  "contributes": {
+    "tools": true,
+    "setup": {
+      "secrets": [
+        { "vault": "composio", "title": "%setup.key.title%", "hint": "%setup.key.hint%", "link": "https://platform.composio.dev", "required": true }
+      ]
+    }
+  },
+  "integration": {
+    "category": "other",
+    "icon": "plug",
+    "connect": "setup",
+    "summary": "%integration.summary%",
+    "example": "%integration.example%",
+    "via": { "name": "Composio", "about": "%via.about%", "link": "https://composio.dev" },
+    "entries": [
+      { "id": "slack", "name": "Slack", "summary": "%entry.slack%", "category": "work", "icon": "message-square", "logo": "./logos/slack.png", "example": "%example.slack%", "popular": 3 },
+      { "id": "github", "name": "GitHub", "summary": "%entry.github%", "category": "work", "icon": "git-pull-request", "logo": "./logos/github.png", "example": "%example.github%", "popular": 4 },
+      { "id": "gmail", "name": "Gmail", "summary": "%entry.gmail%", "category": "communication", "icon": "mail", "logo": "./logos/gmail.png", "example": "%example.gmail%", "popular": 5 },
+      { "id": "googledrive", "name": "Google Drive", "summary": "%entry.googledrive%", "category": "work", "icon": "hard-drive", "logo": "./logos/googledrive.png", "example": "%example.googledrive%" },
+      { "id": "googledocs", "name": "Google Docs", "summary": "%entry.googledocs%", "category": "work", "icon": "file-text", "logo": "./logos/googledocs.png", "example": "%example.googledocs%" },
+      { "id": "googlesheets", "name": "Google Sheets", "summary": "%entry.googlesheets%", "category": "work", "icon": "sheet", "logo": "./logos/googlesheets.png", "example": "%example.googlesheets%" },
+      { "id": "hubspot", "name": "HubSpot", "summary": "%entry.hubspot%", "category": "work", "icon": "users", "logo": "./logos/hubspot.png", "example": "%example.hubspot%" },
+      { "id": "dropbox", "name": "Dropbox", "summary": "%entry.dropbox%", "category": "work", "icon": "package", "logo": "./logos/dropbox.png", "example": "%example.dropbox%" },
+      { "id": "box", "name": "Box", "summary": "%entry.box%", "category": "work", "icon": "archive", "logo": "./logos/box.png", "example": "%example.box%" },
+      { "id": "googlecalendar", "name": "Google Calendar", "summary": "%entry.googlecalendar%", "category": "work", "icon": "calendar-days", "logo": "./logos/googlecalendar.png", "example": "%example.googlecalendar%", "popular": 6 },
+      { "id": "googletasks", "name": "Google Tasks", "summary": "%entry.googletasks%", "category": "everyday", "icon": "list-checks", "logo": "./logos/googletasks.png", "example": "%example.googletasks%" },
+      { "id": "googlemeet", "name": "Google Meet", "summary": "%entry.googlemeet%", "category": "work", "icon": "video", "logo": "./logos/googlemeet.png", "example": "%example.googlemeet%" },
+      { "id": "outlook", "name": "Outlook", "summary": "%entry.outlook%", "category": "communication", "icon": "inbox", "logo": "./logos/outlook.png", "example": "%example.outlook%", "popular": 7 },
+      { "id": "microsoft_teams", "name": "Microsoft Teams", "summary": "%entry.microsoft_teams%", "category": "communication", "icon": "messages-square", "logo": "./logos/microsoft_teams.png", "example": "%example.microsoft_teams%" },
+      { "id": "one_drive", "name": "OneDrive", "summary": "%entry.one_drive%", "category": "work", "icon": "cloud", "logo": "./logos/one_drive.png", "example": "%example.one_drive%" },
+      { "id": "trello", "name": "Trello", "summary": "%entry.trello%", "category": "work", "icon": "square-kanban", "logo": "./logos/trello.png", "example": "%example.trello%" },
+      { "id": "jira", "name": "Jira", "summary": "%entry.jira%", "category": "work", "icon": "ticket", "logo": "./logos/jira.png", "example": "%example.jira%" },
+      { "id": "zoom", "name": "Zoom", "summary": "%entry.zoom%", "category": "work", "icon": "webcam", "logo": "./logos/zoom.png", "example": "%example.zoom%" },
+      { "id": "calendly", "name": "Calendly", "summary": "%entry.calendly%", "category": "work", "icon": "calendar-clock", "logo": "./logos/calendly.png", "example": "%example.calendly%" },
+      { "id": "figma", "name": "Figma", "summary": "%entry.figma%", "category": "work", "icon": "pen-tool", "logo": "./logos/figma.png", "example": "%example.figma%" },
+      { "id": "salesforce", "name": "Salesforce", "summary": "%entry.salesforce%", "category": "work", "icon": "building-2", "logo": "./logos/salesforce.png", "example": "%example.salesforce%" },
+      { "id": "linkedin", "name": "LinkedIn", "summary": "%entry.linkedin%", "category": "communication", "icon": "briefcase", "logo": "./logos/linkedin.png", "example": "%example.linkedin%" },
+      { "id": "youtube", "name": "YouTube", "summary": "%entry.youtube%", "category": "reading", "icon": "tv", "logo": "./logos/youtube.png", "example": "%example.youtube%" },
+      { "id": "reddit", "name": "Reddit", "summary": "%entry.reddit%", "category": "reading", "icon": "newspaper", "logo": "./logos/reddit.png", "example": "%example.reddit%" }
+    ]
+  },
+  "permissions": {
+    "network": ["backend.composio.dev"],
+    "vault": ["composio"]
+  }
+}

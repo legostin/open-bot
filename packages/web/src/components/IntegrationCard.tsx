@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, ExternalLink } from "lucide-react";
-import type { IntegrationView } from "@owlbot/shared";
+import type { IntegrationView } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { openExternal } from "../lib/external";
 import { primaryAction, STATUS_TONE } from "../lib/integrations";

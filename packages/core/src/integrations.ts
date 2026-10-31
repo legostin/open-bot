@@ -9,8 +9,8 @@
 
 import { openSync, readSync, closeSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
-import type { CatalogView, IntegrationInfo, IntegrationVia, IntegrationView, Locale, OwlbotManifest } from "@owlbot/shared";
-import { toolPrefixOf } from "@owlbot/shared";
+import type { CatalogView, IntegrationInfo, IntegrationVia, IntegrationView, Locale, PiomioManifest } from "@piomio/shared";
+import { toolPrefixOf } from "@piomio/shared";
 import type { Hub } from "./app.ts";
 import { localizePluginValue, tFor } from "./i18n.ts";
 import type { PluginRecord } from "./plugins/host.ts";
@@ -46,7 +46,7 @@ export function googleScopes(hub: Hub): string[] {
 }
 
 /** How a plugin without an `integration` block shows in the catalog: as a brain, or as something else. */
-function plainIntegration(m: OwlbotManifest): IntegrationInfo {
+function plainIntegration(m: PiomioManifest): IntegrationInfo {
   const brain = m.contributes.brains.length > 0;
   return { category: brain ? "brains" : "other", icon: brain ? "brain" : "puzzle", connect: m.contributes.setup?.secrets.length ? "setup" : "none", scopes: [], entries: [] };
 }

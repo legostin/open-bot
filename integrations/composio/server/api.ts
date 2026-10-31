@@ -2,7 +2,7 @@
 // connected accounts), tools and running them. Every request carries the key as x-api-key; failures come back as a
 // ComposioError whose kind says what the person or the agent can do about it.
 
-import type { JsonSchema } from "@owlbot/shared";
+import type { JsonSchema } from "@piomio/shared";
 
 export const DEFAULT_API = "https://backend.composio.dev/api/v3.1";
 

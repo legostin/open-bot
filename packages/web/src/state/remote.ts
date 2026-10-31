@@ -1,6 +1,6 @@
 // Access from anywhere (GET /api/remote): the card's steps and the link, refreshed when the hub reports a change.
 
-import type { RemoteView } from "@owlbot/shared";
+import type { RemoteView } from "@piomio/shared";
 import { api } from "../lib/api";
 import { createStore, useStore } from "../lib/store";
 import { hubEvents } from "./app";

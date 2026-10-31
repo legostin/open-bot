@@ -11,24 +11,24 @@ describe("desktop app links", () => {
   });
 
   it("builds the pairing link the app opens", () => {
-    expect(pairLink("https://bot.example.com", "AB12CD34")).toBe("owlbot://pair?hub=https%3A%2F%2Fbot.example.com&code=AB12CD34");
-    expect(pairLink("http://localhost:41790", "x", "owlbot-test")).toBe("owlbot-test://pair?hub=http%3A%2F%2Flocalhost%3A41790&code=x");
+    expect(pairLink("https://bot.example.com", "AB12CD34")).toBe("piomio://pair?hub=https%3A%2F%2Fbot.example.com&code=AB12CD34");
+    expect(pairLink("http://localhost:41790", "x", "piomio-test")).toBe("piomio-test://pair?hub=http%3A%2F%2Flocalhost%3A41790&code=x");
   });
 
   it("knows the app window it runs in", () => {
     expect(desktopApp({})).toBeUndefined();
-    expect(desktopApp({ owlbotDesktop: { scheme: "owlbot", test: false } })).toEqual({ scheme: "owlbot", test: false });
-    expect(desktopApp({ owlbotDesktop: { scheme: "owlbot-test", test: true } })).toEqual({ scheme: "owlbot-test", test: true });
-    expect(desktopApp({ owlbotDesktop: { scheme: "javascript" } })).toBeUndefined();
+    expect(desktopApp({ piomioDesktop: { scheme: "piomio", test: false } })).toEqual({ scheme: "piomio", test: false });
+    expect(desktopApp({ piomioDesktop: { scheme: "piomio-test", test: true } })).toEqual({ scheme: "piomio-test", test: true });
+    expect(desktopApp({ piomioDesktop: { scheme: "javascript" } })).toBeUndefined();
   });
 
   it("offers to connect the computer the web UI is open on, unless it is the hub's own or a phone", () => {
     const mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15";
-    expect(onAnotherComputer("owlbot.tail1234.ts.net", mac, {})).toBe(true);
+    expect(onAnotherComputer("piomio.tail1234.ts.net", mac, {})).toBe(true);
     expect(onAnotherComputer("192.168.1.2", mac, {})).toBe(true);
     expect(onAnotherComputer("localhost", mac, {})).toBe(false);
     expect(onAnotherComputer("127.0.0.1", mac, {})).toBe(false);
-    expect(onAnotherComputer("owlbot.tail1234.ts.net", "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)", {})).toBe(false);
-    expect(onAnotherComputer("owlbot.tail1234.ts.net", mac, { owlbotDesktop: { scheme: "owlbot" } })).toBe(false);
+    expect(onAnotherComputer("piomio.tail1234.ts.net", "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)", {})).toBe(false);
+    expect(onAnotherComputer("piomio.tail1234.ts.net", mac, { piomioDesktop: { scheme: "piomio" } })).toBe(false);
   });
 });

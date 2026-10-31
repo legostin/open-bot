@@ -114,8 +114,8 @@ function appServer() {
       return complete("completed");
     }
     agent("a1", `echo:${text}`);
-    note("item/started", { item: { type: "mcpToolCall", id: "m1", server: "owlbot", tool: "notify", arguments: { title: "x" }, status: "inProgress" }, threadId, turnId: turn.id });
-    note("item/completed", { item: { type: "mcpToolCall", id: "m1", server: "owlbot", tool: "notify", status: "completed", result: { content: [{ type: "text", text: "ok" }] } }, threadId, turnId: turn.id });
+    note("item/started", { item: { type: "mcpToolCall", id: "m1", server: "piomio", tool: "notify", arguments: { title: "x" }, status: "inProgress" }, threadId, turnId: turn.id });
+    note("item/completed", { item: { type: "mcpToolCall", id: "m1", server: "piomio", tool: "notify", status: "completed", result: { content: [{ type: "text", text: "ok" }] } }, threadId, turnId: turn.id });
     agent("a2", `thread=${threadId} model=${model}${effort ? ` effort=${effort}` : ""}`);
     complete("completed");
   }

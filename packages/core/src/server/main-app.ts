@@ -8,7 +8,7 @@ import { join } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
-import { LOCALES, localeFromEnv } from "@owlbot/shared";
+import { LOCALES, localeFromEnv } from "@piomio/shared";
 import { errorText, hubLocale, localizePluginValue, LocalizedError, requestLocale, t, tFor } from "../i18n.ts";
 import { forwardToLeader, pipeToLeader } from "./forward.ts";
 import type { WebSocket } from "ws";
@@ -20,7 +20,7 @@ import { registerApi } from "./api.ts";
 import { registerSpa } from "./spa.ts";
 import { registerPages } from "./pages.ts";
 
-const COOKIE = "owlbot_session";
+const COOKIE = "piomio_session";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -37,14 +37,14 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   const cfg = hub.config;
   const remote = opts.remote;
   // The gateway trusts the node's X-Forwarded-For (it sets it, dropping the client's own): clientIp() is the real one.
-  const trustProxy = remote ? "127.0.0.1" : process.env.OWLBOT_TRUST_PROXY === "1";
+  const trustProxy = remote ? "127.0.0.1" : process.env.PIOMIO_TRUST_PROXY === "1";
   const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, trustProxy });
   await app.register(fastifyCookie);
   await app.register(fastifyWebsocket, { options: { maxPayload: 4 * 1024 * 1024 } });
 
   const secure = !!remote || cfg.publicUrl.startsWith("https://");
   const localOrigins = originsFor(cfg.publicUrl, cfg.allowedHosts, cfg.port);
-  if (process.env.OWLBOT_DEV_ORIGIN) localOrigins.push(process.env.OWLBOT_DEV_ORIGIN);
+  if (process.env.PIOMIO_DEV_ORIGIN) localOrigins.push(process.env.PIOMIO_DEV_ORIGIN);
   /** Where state-changing requests may come from: the link itself on the gateway. */
   const origins = (): string[] => {
     if (!remote) return localOrigins;
@@ -63,7 +63,7 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
 
   app.addHook("onRequest", async (req, reply) => {
     if (!hostAllowed(req, hosts())) {
-      reply.code(421).send({ error: "Host not allowed. Add it to OWLBOT_ALLOWED_HOSTS." });
+      reply.code(421).send({ error: "Host not allowed. Add it to PIOMIO_ALLOWED_HOSTS." });
       return reply;
     }
     // A machine's MCP calls on a standby belong to the leader that opened its session.
@@ -121,8 +121,8 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
       if (!originAllowed(req, origins())) throw new HttpError(403, "Origin not allowed");
       const b = req.body as { token?: string; password?: string };
       hub.auth.setup(String(b?.token ?? ""), String(b?.password ?? ""), clientIp(req));
-      // The first user's browser language becomes the hub language unless OWLBOT_LANG pins it.
-      if (!localeFromEnv({ OWLBOT_LANG: process.env.OWLBOT_LANG })) hub.settings.update({ language: requestLocale(req) });
+      // The first user's browser language becomes the hub language unless PIOMIO_LANG pins it.
+      if (!localeFromEnv({ PIOMIO_LANG: process.env.PIOMIO_LANG })) hub.settings.update({ language: requestLocale(req) });
       const { token } = hub.auth.createSession("main");
       setCookie(reply, token);
       return { ok: true };
@@ -179,7 +179,7 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   app.post("/mcp", async (req, reply) => {
     const session = hub.mcp.authenticate(req.headers.authorization);
     if (!session) {
-      reply.code(401).header("www-authenticate", 'Bearer realm="owlbot"');
+      reply.code(401).header("www-authenticate", 'Bearer realm="piomio"');
       return { jsonrpc: "2.0", id: null, error: { code: -32001, message: "invalid session token" } };
     }
     const out = await hub.mcp.handle(session, req.body);
@@ -214,9 +214,9 @@ export async function buildMainApp(hub: Hub, opts: MainAppOptions = {}): Promise
   // The invite's page and the desktop installers (join-page.ts).
   registerJoinPage(app, hub, { remote: !!remote, budget: pairBudget });
 
-  // Single-file machine daemon (public code, no secrets): `node owlbot-node.mjs pair <hub> <code>`.
-  app.get("/download/owlbot-node.mjs", async (_req, reply) => {
-    const file = join(cfg.appRoot, "packages", "node", "dist", "owlbot-node.mjs");
+  // Single-file machine daemon (public code, no secrets): `node piomio-node.mjs pair <hub> <code>`.
+  app.get("/download/piomio-node.mjs", async (_req, reply) => {
+    const file = join(cfg.appRoot, "packages", "node", "dist", "piomio-node.mjs");
     if (!existsSync(file)) throw new HttpError(404, "build.daemonMissing");
     return sendFile(reply, file, { download: true });
   });

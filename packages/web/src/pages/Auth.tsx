@@ -15,7 +15,7 @@ function Logo() {
     <div className="animate-zoom mb-7 flex flex-col items-center gap-4">
       <OwlMark size={76} className="rounded-[22px] shadow-[0_18px_40px_-14px_rgb(245_158_11/0.55)]" />
       <div className="text-center">
-        <div className="font-display text-[30px] leading-none font-semibold">Owlbot</div>
+        <div className="font-display text-[30px] leading-none font-semibold">Piomio</div>
         <div className="mt-2.5 text-sm text-muted">{t("auth.tagline")}</div>
       </div>
     </div>
@@ -87,7 +87,7 @@ function SetupForm() {
         <>
           <div className="flex gap-2.5 rounded-2xl bg-surface-2 p-3 text-xs leading-relaxed text-muted">
             <Terminal className="mt-0.5 size-4 shrink-0" />
-            <span>{tRich("auth.setup.codeHint", { command: <code className="font-mono">docker logs owlbot</code> })}</span>
+            <span>{tRich("auth.setup.codeHint", { command: <code className="font-mono">docker logs piomio</code> })}</span>
           </div>
           <Field label={t("auth.setup.code")}>
             <Input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="one-time-code" autoFocus required spellCheck={false} className="font-mono" />
@@ -162,7 +162,7 @@ function LoginForm({ auth }: { auth: AuthState }) {
         </>
       )}
       <p className="text-center text-xs leading-relaxed text-muted">
-        {tRich("auth.login.forgot", { command: <code className="font-mono">{`owlbot reset-password <${t("auth.login.newPassword")}>`}</code> })}
+        {tRich("auth.login.forgot", { command: <code className="font-mono">{`piomio reset-password <${t("auth.login.newPassword")}>`}</code> })}
       </p>
     </form>
   );

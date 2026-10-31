@@ -1,6 +1,6 @@
 // The kit every page runs on: one classic script (build.mjs) the hub serves at /p/kit/<hash>/kit.js. The hub compiles
-// a page's TSX to CommonJS and serves it wrapped as `owlbotPage(function (require, exports, module) { … })`; `require`
-// hands out React, the shadcn/ui components, lucide icons and Owlbot's blocks (the names in shared/src/pages.ts), and
+// a page's TSX to CommonJS and serves it wrapped as `piomioPage(function (require, exports, module) { … })`; `require`
+// hands out React, the shadcn/ui components, lucide icons and Piomio's blocks (the names in shared/src/pages.ts), and
 // the kit renders the page's default export. In the page's JSX, pictures from other sites go through the page's image
 // route and outside links open outside the page.
 import * as React from "react";
@@ -90,8 +90,8 @@ const modules: Record<string, unknown> = {
   "class-variance-authority": cva,
   "tailwind-merge": twMerge,
   "@/lib/utils": utils,
-  "@owlbot/ui": uiForPages,
-  "@owlbot/page": page,
+  "@piomio/ui": uiForPages,
+  "@piomio/page": page,
 };
 
 function require(name: string): unknown {
@@ -133,12 +133,12 @@ function theme(): void {
   apply(pinned ? pinned === "dark" : media.matches);
   if (!pinned) media.addEventListener("change", (e) => apply(e.matches));
   window.addEventListener("message", (e) => {
-    if (e.source === window.parent && e.data?.owlbot && typeof e.data.dark === "boolean") apply(e.data.dark);
+    if (e.source === window.parent && e.data?.piomio && typeof e.data.dark === "boolean") apply(e.data.dark);
   });
 }
 
 function start(factory: (require: (name: string) => unknown, exports: Record<string, unknown>, module: { exports: Record<string, unknown> }) => void): void {
-  const holder = document.getElementById("owlbot-page");
+  const holder = document.getElementById("piomio-page");
   const info = JSON.parse(holder?.textContent || "{}") as runtime.PageInfo;
   runtime.setPageInfo({ ...info, state: info.state ?? {} });
   setLocale(info.locale ?? "en");
@@ -165,4 +165,4 @@ function start(factory: (require: (name: string) => unknown, exports: Record<str
   runtime.post({ type: "ready", title: info.title });
 }
 
-(window as unknown as { owlbotPage: typeof start }).owlbotPage = start;
+(window as unknown as { piomioPage: typeof start }).piomioPage = start;

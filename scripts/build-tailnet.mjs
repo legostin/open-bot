@@ -1,7 +1,7 @@
-// Builds owlbot-tailnet, the hub's own Tailscale node (packages/tailnet, Go), into
-// packages/tailnet/bin/<platform>-<arch>/owlbot-tailnet[.exe] — the names Node's process.platform/arch use.
+// Builds piomio-tailnet, the hub's own Tailscale node (packages/tailnet, Go), into
+// packages/tailnet/bin/<platform>-<arch>/piomio-tailnet[.exe] — the names Node's process.platform/arch use.
 //   node scripts/build-tailnet.mjs            this computer's platform
-//   node scripts/build-tailnet.mjs --all      every platform Owlbot ships
+//   node scripts/build-tailnet.mjs --all      every platform Piomio ships
 //   node scripts/build-tailnet.mjs --target darwin-arm64 --target win32-x64
 // Needs Go; the module asks for its own toolchain version, which Go downloads by itself.
 import { execFileSync } from "node:child_process";
@@ -18,7 +18,7 @@ const GOOS = { darwin: "darwin", win32: "windows", linux: "linux" };
 const GOARCH = { arm64: "arm64", x64: "amd64" };
 
 export function binaryPath(target) {
-  return join(pkg, "bin", target, target.startsWith("win32") ? "owlbot-tailnet.exe" : "owlbot-tailnet");
+  return join(pkg, "bin", target, target.startsWith("win32") ? "piomio-tailnet.exe" : "piomio-tailnet");
 }
 
 const { values } = parseArgs({ options: { all: { type: "boolean" }, target: { type: "string", multiple: true } } });

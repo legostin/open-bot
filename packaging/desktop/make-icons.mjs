@@ -1,7 +1,7 @@
 // Renders the 0_0 mark into the desktop icons. Run by hand when the logo changes; the outputs are committed so builds
 // need no browser:
-//   packages/web/public/favicon.svg (the mark)  -> packaging/assets/owlbot.ico (Windows, PNG entries), png/ (Tauri)
-//   packaging/assets/app-icon.svg (Apple grid)  -> packaging/assets/owlbot.icns (macOS)
+//   packages/web/public/favicon.svg (the mark)  -> packaging/assets/piomio.ico (Windows, PNG entries), png/ (Tauri)
+//   packaging/assets/app-icon.svg (Apple grid)  -> packaging/assets/piomio.icns (macOS)
 //   packaging/assets/tray.svg (the glyph)       -> packaging/assets/png/tray.png (the macOS menu bar, a template image)
 //   packaging/assets/dmg-background.svg         -> packaging/assets/dmg-background.tiff (1x and Retina, macOS tiffutil)
 //   node packaging/desktop/make-icons.mjs
@@ -54,7 +54,7 @@ icoSizes.forEach((s, i) => {
   header.writeUInt32LE(offset, e + 12);
   offset += png[s].length;
 });
-writeFileSync(join(out, "owlbot.ico"), Buffer.concat([header, ...icoSizes.map((s) => png[s])]));
+writeFileSync(join(out, "piomio.ico"), Buffer.concat([header, ...icoSizes.map((s) => png[s])]));
 
 // ICNS: "icns" + length, then typed PNG chunks (16…512 and their @2x variants).
 const icnsTypes = [["icp4", 16], ["icp5", 32], ["icp6", 64], ["ic07", 128], ["ic08", 256], ["ic09", 512], ["ic10", 1024], ["ic11", 32], ["ic12", 64], ["ic13", 256], ["ic14", 512]];
@@ -67,13 +67,13 @@ const chunks = icnsTypes.map(([type, s]) => {
 const icnsHead = Buffer.alloc(8);
 icnsHead.write("icns", 0, "ascii");
 icnsHead.writeUInt32BE(8 + chunks.reduce((n, c) => n + c.length, 0), 4);
-writeFileSync(join(out, "owlbot.icns"), Buffer.concat([icnsHead, ...chunks]));
+writeFileSync(join(out, "piomio.icns"), Buffer.concat([icnsHead, ...chunks]));
 // PNGs for the Tauri bundle (tauri.conf.json "bundle.icon"; the tray uses the app icon).
 mkdirSync(join(out, "png"), { recursive: true });
 for (const [file, size] of [["32x32.png", 32], ["128x128.png", 128], ["128x128@2x.png", 256], ["icon.png", 512]]) writeFileSync(join(out, "png", file), png[size]);
 writeFileSync(join(out, "png", "tray.png"), tray[44]);
 // The .dmg window's background: Finder picks the Retina image from a two-image TIFF.
-const tmp = mkdtempSync(join(tmpdir(), "owlbot-dmg-"));
+const tmp = mkdtempSync(join(tmpdir(), "piomio-dmg-"));
 writeFileSync(join(tmp, "bg.png"), dmg[660]);
 writeFileSync(join(tmp, "bg@2x.png"), dmg[1320]);
 execFileSync("tiffutil", ["-cathidpicheck", join(tmp, "bg.png"), join(tmp, "bg@2x.png"), "-out", join(out, "dmg-background.tiff")]);

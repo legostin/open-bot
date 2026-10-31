@@ -13,13 +13,13 @@ const IMPORT_MAP = {
     "react/jsx-runtime": "/shared/react-jsx-runtime.js",
     "react-dom": "/shared/react-dom.js",
     "react-dom/client": "/shared/react-dom-client.js",
-    "@owlbot/ui": "/shared/owlbot-ui.js",
+    "@piomio/ui": "/shared/piomio-ui.js",
   },
 };
 
 function devImportMap(): Plugin {
   return {
-    name: "owlbot-dev-import-map",
+    name: "piomio-dev-import-map",
     apply: "serve",
     transformIndexHtml: () => [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify(IMPORT_MAP), injectTo: "head-prepend" }],
   };
@@ -29,13 +29,13 @@ export default defineConfig({
   base: "/",
   plugins: [react(), tailwindcss(), devImportMap()],
   resolve: {
-    // The browser-safe part of @owlbot/shared, taken from this checkout (not whatever node_modules links to).
+    // The browser-safe part of @piomio/shared, taken from this checkout (not whatever node_modules links to).
     alias: {
-      "@owlbot/shared/i18n": resolve(import.meta.dirname, "../shared/src/i18n.ts"),
-      "@owlbot/shared/avatar": resolve(import.meta.dirname, "../shared/src/avatar.ts"),
-      "@owlbot/shared/group": resolve(import.meta.dirname, "../shared/src/group.ts"),
-      "@owlbot/shared/thinking": resolve(import.meta.dirname, "../shared/src/thinking.ts"),
-      "@owlbot/shared/models": resolve(import.meta.dirname, "../shared/src/models.ts"),
+      "@piomio/shared/i18n": resolve(import.meta.dirname, "../shared/src/i18n.ts"),
+      "@piomio/shared/avatar": resolve(import.meta.dirname, "../shared/src/avatar.ts"),
+      "@piomio/shared/group": resolve(import.meta.dirname, "../shared/src/group.ts"),
+      "@piomio/shared/thinking": resolve(import.meta.dirname, "../shared/src/thinking.ts"),
+      "@piomio/shared/models": resolve(import.meta.dirname, "../shared/src/models.ts"),
     },
   },
   build: {

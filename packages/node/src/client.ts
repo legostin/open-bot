@@ -2,7 +2,7 @@
 // Reconnects forever with exponential backoff (max 60 s); a 4401 close (revoked / unknown key) is fatal.
 
 import WebSocket from "ws";
-import { createRpcPeer, normalizeLocale, wsTransport, type RpcPeer, type WsLike } from "@owlbot/shared";
+import { createRpcPeer, normalizeLocale, wsTransport, type RpcPeer, type WsLike } from "@piomio/shared";
 import { setHubLocale, t } from "./messages.ts";
 import { nodeWsUrl } from "./home.ts";
 import { signChallenge } from "./keys.ts";

@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, LogOut, Power, RotateCcw, Save } from "lucide-react";
-import type { Locale } from "@owlbot/shared";
-import { LOCALE_NAMES } from "@owlbot/shared/i18n";
+import type { Locale } from "@piomio/shared";
+import { LOCALE_NAMES } from "@piomio/shared/i18n";
 import { api, errorText } from "../lib/api";
 import { desktopAction, desktopApp } from "../lib/desktop";
 import { useStore } from "../lib/store";

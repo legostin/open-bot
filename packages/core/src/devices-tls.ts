@@ -94,7 +94,7 @@ export function deviceTls(dataDir: string): DeviceTls {
   if (!existsSync(keyFile) || !existsSync(certFile)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
-    const der = selfSignedCertificate(publicKey, privateKey, `Owlbot hub ${hostname()}`);
+    const der = selfSignedCertificate(publicKey, privateKey, `Piomio hub ${hostname()}`);
     writeFileSync(keyFile, privateKey.export({ type: "pkcs8", format: "pem" }) as string, { mode: 0o600 });
     writeFileSync(certFile, pem("CERTIFICATE", der), { mode: 0o644 });
   }

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { join } from "node:path";
-import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import { startPlugin, type PluginHarness } from "@piomio/testkit";
 import { startMockTelegram, type MockTelegram } from "./mock-telegram.ts";
 
 const TOKEN = "123456:TEST-token";
@@ -80,7 +80,7 @@ describe("telegram plugin", () => {
     });
     expect(st.connected).toBe(false);
     expect(st.pairingCode).toMatch(/^\d{6}$/);
-    expect(st.deepLink).toBe(`https://t.me/owlbot_test_bot?start=${st.pairingCode}`);
+    expect(st.deepLink).toBe(`https://t.me/piomio_test_bot?start=${st.pairingCode}`);
     const wrong = st.pairingCode === "000000" ? "111111" : "000000";
 
     let from = tg.calls.length;
@@ -98,7 +98,7 @@ describe("telegram plugin", () => {
     expect(after.connected).toBe(true);
     expect(after.chat.id).toBe(OWNER);
     expect(after.pairingCode).toBeNull();
-    expect(after.detail).toBe("@owlbot_test_bot is linked to the chat “Аня”");
+    expect(after.detail).toBe("@piomio_test_bot is linked to the chat “Аня”");
     expect(h.coreCalls.some((c) => c.method === "ui.emit" && c.params.channel === "status")).toBe(true);
     expect((await h.peer.request<any>("channel.status", { channelId: "telegram" })).connected).toBe(true);
   });
@@ -220,7 +220,7 @@ describe("telegram plugin", () => {
     tg.push(
       privateMsg(OWNER, "что думаешь?", {
         forward_origin: { type: "user", sender_user: { id: 9, first_name: "Оля" } },
-        reply_to_message: { message_id: 5, date: 0, chat: { id: OWNER, type: "private" }, from: { id: 4242, is_bot: true, first_name: "Owlbot" }, text: "Напомнить про созвон?" },
+        reply_to_message: { message_id: 5, date: 0, chat: { id: OWNER, type: "private" }, from: { id: 4242, is_bot: true, first_name: "Piomio" }, text: "Напомнить про созвон?" },
       }),
     );
     expect(await inbound((p) => p.text === "что думаешь?")).toEqual({
@@ -463,7 +463,7 @@ describe("telegram plugin without a token", () => {
         const s = (await h.http({ path: "/status" })).body as any;
         return s.state === "polling" ? s : undefined;
       }, 5000);
-      expect(live.deepLink).toMatch(/^https:\/\/t\.me\/owlbot_test_bot\?start=\d{6}$/);
+      expect(live.deepLink).toMatch(/^https:\/\/t\.me\/piomio_test_bot\?start=\d{6}$/);
     } finally {
       await h.stop();
       await tg.close();
@@ -482,7 +482,7 @@ describe("telegram plugin with Telegram's long polls", () => {
         const s = (await h.http({ path: "/status" })).body as any;
         return s.state === "polling" ? s : undefined;
       }, 1500);
-      expect(st.deepLink).toMatch(/^https:\/\/t\.me\/owlbot_test_bot\?start=\d{6}$/);
+      expect(st.deepLink).toMatch(/^https:\/\/t\.me\/piomio_test_bot\?start=\d{6}$/);
     } finally {
       await h.stop();
       await tg.close();
@@ -506,12 +506,12 @@ describe("telegram plugin in Russian", () => {
         const r = (await h.http({ path: "/status" })).body as any;
         return r.state === "polling" ? r : undefined;
       });
-      expect(st.detail).toBe(`@owlbot_test_bot ждёт привязки: отправьте ему /start ${st.pairingCode}`);
+      expect(st.detail).toBe(`@piomio_test_bot ждёт привязки: отправьте ему /start ${st.pairingCode}`);
 
       let from = tg.calls.length;
       tg.push(privateMsg(OWNER, `/start ${st.pairingCode === "000000" ? "111111" : "000000"}`));
       const bad = await tg.waitFor("sendMessage", (p) => p.chat_id === OWNER, { from });
-      expect(bad.params.text).toBe("Код не подошёл. Проверьте код в настройках Owlbot и попробуйте ещё раз.");
+      expect(bad.params.text).toBe("Код не подошёл. Проверьте код в настройках Piomio и попробуйте ещё раз.");
 
       // Switching the hub language re-registers the command menu.
       from = tg.calls.length;

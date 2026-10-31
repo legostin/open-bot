@@ -1,7 +1,7 @@
-// Where the user is, as their phone says (the Owlbot app, once they turn location sharing on there): only the last
+// Where the user is, as their phone says (the Piomio app, once they turn location sharing on there): only the last
 // place, kept in the settings store. Agents see it in their `[You now]` block and ask for the exact point with
 // user_location. Turning sharing off forgets it, and so does unpairing the phone.
-import type { ISODate } from "@owlbot/shared";
+import type { ISODate } from "@piomio/shared";
 import type { Settings } from "./settings.ts";
 
 export interface UserLocation {

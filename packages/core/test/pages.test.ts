@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PageView } from "@owlbot/shared";
+import type { PageView } from "@piomio/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { compilePage, PageError, pageApiHostAllowed } from "../src/pages.ts";
 
@@ -18,7 +18,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin } from "lucide-react";
-import { Hero, useData } from "@owlbot/page";
+import { Hero, useData } from "@piomio/page";
 
 type Data = { stops: { name: string }[] };
 
@@ -41,7 +41,7 @@ export default function Page() {
 describe("a page's code", () => {
   it("compiles to the kit's script with the kit's modules", () => {
     const script = compilePage(PAGE);
-    expect(script.startsWith("owlbotPage(function (require, exports, module) {")).toBe(true);
+    expect(script.startsWith("piomioPage(function (require, exports, module) {")).toBe(true);
     expect(script).toMatch(/require\(['"]@\/components\/ui\/card['"]\)/);
     expect(script).toMatch(/require\(['"]react\/jsx-runtime['"]\)/);
     expect(script).not.toContain("type Data");
@@ -49,7 +49,7 @@ describe("a page's code", () => {
 
   it("refuses modules the kit does not have and says what it has", () => {
     expect(() => compilePage(`import axios from "axios";\nexport default function P() { return axios; }`)).toThrow(PageError);
-    expect(() => compilePage(`import axios from "axios";\nexport default function P() { return axios; }`)).toThrow(/cannot import "axios".*@owlbot\/page/);
+    expect(() => compilePage(`import axios from "axios";\nexport default function P() { return axios; }`)).toThrow(/cannot import "axios".*@piomio\/page/);
     expect(() => compilePage(`const x = await import("fs");`)).toThrow(/"fs"/);
   });
 
@@ -117,12 +117,12 @@ describe("pages (integration)", () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const kit = mkdtempSync(join(tmpdir(), "owl-kit-"));
     mkdirSync(kit, { recursive: true });
-    writeFileSync(join(kit, "kit.js"), "window.owlbotPage = function () {};");
+    writeFileSync(join(kit, "kit.js"), "window.piomioPage = function () {};");
     writeFileSync(join(kit, "kit.css"), ".owl-pin{}");
     writeFileSync(join(kit, "tailwind.js"), "/* tailwind */");
     writeFileSync(join(kit, "theme.css"), ":root{--radius:.75rem}");
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-pages-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), pagesKitDir: kit },
     );
     hub = new Hub(config);
@@ -174,12 +174,12 @@ describe("pages (integration)", () => {
     const kitJs = await open(`${kitBase}kit.js`, { headers: { "accept-encoding": "identity" } });
     expect(kitJs.status).toBe(200);
     expect(kitJs.headers.get("cache-control")).toContain("immutable");
-    expect(await kitJs.text()).toContain("owlbotPage");
+    expect(await kitJs.text()).toContain("piomioPage");
     expect((await open("/p/kit/000000000000/kit.js")).status).toBe(404);
 
     const script = await open(`${page.url}page.js`);
     expect(script.headers.get("content-type")).toContain("javascript");
-    expect(await script.text()).toMatch(/^owlbotPage\(function/);
+    expect(await script.text()).toMatch(/^piomioPage\(function/);
     // A link without the trailing slash goes to the page; a wrong token is no page at all.
     expect((await open(page.url.slice(0, -1), { redirect: "manual" })).headers.get("location")).toBe(page.url);
     const wrong = page.url.replace(/\/([\w-]+)\/$/, "/AAAAAAAAAAAAAAAAAAAAAAAA/");

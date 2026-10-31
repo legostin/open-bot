@@ -18,7 +18,7 @@ describe("device port certificate", () => {
     const x = new X509Certificate(a.cert);
     expect(x.publicKey.asymmetricKeyType).toBe("ec");
     expect(x.verify(x.publicKey)).toBe(true);
-    expect(x.subject).toMatch(/^CN=Owlbot hub /);
+    expect(x.subject).toMatch(/^CN=Piomio hub /);
     expect(new Date(x.validTo).getUTCFullYear()).toBeGreaterThanOrEqual(new Date().getUTCFullYear() + 19);
     expect(createHash("sha256").update(x.raw).digest("base64url")).toBe(a.fingerprint);
   });

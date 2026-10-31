@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Check, Pause, Play, RotateCw, Trash2 } from "lucide-react";
 import { ChannelTile } from "../channels/ChannelTile";
-import type { MessagePart } from "@owlbot/shared";
+import type { MessagePart } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { api, errorText } from "../../lib/api";
 import { CADENCES, cadenceOf, feedPath, type Cadence } from "../../lib/feeds";

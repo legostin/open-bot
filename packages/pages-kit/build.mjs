@@ -1,5 +1,5 @@
 // Builds what the hub serves to pages (core/src/pages.ts) into dist/: kit.js (React, shadcn/ui, lucide icons,
-// Owlbot's blocks and the page runtime as one classic script), kit.css (Leaflet's and the blocks' styles),
+// Piomio's blocks and the page runtime as one classic script), kit.css (Leaflet's and the blocks' styles),
 // tailwind.js (Tailwind's browser runtime, which styles a page from its classes) and theme.css (shadcn's tokens).
 import { build } from "esbuild";
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";

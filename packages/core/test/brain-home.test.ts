@@ -8,11 +8,11 @@ describe("brain home", () => {
     expect(loadConfig({}, { dataDir: "/srv/owl" }).brainHome).toBe(join("/srv/owl", "home", "agent"));
   });
 
-  it("follows OWLBOT_BRAIN_HOME, as the desktop app sets it", () => {
-    expect(loadConfig({ OWLBOT_BRAIN_HOME: "/Users/u" }, { dataDir: "/srv/owl" }).brainHome).toBe("/Users/u");
+  it("follows PIOMIO_BRAIN_HOME, as the desktop app sets it", () => {
+    expect(loadConfig({ PIOMIO_BRAIN_HOME: "/Users/u" }, { dataDir: "/srv/owl" }).brainHome).toBe("/Users/u");
   });
 
   it("stays in the data dir under user isolation", () => {
-    expect(loadConfig({ OWLBOT_BRAIN_HOME: "/Users/u", OWLBOT_ISOLATION: "users" }, { dataDir: "/srv/owl" }).brainHome).toBe(join("/srv/owl", "home", "agent"));
+    expect(loadConfig({ PIOMIO_BRAIN_HOME: "/Users/u", PIOMIO_ISOLATION: "users" }, { dataDir: "/srv/owl" }).brainHome).toBe(join("/srv/owl", "home", "agent"));
   });
 });

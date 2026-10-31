@@ -2,8 +2,8 @@
 // forecast as a card in the chat (widget "forecast": now, the next hours, the days ahead) and gives the model the same
 // numbers in a few lines, so it can answer the actual question ("do I need an umbrella?") in a sentence.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
 import { CONDITION_TEXT, conditionOf } from "./codes.ts";
 
 interface Settings {

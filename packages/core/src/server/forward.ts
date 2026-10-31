@@ -10,7 +10,7 @@ import type { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fast
 import WebSocket from "ws";
 import type { Hub } from "../app.ts";
 import { linkHttp } from "../replica-link.ts";
-import { pinMatches, pinnedAgent } from "@owlbot/replica";
+import { pinMatches, pinnedAgent } from "@piomio/replica";
 
 const HERE = /^\/api\/replica\//;
 const HOP = new Set(["connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade", "te", "trailer"]);

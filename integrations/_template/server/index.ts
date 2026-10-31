@@ -2,8 +2,8 @@
 // length for any place from sunrise-sunset.org, no key. sun_times shows a card in the chat (widget "day") and gives
 // the model the times as text. A new integration replaces the API and the card and keeps the shape: see SKILL.md.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
 
 interface Settings {
   /** The API's address (tests point it at a fake). */
@@ -21,7 +21,7 @@ export interface DayCard {
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const USER_AGENT = "Owlbot/0.1 (self-hosted personal agent; sun integration)";
+const USER_AGENT = "Piomio/0.1 (self-hosted personal agent; sun integration)";
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 

@@ -1,6 +1,6 @@
-# Owlbot: one image with the hub, web UI, security console, built-in plugins,
+# Piomio: one image with the hub, web UI, security console, built-in plugins,
 # Claude Code + Codex CLIs and a Chromium for the browser plugin.
-# Build from the repo root:  docker build -f docker/Dockerfile -t owlbot .
+# Build from the repo root:  docker build -f docker/Dockerfile -t piomio .
 
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
@@ -16,7 +16,7 @@ WORKDIR /src
 COPY packages/tailnet/go.mod packages/tailnet/go.sum ./
 RUN go mod download
 COPY packages/tailnet/*.go ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/owlbot-tailnet .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/piomio-tailnet .
 
 FROM node:24-bookworm-slim AS runtime-base
 ENV DEBIAN_FRONTEND=noninteractive
@@ -28,9 +28,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Harness CLIs used as brains (they run as the unprivileged "agent" user).
 RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code @openai/codex && npm cache clean --force
 
-# Users: hub = owlbot; brain CLIs = agent (shares the owlbot group for workspaces); other plugins = plugin.
-RUN groupadd -r owlbot && useradd -r -m -d /home/owlbot -g owlbot -s /bin/bash owlbot \
-    && groupadd -r agent && useradd -r -M -d /data/home/agent -g agent -G owlbot -s /bin/bash agent \
+# Users: hub = piomio; brain CLIs = agent (shares the piomio group for workspaces); other plugins = plugin.
+RUN groupadd -r piomio && useradd -r -m -d /home/piomio -g piomio -s /bin/bash piomio \
+    && groupadd -r agent && useradd -r -M -d /data/home/agent -g agent -G piomio -s /bin/bash agent \
     && groupadd -r plugin && useradd -r -M -d /data/home/plugin -g plugin -s /usr/sbin/nologin plugin
 # Chromium for the browser plugin; keep the version in sync with playwright in package-lock.json.
 ARG PLAYWRIGHT_VERSION=1.64.1
@@ -38,24 +38,24 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium && chmod -R a+rX /ms-playwright \
     && npm cache clean --force && rm -rf /var/lib/apt/lists/*
 
-COPY docker/sudoers /etc/sudoers.d/owlbot
-RUN chmod 0440 /etc/sudoers.d/owlbot && visudo -c
+COPY docker/sudoers /etc/sudoers.d/piomio
+RUN chmod 0440 /etc/sudoers.d/piomio && visudo -c
 
 FROM runtime-base
 COPY --from=build --chown=root:root /app /app
-COPY --from=tailnet /out/owlbot-tailnet /usr/local/bin/owlbot-tailnet
+COPY --from=tailnet /out/piomio-tailnet /usr/local/bin/piomio-tailnet
 WORKDIR /app
-COPY docker/entrypoint.sh /usr/local/bin/owlbot-entrypoint
-RUN chmod 0755 /usr/local/bin/owlbot-entrypoint
+COPY docker/entrypoint.sh /usr/local/bin/piomio-entrypoint
+RUN chmod 0755 /usr/local/bin/piomio-entrypoint
 
 ENV NODE_ENV=production \
-    OWLBOT_APP_ROOT=/app \
-    OWLBOT_DATA_DIR=/data \
-    OWLBOT_HOST=0.0.0.0 \
-    OWLBOT_PORT=8080 \
-    OWLBOT_CONSOLE_PORT=8081 \
-    OWLBOT_ISOLATION=users \
-    OWLBOT_TAILNET_BIN=/usr/local/bin/owlbot-tailnet \
+    PIOMIO_APP_ROOT=/app \
+    PIOMIO_DATA_DIR=/data \
+    PIOMIO_HOST=0.0.0.0 \
+    PIOMIO_PORT=8080 \
+    PIOMIO_CONSOLE_PORT=8081 \
+    PIOMIO_ISOLATION=users \
+    PIOMIO_TAILNET_BIN=/usr/local/bin/piomio-tailnet \
     DISPLAY=:99 \
     DISABLE_AUTOUPDATER=1 \
     LANG=C.UTF-8
@@ -63,5 +63,5 @@ ENV NODE_ENV=production \
 VOLUME /data
 EXPOSE 8080 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD curl -fsS http://127.0.0.1:8080/api/auth/state >/dev/null || exit 1
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/owlbot-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/piomio-entrypoint"]
 CMD ["start"]

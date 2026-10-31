@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Lock, LockOpen, ShieldCheck, ExternalLink } from "lucide-react";
-import type { MessagePart, PluginSetupView, SecretRequest, VaultState } from "@owlbot/shared";
+import type { MessagePart, PluginSetupView, SecretRequest, VaultState } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
 import { openOutside } from "../lib/native";

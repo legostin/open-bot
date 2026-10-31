@@ -3,7 +3,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { Params } from "@owlbot/shared";
+import type { Params } from "@piomio/shared";
 import { LocalizedError } from "../i18n.ts";
 
 export const MIME: Record<string, string> = {

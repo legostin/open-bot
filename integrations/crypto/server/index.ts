@@ -1,8 +1,8 @@
 // Builtin plugin "crypto": cryptocurrency prices from CoinGecko's public API (no key; a few calls a minute). Both
 // tools show a card in the chat (widget "prices": each coin's price, its 24-hour change and a 7-day sparkline).
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
 
 interface Settings {
   /** CoinGecko's address (tests point it at a fake). */

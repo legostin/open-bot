@@ -2,8 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Badge, Button, Card, Spinner, definePluginUI } from "@owlbot/ui";
-import type { OwlbotUI } from "@owlbot/ui";
+import { Badge, Button, Card, Spinner, definePluginUI } from "@piomio/ui";
+import type { PiomioUI } from "@piomio/ui";
 
 interface Status {
   connected: boolean;
@@ -17,8 +17,8 @@ interface Status {
 }
 
 // Set in definePluginUI: the page reloads on a language switch.
-let t: OwlbotUI["i18n"]["t"] = (key) => key;
-let formatDate: OwlbotUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleString();
+let t: PiomioUI["i18n"]["t"] = (key) => key;
+let formatDate: PiomioUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleString();
 
 /** A message with React elements in its placeholders: rich("ui.x", { link: <a>…</a> }). */
 function rich(key: string, parts: Record<string, ReactNode>): ReactNode[] {
@@ -48,7 +48,7 @@ const muted = { opacity: 0.75, fontSize: "0.9em" } as const;
 const code = { fontFamily: "ui-monospace, monospace", fontSize: "1.6em", letterSpacing: "0.2em", fontWeight: 600 } as const;
 const row = { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 12 } as const;
 
-function TelegramSettings({ ui }: { ui: OwlbotUI }) {
+function TelegramSettings({ ui }: { ui: PiomioUI }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -1,7 +1,7 @@
 // "Is it worth interrupting you?" — levels, quiet hours, rate limits, dedup, digests, feedback.
 
-import type { Notification, NotifyLevel } from "@owlbot/shared";
-import { newId, nowIso, truncate } from "@owlbot/shared";
+import type { Notification, NotifyLevel } from "@piomio/shared";
+import { newId, nowIso, truncate } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { Settings } from "./settings.ts";

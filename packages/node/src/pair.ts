@@ -1,7 +1,7 @@
-// `owlbot-node pair <hub> <code>`: new Ed25519 identity → POST <hub>/api/node/pair → config.json + key.json.
+// `piomio-node pair <hub> <code>`: new Ed25519 identity → POST <hub>/api/node/pair → config.json + key.json.
 
 import { existsSync } from "node:fs";
-import type { MachineInfo } from "@owlbot/shared";
+import type { MachineInfo } from "@piomio/shared";
 import { configFile, loadConfig, normalizeHubUrl, savePaired, UserError, type NodeConfig } from "./home.ts";
 import { generateKey } from "./keys.ts";
 import { nodeLocale, t } from "./messages.ts";
@@ -66,7 +66,7 @@ export async function pair(o: PairOptions): Promise<NodeConfig & { replaced?: st
   const post = (url: string) =>
     fetch(`${url}/api/node/pair`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-owlbot-locale": nodeLocale() },
+      headers: { "content-type": "application/json", "x-piomio-locale": nodeLocale() },
       body: JSON.stringify({ code, publicKey: key.publicKey, name: o.name, info: o.info }),
       signal: AbortSignal.timeout(o.timeoutMs ?? 20_000),
     });

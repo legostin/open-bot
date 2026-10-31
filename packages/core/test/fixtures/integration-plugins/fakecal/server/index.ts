@@ -1,5 +1,5 @@
 // An integration for the tests: asks the hub for its Google token, adds a section to the digest.
-import type { PluginContext } from "@owlbot/plugin-sdk";
+import type { PluginContext } from "@piomio/plugin-sdk";
 
 export default {
   async activate(ctx: PluginContext) {

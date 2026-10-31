@@ -15,7 +15,7 @@ use crate::flavor::Flavor;
 use crate::i18n::texts;
 use crate::settings::{self, Mode, Settings};
 use crate::supervisor::{self, Spec, Status, Supervisor};
-use crate::{autostart, login, tray, window};
+use crate::{autostart, login, renamed, tray, window};
 
 /// `--background` (no window: started at login), `--mode hub|node` (when nothing is chosen yet), `--quit` (stops the
 /// running app).
@@ -49,16 +49,16 @@ pub struct Paths {
   /// The app or its test build (flavor.rs).
   pub flavor: Flavor,
   pub config_dir: PathBuf,
-  /// The staged app tree: the app's resource "app" (OWLBOT_APP_ROOT in a dev run).
+  /// The staged app tree: the app's resource "app" (PIOMIO_APP_ROOT in a dev run).
   pub app_root: PathBuf,
   pub node: PathBuf,
   pub hub_data: PathBuf,
   pub hub_log: PathBuf,
   pub node_home: PathBuf,
-  /// OWLBOT_NODE_HOME was given: a reset in a dev run may delete it (otherwise only when it is the app's own).
+  /// PIOMIO_NODE_HOME was given: a reset in a dev run may delete it (otherwise only when it is the app's own).
   pub node_home_custom: bool,
   pub node_log: PathBuf,
-  /// OWLBOT_DATA_DIR is set: a dev or test run, which leaves start at login and the AppleScript build's agent alone.
+  /// PIOMIO_DATA_DIR is set: a dev or test run, which leaves start at login and the AppleScript build's agent alone.
   pub dev: bool,
 }
 
@@ -67,11 +67,14 @@ impl Paths {
     let p = app.path();
     let flavor = Flavor::of(&app.config().identifier, &app.package_info().name);
     // Windows gives the resource dir as \\?\C:\..., which Node cannot load a main script from: plain C:\... instead.
-    let app_root = dunce::simplified(&std::env::var_os("OWLBOT_APP_ROOT").map(PathBuf::from).unwrap_or(p.resource_dir()?.join("app"))).to_path_buf();
-    let data_override = std::env::var_os("OWLBOT_DATA_DIR").map(PathBuf::from);
-    // "Owlbot", as launch.mjs has it; the test build's own "Owlbot Test".
-    let hub_data = data_override.clone().unwrap_or(p.local_data_dir()?.join(&flavor.name));
-    let node_home_override = std::env::var_os("OWLBOT_NODE_HOME").map(PathBuf::from);
+    let app_root = dunce::simplified(&std::env::var_os("PIOMIO_APP_ROOT").map(PathBuf::from).unwrap_or(p.resource_dir()?.join("app"))).to_path_buf();
+    let data_override = std::env::var_os("PIOMIO_DATA_DIR").map(PathBuf::from);
+    // "Piomio", as launch.mjs has it (Owlbot's data dir when an Owlbot install left one); the test build's own "Piomio Test".
+    let hub_data = match &data_override {
+      Some(data) => data.clone(),
+      None => renamed::hub_data(&p.local_data_dir()?, &flavor),
+    };
+    let node_home_override = std::env::var_os("PIOMIO_NODE_HOME").map(PathBuf::from);
     let node_home_custom = node_home_override.is_some();
     let node_home = node_home_override.unwrap_or(p.home_dir()?.join(flavor.node_home_dir()));
     // A dev or test run keeps the app's own settings and logs in its data dir too, away from an installed app's.
@@ -79,6 +82,9 @@ impl Paths {
       Some(data) => (data.join("app"), data.join("logs").join("node.log")),
       None => (p.app_config_dir()?, p.app_log_dir()?.join("node.log")),
     };
+    if data_override.is_none() {
+      renamed::adopt(&flavor, &config_dir, (!node_home_custom).then_some(node_home.as_path()));
+    }
     Ok(Paths {
       flavor,
       config_dir,
@@ -103,11 +109,11 @@ impl Paths {
   }
 
   fn node_cli(&self) -> PathBuf {
-    self.app_root.join("packages").join("node").join("dist").join("owlbot-node.mjs")
+    self.app_root.join("packages").join("node").join("dist").join("piomio-node.mjs")
   }
 }
 
-/// The ports launch.mjs gives the hub: `port` (else `default`: OWLBOT_DESKTOP_PORT there), `consolePort` (port+1),
+/// The ports launch.mjs gives the hub: `port` (else `default`: PIOMIO_DESKTOP_PORT there), `consolePort` (port+1),
 /// `egressPort` (port+9).
 pub fn hub_ports(desktop_json: Option<&str>, default: u16) -> Vec<u16> {
   let v: serde_json::Value = desktop_json.and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
@@ -132,11 +138,11 @@ pub struct AppState {
   pub error: Mutex<Option<UiError>>,
   /// The hub window's address is being fetched: the setup window says "starting".
   pub starting: Mutex<bool>,
-  /// "Reset Owlbot…" was chosen: the setup window asks to confirm.
+  /// "Reset Piomio…" was chosen: the setup window asks to confirm.
   pub reset: Mutex<bool>,
   pub tray: Mutex<Option<tray::Tray>>,
   pub updates: crate::update::Updates,
-  /// macOS: the login shell's PATH for owlbot-node (a GUI app gets a bare one; the hub reads it itself).
+  /// macOS: the login shell's PATH for piomio-node (a GUI app gets a bare one; the hub reads it itself).
   pub path_env: Option<String>,
 }
 
@@ -182,6 +188,7 @@ pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error:
     if !state.paths.flavor.test {
       crate::migration::remove_old_hub_agent();
     }
+    crate::renamed::remove_old_autostart(&state.paths.flavor);
     if settings.mode.is_some() {
       apply_autostart(&state.paths.flavor, settings.autostart);
     }
@@ -216,24 +223,24 @@ pub fn setup(app: &mut tauri::App, args: Args) -> Result<(), Box<dyn std::error:
 fn apply_autostart(flavor: &Flavor, on: bool) {
   if let Ok(exe) = std::env::current_exe() {
     if let Err(e) = autostart::set(flavor, &exe, on) {
-      eprintln!("owlbot: start at login: {e}");
+      eprintln!("piomio: start at login: {e}");
     }
   }
 }
 
 fn spec(st: &AppState, mode: Mode) -> Spec {
   let p = &st.paths;
-  let mut env = vec![("OWLBOT_DESKTOP".to_string(), "1".to_string()), ("OWLBOT_DESKTOP_PORT".to_string(), p.flavor.port.to_string())];
+  let mut env = vec![("PIOMIO_DESKTOP".to_string(), "1".to_string()), ("PIOMIO_DESKTOP_PORT".to_string(), p.flavor.port.to_string())];
   let delay = Duration::from_secs(2);
   match mode {
     Mode::Hub => {
-      env.push(("OWLBOT_DATA_DIR".into(), arg(&p.hub_data)));
+      env.push(("PIOMIO_DATA_DIR".into(), arg(&p.hub_data)));
       Spec { program: p.node.clone(), args: vec![arg(&p.launch()), "run".into()], env, log: p.hub_log.clone(), ports: p.hub_ports(), restart_delay: delay }
     }
     Mode::Node => {
-      env.push(("OWLBOT_LANG".into(), texts().lang().into()));
-      env.push(("OWLBOT_NODE_HOME".into(), arg(&p.node_home)));
-      // The hub finds the user's CLIs itself (packages/core/src/user-path.ts); owlbot-node needs this PATH.
+      env.push(("PIOMIO_LANG".into(), texts().lang().into()));
+      env.push(("PIOMIO_NODE_HOME".into(), arg(&p.node_home)));
+      // The hub finds the user's CLIs itself (packages/core/src/user-path.ts); piomio-node needs this PATH.
       if let Some(path) = &st.path_env {
         env.push(("PATH".into(), path.clone()));
       }
@@ -276,8 +283,8 @@ fn hub_window_url(st: &AppState) -> Option<Url> {
   let out = supervisor::command(&p.node)
     .arg(p.launch())
     .arg("url")
-    .env("OWLBOT_DATA_DIR", &p.hub_data)
-    .env("OWLBOT_DESKTOP_PORT", p.flavor.port.to_string())
+    .env("PIOMIO_DATA_DIR", &p.hub_data)
+    .env("PIOMIO_DESKTOP_PORT", p.flavor.port.to_string())
     .output()
     .ok()?;
   if !out.status.success() {
@@ -354,13 +361,13 @@ pub fn choose(app: &AppHandle, mode: Mode) -> Result<(), String> {
   Ok(())
 }
 
-/// `owlbot-node pair` with the bundled Node; on success this computer becomes a machine of that hub.
+/// `piomio-node pair` with the bundled Node; on success this computer becomes a machine of that hub.
 pub fn pair(app: &AppHandle, hub: &str, code: &str, name: &str) -> Result<(), String> {
   let st = app.state::<AppState>();
   let p = &st.paths;
   let mut cmd = supervisor::command(&p.node);
-  // An owlbot://pair link brings the hub and the code; the setup form gives the invite link alone, which the CLI reads.
-  cmd.arg(p.node_cli()).args(["pair", hub.trim()]).env("OWLBOT_LANG", texts().lang()).env("OWLBOT_NODE_HOME", &p.node_home);
+  // An piomio://pair link brings the hub and the code; the setup form gives the invite link alone, which the CLI reads.
+  cmd.arg(p.node_cli()).args(["pair", hub.trim()]).env("PIOMIO_LANG", texts().lang()).env("PIOMIO_NODE_HOME", &p.node_home);
   if !code.trim().is_empty() {
     cmd.arg(code.trim());
   }
@@ -559,7 +566,7 @@ mod tests {
     assert!(args(&["--quit"]).quit);
     assert!(args(&["--update"]).update);
     assert_eq!(args(&["--mode", "x"]).mode, None);
-    assert_eq!(args(&["owlbot://pair?hub=x&code=y"]), Args::default());
+    assert_eq!(args(&["piomio://pair?hub=x&code=y"]), Args::default());
   }
 
   #[test]

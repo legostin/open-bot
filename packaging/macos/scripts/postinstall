@@ -1,7 +1,7 @@
 #!/bin/sh
-# Runs as root once the files are in place: opens Owlbot for the user at the console; its first run asks what this
+# Runs as root once the files are in place: opens Piomio for the user at the console; its first run asks what this
 # computer is. With nobody at the console (SSH, MDM) it starts when the user opens it.
-APP=/Applications/Owlbot.app
+APP=/Applications/Piomio.app
 USER_NAME="$(stat -f %Su /dev/console)"
 if [ -z "$USER_NAME" ] || [ "$USER_NAME" = root ] || [ "$USER_NAME" = loginwindow ]; then exit 0; fi
 launchctl asuser "$(id -u "$USER_NAME")" sudo -u "$USER_NAME" -H open "$APP"

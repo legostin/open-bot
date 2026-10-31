@@ -1,0 +1,6 @@
+{
+  "name": "Blender",
+  "description": "Blender for the agents, through the official MCP server from Blender Lab: look at the scene, its objects and files, take screenshots, render, and run Python in Blender (each change asks you first). Works with any Blender 5.1 or newer on this computer: Piomio finds it, installs the official MCP add-on into it on first use and opens Blender when an agent needs it.",
+  "integration.summary": "Your Blender scenes: look, explain, change",
+  "integration.example": "What is in my open Blender scene?"
+}

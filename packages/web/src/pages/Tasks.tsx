@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { AlarmClock, Bot, ChevronRight, Plus, Search, Timer, User, Zap } from "lucide-react";
 import { AgentAvatar } from "../components/AgentAvatar";
-import type { Task, TaskStatus } from "@owlbot/shared";
+import type { Task, TaskStatus } from "@piomio/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { ACTIVE_STATUSES, formatDateTime, formatTime, relativeTime, taskStatus } from "../lib/format";

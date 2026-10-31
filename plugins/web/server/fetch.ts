@@ -5,7 +5,7 @@ import { assertPublicUrl, BlockedUrlError, defaultLookup, type LookupFn } from "
 export const MAX_REDIRECTS = 5;
 export const MAX_BYTES = 5 * 1024 * 1024;
 export const TIMEOUT_MS = 30_000;
-export const DEFAULT_USER_AGENT = "Mozilla/5.0 (compatible; owlbot/0.1; personal agent)";
+export const DEFAULT_USER_AGENT = "Mozilla/5.0 (compatible; piomio/0.1; personal agent)";
 
 export interface FetchOptions {
   allowPrivate?: boolean;

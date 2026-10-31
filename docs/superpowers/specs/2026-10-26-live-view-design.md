@@ -31,7 +31,7 @@ happens. The window belongs to the core; plugins contribute content and activity
 - Command palette: "Show live view: <title>" opens the expanded view even with no activity (e.g. to sign in to a site
   in the agent's browser ahead of time).
 
-## Contract (`@owlbot/ui`)
+## Contract (`@piomio/ui`)
 
 ```ts
 ui.liveView.register({ id, title, icon?, component }): LiveViewHandle

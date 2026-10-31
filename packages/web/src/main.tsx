@@ -10,9 +10,9 @@ import "./index.css";
 // The iOS app's chat page (/m/*): its viewport and look, before anything renders.
 if (mobileMode) applyMobileDocument();
 
-// Shared instances for UI plugins: the import map points "react", "react-dom", "@owlbot/ui", ... at
+// Shared instances for UI plugins: the import map points "react", "react-dom", "@piomio/ui", ... at
 // /shared/*.js shims that read from here. Must be set before any UI plugin module is imported.
-window.__OWLBOT_SHARED__ = {
+window.__PIOMIO_SHARED__ = {
   react: React,
   reactDom: ReactDOM,
   reactDomClient: ReactDOMClient,

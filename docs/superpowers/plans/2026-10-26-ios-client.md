@@ -4,7 +4,7 @@
 
 **Goal:** Phones pair with a hub by QR or link and use it from a native SwiftUI app: team, chat with cards, approvals with Face ID, tasks, notifications, voice.
 
-**Architecture:** The hub gets a devices service and a second, phone-only HTTPS server (pinned self-signed certificate, bearer tokens) that serves the same API as the web UI plus device routes. The app lives in its own repository (`owlbot-ios`): a Swift package `OwlbotKit` for everything testable and a SwiftUI app target.
+**Architecture:** The hub gets a devices service and a second, phone-only HTTPS server (pinned self-signed certificate, bearer tokens) that serves the same API as the web UI plus device routes. The app lives in its own repository (`piomio-ios`): a Swift package `PiomioKit` for everything testable and a SwiftUI app target.
 
 **Tech Stack:** Node 24 (type stripping), Fastify 5, `node:sqlite`, `node:crypto`, vitest; `qrcode-generator` for QR codes; Swift 6, SwiftUI (iOS 26), Security / LocalAuthentication / Speech / AVFoundation.
 
@@ -16,9 +16,9 @@ Spec: `docs/superpowers/specs/2026-10-26-ios-client-design.md`.
 - Every user-facing string goes through the catalogs (core `packages/core/src/locales/{en,ru}.ts`, web `packages/web/src/i18n/{en,ru}.ts`, app `Localizable.xcstrings`); English is the source; parity tests stay green.
 - Text for the model (tool descriptions, tool results) is English.
 - Device port default: web port + 2 (8082). Pairing codes live 10 minutes and are single use. Approval nonces live 2 minutes and are single use.
-- Link format: `owlbot://pair?v=1&c=<code>&n=<hub name>&fp=<base64url sha256 of the certificate DER>&u=<https url>` (repeat `u`).
-- Approval signature payload: `owlbot-approval\n<approvalId>\napprove\n<nonce>`, ECDSA P-256 / SHA-256, DER signature, base64.
-- iOS deployment target 26.0; bundle id `app.owlbot.ios`, URL scheme `owlbot`.
+- Link format: `piomio://pair?v=1&c=<code>&n=<hub name>&fp=<base64url sha256 of the certificate DER>&u=<https url>` (repeat `u`).
+- Approval signature payload: `piomio-approval\n<approvalId>\napprove\n<nonce>`, ECDSA P-256 / SHA-256, DER signature, base64.
+- iOS deployment target 26.0; bundle id `app.piomio.ios`, URL scheme `piomio`.
 
 ---
 
@@ -57,16 +57,16 @@ Spec: `docs/superpowers/specs/2026-10-26-ios-client-design.md`.
 - [ ] Chat card renders the same pairing block.
 - [ ] `npm run build`, `npm test`, check in the browser.
 
-### Task 5: OwlbotKit (repository `owlbot-ios`)
+### Task 5: PiomioKit (repository `piomio-ios`)
 
-**Files:** `OwlbotKit/Package.swift`, `Sources/OwlbotKit/{Models,PairingLink,PinnedTrust,HubClient,Endpoints,Realtime,Credentials,Stores}.swift`, `Tests/OwlbotKitTests/*`.
+**Files:** `PiomioKit/Package.swift`, `Sources/PiomioKit/{Models,PairingLink,PinnedTrust,HubClient,Endpoints,Realtime,Credentials,Stores}.swift`, `Tests/PiomioKitTests/*`.
 
 - [ ] Tests first for link parsing, part decoding (fixtures recorded from the dev hub), event reducer.
 - [ ] `swift test` green.
 
 ### Task 6: The app
 
-**Files:** `Owlbot.xcodeproj`, `Config/{Info.plist,Base.xcconfig}`, `Owlbot/` (App, Onboarding, Scanner, Team, Chat + cards, Tasks, Inbox, Hub, Voice, DeviceKey), `Owlbot/Localizable.xcstrings`.
+**Files:** `Piomio.xcodeproj`, `Config/{Info.plist,Base.xcconfig}`, `Piomio/` (App, Onboarding, Scanner, Team, Chat + cards, Tasks, Inbox, Hub, Voice, DeviceKey), `Piomio/Localizable.xcstrings`.
 
 - [ ] Build for the simulator, pair with the dev hub via `xcrun simctl openurl`, walk every tab, screenshots.
 - [ ] Build signed for the iPhone (`-allowProvisioningUpdates`), install with `xcrun devicectl device install app`, launch, pair over Wi-Fi, send a message, approve with Face ID.

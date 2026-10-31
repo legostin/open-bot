@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentDef, BrainEvent } from "@owlbot/shared";
+import type { AgentDef, BrainEvent } from "@piomio/shared";
 import { PolicyStore } from "../src/policy.ts";
 import { BrainHost } from "../src/brains.ts";
 
@@ -19,7 +19,7 @@ describe("BrainHost", () => {
   const policy = new PolicyStore(home, { userHome });
   const raw = JSON.parse(readFileSync(policy.file, "utf8"));
   raw.brains["claude-code"].command = ENV_CLAUDE;
-  raw.brains["claude-code"].allowedTools = ["Read", "mcp__owlbot"];
+  raw.brains["claude-code"].allowedTools = ["Read", "mcp__piomio"];
   raw.brains.codex.enabled = false;
   writeFileSync(policy.file, JSON.stringify(raw));
   const host = new BrainHost({ home, policy, hubUrl: "http://hub.test:8080", bridgeCommand: ["bridge-cmd"] });
@@ -47,24 +47,24 @@ describe("BrainHost", () => {
       },
     });
     const events: BrainEvent[] = [];
-    process.env.OWLBOT_NODE_HOME = home; // daemon env must not leak into the brain
+    process.env.PIOMIO_NODE_HOME = home; // daemon env must not leak into the brain
     try {
       await host.send({ sessionId: "s1", turn: { text: "hi" } }, (e) => events.push(e));
     } finally {
-      delete process.env.OWLBOT_NODE_HOME;
+      delete process.env.PIOMIO_NODE_HOME;
     }
     expect(events.at(-1)).toMatchObject({ type: "done" });
-    const ws = join(userHome, "owlbot-workspace", "a", "c1");
+    const ws = join(userHome, "piomio-workspace", "a", "c1");
     const seen = JSON.parse(readFileSync(join(ws, "env.json"), "utf8"));
     expect(seen.cwd.toLowerCase()).toBe(ws.toLowerCase());
     expect(seen.TZ).toBe("Europe/Moscow");
     expect(seen.NODE_OPTIONS).not.toBe("--require /tmp/evil.js");
     expect(seen.ANTHROPIC_BASE_URL).not.toBe("http://evil.test");
-    expect(seen.OWLBOT_NODE_HOME).toBeNull();
-    expect(seen.args[seen.args.indexOf("--allowedTools") + 1]).toBe("Read,mcp__owlbot");
-    const mcp = JSON.parse(readFileSync(join(home, "brains", "claude-code", "sessions", "s1", "mcp.json"), "utf8")).mcpServers.owlbot;
+    expect(seen.PIOMIO_NODE_HOME).toBeNull();
+    expect(seen.args[seen.args.indexOf("--allowedTools") + 1]).toBe("Read,mcp__piomio");
+    const mcp = JSON.parse(readFileSync(join(home, "brains", "claude-code", "sessions", "s1", "mcp.json"), "utf8")).mcpServers.piomio;
     expect(mcp.command).toBe("bridge-cmd");
-    expect(mcp.env.OWLBOT_URL).toBe("http://hub.test:8080/mcp");
+    expect(mcp.env.PIOMIO_URL).toBe("http://hub.test:8080/mcp");
     await host.closeAll();
     expect(host.sessionCount).toBe(0);
   });
@@ -133,7 +133,7 @@ describe("BrainHost with the hub's setup", () => {
       opts: { sessionId: "k1", agent, workspace: "a/k1", mcp: { url: "", token: "t", bridgeCommand: [] }, systemPrompt: "", env: {}, background: false, model: "claude-opus-5-5" },
     });
     await host.send({ sessionId: "k1", turn: { text: "hi" } }, () => {});
-    const seen = JSON.parse(readFileSync(join(userHome, "owlbot-workspace", "a", "k1", "env.json"), "utf8"));
+    const seen = JSON.parse(readFileSync(join(userHome, "piomio-workspace", "a", "k1", "env.json"), "utf8"));
     expect(seen.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:45123");
     expect(seen.ANTHROPIC_AUTH_TOKEN).toBe("owlgw-k1");
     expect(seen.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("claude-haiku-5-5");

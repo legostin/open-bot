@@ -2,7 +2,7 @@
 // machine) or a phone, once, within an hour. The first device to use it wins.
 
 import { randomBytes } from "node:crypto";
-import { nowIso } from "@owlbot/shared";
+import { nowIso } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";

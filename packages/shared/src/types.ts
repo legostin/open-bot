@@ -863,7 +863,7 @@ export interface MachineActivity {
 
 // ---------- Machines: brain setup, keys and spend (docs/superpowers/specs/2026-10-30-cluster-design.md) ----------
 
-/** The CLI brains a machine (owlbot-node) runs. */
+/** The CLI brains a machine (piomio-node) runs. */
 export type MachineBrainId = "claude-code" | "codex";
 
 /** A model a machine's brain may use; price in dollars per million tokens. */
@@ -949,7 +949,7 @@ export interface ReplicaState extends Replica {
   lastSeenAt?: ISODate;
 }
 
-// ---------- Devices (phones running the Owlbot app) ----------
+// ---------- Devices (phones running the Piomio app) ----------
 
 export interface Device {
   id: string;
@@ -966,7 +966,7 @@ export interface Device {
 export interface DevicePairing {
   code: string;
   expiresAt: ISODate;
-  /** owlbot://pair?v=1&c=…&n=…&fp=…&u=…&u=… */
+  /** piomio://pair?v=1&c=…&n=…&fp=…&u=…&u=… */
   link: string;
   qrSvg: string;
   /** The device port's addresses, as the phone tries them. */
@@ -981,9 +981,9 @@ export interface Invite {
   expiresAt: ISODate;
   /** https://<hub>/join/<code>: forwarded to the device or opened there. Absent when only this computer reaches the hub. */
   url?: string;
-  /** owlbot://pair?hub=…&code=…: opens the desktop app on the computer the web UI is open on. */
+  /** piomio://pair?hub=…&code=…: opens the desktop app on the computer the web UI is open on. */
   appLink?: string;
-  /** owlbot://pair?v=1&c=…: the phone's link, while phones can reach the hub; `qrSvg` draws it. */
+  /** piomio://pair?v=1&c=…: the phone's link, while phones can reach the hub; `qrSvg` draws it. */
   phoneLink?: string;
   qrSvg?: string;
 }
@@ -997,7 +997,7 @@ export interface InviteUsed {
 
 /** The device port: whether phones can reach the hub, and where. */
 export interface DeviceNetwork {
-  /** False only when OWLBOT_DEVICES=0 closed the port: phones then use the link alone. */
+  /** False only when PIOMIO_DEVICES=0 closed the port: phones then use the link alone. */
   enabled: boolean;
   listening: boolean;
   port: number;
@@ -1013,7 +1013,7 @@ export interface RemoteView {
   available: boolean;
   enabled: boolean;
   state: RemoteState;
-  /** The permanent link: https://owlbot.<tailnet>.ts.net */
+  /** The permanent link: https://piomio.<tailnet>.ts.net */
   url?: string;
   /** The phones' address behind the link (port 8443). */
   deviceUrl?: string;

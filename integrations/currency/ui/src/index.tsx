@@ -2,13 +2,13 @@
 // and, where there is history, a sparkline of the last weeks with how much the rate moved.
 
 import type { CSSProperties } from "react";
-import { definePluginUI } from "@owlbot/ui";
-import type { OwlbotUI, WidgetProps } from "@owlbot/ui";
+import { definePluginUI } from "@piomio/ui";
+import type { PiomioUI, WidgetProps } from "@piomio/ui";
 import type { RatesCard } from "../../server/index.ts";
 
-let t: OwlbotUI["i18n"]["t"] = (k) => k;
+let t: PiomioUI["i18n"]["t"] = (k) => k;
 let locale = "en";
-let formatDate: OwlbotUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleDateString();
+let formatDate: PiomioUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleDateString();
 
 /** 🇺🇸 for USD, 🇪🇺 for EUR; nothing for codes that are not a country's (XAU, XDR…). */
 function flag(code: string): string {

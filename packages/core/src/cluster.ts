@@ -7,8 +7,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Replica, ReplicaState } from "@owlbot/shared";
-import { newId, nowIso } from "@owlbot/shared";
+import type { Replica, ReplicaState } from "@piomio/shared";
+import { newId, nowIso } from "@piomio/shared";
 import {
   DbReplicator,
   FileSync,
@@ -21,16 +21,16 @@ import {
   type ReplEntry,
   type ReplicaKey,
   type ReplTable,
-} from "@owlbot/replica";
+} from "@piomio/replica";
 import type WebSocket from "ws";
-import type { RpcPeer } from "@owlbot/shared";
+import type { RpcPeer } from "@piomio/shared";
 import { json } from "./db.ts";
 import { t } from "./i18n.ts";
 import type { Hub } from "./app.ts";
 import { ruleMatches } from "./policy/engine.ts";
 import { dialLink, linkPeer, serveLink, type LinkAnswer, type LinkCall } from "./replica-link.ts";
 
-/** owlbot.db tables every replica shares (the rest stays per replica: audit's hash chain, pairing codes). */
+/** piomio.db tables every replica shares (the rest stays per replica: audit's hash chain, pairing codes). */
 export const MAIN_TABLES: ReplTable[] = [
   { name: "conversations", pk: ["id"] },
   { name: "messages", pk: ["id"] },
@@ -125,17 +125,17 @@ const rowToReplica = (r: any): Replica & { publicKey: string; nodeUrls: string[]
   publicKey: r.public_key,
 });
 
-/** owlbot://replica?c=<code>&u=<url>&u=…&fp=<fingerprint> */
+/** piomio://replica?c=<code>&u=<url>&u=…&fp=<fingerprint> */
 export function replicaLink(code: string, urls: string[], fingerprint: string): string {
   const q = new URLSearchParams({ c: code });
   for (const u of urls) q.append("u", u);
   q.set("fp", fingerprint);
-  return `owlbot://replica?${q.toString()}`;
+  return `piomio://replica?${q.toString()}`;
 }
 
 export function parseReplicaLink(link: string): { code: string; urls: string[]; fingerprint: string } {
   const u = new URL(link.trim());
-  if (u.protocol !== "owlbot:" || u.hostname !== "replica") throw new Error("not a replica link");
+  if (u.protocol !== "piomio:" || u.hostname !== "replica") throw new Error("not a replica link");
   const code = u.searchParams.get("c") ?? "";
   const urls = u.searchParams.getAll("u");
   const fingerprint = u.searchParams.get("fp") ?? "";
@@ -261,12 +261,12 @@ export class Cluster {
     }
   }
 
-  /** Where replicas and phones reach this one: its device addresses (OWLBOT_DEVICE_URLS first), the link's :8443. */
+  /** Where replicas and phones reach this one: its device addresses (PIOMIO_DEVICE_URLS first), the link's :8443. */
   ownUrls(): string[] {
     return this.hub.phoneUrls();
   }
 
-  /** Where machines reach this one for /node/ws and /mcp: OWLBOT_NODE_URLS, else its own machine address. */
+  /** Where machines reach this one for /node/ws and /mcp: PIOMIO_NODE_URLS, else its own machine address. */
   ownNodeUrls(): string[] {
     return this.hub.config.nodeUrls.length ? this.hub.config.nodeUrls : [this.hub.machineHubUrl()];
   }
@@ -709,15 +709,15 @@ export class Cluster {
     }
     this.main!.drain();
     this.vaultRepl!.drain();
-    const dir = join(tmpdir(), `owlbot-join-${id}`);
+    const dir = join(tmpdir(), `piomio-join-${id}`);
     mkdirSync(dir, { recursive: true });
     try {
-      this.main!.snapshot(join(dir, "owlbot.db"));
+      this.main!.snapshot(join(dir, "piomio.db"));
       this.vaultRepl!.snapshot(join(dir, "vault.db"));
       const tls = this.hub.deviceTls();
       return {
         id,
-        db: readFileSync(join(dir, "owlbot.db")).toString("base64"),
+        db: readFileSync(join(dir, "piomio.db")).toString("base64"),
         vault: readFileSync(join(dir, "vault.db")).toString("base64"),
         tls: { key: tls.key, cert: tls.cert },
       };
@@ -824,12 +824,12 @@ export interface JoinSnapshot {
 }
 
 /**
- * `owlbot replica join <link>` on the new machine, before its hub runs: makes its key, joins through the inviter and
+ * `piomio replica join <link>` on the new machine, before its hub runs: makes its key, joins through the inviter and
  * writes the data dir to start from. The hub then starts as a standby and catches up.
  */
 export async function joinCluster(o: { dataDir: string; link: string; name: string; urls: string[]; nodeUrls: string[]; force?: boolean }): Promise<{ id: string }> {
   const { code, urls, fingerprint } = parseReplicaLink(o.link);
-  if (existsSync(join(o.dataDir, "owlbot.db")) && !o.force) throw new Error(`${o.dataDir} already holds a hub; use --force to replace it`);
+  if (existsSync(join(o.dataDir, "piomio.db")) && !o.force) throw new Error(`${o.dataDir} already holds a hub; use --force to replace it`);
   const tmpKey = newReplicaKey("pending");
   const body = JSON.stringify({ code, publicKey: tmpKey.publicKey, name: o.name, urls: o.urls, nodeUrls: o.nodeUrls });
   let snap: JoinSnapshot | undefined;
@@ -847,8 +847,8 @@ export async function joinCluster(o: { dataDir: string; link: string; name: stri
   if (!snap) throw last ?? new Error("no address answered");
   mkdirSync(join(o.dataDir, "replica"), { recursive: true, mode: 0o700 });
   mkdirSync(join(o.dataDir, "devices"), { recursive: true, mode: 0o700 });
-  for (const f of ["owlbot.db", "owlbot.db-wal", "owlbot.db-shm", "vault.db", "vault.db-wal", "vault.db-shm"]) rmSync(join(o.dataDir, f), { force: true });
-  writeFileSync(join(o.dataDir, "owlbot.db"), Buffer.from(snap.db, "base64"), { mode: 0o600 });
+  for (const f of ["piomio.db", "piomio.db-wal", "piomio.db-shm", "vault.db", "vault.db-wal", "vault.db-shm"]) rmSync(join(o.dataDir, f), { force: true });
+  writeFileSync(join(o.dataDir, "piomio.db"), Buffer.from(snap.db, "base64"), { mode: 0o600 });
   writeFileSync(join(o.dataDir, "vault.db"), Buffer.from(snap.vault, "base64"), { mode: 0o600 });
   writeFileSync(join(o.dataDir, "devices", "tls-key.pem"), snap.tls.key, { mode: 0o600 });
   writeFileSync(join(o.dataDir, "devices", "tls-cert.pem"), snap.tls.cert, { mode: 0o644 });
@@ -858,7 +858,7 @@ export async function joinCluster(o: { dataDir: string; link: string; name: stri
 }
 
 /**
- * `owlbot replica invite` from the hub's own machine, the hub running or not: this hub gets its replica identity (if it
+ * `piomio replica invite` from the hub's own machine, the hub running or not: this hub gets its replica identity (if it
  * has none) and a one-time invite. A running hub that had no identity starts acting as a replica after a restart.
  */
 export function localInvite(o: { dataDir: string; db: import("./db.ts").Db; invites: { create(): { code: string } }; name: string; urls: string[]; nodeUrls: string[]; fingerprint: string }): { link: string; created: boolean } {

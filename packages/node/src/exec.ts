@@ -2,7 +2,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { statSync } from "node:fs";
-import { matchesAny } from "@owlbot/shared";
+import { matchesAny } from "@piomio/shared";
 import { DEFAULT_MAX_TIMEOUT_MS, type Policy } from "./policy.ts";
 import { resolveAllowedPath, type GuardOptions } from "./guard.ts";
 
@@ -57,7 +57,7 @@ export function killTree(child: ChildProcess): void {
 
 function childEnv(): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith("OWLBOT_")) out[k] = v;
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith("PIOMIO_")) out[k] = v;
   return out;
 }
 
@@ -126,15 +126,15 @@ export function runShell(o: RunOptions): Promise<ExecResult> {
       o.track?.delete(child);
       let stdout = Buffer.concat(out).toString("utf8");
       let stderr = Buffer.concat(err).toString("utf8");
-      if (cap.truncated) stderr += `\n[owlbot-node] output truncated to ${Math.round(cap.max / 1024)} KB`;
+      if (cap.truncated) stderr += `\n[piomio-node] output truncated to ${Math.round(cap.max / 1024)} KB`;
       let exit = code ?? (signal ? 128 + (signal === "SIGKILL" ? 9 : 15) : -1);
       if (timedOut) {
         exit = TIMEOUT_EXIT_CODE;
-        stderr += `\n[owlbot-node] timed out after ${Math.round(o.timeoutMs / 1000)} s, the process was stopped`;
+        stderr += `\n[piomio-node] timed out after ${Math.round(o.timeoutMs / 1000)} s, the process was stopped`;
       }
       if (spawnError) {
         exit = exit === 0 ? -1 : exit;
-        stderr += `\n[owlbot-node] could not start the command: ${spawnError.message}`;
+        stderr += `\n[piomio-node] could not start the command: ${spawnError.message}`;
       }
       resolvePromise({ code: exit, stdout, stderr: stderr.replace(/^\n/, "") });
     };

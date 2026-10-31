@@ -1,7 +1,7 @@
 // How each agent thinks (GET /api/agents/:id/thinking): what every kind of work comes to on the brains here, for the
 // header picker and the chat card. Refreshed when agents or brains change (sign-ins, limits, another tab's choice).
 
-import type { ThinkingPatch, ThinkingView, WorkKind } from "@owlbot/shared";
+import type { ThinkingPatch, ThinkingView, WorkKind } from "@piomio/shared";
 import { api } from "../lib/api";
 import { createStore } from "../lib/store";
 import { hubEvents, refreshAgents, reconnected } from "./app";

@@ -2,8 +2,8 @@
 // saved at once; its name and character change in words, and the card follows.
 
 import { useEffect } from "react";
-import type { AgentDef } from "@owlbot/shared";
-import { defaultAvatar } from "@owlbot/shared";
+import type { AgentDef } from "@piomio/shared";
+import { defaultAvatar } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { api, errorText } from "../../lib/api";
 import { agents, ensureAgents, refreshAgents } from "../../state/app";

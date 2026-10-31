@@ -2,7 +2,7 @@
 
 [English](plugins.md)
 
-Почти всё в Owlbot — плагины: интеллекты (Claude Code, Codex, API), каналы (Telegram), браузер, память, веб-поиск, триггеры. Ядро только связывает их и следит за безопасностью. Интеграции (сервисы и умения: погода, календари, карты…) — тоже плагины; они лежат в [`integrations/`](../integrations/README.ru.md), каждая в своей папке, и начинаются с шаблона: `npm run new:integration -- <id>`.
+Почти всё в Piomio — плагины: интеллекты (Claude Code, Codex, API), каналы (Telegram), браузер, память, веб-поиск, триггеры. Ядро только связывает их и следит за безопасностью. Интеграции (сервисы и умения: погода, календари, карты…) — тоже плагины; они лежат в [`integrations/`](../integrations/README.ru.md), каждая в своей папке, и начинаются с шаблона: `npm run new:integration -- <id>`.
 
 Плагин может добавить:
 
@@ -16,19 +16,19 @@
 | Скиллы, команды, агенты | `skills/`, `commands/`, `agents/` |
 | MCP-серверы | `.mcp.json` |
 | Интерфейс: панели, вкладки, рендер результатов, замена композера | `ui/` |
-| Переводы | `.owlbot-plugin/locales/` |
+| Переводы | `.piomio-plugin/locales/` |
 
 Плагины Claude Code (`.claude-plugin/plugin.json`) и Codex (`.codex-plugin/plugin.json`) ставятся как есть: их скиллы, команды, агенты и MCP-серверы становятся доступны. Плагины Claude Code к тому же передаются интеллекту Claude Code на хабе через `--plugin-dir`, поэтому их хуки работают там.
 
-В `.mcp.json` `${OWLBOT_PLUGIN_ROOT}` (или `${CLAUDE_PLUGIN_ROOT}`) — папка плагина, `${OWLBOT_PLUGIN_DATA}` — его папка данных, `${OWLBOT_NODE}` — собственный Node хаба, так что локальный сервер может быть запускателем на TypeScript внутри плагина (`integrations/blender`). Локальный сервер ходит только на хосты из `permissions.network` плагина; если он завершился при запуске, последняя строка его stderr становится ошибкой, которую видно на плагине.
+В `.mcp.json` `${PIOMIO_PLUGIN_ROOT}` (или `${CLAUDE_PLUGIN_ROOT}`) — папка плагина, `${PIOMIO_PLUGIN_DATA}` — его папка данных, `${PIOMIO_NODE}` — собственный Node хаба, так что локальный сервер может быть запускателем на TypeScript внутри плагина (`integrations/blender`). Локальный сервер ходит только на хосты из `permissions.network` плагина; если он завершился при запуске, последняя строка его stderr становится ошибкой, которую видно на плагине.
 
 ## Структура
 
 ```
 my-plugin/
-  .owlbot-plugin/plugin.json
-  .owlbot-plugin/locales/en.json   # translations, see Localization
-  .owlbot-plugin/locales/ru.json
+  .piomio-plugin/plugin.json
+  .piomio-plugin/locales/en.json   # translations, see Localization
+  .piomio-plugin/locales/ru.json
   server/index.ts        # backend: a separate process, JSON-RPC over stdio
   ui/src/index.tsx       # UI module (built into ui/dist/index.js)
   skills/<name>/SKILL.md
@@ -81,7 +81,7 @@ my-plugin/
 ## Бэкенд
 
 ```ts
-import type { PluginModule } from "@owlbot/plugin-sdk";
+import type { PluginModule } from "@piomio/plugin-sdk";
 
 const plugin: PluginModule = {
   async activate(ctx) {
@@ -105,7 +105,7 @@ const plugin: PluginModule = {
 export default plugin;
 ```
 
-Из `@owlbot/plugin-sdk` плагины импортируют только типы (`import type`): реализацию даёт раннер, поэтому плагину не нужна зависимость от SDK во время работы. В SDK есть и помощник `definePlugin`, но это импорт значения; типизированный объект, как в примере, делает то же самое.
+Из `@piomio/plugin-sdk` плагины импортируют только типы (`import type`): реализацию даёт раннер, поэтому плагину не нужна зависимость от SDK во время работы. В SDK есть и помощник `definePlugin`, но это импорт значения; типизированный объект, как в примере, делает то же самое.
 
 Что есть в `ctx`: `pluginId`, `pluginDir`, `dataDir` (личная папка с правом записи), `hubUrl`, `appRoot`, `settings`, `onSettingsChange`, `i18n` (см. [Локализация](#локализация)), `log`, `tools`, `brains`, `channels`, `events.on`, `hooks.on`, `http.handle`, `ui.emit` / `ui.onMessage`, `vault.get`, `storage` (хранилище ключ-значение плагина: `get`, `set`, `delete`, `list`) и `core.call`. Модуль может также экспортировать `deactivate()`.
 
@@ -121,17 +121,17 @@ export default plugin;
 
 ## Интеллект
 
-Интеллект — это `BrainProviderImpl`: `probe()` (установлен? есть вход?) и `createSession(opts)`. Сессия получает системный промпт, рабочую папку и MCP-доступ к инструментам хаба (`opts.mcp.url`, `opts.mcp.token`, `opts.mcp.bridgeCommand` для stdio-клиентов). `send(turn)` выдаёт события `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error`, `done`; ещё сессия реализует `interrupt()` и `close()`. При `limit_hit` ядро помечает интеллект занятым до `resetAt` и переключается на следующий в списке агента. Готовые адаптеры для CLI — в `@owlbot/brains-cli`. Если у интеллекта есть варианты (например, провайдеры API), перечислите их в `variants: ["anthropic", "openai"]` — в интерфейсе они появятся отдельными интеллектами `<id>:<вариант>@local`, а вариант придёт в `probe(variant)` и `opts.variant`. Id интеллектов перечисляются в `contributes.brains`.
+Интеллект — это `BrainProviderImpl`: `probe()` (установлен? есть вход?) и `createSession(opts)`. Сессия получает системный промпт, рабочую папку и MCP-доступ к инструментам хаба (`opts.mcp.url`, `opts.mcp.token`, `opts.mcp.bridgeCommand` для stdio-клиентов). `send(turn)` выдаёт события `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error`, `done`; ещё сессия реализует `interrupt()` и `close()`. При `limit_hit` ядро помечает интеллект занятым до `resetAt` и переключается на следующий в списке агента. Готовые адаптеры для CLI — в `@piomio/brains-cli`. Если у интеллекта есть варианты (например, провайдеры API), перечислите их в `variants: ["anthropic", "openai"]` — в интерфейсе они появятся отдельными интеллектами `<id>:<вариант>@local`, а вариант придёт в `probe(variant)` и `opts.variant`. Id интеллектов перечисляются в `contributes.brains`.
 
 ## UI
 
-UI-модуль — ES-модуль; React и `@owlbot/ui` берутся у хоста через import map, поэтому в сборку не попадают.
+UI-модуль — ES-модуль; React и `@piomio/ui` берутся у хоста через import map, поэтому в сборку не попадают.
 
 ```tsx
-import { definePluginUI, Card } from "@owlbot/ui";
-import type { OwlbotUI, ToolResultProps } from "@owlbot/ui";
+import { definePluginUI, Card } from "@piomio/ui";
+import type { PiomioUI, ToolResultProps } from "@piomio/ui";
 
-let ui: OwlbotUI;
+let ui: PiomioUI;
 
 function Panel() {
   const time = ui.i18n.formatDate(Date.now(), { timeStyle: "short" });
@@ -168,7 +168,7 @@ ui.plugin.on("activity", (a) => view.update({ active: a.busy, agentId: a.agentId
 
 `attention` снова открывает окно (даже если пользователь его свернул или закрыл) и подсвечивает его; `userControl` держит его открытым, пока управляет пользователь. Плагин может зарегистрировать несколько живых просмотров и убрать любой через `dispose()`.
 
-Кроме слотов, в `ui` есть `routes.add` (отдельная страница, по желанию — в навигации), `settings.section`, `commands.register` (палитра команд), `toast`, `navigate`, `api` (REST API хаба), `plugin` (`http`, `send` и `on` — связь со своим бэкендом через `ctx.http`, `ctx.ui.onMessage` и `ctx.ui.emit`), `events.on` (события хаба в реальном времени) и `i18n`. Ещё `@owlbot/ui` экспортирует компоненты `Button`, `Card`, `Badge`, `EmptyState`, `Spinner`, `Markdown`, хуки `useTasks` и `useHubEvent`, а также `api` и `locale`.
+Кроме слотов, в `ui` есть `routes.add` (отдельная страница, по желанию — в навигации), `settings.section`, `commands.register` (палитра команд), `toast`, `navigate`, `api` (REST API хаба), `plugin` (`http`, `send` и `on` — связь со своим бэкендом через `ctx.http`, `ctx.ui.onMessage` и `ctx.ui.emit`), `events.on` (события хаба в реальном времени) и `i18n`. Ещё `@piomio/ui` экспортирует компоненты `Button`, `Card`, `Badge`, `EmptyState`, `Spinner`, `Markdown`, хуки `useTasks` и `useHubEvent`, а также `api` и `locale`.
 
 Сборка всех встроенных UI-плагинов: `npm run build:ui-plugins` (`plugins/*/ui/src/index.tsx` → `ui/dist/index.js`); одного плагина — `node scripts/build-ui-plugins.mjs path/to/my-plugin`. Собранный `ui/dist/index.js` поставляется вместе с плагином: при установке он не собирается.
 
@@ -176,11 +176,11 @@ ui.plugin.on("activity", (a) => view.update({ active: a.busy, agentId: a.agentId
 
 ## Локализация
 
-Owlbot работает на английском и русском, и плагины следуют тем же правилам. Английский — основной язык и запасной вариант: если ключа нет на языке читателя, берётся английский текст, а если нет и его — сам ключ.
+Piomio работает на английском и русском, и плагины следуют тем же правилам. Английский — основной язык и запасной вариант: если ключа нет на языке читателя, берётся английский текст, а если нет и его — сам ключ.
 
 ### Каталоги
 
-Переводы лежат в `.owlbot-plugin/locales/en.json` и `ru.json` — плоских словарях «ключ → строка». Если файл некорректен, плагин не загрузится. В строках есть подстановки `{name}` и множественные формы в стиле ICU, например `{n, plural, one {# file} other {# files}}`, где `#` — число в формате языка, а `=0 {…}` срабатывает на точное значение; в русском используются категории `one`, `few`, `many` и `other`. `{kind, select, a {…} other {…}}` выбирает вариант по значению.
+Переводы лежат в `.piomio-plugin/locales/en.json` и `ru.json` — плоских словарях «ключ → строка». Если файл некорректен, плагин не загрузится. В строках есть подстановки `{name}` и множественные формы в стиле ICU, например `{n, plural, one {# file} other {# files}}`, где `#` — число в формате языка, а `=0 {…}` срабатывает на точное значение; в русском используются категории `one`, `few`, `many` и `other`. `{kind, select, a {…} other {…}}` выбирает вариант по значению.
 
 `en.json`:
 
@@ -266,11 +266,11 @@ brains: [claude-code@local, "api:anthropic"]
 You watch the weather forecast for the user's city and warn about rain a day ahead.
 ```
 
-Файл из папки `agents/` плагина становится агентом Owlbot, только если в его frontmatter есть `brains:`.
+Файл из папки `agents/` плагина становится агентом Piomio, только если в его frontmatter есть `brains:`.
 
 ### Проверки
 
-`packages/core/test/i18n.test.ts` запускается вместе с `npm test`. Он проверяет каталоги ядра и каждый плагин из `plugins/`, у которого есть переводы: в каждом языке должны быть ровно те же ключи, что в английском, с теми же подстановками, а каждый `"%key%"` из `plugin.json` должен быть в `en.json`. Для плагина вне репозитория тот же список проблем вернёт `catalogProblems(readPluginLayout(dir).messages)` из `@owlbot/shared`.
+`packages/core/test/i18n.test.ts` запускается вместе с `npm test`. Он проверяет каталоги ядра и каждый плагин из `plugins/`, у которого есть переводы: в каждом языке должны быть ровно те же ключи, что в английском, с теми же подстановками, а каждый `"%key%"` из `plugin.json` должен быть в `en.json`. Для плагина вне репозитория тот же список проблем вернёт `catalogProblems(readPluginLayout(dir).messages)` из `@piomio/shared`.
 
 В тестах плагин запускается на нужном языке через `startPlugin({ locale })`, а `h.setLocale()` переключает язык и вызывает `ctx.i18n.onChange`:
 
@@ -281,10 +281,10 @@ h.setLocale("en");
 
 ## Тесты
 
-`@owlbot/testkit` запускает плагин как настоящий процесс и эмулирует ядро:
+`@piomio/testkit` запускает плагин как настоящий процесс и эмулирует ядро:
 
 ```ts
-import { startPlugin } from "@owlbot/testkit";
+import { startPlugin } from "@piomio/testkit";
 
 const h = await startPlugin({ dir: "plugins/weather", settings: { city: "Berlin" } });
 expect(h.tools.has("forecast")).toBe(true);

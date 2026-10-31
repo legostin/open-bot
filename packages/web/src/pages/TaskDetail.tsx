@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, ArrowLeftRight, Ban, ChevronDown, RotateCcw } from "lucide-react";
-import type { Task } from "@owlbot/shared";
+import type { Task } from "@piomio/shared";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { ACTIVE_STATUSES, formatDateTime, relativeTime, taskStatus, threadStatus } from "../lib/format";

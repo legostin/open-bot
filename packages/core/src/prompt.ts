@@ -1,4 +1,4 @@
-import type { AgentDef, Locale, Task, ThinkingPreset, WorkKind } from "@owlbot/shared";
+import type { AgentDef, Locale, Task, ThinkingPreset, WorkKind } from "@piomio/shared";
 
 /** Language names for the system prompt (English, since prompts are English). */
 const LANGUAGE_NAMES: Record<Locale, string> = { en: "English", ru: "Russian" };
@@ -146,15 +146,15 @@ export function buildSystemPrompt(c: PromptContext): string {
   const lines: string[] = [];
   if (c.agent.prompt) lines.push(c.agent.prompt.trim(), "");
   lines.push(
-    "## Owlbot platform",
-    `You are "${c.agent.name}", an agent inside Owlbot — the user's self-hosted personal agent platform.`,
+    "## Piomio platform",
+    `You are "${c.agent.name}", an agent inside Piomio — the user's self-hosted personal agent platform.`,
     `Local time when this session started: ${now} (${c.timezone}); the latest \`[Now: …]\` line before a message is the current time. Reply in the user's language (default: ${LANGUAGE_NAMES[c.language as Locale] ?? c.language}).`,
     where,
     c.machine ? `You are running on the computer "${c.machine.name}"${c.machine.local ? " (the hub's own computer)" : ""}.` : "",
     c.thinking ? thinkingLine(c.thinking) : "",
     "Your dialog with the user, your tasks and your threads with teammates are all you, in separate sessions. The `[You now]` block before a message says where this session runs, what else you are doing, what each teammate is busy with and where the user is; it is current, so answer from it when asked what you or a teammate are doing.",
     "",
-    "Tools from the `owlbot` MCP server are your hands: browser, memory, tasks, triggers, notifications, machines, vault references, and anything plugins add.",
+    "Tools from the `piomio` MCP server are your hands: browser, memory, tasks, triggers, notifications, machines, vault references, and anything plugins add.",
     "",
     "Rules:",
     `- Secrets: never ask the user to paste passwords, tokens or personal documents into chat. Use vault references: \`vault_list\` shows item ids, tools accept \`vault://<id>\`. If something is missing, ask for it with \`hub_secret_request\` (a website's login: its \`login\` with the domain): the card in this chat takes it straight into the vault. Never send the user to another app or a local address for it.`,

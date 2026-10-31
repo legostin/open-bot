@@ -2,8 +2,8 @@
 
 import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import type { Machine, MachineInfo, MachineUsage, ToolResult } from "@owlbot/shared";
-import { createRpcPeer, newId, nowIso, wsTransport, type RpcPeer, type WsLike } from "@owlbot/shared";
+import type { Machine, MachineInfo, MachineUsage, ToolResult } from "@piomio/shared";
+import { createRpcPeer, newId, nowIso, wsTransport, type RpcPeer, type WsLike } from "@piomio/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { BrainRegistry } from "./brains.ts";
@@ -14,7 +14,7 @@ import { InviteRegistry } from "./invites.ts";
 import type { MachineSetups } from "./machine-setup.ts";
 import type { Cluster } from "./cluster.ts";
 
-export const NODE_AUTH_PREFIX = "owlbot-node-auth:";
+export const NODE_AUTH_PREFIX = "piomio-node-auth:";
 
 const fromRow = (r: any, online: boolean): Machine => ({
   id: r.id,

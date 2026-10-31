@@ -9,7 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { ToolResult } from "@owlbot/shared";
+import type { ToolResult } from "@piomio/shared";
 import type { Config } from "../config.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
 import { sanitizeToolName } from "../tools/registry.ts";
@@ -208,7 +208,7 @@ export class McpClientManager {
     if (config.disabled) return;
     let stderrTail = "";
     try {
-      const client = new Client({ name: "owlbot-hub", version: this.config.version });
+      const client = new Client({ name: "piomio-hub", version: this.config.version });
       const type = config.type ?? (config.url ? "http" : "stdio");
       if (type === "stdio") {
         if (!config.command) throw new Error("command is required");
@@ -342,8 +342,8 @@ function normalizeResult(r: any): ToolResult {
 /** A plugin's .mcp.json may name its own folder, its data folder and the hub's Node (a launcher written in TypeScript runs on it). */
 function expandPluginRoot(cfg: McpServerConfig, dir: string, data?: string): McpServerConfig {
   const sub = (s: string) => {
-    const out = s.replaceAll("${CLAUDE_PLUGIN_ROOT}", dir).replaceAll("${PLUGIN_ROOT}", dir).replaceAll("${OWLBOT_PLUGIN_ROOT}", dir).replaceAll("${OWLBOT_NODE}", process.execPath);
-    return data ? out.replaceAll("${OWLBOT_PLUGIN_DATA}", data) : out;
+    const out = s.replaceAll("${CLAUDE_PLUGIN_ROOT}", dir).replaceAll("${PLUGIN_ROOT}", dir).replaceAll("${PIOMIO_PLUGIN_ROOT}", dir).replaceAll("${PIOMIO_NODE}", process.execPath);
+    return data ? out.replaceAll("${PIOMIO_PLUGIN_DATA}", data) : out;
   };
   return {
     ...cfg,

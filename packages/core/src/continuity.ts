@@ -2,8 +2,8 @@
 // the old session's history is gone or too full), the new session starts with a recap of what came before, so the
 // agent carries on as if nothing happened. The user never sees it: it is input for the model only.
 
-import type { Message, MessagePart } from "@owlbot/shared";
-import { truncate } from "@owlbot/shared";
+import type { Message, MessagePart } from "@piomio/shared";
+import { truncate } from "@piomio/shared";
 
 /** How long the recap may get, in characters, and how it is split. */
 const RECAP_CHARS = 16_000;

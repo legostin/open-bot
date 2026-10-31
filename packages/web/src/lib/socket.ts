@@ -1,6 +1,6 @@
 // Realtime connection to the hub (/api/ws) with reconnect + backoff.
 
-import type { UiEvent } from "@owlbot/shared";
+import type { UiEvent } from "@piomio/shared";
 import { backoffDelay } from "./backoff";
 
 export type ConnectionState = "connecting" | "open" | "reconnecting" | "offline";

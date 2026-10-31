@@ -2,8 +2,8 @@
 // description and instructions it writes itself); the user adjusts it in words or in the card (look, proactivity).
 // Nothing joins the team until the draft is created (Hub.createAgentFromDraft).
 
-import type { AgentDraft } from "@owlbot/shared";
-import { defaultAvatar, newId, nowIso, parseAvatar } from "@owlbot/shared";
+import type { AgentDraft } from "@piomio/shared";
+import { defaultAvatar, newId, nowIso, parseAvatar } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import { json } from "./db.ts";
 import type { EventBus } from "./bus.ts";

@@ -1,8 +1,8 @@
 // Find the activate() function in a loaded UI plugin module (pure; unit-tested).
 
-import type { OwlbotUI } from "@owlbot/ui";
+import type { PiomioUI } from "@piomio/ui";
 
-export type ActivateFn = (ui: OwlbotUI) => void | (() => void) | Promise<void | (() => void)>;
+export type ActivateFn = (ui: PiomioUI) => void | (() => void) | Promise<void | (() => void)>;
 
 export function resolveActivate(mod: unknown): ActivateFn | undefined {
   if (!mod || typeof mod !== "object") return undefined;

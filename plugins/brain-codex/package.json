@@ -1,5 +1,5 @@
 {
-  "name": "@owlbot/plugin-brain-codex",
+  "name": "@piomio/plugin-brain-codex",
   "version": "0.1.0",
   "private": true,
   "type": "module"

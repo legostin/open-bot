@@ -2,14 +2,14 @@
 # Runs as root before the files are copied: quits the app of the user at the console (it stops its hub) and removes
 # the previous copy, so an upgrade never mixes old and new files. The AppleScript build's LaunchAgent (ai.owlbot.hub)
 # goes too. The data in the user's home stays.
-APP=/Applications/Owlbot.app
+APP=/Applications/Piomio.app
 USER_NAME="$(stat -f %Su /dev/console)"
 if [ -n "$USER_NAME" ] && [ "$USER_NAME" != root ] && [ "$USER_NAME" != loginwindow ]; then
   USER_ID="$(id -u "$USER_NAME")"
-  if [ -x "$APP/Contents/MacOS/Owlbot" ]; then
-    launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H "$APP/Contents/MacOS/Owlbot" --quit 2>/dev/null
+  if [ -x "$APP/Contents/MacOS/Piomio" ]; then
+    launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H "$APP/Contents/MacOS/Piomio" --quit 2>/dev/null
     i=0
-    while pgrep -f "$APP/Contents/MacOS/Owlbot" >/dev/null && [ "$i" -lt 40 ]; do sleep 0.5; i=$((i + 1)); done
+    while pgrep -f "$APP/Contents/MacOS/Piomio" >/dev/null && [ "$i" -lt 40 ]; do sleep 0.5; i=$((i + 1)); done
   fi
   launchctl bootout "gui/$USER_ID/ai.owlbot.hub" 2>/dev/null
   rm -f "$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory | awk '{ print $2 }')/Library/LaunchAgents/ai.owlbot.hub.plist"

@@ -4,8 +4,8 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, cpSync, rmSync, renameSync, statSync, readFileSync } from "node:fs";
 import { join, dirname, basename, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { Catalog, CatalogEntryState, CoreMethod, Locale, MessagePart, OwlbotManifest, PluginLayout, PluginPermissions, ToolCallContext, ToolDescriptor, ToolResult, ToolSpec } from "@owlbot/shared";
-import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, ENTRY_ID_RE, type RpcPeer } from "@owlbot/shared";
+import type { Catalog, CatalogEntryState, CoreMethod, Locale, MessagePart, PiomioManifest, PluginLayout, PluginPermissions, ToolCallContext, ToolDescriptor, ToolResult, ToolSpec } from "@piomio/shared";
+import { createRpcPeer, ndjsonTransport, readPluginLayout, toolPrefixOf, nowIso, ENTRY_ID_RE, type RpcPeer } from "@piomio/shared";
 import { json, type Db } from "../db.ts";
 import { hubLocale, localizePluginValue, LocalizedError, tFor } from "../i18n.ts";
 import type { Config } from "../config.ts";
@@ -107,7 +107,7 @@ interface Running {
 
 export interface InstallPreview {
   stagingId: string;
-  manifest: OwlbotManifest;
+  manifest: PiomioManifest;
   formats: PluginLayout["formats"];
   permissions: PluginPermissions;
   commitHash?: string;
@@ -265,8 +265,8 @@ export class PluginHost {
     }
     const env: Record<string, string> = {
       HOME: home,
-      OWLBOT_DATA_DIR_PLUGIN: dataDir,
-      OWLBOT_PLUGIN_ID: id,
+      PIOMIO_DATA_DIR_PLUGIN: dataDir,
+      PIOMIO_PLUGIN_ID: id,
       NODE_USE_ENV_PROXY: "1",
       HTTP_PROXY: proxyUrl,
       HTTPS_PROXY: proxyUrl,
@@ -417,7 +417,7 @@ export class PluginHost {
   private log(rec: PluginRecord, level: string, msg: string): void {
     rec.logs.push({ ts: nowIso(), level, msg: this.d.vault.redactor.text(msg) });
     if (rec.logs.length > MAX_LOGS) rec.logs.splice(0, rec.logs.length - MAX_LOGS);
-    if (level === "error" || process.env.OWLBOT_DEBUG) console.error(`[plugin:${rec.id}] ${msg}`);
+    if (level === "error" || process.env.PIOMIO_DEBUG) console.error(`[plugin:${rec.id}] ${msg}`);
   }
 
   // ---------- RPC wiring ----------
@@ -782,7 +782,7 @@ export function scrubEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined) continue;
     if (/KEY|TOKEN|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL/i.test(k)) continue;
-    if (k.startsWith("OWLBOT_")) continue;
+    if (k.startsWith("PIOMIO_")) continue;
     out[k] = v;
   }
   return out;

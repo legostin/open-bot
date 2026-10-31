@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Plus, UsersRound } from "lucide-react";
-import type { AgentDef, GroupChat, TeamMember } from "@owlbot/shared";
+import type { AgentDef, GroupChat, TeamMember } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { shortTime } from "../../lib/format";
 import { agentPath, groupOrder, groupPath, teamOrder } from "../../lib/team";

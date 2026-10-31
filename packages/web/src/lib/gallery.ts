@@ -1,7 +1,7 @@
 // What the media viewer shows: the pictures and videos of a chat in order (files people sent, pictures agents
 // showed), each with where the page loads it from and how it is saved.
 
-import type { Message } from "@owlbot/shared";
+import type { Message } from "@piomio/shared";
 import { mediaSrc } from "./media";
 
 export type MediaKind = "image" | "video";

@@ -2,8 +2,8 @@
 // Changes in a dialog (new or finished messages, turns starting and ending, the read marker) go out as "team.updated";
 // in a group chat (also its title and members) as "group.updated".
 
-import type { Conversation, GroupChat, Message, TeamMember } from "@owlbot/shared";
-import { truncate } from "@owlbot/shared";
+import type { Conversation, GroupChat, Message, TeamMember } from "@piomio/shared";
+import { truncate } from "@piomio/shared";
 import type { Store } from "./store.ts";
 import type { EventBus } from "./bus.ts";
 

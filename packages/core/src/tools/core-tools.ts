@@ -2,8 +2,8 @@
 
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { ImageItem, MapIcon, MapMarker, MapRoute, MessagePart, ModelSkill, RouteMode, ToolDescriptor, ToolResult } from "@owlbot/shared";
-import { brainsFor, isThinkingPreset, MAP_ICONS, sameBrain } from "@owlbot/shared";
+import type { ImageItem, MapIcon, MapMarker, MapRoute, MessagePart, ModelSkill, RouteMode, ToolDescriptor, ToolResult } from "@piomio/shared";
+import { brainsFor, isThinkingPreset, MAP_ICONS, sameBrain } from "@piomio/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { SkillIndex } from "../skills.ts";
 import type { VaultService } from "../vault/service.ts";
@@ -484,7 +484,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
     {
       name: "user_location",
       description:
-        "Where the user is now, as their phone reports it (when they share their location in the Owlbot app): the point, how exact it is, " +
+        "Where the user is now, as their phone reports it (when they share their location in the Piomio app): the point, how exact it is, " +
         "the place's name and when it was reported. Use it for \"near me\", directions from where they are (show_map with an icon \"user\" marker as " +
         "the first stop), local time and weather questions. Your [You now] block already names the place when it is known.",
       effect: "read",
@@ -492,7 +492,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
     },
     () => {
       const l = d.userLocation?.();
-      if (!l) return text("Unknown: the user's phone does not share their location. They can turn it on in the Owlbot app, on the Hub tab.");
+      if (!l) return text("Unknown: the user's phone does not share their location. They can turn it on in the Piomio app, on the Hub tab.");
       const ago = Math.max(0, Math.round((Date.now() - Date.parse(l.at)) / 60_000));
       return text(
         [

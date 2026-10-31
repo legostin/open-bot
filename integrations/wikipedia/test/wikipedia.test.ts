@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
-import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import { startPlugin, type PluginHarness } from "@piomio/testkit";
 import { leadImage, plain, type ArticleCard } from "../server/index.ts";
 
 const dir = join(import.meta.dirname, "..");
@@ -83,7 +83,7 @@ describe("wikipedia plugin", () => {
     expect(r).toContain("Lisbon is the capital & largest city");
     expect(r).toContain("https://ru.wikipedia.org/wiki/Lisbon");
     expect(api.requests.at(-1)!.path).toMatch(/^\/ru\/w\/rest\.php/);
-    expect(api.requests.at(-1)!.agent).toMatch(/^Owlbot\//);
+    expect(api.requests.at(-1)!.agent).toMatch(/^Piomio\//);
     expect(await h.invokeText("search", { query: "nothing", lang: "en" })).toBe('Nothing on en.wikipedia.org for "nothing".');
     expect((await h.invoke("search", { query: "x", lang: "not a lang" })).isError).toBe(true);
   });

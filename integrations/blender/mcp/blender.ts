@@ -107,7 +107,7 @@ export function pythonOf(b: Blender): string | undefined {
   return exe ? join(bin, exe) : undefined;
 }
 
-const MARK = "__OWLBOT_BLENDER__";
+const MARK = "__PIOMIO_BLENDER__";
 
 // Run inside `blender --background`: the official add-on (maintainer "Blender Lab", id "mcp", in any repository).
 const CHECK = `
@@ -150,7 +150,7 @@ export async function ensureAddon(b: Blender, addonSource: string): Promise<Addo
     state = await addonState(b);
   }
   if (!state.module) {
-    const tmp = mkdtempSync(join(tmpdir(), "owlbot-blender-addon-"));
+    const tmp = mkdtempSync(join(tmpdir(), "piomio-blender-addon-"));
     try {
       const zip = join(tmp, "mcp.zip");
       const built = await run(b.bin, ["--background", "--command", "extension", "build", "--source-dir", addonSource, "--output-filepath", zip], 120_000, blenderEnv());

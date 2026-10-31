@@ -5,7 +5,7 @@ import { createNative, NATIVE_EVENT, nativeErrorText, openOutside, outsideUrl, t
 function appWindow(reply: (message: any) => unknown = () => ({ ok: true })) {
   const target = new EventTarget();
   const postMessage = vi.fn(reply);
-  const host = Object.assign(target, { webkit: { messageHandlers: { owlbot: { postMessage } } } }) as unknown as NativeHost;
+  const host = Object.assign(target, { webkit: { messageHandlers: { piomio: { postMessage } } } }) as unknown as NativeHost;
   const dispatch = (detail: unknown) => target.dispatchEvent(new CustomEvent(NATIVE_EVENT, { detail }));
   return { host, postMessage, dispatch };
 }
@@ -77,7 +77,7 @@ describe("native bridge", () => {
     expect(postMessage).toHaveBeenCalledWith({ type: "reauth" });
   });
 
-  it("delivers owlbot-native events until unsubscribed", () => {
+  it("delivers piomio-native events until unsubscribed", () => {
     const { host, dispatch } = appWindow();
     const native = createNative(host)!;
     const seen: unknown[] = [];

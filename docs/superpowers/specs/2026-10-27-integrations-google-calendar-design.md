@@ -1,6 +1,6 @@
 # Integrations library and Google Calendar
 
-2026-10-27. Decided with the user: an integrations library (a page of cards), Google first, Owlbot's own OAuth client
+2026-10-27. Decided with the user: an integrations library (a page of cards), Google first, Piomio's own OAuth client
 built in, the agent reads and writes the calendar, the morning digest shows the day's events. The phone's calendar
 (the iOS app) comes next as another integration in the same library.
 
@@ -28,8 +28,8 @@ built in, the agent reads and writes the calendar, the morning digest shows the 
 
 `packages/core/src/connections.ts`, one account per provider for now.
 
-- Provider `google`: endpoints (auth, token, revoke, userinfo) and the client from `OWLBOT_GOOGLE_CLIENT_ID` /
-  `OWLBOT_GOOGLE_CLIENT_SECRET`, defaulting to the client built into the code (an installed-app client: Google
+- Provider `google`: endpoints (auth, token, revoke, userinfo) and the client from `PIOMIO_GOOGLE_CLIENT_ID` /
+  `PIOMIO_GOOGLE_CLIENT_SECRET`, defaulting to the client built into the code (an installed-app client: Google
   treats its secret as public). Empty → integrations that need Google are `unavailable`.
 - Start: `POST /api/connections/google/start { integration }` → `{ url }`. Authorization code flow with PKCE (S256),
   `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`, the scopes of every enabled integration

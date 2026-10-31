@@ -1,14 +1,14 @@
-// @owlbot/ui — the contract between the web UI host and UI plugins.
+// @piomio/ui — the contract between the web UI host and UI plugins.
 //
 // A UI plugin is an ES module (built by scripts/build-ui-plugins.mjs) whose default export or named export
-// `activate(ui: OwlbotUI)` registers contributions. "react", "react/jsx-runtime", "react-dom" and "@owlbot/ui"
+// `activate(ui: PiomioUI)` registers contributions. "react", "react/jsx-runtime", "react-dom" and "@piomio/ui"
 // are provided by the host through an import map (shared instances); plugins must not bundle them.
 //
-// At runtime "@owlbot/ui" resolves to /shared/owlbot-ui.js, which re-exports `window.__OWLBOT_SHARED__.ui`
+// At runtime "@piomio/ui" resolves to /shared/piomio-ui.js, which re-exports `window.__PIOMIO_SHARED__.ui`
 // (the host's implementation of everything exported below as values).
 
 import type { ComponentType, ReactNode } from "react";
-import type { Locale, Message, MessagePart, Params, RouteMode, Task, UiEvent } from "@owlbot/shared";
+import type { Locale, Message, MessagePart, Params, RouteMode, Task, UiEvent } from "@piomio/shared";
 
 // ---------- slots ----------
 
@@ -174,7 +174,7 @@ export interface PluginChannel {
   on(channel: string, cb: (payload: any) => void): () => void;
 }
 
-export interface OwlbotUI {
+export interface PiomioUI {
   pluginId: string;
   slots: {
     register<P = any>(slot: SlotName, contribution: SlotContribution<P>): () => void;
@@ -199,7 +199,7 @@ export interface OwlbotUI {
   /** All realtime hub events (messages, tasks, notifications...). Returns unsubscribe. */
   events: { on(cb: (e: UiEvent) => void): () => void };
   /**
-   * Interface language and this plugin's translations (.owlbot-plugin/locales/<locale>.json, delivered by the hub).
+   * Interface language and this plugin's translations (.piomio-plugin/locales/<locale>.json, delivered by the hub).
    * The page reloads when the user switches language, so `locale` is fixed for the plugin's lifetime.
    */
   i18n: {
@@ -212,7 +212,7 @@ export interface OwlbotUI {
   };
 }
 
-export type UiPluginModule = { activate(ui: OwlbotUI): void | (() => void) };
+export type UiPluginModule = { activate(ui: PiomioUI): void | (() => void) };
 
 // ---------- shared components and hooks (values provided by the host at runtime) ----------
 
@@ -246,13 +246,13 @@ export interface EmptyStateProps {
 /** Haptic feedback the phone can play. */
 export type NativeHapticKind = "light" | "success" | "warning";
 
-/** What the app tells the page (a `owlbot-native` CustomEvent on window): live words while the mic is held. */
+/** What the app tells the page (a `piomio-native` CustomEvent on window): live words while the mic is held. */
 /** What the app tells the page: live dictation words, the "Show steps" switch in its header, the hub answering again. */
 export type NativeEvent = { type: "dictation"; text: string } | { type: "details"; on: boolean } | { type: "online" };
 
 /**
- * The Owlbot iOS app around the page (its chat screen is the web UI's chat in a WKWebView). Every call is
- * `window.webkit.messageHandlers.owlbot.postMessage({ type, ... })`; a failed call rejects with an Error whose
+ * The Piomio iOS app around the page (its chat screen is the web UI's chat in a WKWebView). Every call is
+ * `window.webkit.messageHandlers.piomio.postMessage({ type, ... })`; a failed call rejects with an Error whose
  * message is the app's reason.
  */
 export interface NativeBridge {
@@ -276,19 +276,19 @@ export interface NativeBridge {
 
 declare global {
   interface Window {
-    __OWLBOT_SHARED__?: {
+    __PIOMIO_SHARED__?: {
       react: unknown;
       reactDom: unknown;
       reactDomClient: unknown;
       jsxRuntime: unknown;
-      ui: OwlbotUIRuntime;
+      ui: PiomioUIRuntime;
     };
   }
 }
 
-/** What the "@owlbot/ui" module exports at runtime. */
-export interface OwlbotUIRuntime {
-  definePluginUI(activate: (ui: OwlbotUI) => void | (() => void)): UiPluginModule;
+/** What the "@piomio/ui" module exports at runtime. */
+export interface PiomioUIRuntime {
+  definePluginUI(activate: (ui: PiomioUI) => void | (() => void)): UiPluginModule;
   Button: ComponentType<ButtonProps>;
   Card: ComponentType<CardProps>;
   Badge: ComponentType<BadgeProps>;
@@ -308,26 +308,26 @@ export interface OwlbotUIRuntime {
   /** Interface language (same as ui.i18n.locale). */
   locale: Locale;
   /**
-   * The iOS app's bridge when the page runs inside the Owlbot app; `undefined` in a browser, so check it first:
+   * The iOS app's bridge when the page runs inside the Piomio app; `undefined` in a browser, so check it first:
    * `native?.haptic("success")`.
    */
   native: NativeBridge | undefined;
 }
 
-// Value exports: declared here for type-checking only. At runtime the import map points "@owlbot/ui"
-// to the host shim (/shared/owlbot-ui.js), which provides these values. Plugins must mark "@owlbot/ui" external.
-export declare const definePluginUI: OwlbotUIRuntime["definePluginUI"];
-export declare const Button: OwlbotUIRuntime["Button"];
-export declare const Card: OwlbotUIRuntime["Card"];
-export declare const Badge: OwlbotUIRuntime["Badge"];
-export declare const EmptyState: OwlbotUIRuntime["EmptyState"];
-export declare const Spinner: OwlbotUIRuntime["Spinner"];
-export declare const Markdown: OwlbotUIRuntime["Markdown"];
-export declare const useTasks: OwlbotUIRuntime["useTasks"];
-export declare const useHubEvent: OwlbotUIRuntime["useHubEvent"];
-export declare const api: OwlbotUIRuntime["api"];
-export declare const mediaSrc: OwlbotUIRuntime["mediaSrc"];
-export declare const locale: OwlbotUIRuntime["locale"];
+// Value exports: declared here for type-checking only. At runtime the import map points "@piomio/ui"
+// to the host shim (/shared/piomio-ui.js), which provides these values. Plugins must mark "@piomio/ui" external.
+export declare const definePluginUI: PiomioUIRuntime["definePluginUI"];
+export declare const Button: PiomioUIRuntime["Button"];
+export declare const Card: PiomioUIRuntime["Card"];
+export declare const Badge: PiomioUIRuntime["Badge"];
+export declare const EmptyState: PiomioUIRuntime["EmptyState"];
+export declare const Spinner: PiomioUIRuntime["Spinner"];
+export declare const Markdown: PiomioUIRuntime["Markdown"];
+export declare const useTasks: PiomioUIRuntime["useTasks"];
+export declare const useHubEvent: PiomioUIRuntime["useHubEvent"];
+export declare const api: PiomioUIRuntime["api"];
+export declare const mediaSrc: PiomioUIRuntime["mediaSrc"];
+export declare const locale: PiomioUIRuntime["locale"];
 /** The iOS app's bridge; `undefined` in a browser. */
-export declare const native: OwlbotUIRuntime["native"];
+export declare const native: PiomioUIRuntime["native"];
 export type { Locale, Message, MessagePart, Params, Task, UiEvent };

@@ -5,8 +5,8 @@
 // model and the effort that fits; the runner then takes the first one that can work now (signed in, not over a limit,
 // not busy). It knows profiles, not providers: a new provider counts as soon as its brain publishes a catalog.
 
-import type { ModelProfile, ModelSkill, ProbeResult, WorkKind } from "@owlbot/shared";
-import { catalogOf, fitEffort, isKnownModel, markLegacy, parseBrainRef } from "@owlbot/shared";
+import type { ModelProfile, ModelSkill, ProbeResult, WorkKind } from "@piomio/shared";
+import { catalogOf, fitEffort, isKnownModel, markLegacy, parseBrainRef } from "@piomio/shared";
 
 /**
  * How much a request asks of the model:

@@ -1,6 +1,6 @@
 // The UI module of a plugin being installed, compiled by the hub: an integration an agent made (or one copied from a
 // folder) brings ui/src/index.tsx but no build, so the hub turns that one file into the file its manifest's `ui`
-// names. One file only: its imports stay as they are (react and @owlbot/ui come from the page's import map), and
+// names. One file only: its imports stay as they are (react and @piomio/ui come from the page's import map), and
 // `import type` goes away.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

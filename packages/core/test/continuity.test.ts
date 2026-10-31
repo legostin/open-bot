@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Message, MessagePart } from "@owlbot/shared";
+import type { Message, MessagePart } from "@piomio/shared";
 import { before, partsText, recap } from "../src/continuity.ts";
 import { buildSystemPrompt } from "../src/prompt.ts";
 

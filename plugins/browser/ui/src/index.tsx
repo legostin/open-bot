@@ -1,11 +1,11 @@
 // UI of the browser plugin: the browser's live view (with takeover) for the host's floating live-view window, and a
 // compact renderer for browser_* calls. The backend's "activity" event tells the host when an agent drives the
 // browser, so the window opens on its own.
-// React and @owlbot/ui come from the host (import map); lucide icons are bundled by scripts/build-ui-plugins.mjs.
-// Texts come from .owlbot-plugin/locales (ui.* keys) through ui.i18n.t.
+// React and @piomio/ui come from the host (import map); lucide icons are bundled by scripts/build-ui-plugins.mjs.
+// Texts come from .piomio-plugin/locales (ui.* keys) through ui.i18n.t.
 
-import { definePluginUI } from "@owlbot/ui";
-import type { LiveViewActivity } from "@owlbot/ui";
+import { definePluginUI } from "@piomio/ui";
+import type { LiveViewActivity } from "@piomio/ui";
 import { BrowserCall } from "./call.tsx";
 import { hostOf, send, setHost, t, type Activity } from "./host.ts";
 import { BrowserView } from "./view.tsx";

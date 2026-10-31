@@ -1,0 +1,11 @@
+{
+  "name": "Claude Code",
+  "description": "Интеллект на подписке Claude: запускает Claude Code в режиме без интерфейса с инструментами Piomio.",
+  "settings.tokenRef.title": "Токен (ссылка vault)",
+  "settings.tokenRef.description": "Результат `claude setup-token`, сохранённый в vault. Если пусто — используется вход CLI.",
+  "settings.command.title": "Команда CLI",
+  "settings.allowedTools.title": "Встроенные инструменты Claude Code",
+  "settings.allowedTools.description": "Пусто — набор по умолчанию (Bash, файлы, веб, задачи, скиллы и инструменты Piomio). На Mac терминал работает в песочнице, а файлы вне папки агента — только с вашего разрешения: из этого списка там действуют лишь веб, задачи, скиллы и инструменты Piomio.",
+  "setup.token.title": "Токен Claude Code",
+  "setup.token.hint": "Нужен, только если Claude Code не залогинен на этом сервере: выполните `claude setup-token` на любом компьютере с вашей подпиской и вставьте токен сюда."
+}

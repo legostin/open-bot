@@ -4,10 +4,10 @@
 
 import { mkdirSync, writeFileSync, chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@owlbot/shared";
-import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
-import type { Locale } from "@owlbot/shared/i18n";
-import { markLegacy, profileFrom } from "@owlbot/shared/models";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, ProbeResult } from "@piomio/shared";
+import type { BrainProviderImpl, BrainSessionImpl } from "@piomio/plugin-sdk";
+import type { Locale } from "@piomio/shared/i18n";
+import { markLegacy, profileFrom } from "@piomio/shared/models";
 import { capture, childEnv, runLines } from "./proc.ts";
 import { brainsT } from "./messages.ts";
 import { parseCodexDeviceLogin, runCliLogin } from "./login.ts";
@@ -113,10 +113,10 @@ class CodexSession implements BrainSessionImpl {
     }
     // Codex reads AGENTS.md from the working directory: that is where our system prompt goes.
     const agentsFile = join(opts.workspace, "AGENTS.md");
-    const marker = "<!-- owlbot:system -->";
+    const marker = "<!-- piomio:system -->";
     const existing = existsSync(agentsFile) ? readFileSync(agentsFile, "utf8") : "";
-    const userPart = existing.includes(marker) ? existing.slice(existing.indexOf("<!-- /owlbot:system -->") + 24) : existing;
-    writeFileSync(agentsFile, `${marker}\n${opts.systemPrompt}\n<!-- /owlbot:system -->\n${userPart}`);
+    const userPart = existing.includes(marker) ? existing.slice(existing.indexOf("<!-- /piomio:system -->") + 24) : existing;
+    writeFileSync(agentsFile, `${marker}\n${opts.systemPrompt}\n<!-- /piomio:system -->\n${userPart}`);
   }
 
   private sandbox(): "read-only" | "workspace-write" | "danger-full-access" {
@@ -136,12 +136,12 @@ class CodexSession implements BrainSessionImpl {
 
   /** `-c` overrides: the hub's MCP server, approvals (asked of the hub when confined), the sandbox. */
   private config(): string[] {
-    const [command, ...args] = this.o.mcp.bridgeCommand.length ? this.o.mcp.bridgeCommand : ["owlbot-mcp-bridge"];
+    const [command, ...args] = this.o.mcp.bridgeCommand.length ? this.o.mcp.bridgeCommand : ["piomio-mcp-bridge"];
     return [
-      `mcp_servers.owlbot.command=${tomlString(command)}`,
-      `mcp_servers.owlbot.args=[${args.map(tomlString).join(",")}]`,
-      `mcp_servers.owlbot.env={OWLBOT_URL=${tomlString(this.o.mcp.url)},OWLBOT_TOKEN_FILE=${tomlString(join(this.dir, "token"))}}`,
-      `mcp_servers.owlbot.tool_timeout_sec=3600`,
+      `mcp_servers.piomio.command=${tomlString(command)}`,
+      `mcp_servers.piomio.args=[${args.map(tomlString).join(",")}]`,
+      `mcp_servers.piomio.env={PIOMIO_URL=${tomlString(this.o.mcp.url)},PIOMIO_TOKEN_FILE=${tomlString(join(this.dir, "token"))}}`,
+      `mcp_servers.piomio.tool_timeout_sec=3600`,
       this.ask() ? `approval_policy="on-request"` : `approval_policy="never"`,
       `sandbox_mode=${tomlString(this.sandbox())}`,
       ...(this.o.confine && !this.o.frontDesk ? ["sandbox_workspace_write.network_access=false"] : []),

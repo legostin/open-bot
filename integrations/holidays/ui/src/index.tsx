@@ -2,13 +2,13 @@
 // its name and how soon it is; long weekends show their span, length and the days to take off. Past ones fade.
 
 import type { CSSProperties } from "react";
-import { definePluginUI } from "@owlbot/ui";
-import type { OwlbotUI, WidgetProps } from "@owlbot/ui";
+import { definePluginUI } from "@piomio/ui";
+import type { PiomioUI, WidgetProps } from "@piomio/ui";
 import type { HolidaysCard, HolidayItem } from "../../server/index.ts";
 
-let t: OwlbotUI["i18n"]["t"] = (k) => k;
+let t: PiomioUI["i18n"]["t"] = (k) => k;
 let locale = "en";
-let formatDate: OwlbotUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleDateString();
+let formatDate: PiomioUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleDateString();
 
 const noon = (d: string) => new Date(`${d}T12:00:00`);
 const daysFrom = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);

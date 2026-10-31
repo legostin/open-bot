@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Hand, Maximize2, Minimize2, Minus, X } from "lucide-react";
-import type { AgentDef } from "@owlbot/shared";
+import type { AgentDef } from "@piomio/shared";
 import { createStore, useStore } from "../lib/store";
 import { agents, ensureAgents } from "../state/app";
 import { isBusy, liveWindow, liveWindowActions, liveWindowView, nextChangeAt, phaseOf } from "../plugins/liveview";

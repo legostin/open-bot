@@ -1,8 +1,8 @@
-// Phones (the Owlbot app): the paired list and where the phones' own HTTPS port listens at home. Connecting one is an
+// Phones (the Piomio app): the paired list and where the phones' own HTTPS port listens at home. Connecting one is an
 // invite (components/Invite.tsx).
 
 import { useCallback, useEffect, useState } from "react";
-import type { Device, DeviceNetwork } from "@owlbot/shared";
+import type { Device, DeviceNetwork } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { hubEvents, reconnected } from "../state/app";
 import { useRemote } from "../state/remote";
@@ -42,7 +42,7 @@ export function useDevices() {
   return { devices, network, error, load };
 }
 
-/** The device port on the home network: its addresses, or why phones cannot use it (OWLBOT_DEVICES=0, a busy port). */
+/** The device port on the home network: its addresses, or why phones cannot use it (PIOMIO_DEVICES=0, a busy port). */
 export function PhoneAccess({ network }: { network: DeviceNetwork }) {
   const link = useRemote()?.deviceUrl;
   return (

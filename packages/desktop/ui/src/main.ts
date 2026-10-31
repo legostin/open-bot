@@ -1,5 +1,5 @@
 // The app's own screens (window "setup"): how this computer is used, connecting it to a hub (also from an
-// owlbot://pair link), "starting" and "did not start". The hub's UI opens in its own window and gets no app commands.
+// piomio://pair link), "starting" and "did not start". The hub's UI opens in its own window and gets no app commands.
 
 import { invoke } from "@tauri-apps/api/core";
 import en from "../../../../packaging/desktop/locales/en.json";
@@ -8,9 +8,9 @@ import ru from "../../../../packaging/desktop/locales/ru.json";
 type Mode = "hub" | "node";
 interface UiState {
   lang: "en" | "ru";
-  /** The test build ("Owlbot Test"): a strip on top says so. */
+  /** The test build ("Piomio Test"): a strip on top says so. */
   test: boolean;
-  /** "Reset Owlbot…" from the tray waits for a confirmation here. */
+  /** "Reset Piomio…" from the tray waits for a confirmation here. */
   reset: boolean;
   mode: Mode | null;
   starting: boolean;
@@ -90,9 +90,9 @@ function welcome(state: UiState): void {
   );
 }
 
-/** The invite link (the node CLI reads it) and the machine name; an owlbot://pair link brings the hub and code. */
+/** The invite link (the node CLI reads it) and the machine name; an piomio://pair link brings the hub and code. */
 function pairForm(state: UiState, link?: { hub: string; code: string }): void {
-  const invite = input("", { type: "url", placeholder: "https://owlbot.example.ts.net/join/AB12CD34", required: "" });
+  const invite = input("", { type: "url", placeholder: "https://piomio.example.ts.net/join/AB12CD34", required: "" });
   const name = input(state.hostname, { maxlength: "60" });
   const note = h("p", { class: "error" });
   const form = h(
@@ -130,7 +130,7 @@ function errorScreen(state: UiState, error: NonNullable<UiState["error"]>): void
   );
 }
 
-/** "Reset Owlbot…": what goes, what stays, and the two ways out. */
+/** "Reset Piomio…": what goes, what stays, and the two ways out. */
 function resetScreen(): void {
   const note = h("p", { class: "error" });
   show(

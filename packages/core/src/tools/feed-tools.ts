@@ -1,6 +1,6 @@
 // The tools agents use with the user's channels (feeds.ts): any agent reads them and makes one when the user wants
 // regular news; the editor, in a channel's run, posts, keeps its sources and may rename it.
-import type { Feed, MessagePart, NewsItem, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import type { Feed, MessagePart, NewsItem, ToolDescriptor, ToolResult } from "@piomio/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { Store } from "../store.ts";
 import type { AgentRegistry } from "../agents.ts";

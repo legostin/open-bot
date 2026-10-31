@@ -1,18 +1,18 @@
 {
-  "name": "@owlbot/node",
+  "name": "@piomio/node",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "owlbot-node": "./src/cli.ts"
+    "piomio-node": "./src/cli.ts"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@owlbot/mcp-bridge": "*",
+    "@piomio/mcp-bridge": "*",
     "@noble/curves": "^2.4.0",
     "ws": "^8.22.0",
-    "@owlbot/replica": "*"
+    "@piomio/replica": "*"
   }
 }

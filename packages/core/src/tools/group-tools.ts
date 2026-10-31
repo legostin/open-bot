@@ -1,7 +1,7 @@
 // Group chats from the chat itself: any agent makes a group or changes one (its name, who takes part, who leads) when
 // the person asks in their own words. The same as the group form in the UI, which stays as the other way.
-import type { Conversation, ToolDescriptor, ToolResult } from "@owlbot/shared";
-import { GROUP_MAX_MEMBERS, GROUP_MIN_MEMBERS } from "@owlbot/shared";
+import type { Conversation, ToolDescriptor, ToolResult } from "@piomio/shared";
+import { GROUP_MAX_MEMBERS, GROUP_MIN_MEMBERS } from "@piomio/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { Store } from "../store.ts";
 import type { AgentRegistry } from "../agents.ts";

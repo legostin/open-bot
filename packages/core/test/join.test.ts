@@ -44,7 +44,7 @@ describe("one link to connect a device", () => {
   beforeAll(async () => {
     const [port, consolePort, egressPort, devicePort] = [await freePort(), await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_DEVICE_PORT: String(devicePort), OWLBOT_DEVICE_HOST: "127.0.0.1", OWLBOT_DEVICE_URLS: `https://192.168.1.2:${devicePort}`, TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), PIOMIO_DEVICE_PORT: String(devicePort), PIOMIO_DEVICE_HOST: "127.0.0.1", PIOMIO_DEVICE_URLS: `https://192.168.1.2:${devicePort}`, TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-join-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
     );
     hub = new Hub(config);
@@ -85,26 +85,26 @@ describe("one link to connect a device", () => {
     expect(r.headers.get("referrer-policy")).toBe("no-referrer");
     expect(r.headers.get("cache-control")).toBe("no-store");
     const html = await r.text();
-    expect(html).toContain(`href="owlbot://pair?hub=${encodeURIComponent(base)}&amp;code=${code}"`);
+    expect(html).toContain(`href="piomio://pair?hub=${encodeURIComponent(base)}&amp;code=${code}"`);
     expect(html.indexOf("/download/desktop/windows")).toBeLessThan(html.indexOf("/download/desktop/macos"));
-    expect(html).toContain(`node owlbot-node.mjs pair ${base}/join/${code}`);
+    expect(html).toContain(`node piomio-node.mjs pair ${base}/join/${code}`);
     expect(html).not.toMatch(/<script/i);
   });
 
   it("puts the phone's way first on an iPhone, in the browser's language", async () => {
     const { code } = hub.invites.create();
     const html = await (await open(`/join/${code}`, IPHONE, "ru-RU,ru;q=0.9")).text();
-    expect(html).toContain("Подключение к Owlbot");
-    const phone = html.indexOf(`owlbot://pair?v=1&amp;c=${code}`);
+    expect(html).toContain("Подключение к Piomio");
+    const phone = html.indexOf(`piomio://pair?v=1&amp;c=${code}`);
     expect(phone).toBeGreaterThan(0);
-    expect(phone).toBeLessThan(html.indexOf("owlbot://pair?hub="));
+    expect(phone).toBeLessThan(html.indexOf("piomio://pair?hub="));
   });
 
   it("hands out the installer of the hub's own version", async () => {
     const r = await open("/download/desktop/windows");
     expect(r.status).toBe(302);
     expect(r.headers.get("location")).toBe(installerUrl(hub.config.releasesRepo, hub.config.version, "windows"));
-    expect(installerUrl("legostin/open-bot", "0.2.0", "macos")).toBe("https://github.com/legostin/open-bot/releases/download/v0.2.0/owlbot-0.2.0.dmg");
+    expect(installerUrl("legostin/piomio", "0.2.0", "macos")).toBe("https://github.com/legostin/piomio/releases/download/v0.2.0/piomio-0.2.0.dmg");
     expect((await open("/download/desktop/linux")).status).toBe(404);
   });
 

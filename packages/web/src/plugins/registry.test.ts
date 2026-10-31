@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SlotName } from "@owlbot/ui";
+import type { SlotName } from "@piomio/ui";
 import { addContribution, addRoute, inSlot, matchRoute, normalizePath, pickMessageRenderer, pickOverride, pickToolRenderer, registry, removePlugin, type Contribution } from "./registry";
 import { resolveActivate } from "./activate";
 

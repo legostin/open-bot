@@ -14,10 +14,10 @@ with one injected stylesheet on the host's theme variables and lucide icons bund
 
 ## Global constraints
 
-- Every user-facing string in `.owlbot-plugin/locales/{en,ru}.json` (`ui.*`), parity is tested.
+- Every user-facing string in `.piomio-plugin/locales/{en,ru}.json` (`ui.*`), parity is tested.
 - Text for the model (tool descriptions/results) English, not translated.
 - No script of ours in a page's main world for the probe/focus checks (isolated world only).
-- Plugins only `import type` from `@owlbot/plugin-sdk`; `.ts` extensions in server imports.
+- Plugins only `import type` from `@piomio/plugin-sdk`; `.ts` extensions in server imports.
 
 ## File map
 
@@ -28,7 +28,7 @@ with one injected stylesheet on the host's theme variables and lucide icons bund
   `navigate {text}`, probe/focus via an isolated world, HTTP handler.
 - Modify `plugins/browser/server/tools.ts` — `history`, `history_clear` tools; ENGINES use `SEARCH_ENGINES`.
 - Modify `plugins/browser/server/index.ts` — `ctx.http.handle`.
-- Modify `plugins/browser/.owlbot-plugin/plugin.json` + locales — setting, approval, ui strings.
+- Modify `plugins/browser/.piomio-plugin/plugin.json` + locales — setting, approval, ui strings.
 - UI: `ui/src/{index.tsx, host.ts, styles.ts, view.tsx, screen.tsx, zoom.ts, omnibox.tsx, tabs.tsx, history.tsx, newtab.tsx, call.tsx}`.
 - Tests: `test/unit.test.ts` (address, settings), `test/history.test.ts` (store), `test/zoom.test.ts`,
   `test/browser.test.ts` (search navigate, history HTTP + tools, state fields, probe).

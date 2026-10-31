@@ -3,7 +3,7 @@
 
 import type { CSSProperties } from "react";
 import { Newspaper } from "lucide-react";
-import { AVATAR_PALETTE, defaultAvatar } from "@owlbot/shared/avatar";
+import { AVATAR_PALETTE, defaultAvatar } from "@piomio/shared/avatar";
 import { cx } from "../../components/ui";
 
 export function ChannelTile({ feedId, size = 36, running, paused, className }: { feedId: string; size?: number; running?: boolean; paused?: boolean; className?: string }) {

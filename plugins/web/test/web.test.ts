@@ -3,7 +3,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import { startPlugin, type PluginHarness } from "@piomio/testkit";
 import { isPrivateAddress } from "../server/ssrf.ts";
 import { guardedFetch } from "../server/fetch.ts";
 import { parseDuckDuckGo } from "../server/search.ts";
@@ -352,14 +352,14 @@ describe("web_search", () => {
   it("uses DuckDuckGo's HTML page when it is chosen", async () => {
     const h = await startPlugin({ dir: DIR, settings: { provider: "duckduckgo", duckduckgoUrl: `${base}/html/` } });
     try {
-      const t = await h.invokeText("search", { query: "Owlbot test query", count: 2 });
+      const t = await h.invokeText("search", { query: "Piomio test query", count: 2 });
       expect(t).toContain("(provider: duckduckgo)");
       expect(t).toContain("1. Example Docs & Intro\n   https://example.org/docs/intro?a=1&b=2");
       expect(t).toContain("2. Second result");
       expect(t).not.toContain("3.");
       const req = seen.filter((s) => s.url === "/html/").at(-1)!;
       expect(req.method).toBe("POST");
-      expect(new URLSearchParams(req.body).get("q")).toBe("Owlbot test query");
+      expect(new URLSearchParams(req.body).get("q")).toBe("Piomio test query");
     } finally {
       await h.stop();
     }

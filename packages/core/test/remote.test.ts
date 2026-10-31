@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RemoteView } from "@owlbot/shared";
+import type { RemoteView } from "@piomio/shared";
 import { EventBus } from "../src/bus.ts";
 import { loadConfig } from "../src/config.ts";
 import { deviceTls } from "../src/devices-tls.ts";
@@ -32,7 +32,7 @@ afterEach(async () => {
 
 function setup(opts: { bin?: string; plan?: unknown; password?: boolean } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), "owl-remote-"));
-  const config = loadConfig({ OWLBOT_TAILNET_BIN: opts.bin ?? FAKE, OWLBOT_TAILNET_HOSTNAME: "owlbot-test", TZ: "UTC" }, { dataDir });
+  const config = loadConfig({ PIOMIO_TAILNET_BIN: opts.bin ?? FAKE, PIOMIO_TAILNET_HOSTNAME: "piomio-test", TZ: "UTC" }, { dataDir });
   if (opts.plan) {
     mkdirSync(join(dataDir, "tailnet"), { recursive: true });
     writeFileSync(join(dataDir, "tailnet", "fake.json"), JSON.stringify(opts.plan));
@@ -54,11 +54,11 @@ function setup(opts: { bin?: string; plan?: unknown; password?: boolean } = {}) 
   return { remote, dataDir, events, gateways, settings: () => settings };
 }
 
-const RUNNING = { state: "running", url: "https://owlbot-test.tail1234.ts.net", deviceUrl: "https://owlbot-test.tail1234.ts.net:8443", account: "anna@example.com", keyExpiry: "2027-04-25T00:00:00Z" };
+const RUNNING = { state: "running", url: "https://piomio-test.tail1234.ts.net", deviceUrl: "https://piomio-test.tail1234.ts.net:8443", account: "anna@example.com", keyExpiry: "2027-04-25T00:00:00Z" };
 
 describe("access from anywhere", () => {
   it("is unavailable without the node program", async () => {
-    const { remote } = setup({ bin: "/nonexistent/owlbot-tailnet" });
+    const { remote } = setup({ bin: "/nonexistent/piomio-tailnet" });
     expect(remote.view("en")).toMatchObject({ available: false, enabled: false, state: "off" });
     expect(remote.view("en").error).toMatch(/npm run build:tailnet/);
     await expect(remote.enable()).rejects.toMatchObject({ key: "remote.unavailable", status: 409 });
@@ -87,11 +87,11 @@ describe("access from anywhere", () => {
     expect(events.find((e) => e.state === "needs-login")?.authUrl).toBe("https://login.tailscale.com/a/abc");
     expect(events.find((e) => e.state === "needs-funnel")?.enableUrl).toBe("https://login.tailscale.com/f/funnel?node=n1");
     expect(remote.view("en")).toEqual({ available: true, enabled: true, ...RUNNING });
-    expect(remote.linkHost()).toBe("owlbot-test.tail1234.ts.net");
-    expect(remote.deviceLink()).toBe("https://owlbot-test.tail1234.ts.net:8443");
+    expect(remote.linkHost()).toBe("piomio-test.tail1234.ts.net");
+    expect(remote.deviceLink()).toBe("https://piomio-test.tail1234.ts.net:8443");
 
     const start = JSON.parse(readFileSync(join(dataDir, "tailnet", "start.json"), "utf8"));
-    expect(start).toMatchObject({ type: "start", dir: join(dataDir, "tailnet"), hostname: "owlbot-test", web: "127.0.0.1:4101", device: "127.0.0.1:4102" });
+    expect(start).toMatchObject({ type: "start", dir: join(dataDir, "tailnet"), hostname: "piomio-test", web: "127.0.0.1:4101", device: "127.0.0.1:4102" });
     expect(start.deviceCert).toBe(deviceTls(dataDir).cert);
     expect(start.deviceKey).toBe(deviceTls(dataDir).key);
     expect(gateways.started).toBe(1);
@@ -116,7 +116,7 @@ describe("access from anywhere", () => {
     const { remote, events } = setup({ plan: { states: [{ state: "needs-login", message: "machine-auth" }] } });
     await remote.enable();
     await until(() => events.find((e) => e.state === "needs-login"));
-    expect(remote.view("en").error).toMatch(/approve the owlbot machine/);
+    expect(remote.view("en").error).toMatch(/approve the piomio machine/);
   });
 
   it("forgets: signs the node out and deletes its keys", async () => {

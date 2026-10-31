@@ -1,7 +1,7 @@
 // How an agent thinks (AgentDef.thinking), changed in the chat: the agent shows the card with a preset per kind of work
 // and changes its own choice when the user asks ("use a deeper model for research").
-import type { AgentDef, MessagePart, ToolDescriptor, ToolResult, WorkKind } from "@owlbot/shared";
-import { isWorkKind, sameBrain, THINKING_PRESETS, WORK_KINDS, type ThinkingPatch, type ThinkingView } from "@owlbot/shared";
+import type { AgentDef, MessagePart, ToolDescriptor, ToolResult, WorkKind } from "@piomio/shared";
+import { isWorkKind, sameBrain, THINKING_PRESETS, WORK_KINDS, type ThinkingPatch, type ThinkingView } from "@piomio/shared";
 import type { ToolRegistry } from "./registry.ts";
 import type { AgentRegistry } from "../agents.ts";
 import { applyThinking, describeKind } from "../thinking.ts";

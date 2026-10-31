@@ -286,7 +286,7 @@ fn note(log: &Path, text: &str) {
     let _ = fs::create_dir_all(dir);
   }
   if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(log) {
-    let _ = writeln!(f, "[owlbot] {text}");
+    let _ = writeln!(f, "[piomio] {text}");
   }
 }
 

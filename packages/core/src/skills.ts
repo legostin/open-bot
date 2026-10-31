@@ -2,7 +2,7 @@
 
 import { readdirSync, readFileSync, existsSync, mkdirSync, cpSync, statSync, rmSync } from "node:fs";
 import { join, basename, relative } from "node:path";
-import { matchesAny, parseFrontmatter } from "@owlbot/shared";
+import { matchesAny, parseFrontmatter } from "@piomio/shared";
 
 export interface Skill {
   name: string;

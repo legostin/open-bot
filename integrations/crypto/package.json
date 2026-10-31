@@ -1,5 +1,5 @@
 {
-  "name": "@owlbot/plugin-crypto",
+  "name": "@piomio/plugin-crypto",
   "version": "0.1.0",
   "private": true,
   "type": "module",

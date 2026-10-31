@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { Brain, CalendarClock, ListChecks, MessageCircle, Newspaper } from "lucide-react";
-import type { ThinkingPatch, ThinkingPreset, WorkKind } from "@owlbot/shared";
+import type { ThinkingPatch, ThinkingPreset, WorkKind } from "@piomio/shared";
 import { errorText } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import { agents, ensureAgents } from "../../state/app";

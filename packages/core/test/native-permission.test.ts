@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Approval } from "@owlbot/shared";
+import type { Approval } from "@piomio/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { classifyClaudeTool, claudeProjectDir, commandRule, confinement, decideNative, systemStatusOnly } from "../src/native-permissions.ts";
 
@@ -92,7 +92,7 @@ describe("what a brain's own tools may do", () => {
     expect(d("Read", { file_path: join(home, ".ssh", "id_ed25519") })).toBe("deny");
     expect(d("Read", { file_path: "~/.aws/credentials" })).toBe("deny");
     expect(d("Grep", { pattern: "x", path: join(home, "Library", "Keychains") })).toBe("deny");
-    expect(d("Read", { file_path: "/data/owlbot.db" })).toBe("deny");
+    expect(d("Read", { file_path: "/data/piomio.db" })).toBe("deny");
     expect(d("Read", { file_path: "/data/workspaces/b/c9/secret.md" })).toBe("deny");
     expect(d("Write", { file_path: "/data/vault.db" })).toBe("deny");
     expect(d("Read", { file_path: "/data/workspaces/a/c1/ok.md" })).toBe("allow");
@@ -148,7 +148,7 @@ describe("native_permission (integration)", () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const dataDir = mkdtempSync(join(tmpdir(), "owl-native-"));
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), TZ: "UTC" },
       { dataDir, builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
@@ -163,7 +163,7 @@ describe("native_permission (integration)", () => {
 
   it("allows the agent's folder at once and refuses the hub's data and credentials without asking", async () => {
     expect(await ask("Write", { file_path: join(ws, "a.md"), content: "x" })).toEqual({ behavior: "allow", updatedInput: { file_path: join(ws, "a.md"), content: "x" } });
-    expect((await ask("Read", { file_path: join(hub.config.dataDir, "owlbot.db") })).behavior).toBe("deny");
+    expect((await ask("Read", { file_path: join(hub.config.dataDir, "piomio.db") })).behavior).toBe("deny");
     expect((await ask("Read", { file_path: join(home, ".ssh", "id_rsa") })).behavior).toBe("deny");
     expect(hub.approvals.list().length).toBe(0);
   });
@@ -196,7 +196,7 @@ describe("native_permission (integration)", () => {
     expect(a.ask).toEqual({ kind: "command", detail: "npm ci", reason: "Install the project's packages" });
     expect(hub.approvals.get(a.id)?.ask).toEqual(a.ask);
 
-    const press = (body: unknown, cookie = `owlbot_session=${token}`) =>
+    const press = (body: unknown, cookie = `piomio_session=${token}`) =>
       fetch(`${base}/api/approvals/${a.id}`, {
         method: "POST",
         headers: { cookie, origin: base, "x-csrf": session.csrf, "content-type": "application/json" },

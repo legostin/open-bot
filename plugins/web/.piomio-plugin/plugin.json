@@ -1,0 +1,54 @@
+{
+  "id": "web",
+  "name": "%name%",
+  "version": "0.1.0",
+  "description": "%description%",
+  "author": "Piomio",
+  "builtin": true,
+  "server": "./server/index.ts",
+  "contributes": {
+    "setup": {
+      "secrets": [
+        {"vault": "brave_api_key", "title": "%setup.brave.title%", "hint": "%setup.brave.hint%", "link": "https://api-dashboard.search.brave.com/app/keys"},
+        {"vault": "tavily_api_key", "title": "%setup.tavily.title%", "hint": "%setup.tavily.hint%", "link": "https://app.tavily.com/home", "pattern": "^tvly-[A-Za-z0-9-]{20,}$"}
+      ]
+    },
+    "tools": true,
+    "settings": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "title": "%settings.provider.title%",
+          "enum": ["auto", "brave", "tavily", "searxng", "duckduckgo"],
+          "default": "auto",
+          "description": "%settings.provider.description%"
+        },
+        "searxngUrl": {
+          "type": "string",
+          "title": "%settings.searxngUrl.title%",
+          "description": "%settings.searxngUrl.description%"
+        },
+        "allowPrivate": {
+          "type": "boolean",
+          "title": "%settings.allowPrivate.title%",
+          "default": false,
+          "description": "%settings.allowPrivate.description%"
+        },
+        "userAgent": {
+          "type": "string",
+          "title": "%settings.userAgent.title%",
+          "description": "%settings.userAgent.description%"
+        },
+        "braveBaseUrl": { "type": "string", "title": "%settings.braveBaseUrl.title%", "description": "%settings.braveBaseUrl.description%" },
+        "tavilyBaseUrl": { "type": "string", "title": "%settings.tavilyBaseUrl.title%", "description": "%settings.tavilyBaseUrl.description%" },
+        "duckduckgoUrl": { "type": "string", "title": "%settings.duckduckgoUrl.title%", "description": "%settings.duckduckgoUrl.description%" }
+      }
+    }
+  },
+  "integration": {"category": "reading", "icon": "search", "connect": "setup", "summary": "%integration.summary%", "example": "%integration.example%", "popular": 2},
+  "permissions": {
+    "network": ["*"],
+    "vault": ["brave_api_key", "tavily_api_key"]
+  }
+}

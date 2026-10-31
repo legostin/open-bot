@@ -56,7 +56,7 @@ func TestMachineWalksSignInFunnelRunning(t *testing.T) {
 	expiry := time.Date(2027, 4, 25, 0, 0, 0, 0, time.UTC)
 	b.st = ipnstate.Status{
 		BackendState: "Running",
-		Self:         &ipnstate.PeerStatus{DNSName: "owlbot.tail1234.ts.net.", UserID: 7, KeyExpiry: &expiry},
+		Self:         &ipnstate.PeerStatus{DNSName: "piomio.tail1234.ts.net.", UserID: 7, KeyExpiry: &expiry},
 		User:         map[tailcfg.UserID]tailcfg.UserProfile{7: {LoginName: "anna@example.com"}},
 	}
 	b.funnel = tailcfg.QueryFeatureResponse{URL: "https://login.tailscale.com/f/funnel?node=n1"}
@@ -70,7 +70,7 @@ func TestMachineWalksSignInFunnelRunning(t *testing.T) {
 
 	b.funnel = tailcfg.QueryFeatureResponse{Complete: true}
 	clock = clock.Add(funnelRetry)
-	want := State{State: "running", URL: "https://owlbot.tail1234.ts.net", DeviceURL: "https://owlbot.tail1234.ts.net:8443", Account: "anna@example.com", KeyExpiry: "2027-04-25T00:00:00Z"}
+	want := State{State: "running", URL: "https://piomio.tail1234.ts.net", DeviceURL: "https://piomio.tail1234.ts.net:8443", Account: "anna@example.com", KeyExpiry: "2027-04-25T00:00:00Z"}
 	if s := m.tick(ctx); s != want {
 		t.Fatalf("%+v", s)
 	}
@@ -91,7 +91,7 @@ func TestMachineRetriesListenAfterAnError(t *testing.T) {
 	ctx := context.Background()
 	clock := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
 	b := &fakeBackend{
-		st:     ipnstate.Status{BackendState: "Running", Self: &ipnstate.PeerStatus{DNSName: "owlbot.t.ts.net."}},
+		st:     ipnstate.Status{BackendState: "Running", Self: &ipnstate.PeerStatus{DNSName: "piomio.t.ts.net."}},
 		funnel: tailcfg.QueryFeatureResponse{Complete: true},
 		listen: errors.New("no certificate yet"),
 	}

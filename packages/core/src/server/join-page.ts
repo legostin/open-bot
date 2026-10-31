@@ -1,5 +1,5 @@
 // The invite's page (`/join/<code>`, invites.ts) and the desktop installers. One https link reaches any device; the page
-// hands off to the app through owlbot:// links: the desktop app pairs with the address the page was opened at, the
+// hands off to the app through piomio:// links: the desktop app pairs with the address the page was opened at, the
 // phone with its usual pairing link. Server-rendered, no script, in the browser's language. The User-Agent only picks
 // which way comes first: the others stay one click away, since an iPad says it is a Mac.
 
@@ -21,7 +21,7 @@ export function platformOf(userAgent: string): Platform {
 
 /** The release assets packaging/desktop/build.mjs makes, by the hub's own version. */
 export function installerUrl(repo: string, version: string, os: "windows" | "macos"): string {
-  const asset = os === "windows" ? `owlbot-setup-${version}-x64.exe` : `owlbot-${version}.dmg`;
+  const asset = os === "windows" ? `piomio-setup-${version}-x64.exe` : `piomio-${version}.dmg`;
   return `https://github.com/${repo}/releases/download/v${version}/${asset}`;
 }
 
@@ -58,7 +58,7 @@ export function registerJoinPage(app: FastifyInstance, hub: Hub, o: { remote: bo
     const desktop = desktopSection(t, desktopPairLink(origin, code), platform === "macos" ? ["macos", "windows"] : ["windows", "macos"]);
     const phoneLink = hub.phoneLink(code);
     const phone = phoneSection(t, phoneLink);
-    const server = `<section><h2>${esc(t("join.server.title"))}</h2><p class="muted">${esc(t("join.server.hint"))}</p><code>curl -fsSLo owlbot-node.mjs ${esc(origin)}/download/owlbot-node.mjs &amp;&amp; node owlbot-node.mjs pair ${esc(origin)}/join/${esc(code)}</code></section>`;
+    const server = `<section><h2>${esc(t("join.server.title"))}</h2><p class="muted">${esc(t("join.server.hint"))}</p><code>curl -fsSLo piomio-node.mjs ${esc(origin)}/download/piomio-node.mjs &amp;&amp; node piomio-node.mjs pair ${esc(origin)}/join/${esc(code)}</code></section>`;
     const first = platform === "ios" ? phone : platform === "android" ? `<section><p>${esc(t("join.android"))}</p></section>` : platform === "other" ? server : desktop;
     const rest = (platform === "ios" ? [desktop, server] : platform === "android" ? [desktop, phone, server] : platform === "other" ? [desktop, phone] : [phone, server]).join("");
     const lead = `<p>${esc(t("join.lead", { hub: hubName() }))}</p>`;

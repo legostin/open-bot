@@ -2,11 +2,11 @@
 // the opening paragraphs (folded to a few lines, "More" unfolds them) and the link to the article.
 
 import { useState, type CSSProperties } from "react";
-import { definePluginUI, mediaSrc } from "@owlbot/ui";
-import type { OwlbotUI, WidgetProps } from "@owlbot/ui";
+import { definePluginUI, mediaSrc } from "@piomio/ui";
+import type { PiomioUI, WidgetProps } from "@piomio/ui";
 import type { ArticleCard } from "../../server/index.ts";
 
-let t: OwlbotUI["i18n"]["t"] = (k) => k;
+let t: PiomioUI["i18n"]["t"] = (k) => k;
 
 const serif = 'Georgia, "Linux Libertine", "Times New Roman", serif';
 const clamp = (lines: number): CSSProperties => ({ display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical", overflow: "hidden" });

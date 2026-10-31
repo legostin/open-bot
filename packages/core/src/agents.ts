@@ -4,8 +4,8 @@
 import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { stringify as toYaml } from "yaml";
-import type { AgentDef, Locale } from "@owlbot/shared";
-import { normalizeLocale, parseAvatar, parseFrontmatter, parseThinking } from "@owlbot/shared";
+import type { AgentDef, Locale } from "@piomio/shared";
+import { normalizeLocale, parseAvatar, parseFrontmatter, parseThinking } from "@piomio/shared";
 
 export const DEFAULT_BRAINS = ["claude-code@local", "codex@local", "api:*"];
 

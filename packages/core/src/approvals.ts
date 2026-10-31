@@ -2,8 +2,8 @@
 // deferred execution when the user answers after the inline wait timed out.
 
 import { createHmac, randomBytes } from "node:crypto";
-import type { Approval, ApprovalAsk, ApprovalStatus, ApprovalVia, Rule, ToolEffect, ToolResult } from "@owlbot/shared";
-import { newId, nowIso } from "@owlbot/shared";
+import type { Approval, ApprovalAsk, ApprovalStatus, ApprovalVia, Rule, ToolEffect, ToolResult } from "@piomio/shared";
+import { newId, nowIso } from "@piomio/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";

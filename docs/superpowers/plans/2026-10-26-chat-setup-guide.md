@@ -23,7 +23,7 @@ Spec: `docs/superpowers/specs/2026-10-26-chat-setup-guide-design.md`.
 - Text for the model (prompt block, system notes, tool descriptions and results), code and comments is English.
 - Secrets never pass through the model: cards only (`VaultGate`, `PluginSetupCard`, `BrainLoginCard`).
 - CLI brains keep the hub's own HOME (`<data>/home/agent`); the user's `~/.claude` and `~/.codex` are never read.
-- Under user isolation (Docker, `OWLBOT_ISOLATION=users`) nothing about CLI lookup changes.
+- Under user isolation (Docker, `PIOMIO_ISOLATION=users`) nothing about CLI lookup changes.
 - Hub tools are `hub_<name>`, owner `core`, visible to the default agent only.
 - Commands: `npm run typecheck`, `npx vitest run <file>`, `npm test`, `npm run build`.
 
@@ -59,7 +59,7 @@ Spec: `docs/superpowers/specs/2026-10-26-chat-setup-guide-design.md`.
 
 **Interfaces — produces:**
 ```ts
-export const PATH_MARK = "__OWLBOT_PATH__";
+export const PATH_MARK = "__PIOMIO_PATH__";
 export function parseShellPath(out: string): string[] | undefined;           // the marked line, split on ":"
 export function parseRegPath(out: string): string | undefined;               // `reg query … /v Path` output
 export function expandWinVars(s: string, env: Record<string, string | undefined>): string; // %VAR%, case-insensitive
@@ -77,7 +77,7 @@ export class UserPath { constructor(o?: Partial<{ platform; env; run }>); dirs()
 
 ### Task 2: Setup state and API
 
-**Files:** Create `packages/core/src/setup.ts`, `packages/core/test/setup.test.ts`, `packages/core/test/fixtures/plugins/fakegated/{.owlbot-plugin/plugin.json,server/index.ts}`, `packages/core/test/fixtures/setup-agents/assistant.md`; modify `packages/shared/src/types.ts`, `packages/core/src/app.ts`, `packages/core/src/server/main-app.ts`.
+**Files:** Create `packages/core/src/setup.ts`, `packages/core/test/setup.test.ts`, `packages/core/test/fixtures/plugins/fakegated/{.piomio-plugin/plugin.json,server/index.ts}`, `packages/core/test/fixtures/setup-agents/assistant.md`; modify `packages/shared/src/types.ts`, `packages/core/src/app.ts`, `packages/core/src/server/main-app.ts`.
 
 **Interfaces — produces (shared):**
 ```ts
@@ -142,4 +142,4 @@ Card: title `setup.title`, intro `setup.intro`, a compact `BrainLoginCard` per C
 - [x] README.md / README.ru.md: the first-run paragraph says the chat shows the sign-in card and the assistant then guides the rest.
 - [x] Spec: note `hub_setup_status` / `hub_setup_update`, no new bus event (the web reloads on existing ones), kickoff in the default agent's main dialog, held messages kept in memory.
 - [x] `npm run typecheck`, `npm test`, `npm run build`.
-- [x] Manual: `OWLBOT_DATA_DIR=<fresh> OWLBOT_INSTALL_CLIS=1 npm start` on alternate ports; set up the owner; the card lists Claude Code and Codex as installed and not signed in; say "привет" → card, no error. Commit.
+- [x] Manual: `PIOMIO_DATA_DIR=<fresh> PIOMIO_INSTALL_CLIS=1 npm start` on alternate ports; set up the owner; the card lists Claude Code and Codex as installed and not signed in; say "привет" → card, no error. Commit.

@@ -12,11 +12,11 @@ export function latestJson(dir, version, repo, now = new Date()) {
     if (!existsSync(file) || !existsSync(`${file}.sig`)) throw new Error(`missing ${name} or its .sig in ${dir}`);
     return { signature: readFileSync(`${file}.sig`, "utf8").trim(), url: `https://github.com/${repo}/releases/download/v${version}/${name}` };
   };
-  const mac = asset(`owlbot-${version}-mac.app.tar.gz`);
+  const mac = asset(`piomio-${version}-mac.app.tar.gz`);
   return {
     version,
     pub_date: now.toISOString(),
-    platforms: { "darwin-aarch64": mac, "darwin-x86_64": mac, "windows-x86_64": asset(`owlbot-setup-${version}-x64.exe`) },
+    platforms: { "darwin-aarch64": mac, "darwin-x86_64": mac, "windows-x86_64": asset(`piomio-setup-${version}-x64.exe`) },
   };
 }
 

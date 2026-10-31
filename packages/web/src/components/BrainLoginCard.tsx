@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { ExternalLink, LogIn, CheckCircle2 } from "lucide-react";
-import type { BrainLoginView } from "@owlbot/shared";
+import type { BrainLoginView } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { openOutside } from "../lib/native";

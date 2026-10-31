@@ -1,7 +1,7 @@
 // How the agents think on this hub (AgentDef.thinking): what each kind of work comes to on the brains that are here,
 // for the header picker, the chat card and the phone, and the change they make.
 
-import type { AgentDef, ProbeResult, WorkKind } from "@owlbot/shared";
+import type { AgentDef, ProbeResult, WorkKind } from "@piomio/shared";
 import {
   brainsFor,
   expandBrains,
@@ -16,7 +16,7 @@ import {
   type ThinkingBrain,
   type ThinkingPatch,
   type ThinkingView,
-} from "@owlbot/shared";
+} from "@piomio/shared";
 import type { BrainRegistry } from "./brains.ts";
 import type { Db } from "./db.ts";
 

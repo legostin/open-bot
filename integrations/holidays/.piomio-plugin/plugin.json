@@ -1,0 +1,19 @@
+{
+  "id": "holidays",
+  "name": "%name%",
+  "version": "0.1.0",
+  "author": "Piomio",
+  "description": "%description%",
+  "builtin": true,
+  "defaultEnabled": false,
+  "server": "./server/index.ts",
+  "ui": "./ui/dist/index.js",
+  "contributes": {
+    "tools": true,
+    "widgets": ["holidays"]
+  },
+  "integration": {"category": "everyday", "icon": "party-popper", "connect": "none", "summary": "%integration.summary%", "example": "%integration.example%"},
+  "permissions": {
+    "network": ["date.nager.at"]
+  }
+}

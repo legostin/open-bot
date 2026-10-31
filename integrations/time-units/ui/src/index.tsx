@@ -2,11 +2,11 @@
 // and how it relates to the viewer's own: today or tomorrow, hours ahead or behind. "Now" clocks keep running.
 
 import { useEffect, useState } from "react";
-import { definePluginUI } from "@owlbot/ui";
-import type { OwlbotUI, WidgetProps } from "@owlbot/ui";
+import { definePluginUI } from "@piomio/ui";
+import type { PiomioUI, WidgetProps } from "@piomio/ui";
 import type { ClocksCard } from "../../server/index.ts";
 
-let t: OwlbotUI["i18n"]["t"] = (k) => k;
+let t: PiomioUI["i18n"]["t"] = (k) => k;
 let locale = "en";
 
 interface ZoneTime {

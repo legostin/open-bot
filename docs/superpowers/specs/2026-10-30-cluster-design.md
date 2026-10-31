@@ -11,7 +11,7 @@ Decisions the person made:
 - Shared secrets (Telegram, Google, API keys) on a machine that takes over **wait for one tap** from the person; a
   machine keeps them unlocked in memory until it restarts, never on its disk.
 - **The Mac leads**; the VPS takes over while the Mac sleeps and gives the lead back when it returns.
-- **Everything Owlbot keeps in files replicates**, except what a machine downloads again (node_modules, vendor, .venv,
+- **Everything Piomio keeps in files replicates**, except what a machine downloads again (node_modules, vendor, .venv,
   target, build output, caches, what .gitignore leaves out).
 - Allowed models are **a list plus a spend limit** per machine.
 
@@ -66,8 +66,8 @@ A loopback HTTP server in the node daemon. Key-mode sessions get a per-session t
 - Claude Code: `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>`, `ANTHROPIC_AUTH_TOKEN=<token>`, alias models
   (`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`) pinned to
   allowed models, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`.
-- Codex: a model provider `owlbot` (`-c model_provider=owlbot`, `base_url=http://127.0.0.1:<port>/v1`,
-  `wire_api=responses`, `env_key=OWLBOT_GATEWAY_KEY`).
+- Codex: a model provider `piomio` (`-c model_provider=piomio`, `base_url=http://127.0.0.1:<port>/v1`,
+  `wire_api=responses`, `env_key=PIOMIO_GATEWAY_KEY`).
 
 For each request the gateway checks the token, takes the body's `model`; a model off the list becomes **the cheapest
 allowed model** of that wire (never more expensive); over the limit it answers 429 in the wire's error shape. It adds
@@ -100,13 +100,13 @@ When a period's spend reaches the limit, the machine's key-mode brains get a `br
 `replicas(id, name, public_key, urls, priority, created_at, revoked)` (replicated): every hub replica, its Ed25519
 key, the addresses it serves the device app on, and its place in the order of who leads (1 first). A replica has its
 own key in `<data>/replica/key.json`. A new replica joins with an invite from any replica:
-`owlbot replica invite` → `owlbot://replica?...` link carrying the code, the inviter's URLs and the device
-certificate fingerprint; `owlbot replica join <link> --name vps --url https://…` makes the key, sends the public key,
+`piomio replica invite` → `piomio://replica?...` link carrying the code, the inviter's URLs and the device
+certificate fingerprint; `piomio replica join <link> --name vps --url https://…` makes the key, sends the public key,
 and receives a snapshot (both databases via `VACUUM INTO`, the device TLS identity).
 
 Replicas talk to each other over the **device app** (TLS with the hub's self-signed certificate, which every replica
 shares, so phones and replicas pin one fingerprint), with every request signed by the replica's key
-(`authorization: OwlbotReplica <id>.<ts>.<sig>` over method, path, ts and body hash; 60 s clock window).
+(`authorization: PiomioReplica <id>.<ts>.<sig>` over method, path, ts and body hash; 60 s clock window).
 
 ### Database
 

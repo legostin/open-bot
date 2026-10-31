@@ -1,5 +1,5 @@
 // Local policy: the machine owner (not the hub) decides which folders, commands and brains are available.
-// ~/.owlbot-node/policy.json is created with safe defaults on first run and re-read whenever it changes.
+// ~/.piomio-node/policy.json is created with safe defaults on first run and re-read whenever it changes.
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -31,12 +31,12 @@ export interface Policy {
 }
 
 /** Claude Code built-in tools allowed by default: file tools and web, but no Bash. */
-export const DEFAULT_NODE_CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "TodoWrite", "Task", "Skill", "mcp__owlbot"];
+export const DEFAULT_NODE_CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "TodoWrite", "Task", "Skill", "mcp__piomio"];
 
 export const DEFAULT_MAX_TIMEOUT_MS = 30 * 60_000;
 
 export function defaultPolicy(userHome = homedir()): Policy {
-  const ws = join(userHome, "owlbot-workspace");
+  const ws = join(userHome, "piomio-workspace");
   return {
     allowedDirs: [ws],
     exec: { enabled: false, allowCommands: [] },

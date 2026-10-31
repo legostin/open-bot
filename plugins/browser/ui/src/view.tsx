@@ -5,8 +5,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { ArrowLeft, ArrowRight, History, Keyboard as KeyboardIcon, RotateCw, X } from "lucide-react";
-import { Badge, Button, EmptyState, Spinner } from "@owlbot/ui";
-import type { LiveViewProps } from "@owlbot/ui";
+import { Badge, Button, EmptyState, Spinner } from "@piomio/ui";
+import type { LiveViewProps } from "@piomio/ui";
 import { ControlButton, IconButton, MoreMenu } from "./chrome.tsx";
 import { HistoryPanel } from "./history.tsx";
 import { errorText, host, isBlank, send, t, toolLabel, touchScreen, viewerId, type BrowserState } from "./host.ts";

@@ -15,7 +15,7 @@ describe("policy defaults", () => {
     const store = new PolicyStore(home, { userHome, log: (m) => logs.push(m) });
     expect(existsSync(store.file)).toBe(true);
     const p = store.get();
-    const ws = join(userHome, "owlbot-workspace");
+    const ws = join(userHome, "piomio-workspace");
     expect(p.allowedDirs).toEqual([ws]);
     expect(p.workspacesRoot).toBe(ws);
     expect(existsSync(ws)).toBe(true);
@@ -23,7 +23,7 @@ describe("policy defaults", () => {
     expect(p.fs).toEqual({ read: true, write: true });
     expect(p.brains["claude-code"].enabled).toBe(true);
     expect(p.brains["claude-code"].allowedTools).not.toContain("Bash");
-    expect(p.brains["claude-code"].allowedTools).toEqual(expect.arrayContaining(["Read", "Write", "Edit", "Glob", "Grep", "mcp__owlbot"]));
+    expect(p.brains["claude-code"].allowedTools).toEqual(expect.arrayContaining(["Read", "Write", "Edit", "Glob", "Grep", "mcp__piomio"]));
     expect(p.brains.codex).toEqual({ enabled: true, sandbox: "workspace-write" });
     expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual(defaultPolicy(userHome));
     expect(logs.some((l) => l.includes("created"))).toBe(true);

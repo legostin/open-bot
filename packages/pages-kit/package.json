@@ -1,9 +1,9 @@
 {
-  "name": "@owlbot/pages-kit",
+  "name": "@piomio/pages-kit",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "What agents build pages with: React, shadcn/ui components, Tailwind (compiled in the browser) and Owlbot's own blocks, bundled for the hub to serve (dist/)",
+  "description": "What agents build pages with: React, shadcn/ui components, Tailwind (compiled in the browser) and Piomio's own blocks, bundled for the hub to serve (dist/)",
   "scripts": {
     "build": "node build.mjs"
   },

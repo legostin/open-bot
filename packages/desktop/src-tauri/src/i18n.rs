@@ -50,10 +50,10 @@ mod tests {
   fn picks_the_language_and_falls_back_to_english() {
     let ru = Texts::for_locale(Some("ru-RU"));
     assert_eq!(ru.lang(), "ru");
-    assert_eq!(ru.t("tray.quit"), "Выйти из Owlbot");
+    assert_eq!(ru.t("tray.quit"), "Выйти из Piomio");
     let en = Texts::for_locale(Some("de-DE"));
     assert_eq!(en.lang(), "en");
-    assert_eq!(en.t("tray.quit"), "Quit Owlbot");
+    assert_eq!(en.t("tray.quit"), "Quit Piomio");
     assert_eq!(en.t("no.such.key"), "no.such.key");
   }
 

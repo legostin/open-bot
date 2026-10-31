@@ -4,7 +4,7 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Plus } from "lucide-react";
-import type { Feed } from "@owlbot/shared";
+import type { Feed } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { shortTime } from "../../lib/format";
 import { feedPath } from "../../lib/feeds";

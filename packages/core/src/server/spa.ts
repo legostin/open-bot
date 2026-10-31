@@ -1,5 +1,5 @@
 // The web UI's single-page app: its static files and index.html with the import map UI plugins resolve React and
-// @owlbot/ui through. Served by the main app (every path) and by the device port (the phone's chat under /m/).
+// @piomio/ui through. Served by the main app (every path) and by the device port (the phone's chat under /m/).
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,7 +14,7 @@ const IMPORT_MAP = JSON.stringify({
     "react/jsx-runtime": "/shared/react-jsx-runtime.js",
     "react-dom": "/shared/react-dom.js",
     "react-dom/client": "/shared/react-dom-client.js",
-    "@owlbot/ui": "/shared/owlbot-ui.js",
+    "@piomio/ui": "/shared/piomio-ui.js",
   },
 });
 
@@ -43,7 +43,7 @@ export function sendSpaIndex(webDist: string, req: FastifyRequest, reply: Fastif
   if (!existsSync(indexFile)) {
     return reply
       .type("text/html; charset=utf-8")
-      .send(`<!doctype html><meta charset="utf-8"><title>Owlbot</title><body style="font-family:sans-serif;padding:2rem">${tFor(requestLocale(req))("build.webMissing")}</body>`);
+      .send(`<!doctype html><meta charset="utf-8"><title>Piomio</title><body style="font-family:sans-serif;padding:2rem">${tFor(requestLocale(req))("build.webMissing")}</body>`);
   }
   const html = readFileSync(indexFile, "utf8").replace("<head>", `<head>\n<script type="importmap" nonce="${nonce}">${IMPORT_MAP}</script>`);
   return reply.type("text/html; charset=utf-8").header("cache-control", "no-cache").send(html);

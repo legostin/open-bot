@@ -2,13 +2,13 @@
 // with a temperature bar each (where the day sits between the week's coldest and warmest), sunrise and sunset.
 
 import type { CSSProperties } from "react";
-import { definePluginUI } from "@owlbot/ui";
-import type { OwlbotUI, WidgetProps } from "@owlbot/ui";
+import { definePluginUI } from "@piomio/ui";
+import type { PiomioUI, WidgetProps } from "@piomio/ui";
 import type { ForecastCard } from "../../server/index.ts";
 import { conditionEmoji, conditionOf } from "../../server/codes.ts";
 
-let t: OwlbotUI["i18n"]["t"] = (k) => k;
-let formatDate: OwlbotUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleString();
+let t: PiomioUI["i18n"]["t"] = (k) => k;
+let formatDate: PiomioUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleString();
 
 const deg = (n: number) => `${Math.round(n)}°`;
 /** The place's local time ("2026-10-28T15:00") read as this device's: hours and weekdays come out as at the place. */

@@ -1,7 +1,7 @@
-// HTTP client for the hub API. Every request names the interface language (x-owlbot-locale) so the hub answers
+// HTTP client for the hub API. Every request names the interface language (x-piomio-locale) so the hub answers
 // in it; non-GET requests carry the CSRF token and a JSON body ({} when empty), or raw bytes for a file upload.
 
-import type { HubApi } from "@owlbot/ui";
+import type { HubApi } from "@piomio/ui";
 import { locale, t } from "../i18n";
 
 export class ApiError extends Error {
@@ -48,7 +48,7 @@ export function upload<T = any>(path: string, data: Blob, opts: UploadOptions = 
     xhr.open("POST", path);
     xhr.withCredentials = true;
     xhr.setRequestHeader("accept", "application/json");
-    xhr.setRequestHeader("x-owlbot-locale", locale);
+    xhr.setRequestHeader("x-piomio-locale", locale);
     xhr.setRequestHeader("content-type", "application/octet-stream");
     xhr.setRequestHeader("x-csrf", csrfToken);
     xhr.upload.onprogress = (e) => {
@@ -69,7 +69,7 @@ export function upload<T = any>(path: string, data: Blob, opts: UploadOptions = 
 }
 
 async function send<T>(method: Method, path: string, payload?: { type: string; body: BodyInit }, signal?: AbortSignal): Promise<T> {
-  const headers: Record<string, string> = { accept: "application/json", "x-owlbot-locale": locale };
+  const headers: Record<string, string> = { accept: "application/json", "x-piomio-locale": locale };
   const init: RequestInit = {
     method,
     headers,

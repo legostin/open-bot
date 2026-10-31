@@ -2,8 +2,8 @@
 // machines block of the web UI and the phone app. The runner reports turns and their steps; this keeps the view and
 // announces it as "machines.activity", at most a few times a second.
 
-import type { Approval, MachineActivity, MachineWork, WorkStep } from "@owlbot/shared";
-import { nowIso, parseBrainRef } from "@owlbot/shared";
+import type { Approval, MachineActivity, MachineWork, WorkStep } from "@piomio/shared";
+import { nowIso, parseBrainRef } from "@piomio/shared";
 import type { EventBus } from "./bus.ts";
 import type { MachineHub } from "./machines.ts";
 import { hubName } from "./pairing.ts";
@@ -62,7 +62,7 @@ export function detailOfTool(name: string, input: unknown): string | undefined {
       return str(i.query) ? short(str(i.query)!) : undefined;
     }
     case "tool":
-      return name.replace(/^mcp__owlbot__/, "");
+      return name.replace(/^mcp__piomio__/, "");
     default:
       return undefined;
   }

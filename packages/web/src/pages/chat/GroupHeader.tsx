@@ -2,7 +2,7 @@
 // and who is next.
 
 import { useEffect, useState } from "react";
-import type { Conversation } from "@owlbot/shared";
+import type { Conversation } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { agents, ensureAgents, ensureGroups, groups, useSelector } from "../../state/app";
 import { AgentAvatar, AvatarPair, AvatarStack } from "../../components/AgentAvatar";

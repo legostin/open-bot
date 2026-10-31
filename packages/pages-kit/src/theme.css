@@ -1,4 +1,4 @@
-/* shadcn/ui's tokens in Owlbot's own look ("Amber": warm paper and ink, amber the one light, Onest), for Tailwind's
+/* shadcn/ui's tokens in Piomio's own look ("Amber": warm paper and ink, amber the one light, Onest), for Tailwind's
    browser runtime; the hub puts this into every page. */
 @custom-variant dark (&:is(.dark *));
 

@@ -1,6 +1,6 @@
-//! "Reset Owlbot…": what the app and its hub keep on this computer goes — the hub's data (chats, agents, memory, the
+//! "Reset Piomio…": what the app and its hub keep on this computer goes — the hub's data (chats, agents, memory, the
 //! vault, plugins, logs), the app's settings, this computer's machine pairing and the start-at-login entry. The CLI
-//! logins in the user's home (Claude Code, Codex) stay: they belong to those tools, not to Owlbot.
+//! logins in the user's home (Claude Code, Codex) stay: they belong to those tools, not to Piomio.
 
 use std::fs;
 use std::io;
@@ -65,7 +65,7 @@ mod tests {
   }
 
   fn fill(dir: &Path) {
-    fs::write(dir.join("owlbot.db"), "x").unwrap();
+    fs::write(dir.join("piomio.db"), "x").unwrap();
     fs::write(dir.join("vault.db"), "x").unwrap();
     fs::create_dir_all(dir.join("workspaces/assistant")).unwrap();
     fs::write(dir.join("workspaces/assistant/notes.md"), "x").unwrap();
@@ -75,7 +75,7 @@ mod tests {
   fn deletes_a_data_folder_entirely() {
     let dir = tmp("data");
     fill(&dir);
-    delete_hub_data(&dir, Some(Path::new("/Applications/Owlbot.app/Contents/MacOS/Owlbot"))).unwrap();
+    delete_hub_data(&dir, Some(Path::new("/Applications/Piomio.app/Contents/MacOS/Piomio"))).unwrap();
     assert!(!dir.exists());
   }
 
@@ -83,14 +83,14 @@ mod tests {
   fn keeps_the_app_when_it_is_installed_in_the_data_folder() {
     let dir = tmp("install");
     fill(&dir);
-    fs::write(dir.join("Owlbot.exe"), "exe").unwrap();
+    fs::write(dir.join("Piomio.exe"), "exe").unwrap();
     fs::write(dir.join("uninstall.exe"), "exe").unwrap();
     fs::write(dir.join("WebView2Loader.dll"), "dll").unwrap();
     fs::create_dir_all(dir.join("app/runtime")).unwrap();
-    delete_hub_data(&dir, Some(&dir.join("Owlbot.exe"))).unwrap();
+    delete_hub_data(&dir, Some(&dir.join("Piomio.exe"))).unwrap();
     let mut left: Vec<String> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     left.sort();
-    assert_eq!(left, vec!["Owlbot.exe", "WebView2Loader.dll", "app", "uninstall.exe"]);
+    assert_eq!(left, vec!["Piomio.exe", "WebView2Loader.dll", "app", "uninstall.exe"]);
   }
 
   #[test]

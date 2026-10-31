@@ -1,6 +1,6 @@
 // Group message parts for rendering: a tool_call is shown together with its tool_result.
 
-import type { MessagePart } from "@owlbot/shared";
+import type { MessagePart } from "@piomio/shared";
 
 export type ToolCallPart = Extract<MessagePart, { type: "tool_call" }>;
 export type ToolResultPart = Extract<MessagePart, { type: "tool_result" }>;

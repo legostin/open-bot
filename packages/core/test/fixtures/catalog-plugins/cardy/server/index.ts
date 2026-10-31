@@ -1,5 +1,5 @@
 // A catalog plugin for the tests: its tool shows a declared card, an undeclared one and a too-big one.
-import type { PluginContext } from "@owlbot/plugin-sdk";
+import type { PluginContext } from "@piomio/plugin-sdk";
 
 export default {
   async activate(ctx: PluginContext) {

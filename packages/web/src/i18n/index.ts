@@ -6,7 +6,7 @@
 // re-render reactively; module-level code must not cache translated strings (call t() while rendering).
 
 import { createElement, Fragment, type ReactNode } from "react";
-import { DEFAULT_LOCALE, LOCALES, normalizeLocale, translator, type Locale, type Params } from "@owlbot/shared/i18n";
+import { DEFAULT_LOCALE, LOCALES, normalizeLocale, translator, type Locale, type Params } from "@piomio/shared/i18n";
 import en from "./en";
 import ru from "./ru";
 
@@ -20,8 +20,8 @@ export const catalog: Record<Locale, Record<MessageKey, string>> = { en, ru };
  * localStorage key and cookie name. localStorage is per origin (port included), so the choice is mirrored into a
  * cookie, which is per host: the security console (another port) reads and writes the same cookie.
  */
-const STORAGE_KEY = "owlbot.locale";
-const COOKIE_RE = /(?:^|;\s*)owlbot\.locale=([^;]*)/;
+const STORAGE_KEY = "piomio.locale";
+const COOKIE_RE = /(?:^|;\s*)piomio\.locale=([^;]*)/;
 
 function readStored(): Locale | undefined {
   try {

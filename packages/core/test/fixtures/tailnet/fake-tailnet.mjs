@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A stand-in for owlbot-tailnet in tests: it keeps the start line in <dir>/start.json and replays the states the test
+// A stand-in for piomio-tailnet in tests: it keeps the start line in <dir>/start.json and replays the states the test
 // put in <dir>/fake.json ({ states: [...], crashOnce?: true }), one every 20 ms. {"type":"logout"} leaves
 // <dir>.logged-out next to the dir (which the hub then deletes) and exits; closing stdin exits.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

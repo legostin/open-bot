@@ -3,7 +3,7 @@
 
 import { useCallback, useState } from "react";
 import { Link2, MonitorSmartphone } from "lucide-react";
-import type { InviteUsed } from "@owlbot/shared";
+import type { InviteUsed } from "@piomio/shared";
 import { InviteBlock, Joined } from "../../components/Invite";
 import { Button, cx } from "../../components/ui";
 import { t } from "../../i18n";

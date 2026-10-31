@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Rule, ToolDescriptor } from "@owlbot/shared";
+import type { Rule, ToolDescriptor } from "@piomio/shared";
 import { decide, extractTargets, suggestRule, type PolicyInput } from "../src/policy/engine.ts";
 import { Redactor } from "../src/vault/redact.ts";
 import { NOT_FOUND_QUIET_MS, VaultService, VaultError, type VaultAccessEntry } from "../src/vault/service.ts";

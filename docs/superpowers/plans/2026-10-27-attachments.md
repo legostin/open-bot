@@ -16,7 +16,7 @@ uploads raw bytes first and sends the paths with the message; Telegram downloads
 
 - Imports of local files end in `.ts`; only erasable syntax; `import type` for types.
 - Every user-facing string goes through the catalogs (core `packages/core/src/locales/{en,ru}.ts`, web
-  `packages/web/src/i18n/{en,ru}.ts`, Telegram `plugins/telegram/.owlbot-plugin/locales/{en,ru}.json`); parity is tested.
+  `packages/web/src/i18n/{en,ru}.ts`, Telegram `plugins/telegram/.piomio-plugin/locales/{en,ru}.json`); parity is tested.
 - Text for the model (notes, tool text) is English and not translated.
 - Limits: 25 MB per file and 10 files per message (web); 20 MB per file (Telegram `getFile`).
 - Attachments live in `<data>/workspaces/<agentId>/<taskId or conversationId>/attachments/`; part paths are relative
@@ -152,7 +152,7 @@ i18n `composer.attach`, `composer.dropHere`, `composer.uploading`, `composer.rem
 ### Task 6: Telegram media in
 
 **Files:** Modify `plugins/telegram/server/bot.ts`, `plugins/telegram/server/api.ts` (`getFile`, `download`),
-`plugins/telegram/.owlbot-plugin/locales/{en,ru}.json` (`bot.unsupported`, `bot.fileTooLarge`, `bot.downloadFailed`;
+`plugins/telegram/.piomio-plugin/locales/{en,ru}.json` (`bot.unsupported`, `bot.fileTooLarge`, `bot.downloadFailed`;
 `bot.textOnly` removed), `plugins/telegram/test/mock-telegram.ts` (`getFile`, `/file/bot<token>/<path>`, `addFile`),
 `plugins/telegram/test/telegram.test.ts`.
 

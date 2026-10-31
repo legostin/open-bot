@@ -12,12 +12,12 @@ export const PAGE_MODULES = [
   "class-variance-authority",
   "tailwind-merge",
   "@/lib/utils",
-  "@owlbot/ui",
-  "@owlbot/page",
+  "@piomio/ui",
+  "@piomio/page",
 ] as const;
 
 /** shadcn's own import paths ("@/components/ui/card"): every component comes from the kit's one ui module. */
-export const PAGE_UI_MODULE = /^(?:@\/components\/ui|components\/ui|@owlbot\/ui)(?:\/[\w-]+)?$/;
+export const PAGE_UI_MODULE = /^(?:@\/components\/ui|components\/ui|@piomio\/ui)(?:\/[\w-]+)?$/;
 
 export function pageModuleAllowed(name: string): boolean {
   return (PAGE_MODULES as readonly string[]).includes(name) || PAGE_UI_MODULE.test(name);

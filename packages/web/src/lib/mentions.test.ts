@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMentions } from "@owlbot/shared/group";
+import { parseMentions } from "@piomio/shared/group";
 import { applyMention, filterMentions, mentionQuery } from "./mentions";
 import { chatForPath, groupOrder, groupPath, suggestedTitle } from "./team";
 

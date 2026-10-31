@@ -1,5 +1,5 @@
 {
-  "name": "@owlbot/plugin-currency",
+  "name": "@piomio/plugin-currency",
   "version": "0.1.0",
   "private": true,
   "type": "module",

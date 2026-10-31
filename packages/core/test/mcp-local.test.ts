@@ -48,18 +48,18 @@ describe("a plugin's local MCP server", () => {
     builtin = mkdtempSync(join(tmpdir(), "owl-local-builtin-"));
     for (const [id, env] of [["local", {}], ["nolocal", { FAIL: "1" }]] as const) {
       const dir = join(builtin, id);
-      mkdirSync(join(dir, ".owlbot-plugin"), { recursive: true });
-      writeFileSync(join(dir, ".owlbot-plugin", "plugin.json"), JSON.stringify({ id, name: id, builtin: true, integration: { category: "work", connect: "none", summary: id } }));
+      mkdirSync(join(dir, ".piomio-plugin"), { recursive: true });
+      writeFileSync(join(dir, ".piomio-plugin", "plugin.json"), JSON.stringify({ id, name: id, builtin: true, integration: { category: "work", connect: "none", summary: id } }));
       writeFileSync(join(dir, "server.mjs"), SERVER);
       writeFileSync(
         join(dir, ".mcp.json"),
-        JSON.stringify({ mcpServers: { [id]: { command: "${OWLBOT_NODE}", args: ["${OWLBOT_PLUGIN_ROOT}/server.mjs"], env: { DATA: "${OWLBOT_PLUGIN_DATA}", ...env } } } }),
+        JSON.stringify({ mcpServers: { [id]: { command: "${PIOMIO_NODE}", args: ["${PIOMIO_PLUGIN_ROOT}/server.mjs"], env: { DATA: "${PIOMIO_PLUGIN_DATA}", ...env } } } }),
       );
     }
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     dataDir = mkdtempSync(join(tmpdir(), "owl-local-"));
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_LANG: "en", TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), PIOMIO_LANG: "en", TZ: "UTC" },
       { dataDir, builtinPluginsDirs: [builtin], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);

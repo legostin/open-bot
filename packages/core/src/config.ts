@@ -6,7 +6,7 @@ import { BUILTIN_GOOGLE_CLIENT, GOOGLE_ENDPOINTS, type GoogleClientConfig } from
 
 export interface Config {
   dataDir: string;
-  /** Google sign-in (connections.ts): Owlbot's client unless OWLBOT_GOOGLE_* says otherwise. */
+  /** Google sign-in (connections.ts): Piomio's client unless PIOMIO_GOOGLE_* says otherwise. */
   google: GoogleClientConfig;
   host: string;
   port: number;
@@ -16,21 +16,21 @@ export interface Config {
   devicePort: number;
   /** Where the device port listens: every interface by default, so phones reach it over Wi-Fi and Tailscale. */
   deviceHost: string;
-  /** OWLBOT_DEVICES=0 closes the device port: phones then reach the hub only through the link. */
+  /** PIOMIO_DEVICES=0 closes the device port: phones then reach the hub only through the link. */
   devicesOff: boolean;
-  /** OWLBOT_REPLICA_NAME: what this machine is called among the hub's replicas (cluster.ts). */
+  /** PIOMIO_REPLICA_NAME: what this machine is called among the hub's replicas (cluster.ts). */
   replicaName: string;
-  /** OWLBOT_NODE_URLS: where machines reach this replica (/node/ws, /mcp); unset: its machine address. */
+  /** PIOMIO_NODE_URLS: where machines reach this replica (/node/ws, /mcp); unset: its machine address. */
   nodeUrls: string[];
-  /** OWLBOT_DEVICE_URLS: addresses for the pairing QR ahead of the detected ones (Docker, reverse proxies). */
+  /** PIOMIO_DEVICE_URLS: addresses for the pairing QR ahead of the detected ones (Docker, reverse proxies). */
   deviceUrls: string[];
   /** URL users and nodes use to reach the main UI / API. */
   publicUrl: string;
-  /** The hub's Tailscale node (remote.ts): OWLBOT_TAILNET_BIN, else packages/tailnet/bin/<platform>-<arch>/ in the app. */
+  /** The hub's Tailscale node (remote.ts): PIOMIO_TAILNET_BIN, else packages/tailnet/bin/<platform>-<arch>/ in the app. */
   tailnetBin: string;
-  /** The node's name in the tailnet, the link's first label (OWLBOT_TAILNET_HOSTNAME, default "owlbot"). */
+  /** The node's name in the tailnet, the link's first label (PIOMIO_TAILNET_HOSTNAME, default "piomio"). */
   tailnetHostname: string;
-  /** The OSRM servers show_map asks for routes along roads (routing.ts): OWLBOT_ROUTER_URL, else OpenStreetMap Germany's. */
+  /** The OSRM servers show_map asks for routes along roads (routing.ts): PIOMIO_ROUTER_URL, else OpenStreetMap Germany's. */
   routerUrl: string;
   /** URL of the isolated security console. */
   consoleUrl: string;
@@ -54,12 +54,12 @@ export interface Config {
   installClis: boolean;
   /**
    * Keep local CLI brains' own tools in their sandbox (macOS Seatbelt; BrainSessionOptions.confine). On by default on
-   * macOS, where the brains run as the person; OWLBOT_SANDBOX_BRAINS=0 turns it off. A hub isolated by unix users
+   * macOS, where the brains run as the person; PIOMIO_SANDBOX_BRAINS=0 turns it off. A hub isolated by unix users
    * has its own walls.
    */
   sandboxBrains: boolean;
   /**
-   * HOME of the brain CLIs (claude, codex), where their logins live: <data>/home/agent, or OWLBOT_BRAIN_HOME. The
+   * HOME of the brain CLIs (claude, codex), where their logins live: <data>/home/agent, or PIOMIO_BRAIN_HOME. The
    * desktop app sets that to the user's own home, so a CLI they already signed in to works as is, and Claude Code on
    * macOS finds the login keychain (it looks for it through HOME). Never under user isolation.
    */
@@ -77,54 +77,54 @@ const here = fileURLToPath(new URL(".", import.meta.url));
 export const APP_ROOT = resolve(here, "..", "..", "..");
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Partial<Config> = {}): Config {
-  const host = env.OWLBOT_HOST ?? "127.0.0.1";
-  const port = Number(env.OWLBOT_PORT ?? 8080);
-  const consolePort = Number(env.OWLBOT_CONSOLE_PORT ?? port + 1);
-  const egressPort = Number(env.OWLBOT_EGRESS_PORT ?? 8089);
-  const devicePort = Number(env.OWLBOT_DEVICE_PORT ?? port + 2);
+  const host = env.PIOMIO_HOST ?? "127.0.0.1";
+  const port = Number(env.PIOMIO_PORT ?? 8080);
+  const consolePort = Number(env.PIOMIO_CONSOLE_PORT ?? port + 1);
+  const egressPort = Number(env.PIOMIO_EGRESS_PORT ?? 8089);
+  const devicePort = Number(env.PIOMIO_DEVICE_PORT ?? port + 2);
   const displayHost = host === "0.0.0.0" || host === "::" ? "localhost" : host;
-  const publicUrl = (env.OWLBOT_PUBLIC_URL ?? `http://${displayHost}:${port}`).replace(/\/$/, "");
-  const consoleUrl = (env.OWLBOT_CONSOLE_URL ?? `http://${new URL(publicUrl).hostname}:${consolePort}`).replace(/\/$/, "");
-  const extraHosts = (env.OWLBOT_ALLOWED_HOSTS ?? "")
+  const publicUrl = (env.PIOMIO_PUBLIC_URL ?? `http://${displayHost}:${port}`).replace(/\/$/, "");
+  const consoleUrl = (env.PIOMIO_CONSOLE_URL ?? `http://${new URL(publicUrl).hostname}:${consolePort}`).replace(/\/$/, "");
+  const extraHosts = (env.PIOMIO_ALLOWED_HOSTS ?? "")
     .split(",")
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean);
   const allowedHosts = Array.from(
     new Set(["localhost", "127.0.0.1", "[::1]", displayHost.toLowerCase(), new URL(publicUrl).hostname, new URL(consoleUrl).hostname, ...extraHosts]),
   );
-  const appRoot = env.OWLBOT_APP_ROOT ?? APP_ROOT;
+  const appRoot = env.PIOMIO_APP_ROOT ?? APP_ROOT;
   const cfg: Config = {
-    dataDir: resolve(env.OWLBOT_DATA_DIR ?? join(appRoot, ".data")),
+    dataDir: resolve(env.PIOMIO_DATA_DIR ?? join(appRoot, ".data")),
     host,
     port,
     consolePort,
     egressPort,
     devicePort,
-    deviceHost: env.OWLBOT_DEVICE_HOST ?? "0.0.0.0",
-    devicesOff: env.OWLBOT_DEVICES === "0",
-    replicaName: (env.OWLBOT_REPLICA_NAME || hostname().split(".")[0] || "hub").slice(0, 40),
-    nodeUrls: (env.OWLBOT_NODE_URLS ?? "")
+    deviceHost: env.PIOMIO_DEVICE_HOST ?? "0.0.0.0",
+    devicesOff: env.PIOMIO_DEVICES === "0",
+    replicaName: (env.PIOMIO_REPLICA_NAME || hostname().split(".")[0] || "hub").slice(0, 40),
+    nodeUrls: (env.PIOMIO_NODE_URLS ?? "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
-    deviceUrls: (env.OWLBOT_DEVICE_URLS ?? "")
+    deviceUrls: (env.PIOMIO_DEVICE_URLS ?? "")
       .split(",")
       .map((u) => u.trim().replace(/\/$/, ""))
       .filter(Boolean),
     publicUrl,
     consoleUrl,
     tailnetBin:
-      env.OWLBOT_TAILNET_BIN ?? join(appRoot, "packages", "tailnet", "bin", `${process.platform}-${process.arch}`, process.platform === "win32" ? "owlbot-tailnet.exe" : "owlbot-tailnet"),
-    tailnetHostname: env.OWLBOT_TAILNET_HOSTNAME?.trim() || "owlbot",
-    routerUrl: (env.OWLBOT_ROUTER_URL ?? "https://routing.openstreetmap.de").replace(/\/$/, ""),
+      env.PIOMIO_TAILNET_BIN ?? join(appRoot, "packages", "tailnet", "bin", `${process.platform}-${process.arch}`, process.platform === "win32" ? "piomio-tailnet.exe" : "piomio-tailnet"),
+    tailnetHostname: env.PIOMIO_TAILNET_HOSTNAME?.trim() || "piomio",
+    routerUrl: (env.PIOMIO_ROUTER_URL ?? "https://routing.openstreetmap.de").replace(/\/$/, ""),
     internalUrl: `http://127.0.0.1:${port}`,
     google: {
-      clientId: env.OWLBOT_GOOGLE_CLIENT_ID ?? BUILTIN_GOOGLE_CLIENT.clientId,
-      clientSecret: env.OWLBOT_GOOGLE_CLIENT_SECRET ?? BUILTIN_GOOGLE_CLIENT.clientSecret,
-      authUrl: env.OWLBOT_GOOGLE_AUTH_URL ?? GOOGLE_ENDPOINTS.authUrl,
-      tokenUrl: env.OWLBOT_GOOGLE_TOKEN_URL ?? GOOGLE_ENDPOINTS.tokenUrl,
-      revokeUrl: env.OWLBOT_GOOGLE_REVOKE_URL ?? GOOGLE_ENDPOINTS.revokeUrl,
-      userinfoUrl: env.OWLBOT_GOOGLE_USERINFO_URL ?? GOOGLE_ENDPOINTS.userinfoUrl,
+      clientId: env.PIOMIO_GOOGLE_CLIENT_ID ?? BUILTIN_GOOGLE_CLIENT.clientId,
+      clientSecret: env.PIOMIO_GOOGLE_CLIENT_SECRET ?? BUILTIN_GOOGLE_CLIENT.clientSecret,
+      authUrl: env.PIOMIO_GOOGLE_AUTH_URL ?? GOOGLE_ENDPOINTS.authUrl,
+      tokenUrl: env.PIOMIO_GOOGLE_TOKEN_URL ?? GOOGLE_ENDPOINTS.tokenUrl,
+      revokeUrl: env.PIOMIO_GOOGLE_REVOKE_URL ?? GOOGLE_ENDPOINTS.revokeUrl,
+      userinfoUrl: env.PIOMIO_GOOGLE_USERINFO_URL ?? GOOGLE_ENDPOINTS.userinfoUrl,
     },
     allowedHosts,
     appRoot,
@@ -134,24 +134,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     pagesKitDir: join(appRoot, "packages", "pages-kit", "dist"),
     consoleDist: join(appRoot, "packages", "console", "dist"),
     isolation: {
-      users: env.OWLBOT_ISOLATION === "users",
-      hubUser: env.OWLBOT_HUB_USER ?? "owlbot",
-      agentUser: env.OWLBOT_AGENT_USER ?? "agent",
-      pluginUser: env.OWLBOT_PLUGIN_USER ?? "plugin",
+      users: env.PIOMIO_ISOLATION === "users",
+      hubUser: env.PIOMIO_HUB_USER ?? "piomio",
+      agentUser: env.PIOMIO_AGENT_USER ?? "agent",
+      pluginUser: env.PIOMIO_PLUGIN_USER ?? "plugin",
     },
-    egressEnforced: env.OWLBOT_EGRESS_ENFORCED === "iptables" ? "iptables" : "proxy",
-    installClis: env.OWLBOT_INSTALL_CLIS === "1" && env.OWLBOT_ISOLATION !== "users",
-    sandboxBrains: env.OWLBOT_SANDBOX_BRAINS !== "0" && env.OWLBOT_ISOLATION !== "users" && process.platform === "darwin",
+    egressEnforced: env.PIOMIO_EGRESS_ENFORCED === "iptables" ? "iptables" : "proxy",
+    installClis: env.PIOMIO_INSTALL_CLIS === "1" && env.PIOMIO_ISOLATION !== "users",
+    sandboxBrains: env.PIOMIO_SANDBOX_BRAINS !== "0" && env.PIOMIO_ISOLATION !== "users" && process.platform === "darwin",
     brainHome: "",
-    vaultPassphraseFile: env.OWLBOT_VAULT_PASSPHRASE_FILE && existsSync(env.OWLBOT_VAULT_PASSPHRASE_FILE) ? env.OWLBOT_VAULT_PASSPHRASE_FILE : undefined,
+    vaultPassphraseFile: env.PIOMIO_VAULT_PASSPHRASE_FILE && existsSync(env.PIOMIO_VAULT_PASSPHRASE_FILE) ? env.PIOMIO_VAULT_PASSPHRASE_FILE : undefined,
     timezone: env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     version: appVersion(),
-    releasesRepo: env.OWLBOT_RELEASES_REPO || "legostin/open-bot",
-    plugins: (env.OWLBOT_PLUGINS ?? "all") === "all" ? "all" : env.OWLBOT_PLUGINS === "none" ? "none" : (env.OWLBOT_PLUGINS ?? "").split(","),
+    releasesRepo: env.PIOMIO_RELEASES_REPO || "legostin/piomio",
+    plugins: (env.PIOMIO_PLUGINS ?? "all") === "all" ? "all" : env.PIOMIO_PLUGINS === "none" ? "none" : (env.PIOMIO_PLUGINS ?? "").split(","),
   };
   const merged = { ...cfg, ...overrides };
   if (!overrides.brainHome) {
-    merged.brainHome = env.OWLBOT_BRAIN_HOME && env.OWLBOT_ISOLATION !== "users" ? resolve(env.OWLBOT_BRAIN_HOME) : join(merged.dataDir, "home", "agent");
+    merged.brainHome = env.PIOMIO_BRAIN_HOME && env.PIOMIO_ISOLATION !== "users" ? resolve(env.PIOMIO_BRAIN_HOME) : join(merged.dataDir, "home", "agent");
   }
   return merged;
 }

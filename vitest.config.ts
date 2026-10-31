@@ -9,6 +9,6 @@ export default defineConfig({
     // Every temp file of the run, spawned processes' included, lands in one folder that is deleted at the end.
     globalSetup: ["packages/testkit/src/temp-dir.ts"],
     // Messages are asserted in English; a developer's own LANG must not change them.
-    env: { OWLBOT_LANG: "en" },
+    env: { PIOMIO_LANG: "en" },
   },
 });

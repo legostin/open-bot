@@ -83,7 +83,7 @@ describe("fetching images", () => {
 
   // "public.test" stands for a site on the internet: it is the only name allowed to reach the local server.
   const resolve = async (host: string) => (host === "public.test" ? ["127.0.0.1"] : realResolve(host));
-  const opts = { resolve, userAgent: "Owlbot/test", maxBytes: 1024, timeoutMs: 5000 };
+  const opts = { resolve, userAgent: "Piomio/test", maxBytes: 1024, timeoutMs: 5000 };
   const status = async (p: Promise<unknown>) => p.then(() => 200, (e) => (e instanceof MediaError ? e.status : String(e)));
 
   it("refuses loopback, private and link-local destinations", async () => {
@@ -105,7 +105,7 @@ describe("fetching images", () => {
   it("caches images and tiles on disk and serves what it has", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "owl-media-"));
     const svc = new MediaService({ dataDir, version: "9.9.9", resolve, tileUrl: `http://public.test:${port}/ok.png?{z}/{x}/{y}` });
-    expect(svc.userAgent).toBe("Owlbot/9.9.9 (+https://github.com/legostin/open-bot)");
+    expect(svc.userAgent).toBe("Piomio/9.9.9 (+https://github.com/legostin/piomio)");
     const url = `http://public.test:${port}/ok.png`;
     expect((await svc.image(url)).data).toEqual(PNG);
     // From the cache now, even with the site gone.

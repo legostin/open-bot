@@ -43,11 +43,11 @@ jobs:
       - name: The assets the hubs link to are there
         run: |
           v="${GITHUB_REF_NAME#v}"
-          test -f "dist/owlbot-setup-$v-x64.exe"
-          test -f "dist/owlbot-$v.dmg"
+          test -f "dist/piomio-setup-$v-x64.exe"
+          test -f "dist/piomio-$v.dmg"
           node packaging/desktop/latest-json.mjs dist "$v" "$GITHUB_REPOSITORY"
           ls -l dist
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Owlbot ${GITHUB_REF_NAME#v}" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Piomio ${GITHUB_REF_NAME#v}" --generate-notes

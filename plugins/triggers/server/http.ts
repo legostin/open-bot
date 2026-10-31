@@ -2,8 +2,8 @@
 // Errors shown by the UI carry the catalog message in the reader's language plus the code and params;
 // webhook responses go to other programs and stay in English.
 
-import type { PluginHttpRequest, PluginHttpResponse } from "@owlbot/plugin-sdk";
-import type { Locale } from "@owlbot/shared";
+import type { PluginHttpRequest, PluginHttpResponse } from "@piomio/plugin-sdk";
+import type { Locale } from "@piomio/shared";
 import { NotFoundError, type TriggerEngine } from "./engine.ts";
 import type { ErrorParams, TriggerError } from "./errors.ts";
 import { describeSchedule } from "./schedule.ts";

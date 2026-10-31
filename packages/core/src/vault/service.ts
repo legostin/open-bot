@@ -2,8 +2,8 @@
 // secret fields are encrypted with a random data key wrapped by an Argon2id-derived key.
 
 import { readFileSync } from "node:fs";
-import type { Params, VaultItem, VaultItemMeta, VaultItemType, VaultScope, VaultState } from "@owlbot/shared";
-import { hostMatches, newId, nowIso } from "@owlbot/shared";
+import type { Params, VaultItem, VaultItemMeta, VaultItemType, VaultScope, VaultState } from "@piomio/shared";
+import { hostMatches, newId, nowIso } from "@piomio/shared";
 import { openDb, json, type Db } from "../db.ts";
 import { DEFAULT_KDF, deriveKey, newDataKey, newSalt, open, openJson, seal, sealJson, type KdfParams, type Sealed } from "./crypto.ts";
 import { Redactor } from "./redact.ts";
@@ -27,7 +27,7 @@ export interface AccessRequest {
   domain?: string;
 }
 
-/** Associated data of the wrapped data key. It predates the Owlbot name and stays: another label would make
+/** Associated data of the wrapped data key. It predates the Piomio name and stays: another label would make
  * every existing vault reject its own passphrase. */
 const DEK_LABEL = "openbot-vault-dek";
 

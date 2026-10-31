@@ -1,7 +1,7 @@
 # Remote access: a permanent link through Tailscale
 
 2026-10-27. Decided with the user: the hub is reachable from anywhere through one permanent link, with no Tailscale
-on the phone or the browser's device (Tailscale Funnel); Tailscale comes built into Owlbot (its own node, not the
+on the phone or the browser's device (Tailscale Funnel); Tailscale comes built into Piomio (its own node, not the
 Tailscale app installed on the computer). Today the phone app works only on the home Wi-Fi, or when the phone itself
 runs Tailscale in the same tailnet, and the web UI only on the computer.
 
@@ -11,14 +11,14 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
   `globe`). Its steps:
   1. **Turn on** (needs the hub password, which every set-up hub has).
   2. **Sign in to Tailscale**: Tailscale's sign-in page (Google, Apple, GitHub, Microsoft…) opens in a new tab or the
-     system browser (iOS app). The node `owlbot` joins the user's tailnet; a new tailnet is made for a new account.
+     system browser (iOS app). The node `piomio` joins the user's tailnet; a new tailnet is made for a new account.
   3. **Allow Funnel**, when the tailnet does not allow it yet: Tailscale's own page, one confirmation by the tailnet
      admin (it turns on HTTPS certificates and adds the `funnel` attribute to the policy).
-  4. **On**: the link `https://owlbot.<tailnet>.ts.net` with Copy and a QR code, the tailnet account, and Turn off.
+  4. **On**: the link `https://piomio.<tailnet>.ts.net` with Copy and a QR code, the tailnet account, and Turn off.
      A smaller **Forget** signs the node out of Tailscale and deletes its keys.
 - The link is permanent: it changes only when the node is removed from the tailnet or renamed there. Tailscale
-  assigns `owlbot-1` and so on when the name is taken.
-- Through the link: the web UI (sign-in by password), the phone app, and machines (`owlbot-node pair <link> <code>`).
+  assigns `piomio-1` and so on when the name is taken.
+- Through the link: the web UI (sign-in by password), the phone app, and machines (`piomio-node pair <link> <code>`).
 - Phones: a new pairing QR lists the link among the hub's addresses. Phones paired before learn it on their next
   connection (below). At home they still go straight over the Wi-Fi; away, through the link.
 - The agent shows the same card in the chat with `hub_integration_connect({ id: "remote-access" })`.
@@ -29,17 +29,17 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
 
 ## The node: `packages/tailnet` (Go)
 
-- A small Go program `owlbot-tailnet` on `tailscale.com/tsnet`. The hub runs it as a child process and talks to it
+- A small Go program `piomio-tailnet` on `tailscale.com/tsnet`. The hub runs it as a child process and talks to it
   in JSON lines over stdin/stdout. Its logs go to stderr, which the hub keeps in its log.
 - Hub → node, the first line:
-  `{ "type": "start", "dir": "<data>/tailnet", "hostname": "owlbot", "web": "127.0.0.1:<port>", "device": "127.0.0.1:<port>", "deviceCert": "<PEM>", "deviceKey": "<PEM>" }`.
+  `{ "type": "start", "dir": "<data>/tailnet", "hostname": "piomio", "web": "127.0.0.1:<port>", "device": "127.0.0.1:<port>", "deviceCert": "<PEM>", "deviceKey": "<PEM>" }`.
   Later lines: `{ "type": "logout" }`. The hub stops the node by closing stdin (the node exits) and kills it after 5 s.
 - Node → hub: `{ "type": "state", ... }` lines:
   - `{ "state": "starting" }`
   - `{ "state": "needs-login", "authUrl": "https://login.tailscale.com/a/…" }`, from the IPN bus `BrowseToURL`
   - `{ "state": "needs-funnel", "enableUrl": "https://login.tailscale.com/f/funnel?node=…" }`, from
     `LocalClient().QueryFeature(ctx, "funnel")`; the node checks again every 10 s and on the IPN bus
-  - `{ "state": "running", "url": "https://owlbot.<tailnet>.ts.net", "deviceUrl": "https://owlbot.<tailnet>.ts.net:8443", "account": "<login name>", "keyExpiry": "<ISO>|null" }`
+  - `{ "state": "running", "url": "https://piomio.<tailnet>.ts.net", "deviceUrl": "https://piomio.<tailnet>.ts.net:8443", "account": "<login name>", "keyExpiry": "<ISO>|null" }`
   - `{ "state": "error", "message": "…" }`
 - When running it listens with `ListenFunnel` (Funnel and the tailnet):
   - `:443` with Tailscale's Let's Encrypt certificate → an HTTP reverse proxy (WebSockets included) to `web`;
@@ -50,14 +50,14 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
 - State (node keys) lives in `<data>/tailnet/` (directory 0700), like the device port's TLS key in
   `<data>/devices/`: the link comes back after a restart without waiting for the vault.
 - Builds: `darwin-arm64`, `darwin-x64`, `win32-x64`, `linux-x64`, `linux-arm64` into
-  `packages/tailnet/bin/<platform>-<arch>/owlbot-tailnet[.exe]` (`npm run build:tailnet`, needs Go;
+  `packages/tailnet/bin/<platform>-<arch>/piomio-tailnet[.exe]` (`npm run build:tailnet`, needs Go;
   `scripts/build-tailnet.mjs` cross-compiles with `CGO_ENABLED=0`). Go tests cover the line protocol and the proxy
   headers (the tsnet parts sit behind an interface).
 
 ## The hub
 
 - `packages/core/src/remote.ts`, class `RemoteAccess`:
-  - finds the binary: `OWLBOT_TAILNET_BIN`, else `packages/tailnet/bin/<platform>-<arch>/…` from the app root;
+  - finds the binary: `PIOMIO_TAILNET_BIN`, else `packages/tailnet/bin/<platform>-<arch>/…` from the app root;
     none → `available: false`;
   - setting `remote: { enabled: boolean }` (core settings); on start, an enabled hub starts the node;
   - `view(): RemoteView` = `{ available, enabled, state, url?, deviceUrl?, authUrl?, enableUrl?, account?, keyExpiry?, error? }`;
@@ -98,7 +98,7 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
 - Devices page: the link and its state above the pairing QR. Machines page: the link as the hub address.
 - All strings in the web catalogs (en, ru); core strings in the core catalogs.
 
-## The iOS app (`~/claude-projects/owlbot-ios`)
+## The iOS app (`~/claude-projects/piomio-ios`)
 
 - After connecting, `HubSession` calls `GET /api/devices/addresses` and stores the new list in `PairedHub.urls`
   (the last working address stays first in `candidates`). Nothing else changes: the link's port presents the same
@@ -123,7 +123,7 @@ runs Tailscale in the same tailnet, and the web UI only on the computer.
 ## Tests
 
 - Go: the line protocol, the proxies set `Host`, `X-Forwarded-For` and `X-Forwarded-Proto`.
-- Core, with a fake node (a Node script speaking the same lines, `OWLBOT_TAILNET_BIN`): state transitions and
+- Core, with a fake node (a Node script speaking the same lines, `PIOMIO_TAILNET_BIN`): state transitions and
   restarts; the gateways answer 404 on setup, desktop, passkeys, OAuth callback and hooks; `clientIp()` comes from the
   forwarded header; the shared remote failure budget and that local sign-in still works; `/api/devices/addresses`;
   the library entry; enable without a password or without the binary.

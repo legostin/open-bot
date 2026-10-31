@@ -2,8 +2,8 @@
 
 import { createReadStream, writeFileSync, mkdirSync } from "node:fs";
 import type { Page, Response } from "playwright";
-import type { ToolCallContext, ToolEffect, ToolResult } from "@owlbot/shared";
-import type { PluginContext, ToolHandler } from "@owlbot/plugin-sdk";
+import type { ToolCallContext, ToolEffect, ToolResult } from "@piomio/shared";
+import type { PluginContext, ToolHandler } from "@piomio/plugin-sdk";
 import type { Visit } from "./history.ts";
 import { BrowserManager, ToolError, type Classified, type DownloadRecord } from "./manager.ts";
 import { SEARCH_ENGINES } from "./address.ts";

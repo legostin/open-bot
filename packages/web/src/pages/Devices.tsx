@@ -1,9 +1,9 @@
-// Devices: phones with the Owlbot app. Where they reach the hub at home and away (the link), pairing by QR, rename,
+// Devices: phones with the Piomio app. Where they reach the hub at home and away (the link), pairing by QR, rename,
 // revoke.
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Pencil, QrCode, Smartphone, Trash2, X } from "lucide-react";
-import type { Device } from "@owlbot/shared";
+import type { Device } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { relativeTime } from "../lib/format";
 import { toast } from "../state/toast";

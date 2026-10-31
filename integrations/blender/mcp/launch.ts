@@ -1,4 +1,4 @@
-// Owlbot's launcher for the official Blender MCP server, started by the hub as this plugin's MCP server (.mcp.json).
+// Piomio's launcher for the official Blender MCP server, started by the hub as this plugin's MCP server (.mcp.json).
 // It finds Blender, prepares the server from its pinned release, and relays MCP to it; the first tool that needs Blender
 // installs the official add-on when missing and opens Blender. What goes wrong while starting is said on stderr, whose
 // last line the hub shows.
@@ -15,7 +15,7 @@ const WITHOUT_BLENDER = new Set(["get_python_api_docs", "search_api_docs", "sear
 const needsBlender = (tool: string) => !WITHOUT_BLENDER.has(tool) && !tool.endsWith("_for_cli");
 
 async function main(): Promise<void> {
-  const data = process.env.BLENDER_MCP_DATA || join(tmpdir(), "owlbot-blender-mcp");
+  const data = process.env.BLENDER_MCP_DATA || join(tmpdir(), "piomio-blender-mcp");
   const port = Number(process.env.BLENDER_MCP_PORT || DEFAULT_PORT);
   const blender = await findBlender();
   if ("missing" in blender) throw new Error(blender.missing);
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
       );
     const state = await ensureAddon(blender, src.addon);
     if (state.port && state.port !== port)
-      throw new Error(`The MCP add-on in Blender is set to port ${state.port}, and Owlbot talks to ${port}: ask the person to set it back to ${port} in Edit > Preferences > Add-ons > MCP.`);
+      throw new Error(`The MCP add-on in Blender is set to port ${state.port}, and Piomio talks to ${port}: ask the person to set it back to ${port} in Edit > Preferences > Add-ons > MCP.`);
     open(blender, state, port);
     if (!(await waitListening(port, 120_000)))
       throw new Error(`Blender ${blender.version} was opened, but its MCP add-on did not start listening on port ${port} within two minutes. Ask the person to look at Edit > Preferences > Add-ons > MCP in Blender.`);

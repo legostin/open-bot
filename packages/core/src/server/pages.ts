@@ -6,7 +6,7 @@
 // The kit's own files are public and cached forever under their hash.
 import { gzipSync } from "node:zlib";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { RouteMode } from "@owlbot/shared";
+import type { RouteMode } from "@piomio/shared";
 import type { Hub } from "../app.ts";
 import { hubLocale } from "../i18n.ts";
 import { MediaError } from "../media.ts";

@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainLoginUpdate } from "@owlbot/shared";
-import type { BrainProviderImpl } from "@owlbot/plugin-sdk";
+import type { BrainLoginUpdate } from "@piomio/shared";
+import type { BrainProviderImpl } from "@piomio/plugin-sdk";
 import { createClaudeCodeProvider, createCodexProvider, parseClaudeBrowserLogin, parseCodexDeviceLogin } from "../src/index.ts";
 
 const fakeCodex = join(import.meta.dirname, "fixtures", "fake-codex.mjs");

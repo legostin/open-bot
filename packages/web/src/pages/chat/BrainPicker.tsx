@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Brain, Check, ChevronDown, ChevronRight, ListChecks, Plus, Scale, Sparkles, Wand2, Zap } from "lucide-react";
-import type { AgentDef, ThinkingPreset } from "@owlbot/shared";
+import type { AgentDef, ThinkingPreset } from "@piomio/shared";
 import { errorText } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import { activeBrain, brainReady, brains, brainStatus, ensureBrains, findBrain, normalizeBrainRef, type BrainRow } from "../../state/brains";

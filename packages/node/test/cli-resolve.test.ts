@@ -38,7 +38,7 @@ describe("hub URLs", () => {
   it("normalizes and derives the WebSocket endpoint", () => {
     expect(normalizeHubUrl("http://100.64.0.1:8080/")).toBe("http://100.64.0.1:8080");
     expect(nodeWsUrl("http://100.64.0.1:8080")).toBe("ws://100.64.0.1:8080/node/ws");
-    expect(nodeWsUrl("https://bot.example.com/owlbot")).toBe("wss://bot.example.com/owlbot/node/ws");
+    expect(nodeWsUrl("https://bot.example.com/piomio")).toBe("wss://bot.example.com/piomio/node/ws");
     expect(() => normalizeHubUrl("bot.example.com")).toThrow(/Invalid hub address/);
     expect(() => normalizeHubUrl("ftp://x")).toThrow(/http/);
   });

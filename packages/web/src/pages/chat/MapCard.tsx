@@ -40,7 +40,7 @@ import {
   Utensils,
   Wine,
 } from "lucide-react";
-import type { MapIcon as MarkerIcon, MapMarker, MessagePart, RouteMode } from "@owlbot/shared";
+import type { MapIcon as MarkerIcon, MapMarker, MessagePart, RouteMode } from "@piomio/shared";
 import type * as Leaflet from "leaflet";
 import { formatCoords, OSM_COPYRIGHT, TILE_URL } from "../../lib/media";
 import { appLink, BUILTIN_MAP_APPS, formatDistance, formatTravelTime, mapTarget } from "../../lib/maps";

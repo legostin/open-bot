@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo } from "react";
 import { Link } from "wouter";
-import type { AgentDef, MachineActivity, MachineWork, WorkStep } from "@owlbot/shared";
+import type { AgentDef, MachineActivity, MachineWork, WorkStep } from "@piomio/shared";
 import { useStore } from "../lib/store";
 import { agentPath, groupPath } from "../lib/team";
 import { agents, ensureMachineActivity, machineActivity, session, team } from "../state/app";

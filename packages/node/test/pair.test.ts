@@ -1,12 +1,12 @@
 // pair() against a stubbed fetch: the phones' address behind the hub's link, and what a self-signed hub says.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig, parseInviteLink } from "../src/home.ts";
+import { loadConfig, nodeHome, parseInviteLink } from "../src/home.ts";
 import { linkForPhoneAddress, pair } from "../src/pair.ts";
 
-const LINK = "https://owlbot.tail1234.ts.net";
+const LINK = "https://piomio.tail1234.ts.net";
 
 /** What fetch() throws for the hub's own certificate on the phones' port. */
 function selfSigned(): TypeError {
@@ -24,7 +24,7 @@ describe("pairing", () => {
     expect(linkForPhoneAddress(`${LINK}:8443`)).toBe(LINK);
     expect(linkForPhoneAddress(LINK)).toBeUndefined();
     expect(linkForPhoneAddress("https://192.168.1.2:8443")).toBeUndefined();
-    expect(linkForPhoneAddress("http://owlbot.tail1234.ts.net:8443")).toBeUndefined();
+    expect(linkForPhoneAddress("http://piomio.tail1234.ts.net:8443")).toBeUndefined();
   });
 
   it("pairs through the link when given the phones' address", async () => {
@@ -52,10 +52,20 @@ describe("pairing", () => {
   it("reads an invite link: the hub's page or the desktop app's link", () => {
     expect(parseInviteLink(`${LINK}/join/AB12CD34`)).toEqual({ hubUrl: LINK, code: "AB12CD34" });
     expect(parseInviteLink(" http://192.168.1.2:8080/join/ab12cd34/ ")).toEqual({ hubUrl: "http://192.168.1.2:8080", code: "ab12cd34" });
-    expect(parseInviteLink("https://example.com/owlbot/join/AB12CD34")).toEqual({ hubUrl: "https://example.com/owlbot", code: "AB12CD34" });
-    expect(parseInviteLink(`owlbot://pair?hub=${encodeURIComponent(LINK)}&code=AB12CD34`)).toEqual({ hubUrl: LINK, code: "AB12CD34" });
+    expect(parseInviteLink("https://example.com/piomio/join/AB12CD34")).toEqual({ hubUrl: "https://example.com/piomio", code: "AB12CD34" });
+    expect(parseInviteLink(`piomio://pair?hub=${encodeURIComponent(LINK)}&code=AB12CD34`)).toEqual({ hubUrl: LINK, code: "AB12CD34" });
     expect(parseInviteLink(LINK)).toBeUndefined();
-    expect(parseInviteLink("owlbot://pair?v=1&c=AB12CD34")).toBeUndefined();
+    expect(parseInviteLink("piomio://pair?v=1&c=AB12CD34")).toBeUndefined();
     expect(parseInviteLink("not a link")).toBeUndefined();
+  });
+
+  it("keeps a machine's pairing from when Piomio was Owlbot", () => {
+    const user = mkdtempSync(join(tmpdir(), "piomio-home-"));
+    expect(nodeHome({}, user)).toBe(join(user, ".piomio-node"));
+    mkdirSync(join(user, ".owlbot-node"));
+    writeFileSync(join(user, ".owlbot-node", "key.json"), "{}");
+    expect(nodeHome({}, user)).toBe(join(user, ".piomio-node"));
+    expect([existsSync(join(user, ".piomio-node", "key.json")), existsSync(join(user, ".owlbot-node"))]).toEqual([true, false]);
+    expect(nodeHome({ PIOMIO_NODE_HOME: join(user, "elsewhere") }, user)).toBe(join(user, "elsewhere"));
   });
 });

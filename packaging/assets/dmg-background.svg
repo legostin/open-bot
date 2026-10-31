@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 400">
-  <!-- The .dmg window (tauri.conf.json bundle.macOS.dmg): Owlbot at (180, 190), Applications at (480, 190), Finder
+  <!-- The .dmg window (tauri.conf.json bundle.macOS.dmg): Piomio at (180, 190), Applications at (480, 190), Finder
        draws their names below them. No words here, so it suits every language. -->
   <rect width="660" height="400" fill="#f7f7f5"/>
   <g fill="none" stroke="#c4c4c0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">

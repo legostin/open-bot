@@ -1,6 +1,6 @@
-// @mention autocomplete for the composer of a group chat (the hub routes with parseMentions from @owlbot/shared/group).
+// @mention autocomplete for the composer of a group chat (the hub routes with parseMentions from @piomio/shared/group).
 
-import { MENTION_ALL, type Mentionable } from "@owlbot/shared/group";
+import { MENTION_ALL, type Mentionable } from "@piomio/shared/group";
 
 /** What the autocomplete offers: a member, or everyone ("@all"). */
 export interface MentionOption {

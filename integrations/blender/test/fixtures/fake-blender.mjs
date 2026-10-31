@@ -15,7 +15,7 @@ const arg = (name) => a[a.indexOf(name) + 1];
 if (a[0] === "--version") {
   console.log(`Blender ${process.env.FAKE_BLENDER_VERSION ?? "5.3.0"}`);
 } else if (a.includes("--background") && a.includes("--python-expr")) {
-  if (arg("--python-expr").includes("__OWLBOT_BLENDER__")) console.log("__OWLBOT_BLENDER__" + JSON.stringify({ online: false, ...s.addon }));
+  if (arg("--python-expr").includes("__PIOMIO_BLENDER__")) console.log("__PIOMIO_BLENDER__" + JSON.stringify({ online: false, ...s.addon }));
 } else if (a.includes("extension") && a.includes("build")) {
   writeFileSync(arg("--output-filepath"), "zip");
 } else if (a.includes("extension") && a.includes("install-file")) {

@@ -2,10 +2,10 @@
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentDef, CatalogEntryState, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing, Invite, ThinkingView } from "@owlbot/shared";
-import { DEFAULT_LOCALE, catalogLookup, formatBrainRef, localizeValue, normalizeLocale, parseBrainRef, toolPrefixOf } from "@owlbot/shared";
+import type { AgentDef, CatalogEntryState, ConnectionAccount, CoreMethod, DeviceNetwork, DevicePairing, Invite, ThinkingView } from "@piomio/shared";
+import { DEFAULT_LOCALE, catalogLookup, formatBrainRef, localizeValue, normalizeLocale, parseBrainRef, toolPrefixOf } from "@piomio/shared";
 import type { Config } from "./config.ts";
-import { openDb, type Db } from "./db.ts";
+import { hubDbFile, openDb, type Db } from "./db.ts";
 import { EventBus } from "./bus.ts";
 import { Store } from "./store.ts";
 import { Settings, type CoreSettings } from "./settings.ts";
@@ -113,7 +113,7 @@ export class Hub {
   cluster: Cluster;
   /** What every machine is doing now, for the machines block (activity.ts). */
   activity: MachineActivityFeed;
-  /** Phones paired with the hub (the Owlbot app) and the device port they talk to. */
+  /** Phones paired with the hub (the Piomio app) and the device port they talk to. */
   devices: DeviceRegistry;
   /** Where the user is, when their phone shares it (user-location.ts). */
   locations: UserLocations;
@@ -142,7 +142,7 @@ export class Hub {
   constructor(config: Config) {
     this.config = config;
     mkdirSync(config.dataDir, { recursive: true });
-    this.db = openDb(join(config.dataDir, "owlbot.db"));
+    this.db = openDb(hubDbFile(config.dataDir));
     this.store = new Store(this.db, this.bus);
     this.settings = new Settings(this.db, config.timezone);
     configureHubLocale(() => normalizeLocale(this.settings.get().language) ?? DEFAULT_LOCALE);
@@ -301,7 +301,7 @@ export class Hub {
     this.auth = new AuthService(this.db, this.audit, {
       rpId,
       origins: [new URL(config.publicUrl).origin, new URL(config.consoleUrl).origin],
-      setupToken: process.env.OWLBOT_SETUP_TOKEN,
+      setupToken: process.env.PIOMIO_SETUP_TOKEN,
     });
     this.auth.onRemotePause = () => {
       void this.notifier.notify({ level: "notify", title: t("remote.pausedTitle"), body: t("remote.pausedBody") }).catch(() => {});
@@ -437,7 +437,7 @@ export class Hub {
     };
   }
 
-  /** Start the device port unless OWLBOT_DEVICES=0 closed it; calls are serialized. */
+  /** Start the device port unless PIOMIO_DEVICES=0 closed it; calls are serialized. */
   syncDeviceServer(): Promise<DeviceNetwork> {
     const run = async () => {
       const want = !this.config.devicesOff;
@@ -447,7 +447,7 @@ export class Hub {
         try {
           await app.listen({ host: this.config.deviceHost, port: this.config.devicePort });
           this.deviceApp = app;
-          console.log(`[owlbot] devices: https://${this.config.deviceHost}:${this.config.devicePort}`);
+          console.log(`[piomio] devices: https://${this.config.deviceHost}:${this.config.devicePort}`);
         } catch (e: any) {
           this.deviceError = e?.code === "EADDRINUSE" ? t("device.portInUse", { port: this.config.devicePort }) : String(e?.message ?? e);
           await app.close().catch(() => {});
@@ -603,7 +603,7 @@ export class Hub {
     const layouts = this.plugins?.enabledLayouts() ?? [];
     this.skills.setRoots([
       // Skills the hub ships sit beside its built-in plugins (integrations/_template is make-integration).
-      ...this.config.builtinPluginsDirs.map((dir) => ({ source: "owlbot", skillsDir: dir })),
+      ...this.config.builtinPluginsDirs.map((dir) => ({ source: "piomio", skillsDir: dir })),
       { source: "user", skillsDir: join(this.config.dataDir, "skills"), commandsDir: join(this.config.dataDir, "commands") },
       ...layouts.map((l) => ({ source: l.manifest.id, skillsDir: l.skillsDir, commandsDir: l.commandsDir })),
     ]);
@@ -714,7 +714,7 @@ export class Hub {
     this.notifier.startDigestTimer();
     for (const m of this.machines.list()) if (m.status === "online") void this.machines.pushSetup(m.id);
     // A new version since the last start: the default agent tells the person what changed.
-    void announceUpdate(this).catch((e) => console.log(`[owlbot] update note: ${e?.message ?? e}`));
+    void announceUpdate(this).catch((e) => console.log(`[piomio] update note: ${e?.message ?? e}`));
   }
 
   /** Another replica leads: this one stops its main-only work and keeps its data current. */
@@ -769,7 +769,7 @@ export class Hub {
       const line = "═".repeat(64);
       console.log(`\n${line}\n  ${t("cli.firstRun", { url: cfg.publicUrl, code: this.auth.setupToken })}\n${line}\n`);
     } else {
-      console.log(`[owlbot] ready: ${cfg.publicUrl} (console: ${cfg.consoleUrl})`);
+      console.log(`[piomio] ready: ${cfg.publicUrl} (console: ${cfg.consoleUrl})`);
     }
   }
 

@@ -11,7 +11,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyWebsocket from "@fastify/websocket";
 import type { WebSocket } from "ws";
-import type { Device } from "@owlbot/shared";
+import type { Device } from "@piomio/shared";
 import { errorText, LocalizedError, requestLocale } from "../i18n.ts";
 import type { Hub } from "../app.ts";
 import { agentName } from "../agents.ts";
@@ -53,7 +53,7 @@ export async function buildDeviceApp(hub: Hub, tls: DeviceTls, opts: { remote?: 
   // ---------- public ----------
 
   // The phone probes every address from the QR with this and keeps the first that answers.
-  app.get("/api/device/hello", async () => ({ owlbot: true, name: hubName(), version: cfg.version }));
+  app.get("/api/device/hello", async () => ({ piomio: true, name: hubName(), version: cfg.version }));
 
   const pairFailures = new Map<string, number[]>();
   app.post("/api/devices/pair", async (req) => {

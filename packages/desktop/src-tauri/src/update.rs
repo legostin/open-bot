@@ -2,7 +2,7 @@
 //! signed with the project's key (the public half is in tauri.conf.json, so nothing else installs). Checked a minute
 //! after start and then every six hours, downloaded in the background; installed only when the person picks
 //! "Install update" in the menu. The hub stops cleanly first; the new version starts it again.
-//! OWLBOT_UPDATE_URL points the check at another latest.json (a local test, the test build over plain http): the
+//! PIOMIO_UPDATE_URL points the check at another latest.json (a local test, the test build over plain http): the
 //! signature still has to match.
 
 use std::sync::Mutex;
@@ -39,7 +39,7 @@ pub struct Updates {
 
 /// A dev run does not update, the test build only from a feed it is pointed at (its files are not the release's).
 pub fn enabled(st: &AppState) -> bool {
-  !st.paths.dev && (!st.paths.flavor.test || std::env::var_os("OWLBOT_UPDATE_URL").is_some())
+  !st.paths.dev && (!st.paths.flavor.test || std::env::var_os("PIOMIO_UPDATE_URL").is_some())
 }
 
 /// The background checks.
@@ -93,7 +93,7 @@ async fn check(app: &AppHandle, asked: bool) {
     }
     Ok(None) => show(app, had.map(Item::Install).unwrap_or(Item::Check)),
     Err(e) => {
-      eprintln!("owlbot: update check: {e}");
+      eprintln!("piomio: update check: {e}");
       show(app, had.map(Item::Install).unwrap_or(if asked { Item::Failed } else { Item::Check }));
     }
   }
@@ -102,7 +102,7 @@ async fn check(app: &AppHandle, asked: bool) {
 /// A newer version than this one (and than `had`, the one already downloaded), downloaded and checked.
 async fn fetch(app: &AppHandle, had: Option<&str>) -> Result<Option<Ready>, String> {
   let mut builder = app.updater_builder();
-  if let Ok(url) = std::env::var("OWLBOT_UPDATE_URL") {
+  if let Ok(url) = std::env::var("PIOMIO_UPDATE_URL") {
     let url = Url::parse(&url).map_err(|e| e.to_string())?;
     builder = builder.endpoints(vec![url]).map_err(|e| e.to_string())?;
   }
@@ -126,7 +126,7 @@ fn install(app: &AppHandle) {
     // macOS: the new app is in place; Windows: the installer took over and this process is ending.
     Ok(()) => app.restart(),
     Err(e) => {
-      eprintln!("owlbot: update install: {e}");
+      eprintln!("piomio: update install: {e}");
       if let Some(mode) = st.settings.lock().unwrap().mode {
         app::start(app, mode);
       }

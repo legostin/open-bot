@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { ArrowRight, CheckCircle2, ChevronRight, Download, GitBranch, Power, RotateCw, Search, ShieldAlert, Sparkles, Trash2, TriangleAlert } from "lucide-react";
-import type { CatalogSection, IntegrationView } from "@owlbot/shared";
+import type { CatalogSection, IntegrationView } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
 import { formatTime, type Tone } from "../lib/format";
@@ -698,7 +698,7 @@ function InstallModal({ onClose, onInstalled }: { onClose: () => void; onInstall
               autoFocus
               value={source}
               onChange={(e) => setSource(e.target.value)}
-              placeholder="https://github.com/user/owlbot-plugin.git"
+              placeholder="https://github.com/user/piomio-plugin.git"
               className="font-mono"
               onKeyDown={(e) => {
                 if (e.key === "Enter") void prepare();

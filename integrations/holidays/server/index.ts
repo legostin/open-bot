@@ -1,8 +1,8 @@
 // Builtin plugin "holidays": public holidays and long weekends of about 120 countries from Nager.Date (no key).
 // Each tool shows the dates as a card in the chat (widget "holidays") and lists them for the model.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
 
 interface Settings {
   /** Nager.Date's address (tests point it at a fake). */

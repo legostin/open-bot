@@ -139,7 +139,7 @@ export function addStyles(): void {
   if (added || typeof document === "undefined") return;
   added = true;
   const el = document.createElement("style");
-  el.dataset.owlbot = "browser";
+  el.dataset.piomio = "browser";
   el.textContent = CSS;
   document.head.appendChild(el);
 }

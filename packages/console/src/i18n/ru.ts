@@ -4,7 +4,7 @@ import type { en } from "./en.ts";
 
 export const ru = {
   // ---------- app ----------
-  "app.title": "Пульт безопасности · Owlbot",
+  "app.title": "Пульт безопасности · Piomio",
   "app.name": "Пульт безопасности",
 
   // ---------- common ----------
@@ -94,7 +94,7 @@ export const ru = {
   "vault.identity.tax_id": "ИНН",
 
   // ---------- notifications ----------
-  "notify.title": "Owlbot: нужно подтверждение",
+  "notify.title": "Piomio: нужно подтверждение",
   "notify.body": "Агент {agent} просит подтвердить действие ({tool}). Откройте пульт, чтобы посмотреть детали.",
 
   // ---------- session ----------
@@ -109,9 +109,9 @@ export const ru = {
   // ---------- passkeys (browser) ----------
   "webauthn.insecure": "Passkey работают только по HTTPS или на localhost.",
   "webauthn.unsupported": "Этот браузер не поддерживает passkey.",
-  "webauthn.ipHost": "Passkey не работают по IP-адресу. Откройте пульт по имени хоста (например, http://localhost:{port}) и укажите это имя в OWLBOT_PUBLIC_URL.",
+  "webauthn.ipHost": "Passkey не работают по IP-адресу. Откройте пульт по имени хоста (например, http://localhost:{port}) и укажите это имя в PIOMIO_PUBLIC_URL.",
   "webauthn.aborted": "Операция с passkey отменена",
-  "webauthn.badDomain": "Passkey недоступен на этом адресе: откройте пульт по тому же имени хоста, что указано в OWLBOT_PUBLIC_URL",
+  "webauthn.badDomain": "Passkey недоступен на этом адресе: откройте пульт по тому же имени хоста, что указано в PIOMIO_PUBLIC_URL",
   "webauthn.alreadyRegistered": "Этот ключ уже зарегистрирован",
   "webauthn.timeout": "Операция с passkey отменена или время ожидания истекло",
 
@@ -138,7 +138,7 @@ export const ru = {
   "live.hint": "Живые обновления подтверждений и состояния vault",
 
   // ---------- login ----------
-  "login.subtitle": "Owlbot · подтверждения, vault, правила и аудит",
+  "login.subtitle": "Piomio · подтверждения, vault, правила и аудит",
   "login.noPassword.title": "Пароль ещё не задан",
   "login.noPassword.body": "Завершите первоначальную настройку в основном приложении: задайте пароль по одноразовому коду из логов хаба. Затем вернитесь сюда.",
   "login.openMainApp": "Открыть основное приложение",
@@ -424,7 +424,7 @@ export const ru = {
   "vault.passphrase.repeat": "Повторите пароль",
   "vault.passphrase.mismatch": "Пароли не совпадают",
   "vault.passphrase.warn.title": "Этот пароль невозможно восстановить",
-  "vault.passphrase.warn.body": "Ни Owlbot, ни кто-либо другой не сможет расшифровать vault без него. Если вы его забудете, все записи будут потеряны навсегда. Сохраните пароль в менеджере паролей или запишите и уберите в надёжное место.",
+  "vault.passphrase.warn.body": "Ни Piomio, ни кто-либо другой не сможет расшифровать vault без него. Если вы его забудете, все записи будут потеряны навсегда. Сохраните пароль в менеджере паролей или запишите и уберите в надёжное место.",
   "vault.passphrase.ack": "Я сохранил пароль и понимаю, что восстановить его нельзя",
   "vault.create.submit": "Создать vault",
   "vault.unlocked": "Vault разблокирован",

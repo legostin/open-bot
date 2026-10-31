@@ -1,6 +1,6 @@
 # Composio: outside services through one integration, with a badge that says so
 
-2026-10-31. Decided with the user: services that do not let Owlbot register its own sign-in (Slack, GitHub, Google
+2026-10-31. Decided with the user: services that do not let Piomio register its own sign-in (Slack, GitHub, Google
 without our own client, HubSpot, Dropbox, Box…) connect through [Composio](https://composio.dev), a hosted service
 with its own OAuth apps for ~1000 apps. Composio holds the account tokens and sees every call, so everything that goes
 through it carries a **Composio** badge; tapping it says what that means. Native sign-ins (Notion, Linear, Granola, the
@@ -76,7 +76,7 @@ Two general abilities, for any integration of this kind.
 ## The plugin: `integrations/composio`
 
 - **Key**: one setup secret, vault item `composio` (`x-api-key`). `permissions.network: ["backend.composio.dev"]`.
-  API v3.1. The whole hub is one Composio user, id `owlbot-<hub id>`, kept in plugin storage.
+  API v3.1. The whole hub is one Composio user, id `piomio-<hub id>`, kept in plugin storage.
 - **Sign-in**:
   1. The first time an app connects the plugin creates an auth config with Composio's own OAuth app
      (`POST /auth_configs`, `use_composio_managed_auth`) and stores its id.
@@ -148,13 +148,13 @@ Two general abilities, for any integration of this kind.
   write), names cut, 401 / limit / 5xx, sign-out.
 - Locales: en/ru parity (`packages/core/test/i18n.test.ts`).
 - Web: the badge and its note (`catalog.test.ts`, the card).
-- iOS: the badge in the catalog row, the note's sheet, the chat card (OwlbotKit tests + a simulator check).
+- iOS: the badge in the catalog row, the note's sheet, the chat card (PiomioKit tests + a simulator check).
 - Live, with the person's key: connect one app, call one read and one write through the approval card.
 
 ## Not in this step
 
 - Our own OAuth apps inside Composio.
-- Composio triggers (webhooks such as "an email arrived"): they fit Owlbot's triggers, a step of their own.
+- Composio triggers (webhooks such as "an email arrived"): they fit Piomio's triggers, a step of their own.
 - Composio's Tool Router and its generic "search and execute" tools in place of separate ones.
 - Self-hosted Composio (Enterprise).
 - Moving Google Calendar to Composio: the native one stays.

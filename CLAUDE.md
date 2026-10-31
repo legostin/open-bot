@@ -1,6 +1,6 @@
-# Owlbot
+# Piomio
 
-Self-hosted personal agent platform. Spec: `docs/superpowers/specs/2026-10-26-open-bot-design.md` (Russian).
+Self-hosted personal agent platform. Spec: `docs/superpowers/specs/2026-10-26-piomio-design.md` (Russian).
 
 ## Conventions
 - Node ≥ 24 runs TypeScript directly (type stripping): no build step for backend code.
@@ -8,13 +8,13 @@ Self-hosted personal agent platform. Spec: `docs/superpowers/specs/2026-10-26-op
   `verbatimModuleSyntax` is on: use `import type` for types.
 - npm workspaces: `packages/*` (core, shared, plugin-sdk, mcp-bridge, brains-cli, node, web, console, ui-sdk, pages-kit, testkit), `plugins/*` (the hub's own built-in plugins: brains, memory, triggers, web, browser, Telegram) and `integrations/*` (built-in integrations).
 - Integrations (services and abilities in the Plugins catalog) live in `integrations/<id>/`, self-contained: adding one touches nothing outside its folder (`npm run new:integration -- <id>`, guide in `integrations/README.md`). `integrations/_template` is the template and the agents' `make-integration` skill (its `SKILL.md`); agents install what they build with `hub_plugin_install`. Keep the template working and its guide in step with the plugin API.
-- Pages agents make: TSX on `packages/pages-kit` (React, shadcn/ui, Tailwind's browser runtime, Owlbot blocks), compiled and served sandboxed by `packages/core/src/pages.ts` + `server/pages.ts`; what a page may import is `packages/shared/src/pages.ts`.
+- Pages agents make: TSX on `packages/pages-kit` (React, shadcn/ui, Tailwind's browser runtime, Piomio blocks), compiled and served sandboxed by `packages/core/src/pages.ts` + `server/pages.ts`; what a page may import is `packages/shared/src/pages.ts`.
 - Contracts live in `packages/shared/src/types.ts`, `packages/shared/src/manifest.ts` and `packages/plugin-sdk/src/types.ts`. Change them deliberately.
-- Plugins only `import type` from `@owlbot/plugin-sdk`; the runner (`packages/plugin-sdk/src/runner.ts`) provides the implementation.
+- Plugins only `import type` from `@piomio/plugin-sdk`; the runner (`packages/plugin-sdk/src/runner.ts`) provides the implementation.
 - Plugin tool names are exposed as `<toolPrefix>_<name>` (prefix defaults to plugin id with `-` → `_`). Names match `[a-zA-Z0-9_-]{1,64}`.
 - i18n (English + Russian, more later): every user-facing string goes through a catalog — never hard-code it.
   Shared runtime: `packages/shared/src/i18n.ts` (`{name}` placeholders, ICU-style plurals). Core: `packages/core/src/locales/{en,ru}.ts` + `t()` / `LocalizedError` / `HttpError(status, key)`.
-  Plugins: `.owlbot-plugin/locales/{en,ru}.json`, `"%key%"` in plugin.json, `ctx.i18n.t()` in the backend, `ui.i18n.t()` in UI modules.
+  Plugins: `.piomio-plugin/locales/{en,ru}.json`, `"%key%"` in plugin.json, `ctx.i18n.t()` in the backend, `ui.i18n.t()` in UI modules.
   English is the source of truth and the fallback; `packages/core/test/i18n.test.ts` checks every catalog for parity.
 - Text for the model (tool results, tool descriptions, system notes, agent prompts), code and comments is English and not translated.
 - Secrets never go into settings, env files or prompts: store them in the vault and pass `vault://<id>` references.

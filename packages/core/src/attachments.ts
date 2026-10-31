@@ -5,7 +5,7 @@
 
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, isAbsolute, join, relative, sep } from "node:path";
-import type { AttachmentKind, MessagePart } from "@owlbot/shared";
+import type { AttachmentKind, MessagePart } from "@piomio/shared";
 import { IMAGE_TYPES } from "./media.ts";
 
 /** Largest file the hub takes in one upload (Telegram hands bots at most 20 MB anyway). */

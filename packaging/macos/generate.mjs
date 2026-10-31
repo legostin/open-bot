@@ -3,7 +3,7 @@
 
 import { text } from "../desktop/locales.mjs";
 
-export const PKG_ID = "ai.owlbot.pkg";
+export const PKG_ID = "ai.piomio.pkg";
 /** Node 24's own minimum. */
 export const MIN_MACOS = "13.5";
 
@@ -34,7 +34,7 @@ ${body}
 export function distributionXml({ version, componentPkg }) {
   return `<?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-  <title>Owlbot</title>
+  <title>Piomio</title>
   <welcome file="welcome.html" mime-type="text/html"/>
   <conclusion file="conclusion.html" mime-type="text/html"/>
   <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>

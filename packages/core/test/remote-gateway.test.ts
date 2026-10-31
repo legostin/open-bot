@@ -13,7 +13,7 @@ import { parsePairingLink } from "../src/pairing.ts";
 const fixtures = join(import.meta.dirname, "fixtures");
 const FAKE = join(fixtures, "tailnet/fake-tailnet.mjs");
 chmodSync(FAKE, 0o755);
-const LINK = "owlbot-test.tail1234.ts.net";
+const LINK = "piomio-test.tail1234.ts.net";
 const PASSWORD = "remote-test-pass";
 
 function freePort(): Promise<number> {
@@ -123,13 +123,13 @@ describe("the link's gateways", () => {
     );
     const config = loadConfig(
       {
-        OWLBOT_PORT: String(port),
-        OWLBOT_DEVICES: "0",
-        OWLBOT_CONSOLE_PORT: String(consolePort),
-        OWLBOT_EGRESS_PORT: String(egressPort),
-        OWLBOT_DEVICE_PORT: String(devicePort),
-        OWLBOT_DEVICE_HOST: "127.0.0.1",
-        OWLBOT_TAILNET_BIN: FAKE,
+        PIOMIO_PORT: String(port),
+        PIOMIO_DEVICES: "0",
+        PIOMIO_CONSOLE_PORT: String(consolePort),
+        PIOMIO_EGRESS_PORT: String(egressPort),
+        PIOMIO_DEVICE_PORT: String(devicePort),
+        PIOMIO_DEVICE_HOST: "127.0.0.1",
+        PIOMIO_TAILNET_BIN: FAKE,
         TZ: "UTC",
       },
       { dataDir, builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
@@ -197,7 +197,7 @@ describe("the link's gateways", () => {
 
   it("serves phones through the link: pairing, the bearer token and the current addresses", async () => {
     const hello = await viaLink(ports.device, "GET", "/api/device/hello", { host: `${LINK}:8443` });
-    expect(hello.json).toMatchObject({ owlbot: true });
+    expect(hello.json).toMatchObject({ piomio: true });
     // The device port itself is off; the link alone is enough to pair.
     const pairing = await web.req("POST", "/api/devices/pairing");
     expect(pairing.status).toBe(200);
@@ -226,7 +226,7 @@ describe("the link's gateways", () => {
     expect(parsePairingLink(invite.json.phoneLink)!.urls).toEqual([`https://${LINK}:8443`]);
     const page = await viaLink(ports.web, "GET", `/join/${invite.json.code}`, { headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } });
     expect(page.status).toBe(200);
-    expect(page.json).toContain(`owlbot://pair?hub=${encodeURIComponent(`https://${LINK}`)}&amp;code=${invite.json.code}`);
+    expect(page.json).toContain(`piomio://pair?hub=${encodeURIComponent(`https://${LINK}`)}&amp;code=${invite.json.code}`);
     // The chat's card tells the model the hub is reachable but never gives it a code.
     const conversationId = hub.store.agentConversation("assistant").id;
     const r = await hub.tools.get("hub_connect_device")!.invoke({}, { conversationId, agentId: "assistant", sessionId: "s", machineId: "local", workspace: tmpdir(), tainted: false, background: false } as any);

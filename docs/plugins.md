@@ -2,7 +2,7 @@
 
 [Русский](plugins.ru.md)
 
-Almost everything in Owlbot is a plugin: brains (Claude Code, Codex, APIs), channels (Telegram), the browser, memory, web search, triggers. The core only wires them together and enforces security. Integrations (services and abilities: the weather, calendars, maps…) are plugins too and live in [`integrations/`](../integrations/README.md), each in its own folder, started from a template with `npm run new:integration -- <id>`.
+Almost everything in Piomio is a plugin: brains (Claude Code, Codex, APIs), channels (Telegram), the browser, memory, web search, triggers. The core only wires them together and enforces security. Integrations (services and abilities: the weather, calendars, maps…) are plugins too and live in [`integrations/`](../integrations/README.md), each in its own folder, started from a template with `npm run new:integration -- <id>`.
 
 A plugin can add:
 
@@ -16,19 +16,19 @@ A plugin can add:
 | Skills, commands, agents | `skills/`, `commands/`, `agents/` |
 | MCP servers | `.mcp.json` |
 | UI: panels, tabs, tool-result renderers, a replacement composer | `ui/` |
-| Translations | `.owlbot-plugin/locales/` |
+| Translations | `.piomio-plugin/locales/` |
 
 Claude Code plugins (`.claude-plugin/plugin.json`) and Codex plugins (`.codex-plugin/plugin.json`) install as they are: their skills, commands, agents and MCP servers become available. Claude Code plugins are also passed to the hub's Claude Code brain with `--plugin-dir`, so their hooks run there.
 
-In `.mcp.json`, `${OWLBOT_PLUGIN_ROOT}` (or `${CLAUDE_PLUGIN_ROOT}`) is the plugin's folder, `${OWLBOT_PLUGIN_DATA}` its data folder and `${OWLBOT_NODE}` the hub's own Node, so a local server can be a TypeScript launcher in the plugin (`integrations/blender`). A local server reaches only the plugin's `permissions.network` hosts; when it exits while starting, the last line of its stderr is the error shown on the plugin.
+In `.mcp.json`, `${PIOMIO_PLUGIN_ROOT}` (or `${CLAUDE_PLUGIN_ROOT}`) is the plugin's folder, `${PIOMIO_PLUGIN_DATA}` its data folder and `${PIOMIO_NODE}` the hub's own Node, so a local server can be a TypeScript launcher in the plugin (`integrations/blender`). A local server reaches only the plugin's `permissions.network` hosts; when it exits while starting, the last line of its stderr is the error shown on the plugin.
 
 ## Layout
 
 ```
 my-plugin/
-  .owlbot-plugin/plugin.json
-  .owlbot-plugin/locales/en.json   # translations, see Localization
-  .owlbot-plugin/locales/ru.json
+  .piomio-plugin/plugin.json
+  .piomio-plugin/locales/en.json   # translations, see Localization
+  .piomio-plugin/locales/ru.json
   server/index.ts        # backend: a separate process, JSON-RPC over stdio
   ui/src/index.tsx       # UI module (built into ui/dist/index.js)
   skills/<name>/SKILL.md
@@ -81,7 +81,7 @@ Permissions are shown at install time. A plugin installed from git is pinned to 
 ## Backend
 
 ```ts
-import type { PluginModule } from "@owlbot/plugin-sdk";
+import type { PluginModule } from "@piomio/plugin-sdk";
 
 const plugin: PluginModule = {
   async activate(ctx) {
@@ -105,7 +105,7 @@ const plugin: PluginModule = {
 export default plugin;
 ```
 
-Plugins only `import type` from `@owlbot/plugin-sdk`: the runner provides the implementation, so a plugin needs no runtime dependency on the SDK. The SDK also exports a `definePlugin` helper, but that is a value import; a typed object as above does the same job.
+Plugins only `import type` from `@piomio/plugin-sdk`: the runner provides the implementation, so a plugin needs no runtime dependency on the SDK. The SDK also exports a `definePlugin` helper, but that is a value import; a typed object as above does the same job.
 
 What `ctx` offers: `pluginId`, `pluginDir`, `dataDir` (a private writable folder), `hubUrl`, `appRoot`, `settings`, `onSettingsChange`, `i18n` (see [Localization](#localization)), `log`, `tools`, `brains`, `channels`, `events.on`, `hooks.on`, `http.handle`, `ui.emit` / `ui.onMessage`, `vault.get`, `storage` (the plugin's key-value store: `get`, `set`, `delete`, `list`), `catalog` (its entries' state with `update`, their sign-in with `onSignIn` / `onSignOut`) and `core.call`. `tools.unregister(name)` takes one of its tools back. A module may also export `deactivate()`.
 
@@ -121,17 +121,17 @@ What `ctx` offers: `pluginId`, `pluginDir`, `dataDir` (a private writable folder
 
 ## Brains
 
-A brain is a `BrainProviderImpl`: `probe()` (installed? signed in?) and `createSession(opts)`. The session gets the system prompt, a working folder and MCP access to the hub's tools (`opts.mcp.url`, `opts.mcp.token`, and `opts.mcp.bridgeCommand` for stdio clients). `send(turn)` yields the events `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error` and `done`; the session also implements `interrupt()` and `close()`. On `limit_hit` the core marks the brain busy until `resetAt` and moves on to the next brain in the agent's list. Ready-made adapters for CLIs live in `@owlbot/brains-cli`. If a brain has variants (for example, API providers), list them in `variants: ["anthropic", "openai"]`: the UI shows them as separate brains `<id>:<variant>@local`, and the variant arrives in `probe(variant)` and `opts.variant`. Brain ids go into `contributes.brains`.
+A brain is a `BrainProviderImpl`: `probe()` (installed? signed in?) and `createSession(opts)`. The session gets the system prompt, a working folder and MCP access to the hub's tools (`opts.mcp.url`, `opts.mcp.token`, and `opts.mcp.bridgeCommand` for stdio clients). `send(turn)` yields the events `text`, `tool_call`, `tool_result`, `usage`, `limit_hit`, `error` and `done`; the session also implements `interrupt()` and `close()`. On `limit_hit` the core marks the brain busy until `resetAt` and moves on to the next brain in the agent's list. Ready-made adapters for CLIs live in `@piomio/brains-cli`. If a brain has variants (for example, API providers), list them in `variants: ["anthropic", "openai"]`: the UI shows them as separate brains `<id>:<variant>@local`, and the variant arrives in `probe(variant)` and `opts.variant`. Brain ids go into `contributes.brains`.
 
 ## UI
 
-A UI module is an ES module. React and `@owlbot/ui` come from the host through an import map, so they are not bundled.
+A UI module is an ES module. React and `@piomio/ui` come from the host through an import map, so they are not bundled.
 
 ```tsx
-import { definePluginUI, Card } from "@owlbot/ui";
-import type { OwlbotUI, ToolResultProps } from "@owlbot/ui";
+import { definePluginUI, Card } from "@piomio/ui";
+import type { PiomioUI, ToolResultProps } from "@piomio/ui";
 
-let ui: OwlbotUI;
+let ui: PiomioUI;
 
 function Panel() {
   const time = ui.i18n.formatDate(Date.now(), { timeStyle: "short" });
@@ -168,7 +168,7 @@ ui.plugin.on("activity", (a) => view.update({ active: a.busy, agentId: a.agentId
 
 `attention` reopens the window (even if the user minimized or closed it) and highlights it; `userControl` keeps it open while the user drives. A plugin may register several live views and `dispose()` them at any time.
 
-Besides slots, `ui` offers `routes.add` (a full page, optionally in the navigation), `settings.section`, `commands.register` (the command palette), `toast`, `navigate`, `api` (the hub's REST API), `plugin` (`http`, `send` and `on` to talk to the plugin's own backend through `ctx.http`, `ctx.ui.onMessage` and `ctx.ui.emit`), `events.on` (realtime hub events) and `i18n`. `@owlbot/ui` also exports the components `Button`, `Card`, `Badge`, `EmptyState`, `Spinner` and `Markdown`, the hooks `useTasks` and `useHubEvent`, plus `api` and `locale`.
+Besides slots, `ui` offers `routes.add` (a full page, optionally in the navigation), `settings.section`, `commands.register` (the command palette), `toast`, `navigate`, `api` (the hub's REST API), `plugin` (`http`, `send` and `on` to talk to the plugin's own backend through `ctx.http`, `ctx.ui.onMessage` and `ctx.ui.emit`), `events.on` (realtime hub events) and `i18n`. `@piomio/ui` also exports the components `Button`, `Card`, `Badge`, `EmptyState`, `Spinner` and `Markdown`, the hooks `useTasks` and `useHubEvent`, plus `api` and `locale`.
 
 Build every builtin UI plugin with `npm run build:ui-plugins` (`plugins/*/ui/src/index.tsx` → `ui/dist/index.js`), or a single plugin with `node scripts/build-ui-plugins.mjs path/to/my-plugin`. Ship the built `ui/dist/index.js` with the plugin: installing does not build it.
 
@@ -176,11 +176,11 @@ Build every builtin UI plugin with `npm run build:ui-plugins` (`plugins/*/ui/src
 
 ## Localization
 
-Owlbot ships in English and Russian, and plugins follow the same rules. English is the source of truth and the fallback: a key missing in the reader's language falls back to English, then to the key itself.
+Piomio ships in English and Russian, and plugins follow the same rules. English is the source of truth and the fallback: a key missing in the reader's language falls back to English, then to the key itself.
 
 ### Catalogs
 
-Translations live in `.owlbot-plugin/locales/en.json` and `ru.json`: flat maps from key to string. A malformed file stops the plugin from loading. Strings use `{name}` placeholders and ICU-style plurals such as `{n, plural, one {# file} other {# files}}`, where `#` is the number formatted for the language and `=0 {…}` matches an exact value; Russian uses the categories `one`, `few`, `many` and `other`. `{kind, select, a {…} other {…}}` picks a branch by value.
+Translations live in `.piomio-plugin/locales/en.json` and `ru.json`: flat maps from key to string. A malformed file stops the plugin from loading. Strings use `{name}` placeholders and ICU-style plurals such as `{n, plural, one {# file} other {# files}}`, where `#` is the number formatted for the language and `=0 {…}` matches an exact value; Russian uses the categories `one`, `few`, `many` and `other`. `{kind, select, a {…} other {…}}` picks a branch by value.
 
 `en.json`:
 
@@ -266,11 +266,11 @@ brains: [claude-code@local, "api:anthropic"]
 You watch the weather forecast for the user's city and warn about rain a day ahead.
 ```
 
-A file in a plugin's `agents/` folder becomes an Owlbot agent only if its frontmatter has `brains:`.
+A file in a plugin's `agents/` folder becomes an Piomio agent only if its frontmatter has `brains:`.
 
 ### Checks
 
-`packages/core/test/i18n.test.ts` runs with `npm test`. It checks the core catalogs and every plugin under `plugins/` that has locales: each language must have exactly the English keys with the same placeholders, and every `"%key%"` in `plugin.json` must exist in `en.json`. For a plugin kept elsewhere, `catalogProblems(readPluginLayout(dir).messages)` from `@owlbot/shared` returns the same list of problems.
+`packages/core/test/i18n.test.ts` runs with `npm test`. It checks the core catalogs and every plugin under `plugins/` that has locales: each language must have exactly the English keys with the same placeholders, and every `"%key%"` in `plugin.json` must exist in `en.json`. For a plugin kept elsewhere, `catalogProblems(readPluginLayout(dir).messages)` from `@piomio/shared` returns the same list of problems.
 
 In tests, start the plugin in a given language with `startPlugin({ locale })` and switch it with `h.setLocale()`, which fires `ctx.i18n.onChange`:
 
@@ -281,10 +281,10 @@ h.setLocale("en");
 
 ## Tests
 
-`@owlbot/testkit` runs the plugin as a real process and plays the role of the core:
+`@piomio/testkit` runs the plugin as a real process and plays the role of the core:
 
 ```ts
-import { startPlugin } from "@owlbot/testkit";
+import { startPlugin } from "@piomio/testkit";
 
 const h = await startPlugin({ dir: "plugins/weather", settings: { city: "Berlin" } });
 expect(h.tools.has("forecast")).toBe(true);

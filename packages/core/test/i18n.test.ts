@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { catalogProblems, createRpcPeer, memoryTransportPair, readPluginLayout } from "@owlbot/shared";
+import { catalogProblems, createRpcPeer, memoryTransportPair, readPluginLayout } from "@piomio/shared";
 import { configureHubLocale, coreCatalog, LocalizedError, requestLocale, tFor } from "../src/i18n.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
 // Built-in plugins and integrations, the integration template included.
 const pluginDirs = ["plugins", "integrations"].flatMap((group) =>
   readdirSync(join(ROOT, group), { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(join(ROOT, group, e.name, ".owlbot-plugin", "plugin.json")))
+    .filter((e) => e.isDirectory() && existsSync(join(ROOT, group, e.name, ".piomio-plugin", "plugin.json")))
     .map((e) => join(ROOT, group, e.name)),
 );
 
@@ -39,7 +39,7 @@ describe("i18n catalogs", () => {
       const layout = readPluginLayout(dir);
       if (!Object.keys(layout.messages).length) return;
       expect(catalogProblems(layout.messages)).toEqual([]);
-      const raw = JSON.parse(readFileSync(join(dir, ".owlbot-plugin", "plugin.json"), "utf8"));
+      const raw = JSON.parse(readFileSync(join(dir, ".piomio-plugin", "plugin.json"), "utf8"));
       const missing = [...manifestRefs(raw)].filter((k) => !(k in (layout.messages.en ?? {})));
       expect(missing).toEqual([]);
     });
@@ -50,7 +50,7 @@ describe("i18n catalogs", () => {
     expect(e.message).toBe("Task not found");
     expect(e.localized("ru")).toBe("Задача не найдена");
     expect(tFor("ru")("cli.auditOk", { count: 5 })).toBe("Журнал цел: 5 записей");
-    expect(requestLocale({ headers: { "x-owlbot-locale": "ru" } } as any)).toBe("ru");
+    expect(requestLocale({ headers: { "x-piomio-locale": "ru" } } as any)).toBe("ru");
     expect(requestLocale({ headers: { "accept-language": "ru-RU,ru;q=0.9" } } as any)).toBe("ru");
   });
 

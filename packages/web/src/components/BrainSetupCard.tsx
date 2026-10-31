@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, CircleCheck, RefreshCw } from "lucide-react";
-import type { SetupState } from "@owlbot/shared";
+import type { SetupState } from "@piomio/shared";
 import { api, errorText } from "../lib/api";
 import { useStore } from "../lib/store";
 import { cliRows, introDue, newest, showGate } from "../lib/setup";

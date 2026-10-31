@@ -1,6 +1,6 @@
 // The team in the sidebar: order, and the route of each agent's dialog.
 
-import type { AgentDef, TeamMember } from "@owlbot/shared";
+import type { AgentDef, TeamMember } from "@piomio/shared";
 
 export interface TeamEntry {
   agent: Pick<AgentDef, "id" | "name">;

@@ -1,10 +1,10 @@
 # Agents that know themselves, the team, the time and the place
 
-Date: 2026-10-29. Status: built (hub main ea178af, owlbot-ios main 5a56a96).
+Date: 2026-10-29. Status: built (hub main ea178af, piomio-ios main 5a56a96).
 
 ## Why
 
-A photo critic agent was editing a shot in a task. The assistant asked it in a thread what it was doing, and it answered "nothing". Each brain session only knew itself. Owlbot's agents are meant to be a team of personalities: each one knows where it runs and what it is doing in all its sessions. It knows its teammates and what they are busy with, the time, and where the user is when the phone shares it. Talking to them should feel like talking to a person, and the interface stays minimal.
+A photo critic agent was editing a shot in a task. The assistant asked it in a thread what it was doing, and it answered "nothing". Each brain session only knew itself. Piomio's agents are meant to be a team of personalities: each one knows where it runs and what it is doing in all its sessions. It knows its teammates and what they are busy with, the time, and where the user is when the phone shares it. Talking to them should feel like talking to a person, and the interface stays minimal.
 
 ## What agents get
 
@@ -34,7 +34,7 @@ The system prompt says all sessions are one person and the block is current. `ta
 - mode `walk`, `drive`, `bike` or `transit`;
 - the stops as marker indexes, all markers in order by default.
 
-The hub asks OSRM for walking, driving and cycling lines (OpenStreetMap Germany's servers, `OWLBOT_ROUTER_URL`). It simplifies the line to at most 400 points and stores length and time. Transit, and any route the router could not find, is drawn straight between the stops, and the tool result says so.
+The hub asks OSRM for walking, driving and cycling lines (OpenStreetMap Germany's servers, `PIOMIO_ROUTER_URL`). It simplifies the line to at most 400 points and stores length and time. Transit, and any route the router could not find, is drawn straight between the stops, and the tool result says so.
 
 The card is minimal:
 - the map and one caption line: title, then length and time or the way of travel;

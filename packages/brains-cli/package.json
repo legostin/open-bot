@@ -1,5 +1,5 @@
 {
-  "name": "@owlbot/brains-cli",
+  "name": "@piomio/brains-cli",
   "version": "0.1.0",
   "private": true,
   "type": "module",

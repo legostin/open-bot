@@ -7,7 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
-import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import { startPlugin, type PluginHarness } from "@piomio/testkit";
 import { approvalOf, effectOf, resultText, specOf, toolName } from "../server/tools.ts";
 
 const dir = join(import.meta.dirname, "..");
@@ -152,7 +152,7 @@ describe("the Composio integration", () => {
     await new Promise<void>((r) => fake.server.listen(0, "127.0.0.1", r));
     h = await startPlugin({
       dir,
-      env: { OWLBOT_COMPOSIO_API: `http://127.0.0.1:${(fake.server.address() as any).port}/api/v3.1`, OWLBOT_COMPOSIO_POLL_MS: "30", OWLBOT_COMPOSIO_GRACE_MS: "1" },
+      env: { PIOMIO_COMPOSIO_API: `http://127.0.0.1:${(fake.server.address() as any).port}/api/v3.1`, PIOMIO_COMPOSIO_POLL_MS: "30", PIOMIO_COMPOSIO_GRACE_MS: "1" },
     });
   });
 
@@ -198,7 +198,7 @@ describe("the Composio integration", () => {
     const { url } = await h.catalogSignIn("slack");
     expect(url).toBe("https://connect.composio.dev/link/ln_1");
     expect(fake.authConfigs).toEqual([{ toolkit: { slug: "slack" }, auth_config: { type: "use_composio_managed_auth" } }]);
-    expect(fake.links[0]).toMatchObject({ auth_config_id: "ac_slack_1", user_id: expect.stringMatching(/^owlbot-[0-9a-f-]{36}$/) });
+    expect(fake.links[0]).toMatchObject({ auth_config_id: "ac_slack_1", user_id: expect.stringMatching(/^piomio-[0-9a-f-]{36}$/) });
     expect(entry("slack")).toMatchObject({ status: "needs-setup", connect: "signin", detail: "%detail.waiting%" });
 
     fake.accounts.get("ca_1")!.status = "ACTIVE";

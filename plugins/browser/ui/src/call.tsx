@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import type { CSSProperties } from "react";
-import { Badge, Spinner } from "@owlbot/ui";
-import type { ToolResultProps } from "@owlbot/ui";
+import { Badge, Spinner } from "@piomio/ui";
+import type { ToolResultProps } from "@piomio/ui";
 import { cut, LABELED, t } from "./host.ts";
 
 const C: Record<string, CSSProperties> = {

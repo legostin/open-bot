@@ -49,7 +49,7 @@ Files: `packages/core/src/notifier.ts` (`flushDigest` runs `digest.compose`, sen
 - [ ] test with a fake plugin hook; commit.
 
 ### Task 5: Google Calendar plugin
-Files: `plugins/google-calendar/{package.json,.owlbot-plugin/plugin.json,.owlbot-plugin/locales/{en,ru}.json,
+Files: `plugins/google-calendar/{package.json,.piomio-plugin/plugin.json,.piomio-plugin/locales/{en,ru}.json,
 server/index.ts,server/api.ts,server/time.ts,test/*.test.ts}`; root `package.json` workspaces already include plugins/*.
 - [ ] unit (time zones, formatting), plugin tests with the testkit (fake Calendar API, fake `connections.token`); commit.
 

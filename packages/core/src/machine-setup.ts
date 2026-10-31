@@ -2,8 +2,8 @@
 // gateway spent (docs/superpowers/specs/2026-10-30-cluster-design.md, "Machines as a pool"). Keys stay in the vault:
 // a machine gets them in node.setup, into its daemon's memory only.
 
-import type { MachineBrainId, MachineModel, MachineSettings, MachineSetupView, MachineUsage, NodeSetup } from "@owlbot/shared";
-import { brainWire, KEY_PROVIDERS, keyProvider, nowIso } from "@owlbot/shared";
+import type { MachineBrainId, MachineModel, MachineSettings, MachineSetupView, MachineUsage, NodeSetup } from "@piomio/shared";
+import { brainWire, KEY_PROVIDERS, keyProvider, nowIso } from "@piomio/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import type { AuditLog } from "./audit.ts";

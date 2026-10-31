@@ -66,7 +66,7 @@ type SetupStep = "telegram" | "backupBrain" | "machines" | "profile";
   with `%VAR%` expanded, so a CLI installed after login is found without logging out.
 
 Brain hosts get these directories after their own PATH and before `<data>/tools`, so a CLI the user installed wins over
-one the hub installed (the existing rule in `cli-tools.ts`). It is read on desktop installs only (`OWLBOT_INSTALL_CLIS=1`:
+one the hub installed (the existing rule in `cli-tools.ts`). It is read on desktop installs only (`PIOMIO_INSTALL_CLIS=1`:
 a hub started from launchd or a tray app has a short PATH, a terminal's `npm start` does not), at hub start and again
 on the card's **Check again**; when it changed, the brain plugins restart. Under user isolation (Docker) nothing
 changes: the image brings the CLIs.
@@ -127,7 +127,7 @@ continue setup").
 | --- | --- | --- |
 | Telegram | Links @BotFather, explains how to get the token; the card's secure field takes it (the vault is created inside this card when absent, with "open automatically"); then asks the user to message the bot and checks it is connected | `plugin_setup` (telegram), `plugins_list` |
 | Backup brain (optional) | If a second CLI is installed but not signed in, offers it as the fallback for limits | `brain_login`, `brains_list` |
-| Other computers (optional) | Gives a pairing code and the `owlbot://pair?...` link for the desktop app on another computer | `machine_pairing_code` |
+| Other computers (optional) | Gives a pairing code and the `piomio://pair?...` link for the desktop app on another computer | `machine_pairing_code` |
 | Profile | Asks how to address the user, which language and what to help with, then updates itself | `profile_update` |
 
 The vault is not a step of its own: it is created inside the first card that needs a secret, which `VaultGate`

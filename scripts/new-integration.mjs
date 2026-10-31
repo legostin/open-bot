@@ -30,13 +30,13 @@ renameSync(join(target, "test", "sun.test.ts"), join(target, "test", `${id}.test
 
 const edit = (file, fn) => writeFileSync(file, `${JSON.stringify(fn(JSON.parse(readFileSync(file, "utf8"))), null, 2)}\n`);
 const name = id.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
-edit(join(target, ".owlbot-plugin", "plugin.json"), (m) => ({ ...m, id }));
-edit(join(target, "package.json"), (p) => ({ ...p, name: `@owlbot/plugin-${id}`, description: name }));
-for (const locale of ["en", "ru"]) edit(join(target, ".owlbot-plugin", "locales", `${locale}.json`), (l) => ({ ...l, name }));
+edit(join(target, ".piomio-plugin", "plugin.json"), (m) => ({ ...m, id }));
+edit(join(target, "package.json"), (p) => ({ ...p, name: `@piomio/plugin-${id}`, description: name }));
+for (const locale of ["en", "ru"]) edit(join(target, ".piomio-plugin", "locales", `${locale}.json`), (l) => ({ ...l, name }));
 
 console.log(`integrations/${id} is ready: it still does sunrise and sunset. Make it yours:
-  1. .owlbot-plugin/plugin.json: the catalog card, permissions, widgets
-  2. .owlbot-plugin/locales/{en,ru}.json: the texts people read
+  1. .piomio-plugin/plugin.json: the catalog card, permissions, widgets
+  2. .piomio-plugin/locales/{en,ru}.json: the texts people read
   3. server/index.ts: the tools;  ui/src/index.tsx: the card in the chat
   4. test/${id}.test.ts, then: npx vitest run integrations/${id}
 The guide: integrations/_template/SKILL.md. Run npm install once so the workspace links the new folder.`);

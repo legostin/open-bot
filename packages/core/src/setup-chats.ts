@@ -2,7 +2,7 @@
 // writes its first question, so the answer is instant) and makes the thing from the talk. The chat then becomes what
 // it made: a channel keeps it as its settings chat, a new agent's dialog takes over. Chats that made nothing go after
 // a day.
-import type { AgentDraft, Conversation, Locale, SetupPurpose } from "@owlbot/shared";
+import type { AgentDraft, Conversation, Locale, SetupPurpose } from "@piomio/shared";
 import type { Store } from "./store.ts";
 import type { EventBus } from "./bus.ts";
 import type { Settings } from "./settings.ts";

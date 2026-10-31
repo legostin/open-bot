@@ -1,7 +1,7 @@
 // Routes along roads and paths for show_map. The hub asks OSRM (by default the public servers of OpenStreetMap
 // Germany, FOSSGIS: car, bike and foot profiles) for the line, its length and time. Public transport has no free
 // router: its line is straight between the stops, and the map's "Open in…" links let a maps app plan it.
-import type { RouteMode } from "@owlbot/shared";
+import type { RouteMode } from "@piomio/shared";
 
 const PROFILE: Record<Exclude<RouteMode, "transit">, string> = { walk: "routed-foot", drive: "routed-car", bike: "routed-bike" };
 /** Points kept in a route's line: enough for a smooth line at street level, small enough for a message. */
@@ -19,7 +19,7 @@ export async function roadRoute(base: string, mode: Exclude<RouteMode, "transit"
   const coords = stops.map(([lat, lon]) => `${lon},${lat}`).join(";");
   const url = `${base}/${PROFILE[mode]}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
   try {
-    const r = await fetchImpl(url, { headers: { "user-agent": "Owlbot (self-hosted personal agent hub)" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const r = await fetchImpl(url, { headers: { "user-agent": "Piomio (self-hosted personal agent hub)" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!r.ok) return { error: `the router answered ${r.status}` };
     const j = (await r.json()) as { code?: string; message?: string; routes?: Array<{ distance: number; duration: number; geometry?: { coordinates?: Array<[number, number]> } }> };
     const best = j.routes?.[0];

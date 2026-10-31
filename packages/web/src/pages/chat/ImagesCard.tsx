@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
-import type { ImageItem } from "@owlbot/shared";
+import type { ImageItem } from "@piomio/shared";
 import { activeSlide, mediaSrc } from "../../lib/media";
 import { partKey } from "../../lib/gallery";
 import { openViewer } from "../../state/viewer";

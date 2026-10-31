@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CatalogSection, CatalogView, IntegrationView } from "@owlbot/shared";
+import type { CatalogSection, CatalogView, IntegrationView } from "@piomio/shared";
 import { chatStep, filterCatalog, findEntry, hasSwitch, hueOf, isOn, popularEntries, rowState } from "./catalog";
 
 const v = (over: Partial<IntegrationView>): IntegrationView => ({ id: "x", name: "X", summary: "", category: "everyday", icon: "puzzle", connect: "none", status: "connected", ...over });

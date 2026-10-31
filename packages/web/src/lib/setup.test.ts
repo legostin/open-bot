@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Message, SetupBrain, SetupState } from "@owlbot/shared";
+import type { Message, SetupBrain, SetupState } from "@piomio/shared";
 import { cliRows, introDue, newest, primaryRef, showGate } from "./setup";
 
 const brain = (ref: string, o: Partial<SetupBrain> = {}): SetupBrain => ({ ref, label: ref, kind: "cli", installed: false, signedIn: false, canInstall: false, ...o });

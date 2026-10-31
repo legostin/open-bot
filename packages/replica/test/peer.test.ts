@@ -24,7 +24,7 @@ describe("replica requests", () => {
 
   describe("pinned TLS", () => {
     const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
-    const der = selfSignedCertificate(publicKey, privateKey, "Owlbot hub test");
+    const der = selfSignedCertificate(publicKey, privateKey, "Piomio hub test");
     const cert = `-----BEGIN CERTIFICATE-----\n${der.toString("base64").replace(/(.{64})/g, "$1\n")}\n-----END CERTIFICATE-----\n`;
     let server: Server;
     let url = "";

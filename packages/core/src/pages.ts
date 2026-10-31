@@ -7,8 +7,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { transform } from "sucrase";
-import type { Locale, PageView } from "@owlbot/shared";
-import { newId, nowIso, pageModuleAllowed, PAGE_MODULES, truncate } from "@owlbot/shared";
+import type { Locale, PageView } from "@piomio/shared";
+import { newId, nowIso, pageModuleAllowed, PAGE_MODULES, truncate } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 
@@ -77,7 +77,7 @@ function cover(v: unknown): string | undefined {
 }
 
 /**
- * The page's TSX compiled to the script the kit runs: CommonJS (sucrase) wrapped as `owlbotPage(function …)`.
+ * The page's TSX compiled to the script the kit runs: CommonJS (sucrase) wrapped as `piomioPage(function …)`.
  * Syntax errors and imports the kit does not have come back as a PageError the agent can act on.
  */
 export function compilePage(code: string): string {
@@ -93,7 +93,7 @@ export function compilePage(code: string): string {
       `Pages cannot import ${[...new Set(missing)].map((m) => `"${m}"`).join(", ")}. Available: ${PAGE_MODULES.join(", ")} and the shadcn/ui paths "@/components/ui/<name>".`,
     );
   }
-  return `owlbotPage(function (require, exports, module) {\n${out}\n});\n`;
+  return `piomioPage(function (require, exports, module) {\n${out}\n});\n`;
 }
 
 function sameToken(a: string, b: string): boolean {
@@ -114,6 +114,24 @@ export class Pages {
   constructor(d: PagesDeps) {
     this.d = d;
     mkdirSync(d.dir, { recursive: true });
+    this.adoptOwlbotPages();
+  }
+
+  /** Pages made while Piomio was Owlbot (until 2026-10-31) import "@owlbot/…": their code moves to the new names. */
+  private adoptOwlbotPages(): void {
+    for (const id of readdirSync(this.d.dir)) {
+      const js = join(this.d.dir, id, "page.js");
+      if (!existsSync(js) || !readFileSync(js, "utf8").startsWith("owlbotPage(")) continue;
+      try {
+        // The source first: a stop before the script is written just does this again.
+        const code = readFileSync(join(this.d.dir, id, "page.tsx"), "utf8").replaceAll("@owlbot/", "@piomio/");
+        writeFileSync(join(this.d.dir, id, "page.tsx"), code);
+        writeFileSync(js, compilePage(code));
+        this.d.db.prepare("update pages set version = version + 1 where id = ?").run(id);
+      } catch (e) {
+        console.error(`[pages] ${id}: ${(e as Error).message}`);
+      }
+    }
   }
 
   create(input: PageInput, by: { agentId: string; conversationId?: string }): PageView {
@@ -237,7 +255,7 @@ export class Pages {
       `<link rel="stylesheet" href="${kit.base}kit.css">`,
       `<style type="text/tailwindcss">${kit.theme}</style>`,
       `<script src="${kit.base}tailwind.js"></script>`,
-      `<script type="application/json" id="owlbot-page">${json}</script>`,
+      `<script type="application/json" id="piomio-page">${json}</script>`,
       "</head>",
       "<body>",
       '<div id="root"></div>',

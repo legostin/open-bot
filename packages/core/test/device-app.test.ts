@@ -35,7 +35,7 @@ function phoneRequest(port: number, fingerprint: string, method: string, path: s
         path,
         method,
         rejectUnauthorized: false,
-        headers: { ...(data ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), "x-owlbot-locale": "en" },
+        headers: { ...(data ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), "x-piomio-locale": "en" },
       },
       (res) => {
         const raw = (res.socket as any).getPeerCertificate().raw as Buffer;
@@ -130,7 +130,7 @@ describe("device port", () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     devicePort = await freePort();
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_DEVICE_PORT: String(devicePort), OWLBOT_DEVICE_HOST: "127.0.0.1", OWLBOT_DEVICE_URLS: `https://127.0.0.1:${devicePort}`, TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), PIOMIO_DEVICE_PORT: String(devicePort), PIOMIO_DEVICE_HOST: "127.0.0.1", PIOMIO_DEVICE_URLS: `https://127.0.0.1:${devicePort}`, TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-dev-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
     );
     hub = new Hub(config);
@@ -157,7 +157,7 @@ describe("device port", () => {
     expect(pairing.qrSvg).toMatch(/^<svg/);
     const fp = link.fingerprint;
 
-    expect((await phoneRequest(devicePort, fp, "GET", "/api/device/hello")).json).toMatchObject({ owlbot: true });
+    expect((await phoneRequest(devicePort, fp, "GET", "/api/device/hello")).json).toMatchObject({ piomio: true });
     expect((await phoneRequest(devicePort, fp, "GET", "/api/team")).status).toBe(401);
 
     const key = phoneKey();
@@ -214,7 +214,7 @@ describe("device port", () => {
     expect(signIn.status).toBe(303);
     expect(signIn.headers.location).toBe("/m/chat/abc");
     const setCookie = String(signIn.headers["set-cookie"]);
-    expect(setCookie).toMatch(/owlbot_device=.+HttpOnly/i);
+    expect(setCookie).toMatch(/piomio_device=.+HttpOnly/i);
     expect(setCookie).toMatch(/SameSite=Strict/i);
     const cookie = setCookie.split(";")[0];
     // A ticket works once.
@@ -272,11 +272,11 @@ describe("device port", () => {
   });
 });
 
-describe("device port closed by OWLBOT_DEVICES=0", () => {
+describe("device port closed by PIOMIO_DEVICES=0", () => {
   it("does not listen, and pairing needs the link", async () => {
     const [port, consolePort, egressPort, devicePort] = [await freePort(), await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_DEVICE_PORT: String(devicePort), OWLBOT_DEVICE_HOST: "127.0.0.1", OWLBOT_DEVICES: "0", TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), PIOMIO_DEVICE_PORT: String(devicePort), PIOMIO_DEVICE_HOST: "127.0.0.1", PIOMIO_DEVICES: "0", TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-dev-off-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents"), plugins: "none" },
     );
     const hub = new Hub(config);

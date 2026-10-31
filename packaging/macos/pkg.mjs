@@ -1,5 +1,5 @@
-// The silent macOS package around the desktop app: the same Owlbot.app into /Applications, for installs over SSH
-// or MDM (`sudo installer -pkg owlbot-<version>.pkg -target /`). pkgbuild and productbuild ship with macOS.
+// The silent macOS package around the desktop app: the same Piomio.app into /Applications, for installs over SSH
+// or MDM (`sudo installer -pkg piomio-<version>.pkg -target /`). pkgbuild and productbuild ship with macOS.
 
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
@@ -31,7 +31,7 @@ export function buildPkg({ appBundle, build, out }) {
     copyFileSync(join(HERE, "scripts", f), join(scripts, f));
     chmodSync(join(scripts, f), 0o755);
   }
-  const componentPkg = "owlbot-app.pkg";
+  const componentPkg = "piomio-app.pkg";
   run("pkgbuild", ["--root", root, "--install-location", "/", "--identifier", PKG_ID, "--version", VERSION, "--scripts", scripts, "--component-plist", comp, join(build, componentPkg)]);
 
   // Product archive with the English and Russian Installer pages.

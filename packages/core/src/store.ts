@@ -1,8 +1,8 @@
 // Repositories for conversations, messages, tasks and brain sessions.
 
 import { createHash, randomBytes } from "node:crypto";
-import type { Conversation, Message, MessagePart, Task, TaskStatus } from "@owlbot/shared";
-import { newId, nowIso, parseThinkingChoice } from "@owlbot/shared";
+import type { Conversation, Message, MessagePart, Task, TaskStatus } from "@piomio/shared";
+import { newId, nowIso, parseThinkingChoice } from "@piomio/shared";
 import { json, type Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
 import { t } from "./i18n.ts";

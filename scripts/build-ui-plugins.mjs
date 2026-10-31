@@ -1,5 +1,5 @@
 // Build UI modules of builtin plugins: {plugins,integrations}/<id>/ui/src/index.tsx → …/<id>/ui/dist/index.js
-// React, ReactDOM and @owlbot/ui stay external: the host provides them through the import map.
+// React, ReactDOM and @piomio/ui stay external: the host provides them through the import map.
 // Usage: node scripts/build-ui-plugins.mjs [pluginDir ...]   (default: every plugins/* and integrations/* with ui/src)
 
 import { existsSync, readdirSync } from "node:fs";
@@ -12,7 +12,7 @@ const dirs =
     ? process.argv.slice(2).map((d) => resolve(d))
     : ["plugins", "integrations"].flatMap((group) => readdirSync(join(root, group)).map((d) => join(root, group, d)));
 
-const EXTERNAL = ["react", "react/jsx-runtime", "react-dom", "react-dom/client", "@owlbot/ui"];
+const EXTERNAL = ["react", "react/jsx-runtime", "react-dom", "react-dom/client", "@piomio/ui"];
 let built = 0;
 for (const dir of dirs) {
   const entry = ["index.tsx", "index.ts", "index.jsx", "index.js"].map((f) => join(dir, "ui", "src", f)).find(existsSync);

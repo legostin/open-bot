@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
-import { chmodSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export type Db = DatabaseSync;
 
@@ -110,6 +110,20 @@ const MIGRATIONS: string[] = [
   // A secret card may ask for a site's login (username and password, kept for that domain): { domain, username? }.
   `alter table secret_requests add column login text;`,
 ];
+
+/**
+ * The hub's database in its data dir. The project was Owlbot until 2026-10-31 and the file owlbot.db: a hub that finds
+ * only that one takes it over under the new name, its -wal and -shm first, so a stop midway loses nothing.
+ */
+export function hubDbFile(dataDir: string): string {
+  const file = join(dataDir, "piomio.db");
+  const old = join(dataDir, "owlbot.db");
+  if (!existsSync(file) && existsSync(old)) {
+    for (const s of ["-wal", "-shm"]) if (existsSync(old + s)) renameSync(old + s, file + s);
+    renameSync(old, file);
+  }
+  return file;
+}
 
 export function openDb(file: string): Db {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });

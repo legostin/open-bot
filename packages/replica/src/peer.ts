@@ -14,7 +14,7 @@ export interface ReplicaKey {
   secretKey: string;
 }
 
-export const REPLICA_AUTH = "OwlbotReplica";
+export const REPLICA_AUTH = "PiomioReplica";
 /** How far a request's clock may be from ours. */
 const WINDOW_MS = 60_000;
 

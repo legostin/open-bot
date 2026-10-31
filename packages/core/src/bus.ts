@@ -1,6 +1,6 @@
 // In-process event bus. Web clients and plugin subscribers are attached by the server and plugin host.
 
-import type { AgentDraft, BrainLoginState, DeviceNetwork, Feed, FeedPost, GroupChat, InviteUsed, MachineActivity, PageView, RemoteView, ReplicaState, TeamMember, UiEvent } from "@owlbot/shared";
+import type { AgentDraft, BrainLoginState, DeviceNetwork, Feed, FeedPost, GroupChat, InviteUsed, MachineActivity, PageView, RemoteView, ReplicaState, TeamMember, UiEvent } from "@piomio/shared";
 
 export type BusEvents = {
   "message.created": any;

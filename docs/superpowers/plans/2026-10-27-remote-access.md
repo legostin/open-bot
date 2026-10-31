@@ -21,7 +21,7 @@ Spec: `docs/superpowers/specs/2026-10-27-remote-access-design.md`.
   `packages/web/src/i18n/{en,ru}.ts`); text for the model, code and comments are English.
 - Requests from the link never reach the computer's own port; the security console never gets a gateway.
 - The node's keys live in `<data>/tailnet/` (0700); nothing about it goes into settings or env except
-  `OWLBOT_TAILNET_BIN` and `OWLBOT_TAILNET_HOSTNAME` (dev/test only).
+  `PIOMIO_TAILNET_BIN` and `PIOMIO_TAILNET_HOSTNAME` (dev/test only).
 - The node disables Tailscale log upload (`TS_NO_LOGS_NO_SUPPORT=true`).
 - Funnel ports: web on 443, phones on 8443.
 
@@ -38,8 +38,8 @@ export interface RemoteView {
   available: boolean;          // the node binary exists
   enabled: boolean;            // the switch (settings.remoteAccess)
   state: RemoteState;
-  url?: string;                // https://owlbot.<tailnet>.ts.net
-  deviceUrl?: string;          // https://owlbot.<tailnet>.ts.net:8443
+  url?: string;                // https://piomio.<tailnet>.ts.net
+  deviceUrl?: string;          // https://piomio.<tailnet>.ts.net:8443
   authUrl?: string;            // needs-login
   enableUrl?: string;          // needs-funnel
   account?: string;            // the tailnet login name
@@ -82,7 +82,7 @@ then `{type:"logout"}`; stdout `State{Type:"state", State, URL, DeviceURL, AuthU
 - [ ] Implement; `go test ./...` passes; `go vet`.
 - [ ] `scripts/build-tailnet.mjs [--all]`: host target by default, all five with `--all`;
   `go build -trimpath -ldflags "-s -w"` with `CGO_ENABLED=0`, `GOOS`/`GOARCH` into
-  `packages/tailnet/bin/<platform>-<arch>/owlbot-tailnet[.exe]`. Commit.
+  `packages/tailnet/bin/<platform>-<arch>/piomio-tailnet[.exe]`. Commit.
 
 ### Task 3: `RemoteAccess` in the core
 
@@ -157,10 +157,10 @@ the Devices and Machines pages, `packages/web/src/i18n/{en,ru}.ts`.
 
 ### Task 6: iOS app
 
-**Files:** `~/claude-projects/owlbot-ios/OwlbotKit/Sources/OwlbotKit/{HubClient,HubSession}.swift`, its tests.
+**Files:** `~/claude-projects/piomio-ios/PiomioKit/Sources/PiomioKit/{HubClient,HubSession}.swift`, its tests.
 - `HubClient.addresses() async throws -> [URL]` (`GET /api/devices/addresses`); after `refresh()` in the run loop,
   `HubSession` merges them: `paired.urls = new` when different, save.
-- [ ] Test the decode; `swift test` in OwlbotKit; commit there.
+- [ ] Test the decode; `swift test` in PiomioKit; commit there.
 
 ### Task 7: Shipping and docs
 
@@ -169,11 +169,11 @@ the Devices and Machines pages, `packages/web/src/i18n/{en,ru}.ts`.
 - stage: copy `packages/tailnet/bin/<target>` (darwin: arm64 + x64; win-x64) into the app tree; fail clearly when
   missing. Workflow: `actions/setup-go` with `go-version-file: packages/tailnet/go.mod`, `npm run build:tailnet -- --all`.
 - Dockerfile: `FROM golang:1.27-bookworm AS tailnet` builds the Linux binary; copied into `/app/packages/tailnet/bin/linux-<arch>/`.
-- READMEs: "Access from anywhere" section; `build:tailnet`; env `OWLBOT_TAILNET_BIN`.
+- READMEs: "Access from anywhere" section; `build:tailnet`; env `PIOMIO_TAILNET_BIN`.
 - [ ] Implement; `node packaging/desktop/stage.mjs --target darwin --skip-build` stages the binaries; commit.
 
 ### Task 8: Live check
 
-- [ ] Build the node; a throwaway hub with `OWLBOT_TAILNET_HOSTNAME=owlbot-dev` in the browser pane: the card
+- [ ] Build the node; a throwaway hub with `PIOMIO_TAILNET_HOSTNAME=piomio-dev` in the browser pane: the card
   walks to "Sign in to Tailscale" with a real login URL. Signing in and allowing Funnel is the user's step; after
   it: the link opens the sign-in page from outside, the device port answers through `:8443`.

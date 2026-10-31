@@ -1,5 +1,5 @@
 //! The app's own settings (<app config dir>/settings.json; no file means the first run) and the machine daemon's
-//! pairing in ~/.owlbot-node, written by `owlbot-node pair`.
+//! pairing in ~/.piomio-node, written by `piomio-node pair`.
 
 use std::fs;
 use std::io;

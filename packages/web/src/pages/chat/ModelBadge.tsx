@@ -3,8 +3,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Cpu } from "lucide-react";
-import type { Message } from "@owlbot/shared";
-import { modelLabel } from "@owlbot/shared/models";
+import type { Message } from "@piomio/shared";
+import { modelLabel } from "@piomio/shared/models";
 import { useStore } from "../../lib/store";
 import { brains, ensureBrains, findBrain } from "../../state/brains";
 import { effortName } from "../../state/thinking";

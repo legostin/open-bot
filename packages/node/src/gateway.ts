@@ -6,8 +6,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { randomBytes } from "node:crypto";
-import { KEY_PROVIDERS, brainWire, cheapestModel, costOf } from "@owlbot/shared";
-import type { CallTokens, KeyProvider, KeyWire, MachineBrainId, MachineModel, MachineUsage } from "@owlbot/shared";
+import { KEY_PROVIDERS, brainWire, cheapestModel, costOf } from "@piomio/shared";
+import type { CallTokens, KeyProvider, KeyWire, MachineBrainId, MachineModel, MachineUsage } from "@piomio/shared";
 
 export interface GatewaySetup {
   wires: Partial<Record<KeyWire, { models: MachineModel[]; providers: Array<{ id: string; key: string }> }>>;

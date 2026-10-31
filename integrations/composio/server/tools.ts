@@ -2,7 +2,7 @@
 // to the world (a read only when Composio tags it readOnlyHint; anything else asks), and its spec.
 
 import { createHash } from "node:crypto";
-import type { ToolEffect, ToolSpec } from "@owlbot/shared";
+import type { ToolEffect, ToolSpec } from "@piomio/shared";
 import type { ComposioTool } from "./api.ts";
 
 /** Longest short name: the hub adds "composio_" and a tool name is at most 64 characters. */

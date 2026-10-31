@@ -2,8 +2,8 @@
 // article's summary as a card in the chat (widget "article": picture, title, the opening paragraphs, a link) and gives
 // the model the text, the whole article when asked; wikipedia_search lists matching articles.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
 
 interface Settings {
   /** The wiki's address with "{lang}" for the language (tests point it at a fake). */
@@ -23,7 +23,7 @@ export interface ArticleCard {
 const LANG = /^[a-z]{2,3}(-[a-z]{2,8})?$/;
 const MAX_FULL_CHARS = 16_000;
 const MAX_RESULTS = 10;
-const USER_AGENT = "Owlbot/0.1 (self-hosted personal agent; wikipedia plugin)";
+const USER_AGENT = "Piomio/0.1 (self-hosted personal agent; wikipedia plugin)";
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 

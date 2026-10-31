@@ -1,8 +1,8 @@
 // Builtin plugin "web": web_fetch (readable page content), web_search (several providers) and web_rss (RSS and Atom
 // feeds, found from a site's page too). All are sources: their results come from the internet and taint the session.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
 import { guardedFetch, DEFAULT_USER_AGENT, MAX_BYTES } from "./fetch.ts";
 import { extractHtml, type TextFormat } from "./extract.ts";
 import { searchInBrowser, webSearch, type SearchSettings } from "./search.ts";

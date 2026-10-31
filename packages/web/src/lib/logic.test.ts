@@ -9,7 +9,7 @@ import { mergeClasses } from "./classes";
 import { stickAfterScroll } from "./stick";
 import { sectionForPath } from "../components/nav";
 import { agentForPath, agentPath, teamOrder } from "./team";
-import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, parseAvatar } from "@owlbot/shared/avatar";
+import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, parseAvatar } from "@piomio/shared/avatar";
 
 describe("glob", () => {
   it("matches * and ? case-insensitively", () => {

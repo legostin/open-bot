@@ -5,8 +5,8 @@ import { mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentDef, MachineActivity, Message } from "@owlbot/shared";
-import { parseMentions } from "@owlbot/shared";
+import type { AgentDef, MachineActivity, Message } from "@piomio/shared";
+import { parseMentions } from "@piomio/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { openDb } from "../src/db.ts";
 import { EventBus } from "../src/bus.ts";
@@ -105,7 +105,7 @@ describe("group chats (integration)", () => {
   beforeAll(async () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-group-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
@@ -387,7 +387,7 @@ describe("group chats (storage)", () => {
   });
 
   it("adds the members column to an older database, keeping its conversations", () => {
-    const file = join(mkdtempSync(join(tmpdir(), "owl-group-db-")), "owlbot.db");
+    const file = join(mkdtempSync(join(tmpdir(), "owl-group-db-")), "piomio.db");
     const old = openDb(file);
     // Schema 6: phones' devices, before group chats.
     old.exec("alter table conversations drop column members; alter table tasks drop column question; alter table tasks drop column kind; alter table tasks drop column tainted; alter table tasks drop column from_agent; drop table invites; drop table feeds; drop table feed_posts; alter table tasks drop column feed_id; alter table conversations drop column purpose; alter table conversations drop column entity; drop table pages; alter table approvals drop column ask; alter table tasks drop column thinking; alter table messages drop column model; alter table messages drop column effort; drop table machine_settings; drop table machine_spend; drop table replicas; alter table secret_requests drop column login; update schema_version set v = 6;");
@@ -402,7 +402,7 @@ describe("group chats (storage)", () => {
   });
 
   it("repairs a database from the desktop builds that ran the group chats' migration before the phones' one", () => {
-    const file = join(mkdtempSync(join(tmpdir(), "owl-group-db-")), "owlbot.db");
+    const file = join(mkdtempSync(join(tmpdir(), "owl-group-db-")), "piomio.db");
     const old = openDb(file);
     // What those builds left: version 6 with the members column, no phones' tables.
     old.exec("drop table devices; drop table device_pairing_codes; alter table tasks drop column question; alter table tasks drop column kind; alter table tasks drop column tainted; alter table tasks drop column from_agent; drop table invites; drop table feeds; drop table feed_posts; alter table tasks drop column feed_id; alter table conversations drop column purpose; alter table conversations drop column entity; drop table pages; alter table approvals drop column ask; alter table tasks drop column thinking; alter table messages drop column model; alter table messages drop column effort; drop table machine_settings; drop table machine_spend; drop table replicas; alter table secret_requests drop column login; update schema_version set v = 6;");

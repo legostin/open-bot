@@ -5,7 +5,7 @@ import http from "node:http";
 import net from "node:net";
 import { lookup } from "node:dns/promises";
 import { randomBytes } from "node:crypto";
-import { hostMatches } from "@owlbot/shared";
+import { hostMatches } from "@piomio/shared";
 import type { AuditLog } from "./audit.ts";
 
 const PRIVATE_V4: Array<[string, number]> = [
@@ -127,7 +127,7 @@ export class EgressProxy {
       const verdict = this.allowed(token, target.hostname);
       if (!verdict.ok) {
         this.logDeny(verdict.owner, target.hostname);
-        res.writeHead(token ? 403 : 407, { "proxy-authenticate": "Basic realm=owlbot" }).end(`egress to ${target.hostname} is not allowed`);
+        res.writeHead(token ? 403 : 407, { "proxy-authenticate": "Basic realm=piomio" }).end(`egress to ${target.hostname} is not allowed`);
         return;
       }
       const headers = { ...req.headers };
@@ -171,7 +171,7 @@ export class EgressProxy {
       const verdict = this.allowed(token, host);
       if (!verdict.ok) {
         this.logDeny(verdict.owner, host);
-        clientSocket.end(`HTTP/1.1 ${token ? "403 Forbidden" : "407 Proxy Authentication Required"}\r\nProxy-Authenticate: Basic realm=owlbot\r\n\r\n`);
+        clientSocket.end(`HTTP/1.1 ${token ? "403 Forbidden" : "407 Proxy Authentication Required"}\r\nProxy-Authenticate: Basic realm=piomio\r\n\r\n`);
         return;
       }
       this.resolveTarget(host).then(

@@ -1,7 +1,7 @@
 // Links to Yandex Maps and 2GIS (https, so a phone opens the app when it is installed, else the website).
 // Yandex: https://yandex.com/dev/yandex-apps-launch-maps/doc/en/concepts/yandexmaps-web — rtext takes lat,lon stops
 // joined with "~", rtt the way of travel. 2GIS: routeSearch from one point to another, longitude first.
-import type { MapAppContribution, MapAppPlace, MapAppRoute } from "@owlbot/ui";
+import type { MapAppContribution, MapAppPlace, MapAppRoute } from "@piomio/ui";
 
 type Links = Pick<MapAppContribution, "place" | "route">;
 type Mode = MapAppRoute["mode"];

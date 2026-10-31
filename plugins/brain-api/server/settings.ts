@@ -1,6 +1,6 @@
 // Plugin settings (defaults applied here: the hub stores only what the user changed) and API variants.
 
-import type { ProbeResult } from "@owlbot/shared";
+import type { ProbeResult } from "@piomio/shared";
 
 export interface ApiSettings {
   defaultVariant: string;

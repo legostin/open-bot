@@ -3,7 +3,7 @@
 
 import { Link } from "wouter";
 import { ChevronRight, Newspaper } from "lucide-react";
-import type { MessagePart } from "@owlbot/shared";
+import type { MessagePart } from "@piomio/shared";
 import { useStore } from "../../lib/store";
 import { feedPath } from "../../lib/feeds";
 import { mediaSrc } from "../../lib/media";

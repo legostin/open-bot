@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Message, TeamMember } from "@owlbot/shared";
+import type { Message, TeamMember } from "@piomio/shared";
 import { openDb } from "../src/db.ts";
 import { EventBus } from "../src/bus.ts";
 import { Store } from "../src/store.ts";
@@ -37,7 +37,7 @@ describe("agent dialogs", () => {
 
   it("keeps the dialog of an install from before per-agent dialogs, with its history read", () => {
     // An older database: schema 3 (before per-agent dialogs), one conversation "main" and no read markers.
-    const file = join(mkdtempSync(join(tmpdir(), "owl-team-")), "owlbot.db");
+    const file = join(mkdtempSync(join(tmpdir(), "owl-team-")), "piomio.db");
     const old = openDb(file);
     old.exec(
       "drop table devices; drop table device_pairing_codes; drop table agent_drafts; drop index conversations_kind_agent; alter table conversations drop column read_at; alter table conversations drop column members; alter table tasks drop column question; alter table tasks drop column kind; alter table tasks drop column tainted; alter table tasks drop column from_agent; drop table invites; drop table feeds; drop table feed_posts; alter table tasks drop column feed_id; alter table conversations drop column purpose; alter table conversations drop column entity; drop table pages; alter table approvals drop column ask; alter table tasks drop column thinking; alter table messages drop column model; alter table messages drop column effort; drop table machine_settings; drop table machine_spend; drop table replicas; alter table secret_requests drop column login; update schema_version set v = 3;",

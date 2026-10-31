@@ -1,10 +1,10 @@
 //! macOS gives a GUI app a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin), so brain CLIs installed with Homebrew, npm or
 //! the Claude installer are not found. The hub reads the login shell's PATH itself (packages/core/src/user-path.ts);
-//! for owlbot-node the app asks the login shell once and passes it on.
+//! for piomio-node the app asks the login shell once and passes it on.
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 
 /// Marks the PATH in the shell's output: startup files may print other text.
-const MARK: &str = "__OWLBOT_PATH__";
+const MARK: &str = "__PIOMIO_PATH__";
 
 pub fn between_marks(out: &str) -> Option<&str> {
   let start = out.find(MARK)? + MARK.len();
@@ -66,9 +66,9 @@ mod tests {
 
   #[test]
   fn finds_the_path_among_shell_chatter() {
-    assert_eq!(between_marks("Welcome!\n__OWLBOT_PATH__/a:/b__OWLBOT_PATH__"), Some("/a:/b"));
+    assert_eq!(between_marks("Welcome!\n__PIOMIO_PATH__/a:/b__PIOMIO_PATH__"), Some("/a:/b"));
     assert_eq!(between_marks("no marks"), None);
-    assert_eq!(between_marks("__OWLBOT_PATH____OWLBOT_PATH__"), None);
+    assert_eq!(between_marks("__PIOMIO_PATH____PIOMIO_PATH__"), None);
   }
 
   #[test]

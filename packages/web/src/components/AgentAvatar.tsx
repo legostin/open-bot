@@ -1,10 +1,10 @@
 // Agent avatar: a little candy with eyes. The shape and colour are picked when the agent is created; the face comes from
-// its id (@owlbot/shared/avatar), so every agent, old ones too, has one and keeps it. The phone app draws the same
+// its id (@piomio/shared/avatar), so every agent, old ones too, has one and keeps it. The phone app draws the same
 // (AgentAvatarView.swift). An agent at work looks around, blinks and glows in its colour; pointed at, it blinks.
 
 import { useId, type CSSProperties } from "react";
-import type { AgentAvatar as Avatar, AvatarColor, AvatarShape } from "@owlbot/shared";
-import { AVATAR_EYES, AVATAR_PALETTE, avatarFace, defaultAvatar, type AvatarFace } from "@owlbot/shared/avatar";
+import type { AgentAvatar as Avatar, AvatarColor, AvatarShape } from "@piomio/shared";
+import { AVATAR_EYES, AVATAR_PALETTE, avatarFace, defaultAvatar, type AvatarFace } from "@piomio/shared/avatar";
 import { cx } from "./ui";
 
 /** Each colour's body (the bottom of the gradient): for places that need one flat colour. */

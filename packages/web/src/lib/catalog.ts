@@ -1,7 +1,7 @@
 // The catalog's entries: whether one is on, what its switch and button do, search, the popular ones, and each
 // situation's colour.
 
-import type { CatalogSection, CatalogView, IntegrationView } from "@owlbot/shared";
+import type { CatalogSection, CatalogView, IntegrationView } from "@piomio/shared";
 
 type Entry = Pick<IntegrationView, "connect" | "status" | "plugin">;
 

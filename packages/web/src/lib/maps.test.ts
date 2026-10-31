@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MessagePart } from "@owlbot/shared";
+import type { MessagePart } from "@piomio/shared";
 import { appLink, BUILTIN_MAP_APPS, formatDistance, formatTravelTime, mapTarget, type MapApp } from "./maps";
 
 type MapPart = Extract<MessagePart, { type: "map" }>;

@@ -1,5 +1,5 @@
 // Pages agents made (/api/pages), kept current by "page.updated" and "page.deleted".
-import type { PageView, UiEvent } from "@owlbot/shared";
+import type { PageView, UiEvent } from "@piomio/shared";
 import { api } from "../lib/api";
 import { createStore } from "../lib/store";
 

@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { arch, hostname, release, version } from "node:os";
-import type { MachineInfo } from "@owlbot/shared";
+import type { MachineInfo } from "@piomio/shared";
 import type { Policy } from "./policy.ts";
 
 export function osName(): string {

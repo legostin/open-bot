@@ -2,13 +2,13 @@
 // and the 24-hour change as a green or red pill.
 
 import { useState, type CSSProperties } from "react";
-import { definePluginUI, mediaSrc } from "@owlbot/ui";
-import type { OwlbotUI, WidgetProps } from "@owlbot/ui";
+import { definePluginUI, mediaSrc } from "@piomio/ui";
+import type { PiomioUI, WidgetProps } from "@piomio/ui";
 import type { CoinRow, PricesCard } from "../../server/index.ts";
 
-let t: OwlbotUI["i18n"]["t"] = (k) => k;
+let t: PiomioUI["i18n"]["t"] = (k) => k;
 let locale = "en";
-let formatDate: OwlbotUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleString();
+let formatDate: PiomioUI["i18n"]["formatDate"] = (d) => new Date(d).toLocaleString();
 
 function price(n: number, currency: string): string {
   const digits = n >= 1000 ? 0 : n >= 1 ? 2 : 6;

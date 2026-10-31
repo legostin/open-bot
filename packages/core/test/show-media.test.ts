@@ -1,6 +1,6 @@
 // End-to-end: an agent shows images and a map (core tools show_images / show_map), the web UI gets them as message
 // parts, the channels get them as media, and the hub serves them through its own authenticated routes. Routes go to a
-// stand-in OSRM server (OWLBOT_ROUTER_URL).
+// stand-in OSRM server (PIOMIO_ROUTER_URL).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -95,11 +95,11 @@ describe("agents show images and maps", () => {
     await new Promise<void>((r) => router.listen(routerPort, "127.0.0.1", r));
     const config = loadConfig(
       {
-        OWLBOT_PORT: String(port),
-        OWLBOT_DEVICES: "0",
-        OWLBOT_CONSOLE_PORT: String(consolePort),
-        OWLBOT_EGRESS_PORT: String(egressPort),
-        OWLBOT_ROUTER_URL: `http://127.0.0.1:${routerPort}`,
+        PIOMIO_PORT: String(port),
+        PIOMIO_DEVICES: "0",
+        PIOMIO_CONSOLE_PORT: String(consolePort),
+        PIOMIO_EGRESS_PORT: String(egressPort),
+        PIOMIO_ROUTER_URL: `http://127.0.0.1:${routerPort}`,
         TZ: "UTC",
       },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-media-hub-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents") },
@@ -163,7 +163,7 @@ describe("agents show images and maps", () => {
   it("show_images refuses files outside the workspace, non-images and bad addresses", async () => {
     const bad = async (images: unknown[]) => (await call("show_images", { images })).parts.find((p: any) => p.type === "tool_result");
     for (const [images, why] of [
-      [[{ path: "../../../owlbot.db" }], /outside your workspace|no such file/],
+      [[{ path: "../../../piomio.db" }], /outside your workspace|no such file/],
       [[{ path: "notes.txt" }], /not an image/],
       [[{ path: "missing.png" }], /no such file/],
       [[{ url: "ftp://example.com/x.png" }], /public http\(s\) address/],

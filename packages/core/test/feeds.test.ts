@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Feed, FeedPost, Task } from "@owlbot/shared";
+import type { Feed, FeedPost, Task } from "@piomio/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 import { nextRun } from "../src/feeds.ts";
 
@@ -77,7 +77,7 @@ describe("channels (integration)", () => {
   beforeAll(async () => {
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-feeds-")), builtinPluginsDirs: [join(fixtures, "plugins")], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);

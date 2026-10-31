@@ -1,4 +1,4 @@
-import type { ToolCallContext, ToolDescriptor, ToolResult } from "@owlbot/shared";
+import type { ToolCallContext, ToolDescriptor, ToolResult } from "@piomio/shared";
 
 export type ToolInvoker = (input: any, ctx: ToolCallContext) => Promise<ToolResult>;
 

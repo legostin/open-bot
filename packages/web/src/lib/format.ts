@@ -1,6 +1,6 @@
 // Formatting helpers: status labels, relative times and dates in the interface language.
 
-import type { NotifyLevel, TaskStatus } from "@owlbot/shared";
+import type { NotifyLevel, TaskStatus } from "@piomio/shared";
 import { formatDate, formatRelative, locale, t, type MessageKey } from "../i18n";
 import { sizeParts } from "./attachments";
 

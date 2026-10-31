@@ -1,7 +1,7 @@
 // Things are made and set up in the chat (CLAUDE.md, "Interface"). "New channel" and "Add agent" open a short setup
 // chat where the agent has already asked its first question; the chat becomes what it made. Other requests go to the
 // right agent's dialog in the person's words.
-import type { Conversation, SetupPurpose } from "@owlbot/shared";
+import type { Conversation, SetupPurpose } from "@piomio/shared";
 import { api } from "../lib/api";
 import { agentPath } from "../lib/team";
 import { conversations, refreshTeam, sendMessage, session, team } from "./app";

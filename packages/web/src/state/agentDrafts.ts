@@ -1,7 +1,7 @@
 // Drafts of new agents shown as cards in the chat. Loaded when a card first renders, kept live by agent_draft.updated.
 
 import { useEffect } from "react";
-import type { AgentAvatar, AgentDef, AgentDraft } from "@owlbot/shared";
+import type { AgentAvatar, AgentDef, AgentDraft } from "@piomio/shared";
 import { api, ApiError } from "../lib/api";
 import { createStore, useStore } from "../lib/store";
 import { hubEvents, reconnected, refreshAgents, refreshTeam } from "./app";

@@ -4,10 +4,10 @@
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, MachineModel, NodeSetup, ProbeResult } from "@owlbot/shared";
-import { brainWire, cheapestModel, keyProvider, profileFrom } from "@owlbot/shared";
-import type { BrainProviderImpl, BrainSessionImpl } from "@owlbot/plugin-sdk";
-import { codexChooser, createClaudeCodeProvider, createCodexProvider } from "@owlbot/brains-cli";
+import type { BrainEvent, BrainSessionOptions, BrainTurn, MachineInfo, MachineModel, NodeSetup, ProbeResult } from "@piomio/shared";
+import { brainWire, cheapestModel, keyProvider, profileFrom } from "@piomio/shared";
+import type { BrainProviderImpl, BrainSessionImpl } from "@piomio/plugin-sdk";
+import { codexChooser, createClaudeCodeProvider, createCodexProvider } from "@piomio/brains-cli";
 import type { PolicyStore } from "./policy.ts";
 import { resolveWorkspace } from "./guard.ts";
 import { hubLocale, tHub } from "./messages.ts";
@@ -66,7 +66,7 @@ export function shimTarget(cmdFile: string): string | undefined {
 export function defaultBridgeCommand(): string[] {
   let entry: string | undefined;
   try {
-    entry = fileURLToPath(import.meta.resolve("@owlbot/mcp-bridge"));
+    entry = fileURLToPath(import.meta.resolve("@piomio/mcp-bridge"));
   } catch {
     entry = fileURLToPath(new URL("../../mcp-bridge/src/index.ts", import.meta.url));
   }
@@ -163,11 +163,11 @@ export class BrainHost {
   private codexProviderConfig(): string[] {
     if (!this.keyMode("codex")) return [];
     return [
-      `model_provider="owlbot"`,
-      `model_providers.owlbot.name="Owlbot"`,
-      `model_providers.owlbot.base_url="http://127.0.0.1:${this.o.gateway!.port}/v1"`,
-      `model_providers.owlbot.env_key="OWLBOT_GATEWAY_KEY"`,
-      `model_providers.owlbot.wire_api="responses"`,
+      `model_provider="piomio"`,
+      `model_providers.piomio.name="Piomio"`,
+      `model_providers.piomio.base_url="http://127.0.0.1:${this.o.gateway!.port}/v1"`,
+      `model_providers.piomio.env_key="PIOMIO_GATEWAY_KEY"`,
+      `model_providers.piomio.wire_api="responses"`,
     ];
   }
 
@@ -276,7 +276,7 @@ export class BrainHost {
   /** The env a key-mode session gets: the gateway and its own token, never a key. */
   private keyEnv(id: NodeBrainId, sessionId: string, model: string | undefined): Record<string, string> {
     const token = this.o.gateway!.open(sessionId, id);
-    if (id === "codex") return { OWLBOT_GATEWAY_KEY: token, OPENAI_API_KEY: "", CODEX_API_KEY: "" };
+    if (id === "codex") return { PIOMIO_GATEWAY_KEY: token, OPENAI_API_KEY: "", CODEX_API_KEY: "" };
     const allowed = this.allowed(id);
     const cheap = cheapestModel(allowed)?.id ?? model ?? "";
     const main = model ?? cheap;

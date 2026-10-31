@@ -45,13 +45,13 @@ async function machine(name: string): Promise<Machine> {
     dir: mkdtempSync(join(tmpdir(), `owl-cluster-${name}-`)),
     deviceUrl,
     env: {
-      OWLBOT_PORT: String(port),
-      OWLBOT_CONSOLE_PORT: String(consolePort),
-      OWLBOT_EGRESS_PORT: String(egressPort),
-      OWLBOT_DEVICE_PORT: String(devicePort),
-      OWLBOT_DEVICE_HOST: "127.0.0.1",
-      OWLBOT_DEVICE_URLS: deviceUrl,
-      OWLBOT_REPLICA_NAME: name,
+      PIOMIO_PORT: String(port),
+      PIOMIO_CONSOLE_PORT: String(consolePort),
+      PIOMIO_EGRESS_PORT: String(egressPort),
+      PIOMIO_DEVICE_PORT: String(devicePort),
+      PIOMIO_DEVICE_HOST: "127.0.0.1",
+      PIOMIO_DEVICE_URLS: deviceUrl,
+      PIOMIO_REPLICA_NAME: name,
       TZ: "UTC",
     },
   };
@@ -149,7 +149,7 @@ describe("a leader nobody can reach", () => {
     all.push(mac, vps);
     // The Mac's only published address leads nowhere (a Funnel some networks cannot reach): only it can dial.
     const real = mac.deviceUrl;
-    mac.env.OWLBOT_DEVICE_URLS = "https://127.0.0.1:1";
+    mac.env.PIOMIO_DEVICE_URLS = "https://127.0.0.1:1";
     const a = await boot(mac);
     a.vault.init("cluster-vault-pass");
     const dialog = a.store.agentConversation(a.settings.get().defaultAgent);
@@ -163,12 +163,12 @@ describe("a leader nobody can reach", () => {
     // A phone at the standby's address gets the leader's answer, through the link.
     const res = await fetch(`${vps.deviceUrl}/api/device/hello`).catch(() => undefined);
     expect(res).toBeUndefined(); // self-signed: plain fetch refuses; the forwarding is checked with the pinned client
-    const { pinnedRequest } = await import("@owlbot/replica");
+    const { pinnedRequest } = await import("@piomio/replica");
     const r = await pinnedRequest(`${vps.deviceUrl}/api/devices/me`, { fingerprint: b.deviceTls().fingerprint });
     expect(r.status).toBe(401);
     // A machine connected to the standby talks to the leader: its challenge, and its MCP calls.
     const { default: WebSocket } = await import("ws");
-    const main = `ws://127.0.0.1:${vps.env.OWLBOT_PORT}/node/ws`;
+    const main = `ws://127.0.0.1:${vps.env.PIOMIO_PORT}/node/ws`;
     const first = await new Promise<string>((resolve, reject) => {
       const ws = new WebSocket(main);
       ws.once("message", (d) => {
@@ -178,7 +178,7 @@ describe("a leader nobody can reach", () => {
       ws.once("error", reject);
     });
     expect(JSON.parse(first)).toMatchObject({ type: "challenge" });
-    const mcp = await fetch(`http://127.0.0.1:${vps.env.OWLBOT_PORT}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const mcp = await fetch(`http://127.0.0.1:${vps.env.PIOMIO_PORT}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     expect(mcp.status).toBe(401);
   });
 });

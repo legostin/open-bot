@@ -6,7 +6,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
-import type { ToolCallContext, ToolResult } from "@owlbot/shared";
+import type { ToolCallContext, ToolResult } from "@piomio/shared";
 import { Hub, loadConfig } from "../src/index.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
@@ -45,7 +45,7 @@ describe("agents making integrations", () => {
   function build(id: string) {
     const dir = join(workspace, "integrations", id);
     cpSync(TEMPLATE, dir, { recursive: true, filter: (src) => !["SKILL.md", "dist", "node_modules"].includes(relative(TEMPLATE, src).split(sep).at(-1)!) });
-    const file = join(dir, ".owlbot-plugin", "plugin.json");
+    const file = join(dir, ".piomio-plugin", "plugin.json");
     const { builtin, defaultEnabled, ...manifest } = JSON.parse(readFileSync(file, "utf8"));
     writeFileSync(file, JSON.stringify({ ...manifest, id }));
     return dir;
@@ -60,7 +60,7 @@ describe("agents making integrations", () => {
     cpSync(TEMPLATE, join(builtin, "_template"), { recursive: true });
     const [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_LANG: "en", TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), PIOMIO_LANG: "en", TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-maker-")), builtinPluginsDirs: [builtin], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
@@ -75,7 +75,7 @@ describe("agents making integrations", () => {
   });
 
   it("ships the make-integration skill, and its template is not a plugin", () => {
-    expect(hub.skills.get("make-integration")).toMatchObject({ source: "owlbot" });
+    expect(hub.skills.get("make-integration")).toMatchObject({ source: "piomio" });
     expect(hub.skills.load("make-integration")).toContain("hub_plugin_install");
     expect(hub.plugins.list()).toEqual([]);
   });
@@ -94,7 +94,7 @@ describe("agents making integrations", () => {
     // The card's one file, compiled by the hub: JSX gone, types gone, imports left to the page's import map.
     const ui = readFileSync(join(rec.dir, "ui", "dist", "index.js"), "utf8");
     expect(ui).toContain('from "react/jsx-runtime"');
-    expect(ui).toContain('from "@owlbot/ui"');
+    expect(ui).toContain('from "@piomio/ui"');
     expect(ui).not.toContain("import type");
     await until(() => hub.tools.get("sunny_times"), "the integration's tool");
   });

@@ -1,8 +1,8 @@
 // Append-only audit log with a hash chain: hash = sha256(prevHash + canonical record).
 
 import { createHash } from "node:crypto";
-import type { AuditEntry } from "@owlbot/shared";
-import { nowIso } from "@owlbot/shared";
+import type { AuditEntry } from "@piomio/shared";
+import { nowIso } from "@piomio/shared";
 import { json, type Db } from "./db.ts";
 import type { Redactor } from "./vault/redact.ts";
 

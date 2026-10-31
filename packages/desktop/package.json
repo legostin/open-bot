@@ -1,9 +1,9 @@
 {
-  "name": "@owlbot/desktop",
+  "name": "@piomio/desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Owlbot desktop app (Tauri): a window for the hub's UI, a tray icon, the hub or a machine in the background",
+  "description": "Piomio desktop app (Tauri): a window for the hub's UI, a tray icon, the hub or a machine in the background",
   "scripts": {
     "build:ui": "node ui/build.mjs",
     "typecheck": "tsc -p ui/tsconfig.json",

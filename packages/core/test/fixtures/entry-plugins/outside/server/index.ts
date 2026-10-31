@@ -1,7 +1,7 @@
 // A plugin with catalog entries for the tests: "chat" from its manifest, "notes" added by a tool; an entry signs in
 // through the plugin (a link, then connected a moment later, with a tool of its own) and out again.
-import type { PluginContext } from "@owlbot/plugin-sdk";
-import type { CatalogEntryState } from "@owlbot/shared";
+import type { PluginContext } from "@piomio/plugin-sdk";
+import type { CatalogEntryState } from "@piomio/shared";
 
 export default {
   async activate(ctx: PluginContext) {

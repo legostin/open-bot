@@ -128,13 +128,13 @@ describe("an integration with its own sign-in", () => {
     // A built-in integration that is only an .mcp.json, like integrations/granola.
     const builtin = mkdtempSync(join(tmpdir(), "owl-signin-builtin-"));
     const dir = join(builtin, "notes");
-    mkdirSync(join(dir, ".owlbot-plugin"), { recursive: true });
-    writeFileSync(join(dir, ".owlbot-plugin", "plugin.json"), JSON.stringify({ id: "notes", name: "Notes", builtin: true, integration: { category: "work", connect: "signin", summary: "Meeting notes" } }));
+    mkdirSync(join(dir, ".piomio-plugin"), { recursive: true });
+    writeFileSync(join(dir, ".piomio-plugin", "plugin.json"), JSON.stringify({ id: "notes", name: "Notes", builtin: true, integration: { category: "work", connect: "signin", summary: "Meeting notes" } }));
     writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { notes: { type: "http", url: `${svc.url()}/mcp`, readTools: ["list_meetings"] } } }));
     let consolePort: number, egressPort: number;
     [port, consolePort, egressPort] = [await freePort(), await freePort(), await freePort()];
     const config = loadConfig(
-      { OWLBOT_PORT: String(port), OWLBOT_DEVICES: "0", OWLBOT_CONSOLE_PORT: String(consolePort), OWLBOT_EGRESS_PORT: String(egressPort), OWLBOT_LANG: "en", TZ: "UTC" },
+      { PIOMIO_PORT: String(port), PIOMIO_DEVICES: "0", PIOMIO_CONSOLE_PORT: String(consolePort), PIOMIO_EGRESS_PORT: String(egressPort), PIOMIO_LANG: "en", TZ: "UTC" },
       { dataDir: mkdtempSync(join(tmpdir(), "owl-signin-")), builtinPluginsDirs: [builtin], builtinAgentsDir: join(fixtures, "agents") },
     );
     hub = new Hub(config);
@@ -170,7 +170,7 @@ describe("an integration with its own sign-in", () => {
     expect(url.origin + url.pathname).toBe(`${svc.url()}/authorize`);
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("redirect_uri")).toBe(`http://localhost:${port}/oauth/mcp`);
-    expect(svc.seen.registrations.at(-1)).toMatchObject({ client_name: "Owlbot", redirect_uris: [`http://localhost:${port}/oauth/mcp`], token_endpoint_auth_method: "none" });
+    expect(svc.seen.registrations.at(-1)).toMatchObject({ client_name: "Piomio", redirect_uris: [`http://localhost:${port}/oauth/mcp`], token_endpoint_auth_method: "none" });
 
     // The browser: Granola's page, then back to the hub.
     const back = (await fetch(url, { redirect: "manual" })).headers.get("location")!;

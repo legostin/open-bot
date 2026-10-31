@@ -46,7 +46,7 @@ export function withPath(env: Record<string, string | undefined>, before: string
 /** The environment npm runs with: this Node first on the PATH (lifecycle scripts call `node`), no hub settings. */
 export function npmEnv(env: NodeJS.ProcessEnv = process.env, execPath = process.execPath): Record<string, string> {
   const clean: Record<string, string> = {};
-  for (const [k, v] of Object.entries(env)) if (v !== undefined && !k.startsWith("OWLBOT_")) clean[k] = v;
+  for (const [k, v] of Object.entries(env)) if (v !== undefined && !k.startsWith("PIOMIO_")) clean[k] = v;
   return { ...withPath(clean, [dirname(execPath)]), npm_config_update_notifier: "false", npm_config_fund: "false" };
 }
 
@@ -122,7 +122,7 @@ export class CliTools {
     mkdirSync(this.dir, { recursive: true });
     // Saved as a dependency: npm prunes what package.json does not list, so a second CLI keeps the first.
     const manifest = join(this.dir, "package.json");
-    if (!existsSync(manifest)) writeFileSync(manifest, JSON.stringify({ name: "owlbot-tools", private: true }, null, 2) + "\n");
+    if (!existsSync(manifest)) writeFileSync(manifest, JSON.stringify({ name: "piomio-tools", private: true }, null, 2) + "\n");
     const args = ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--omit=dev", "--loglevel=error", `${tool.pkg}@latest`];
     const npm = (opts.npm ?? npmInvocation)(args);
     return new Promise((resolve, reject) => {

@@ -1,6 +1,6 @@
 // The integrations library's cards: what each one's button does and how its status looks.
 
-import type { IntegrationStatus, IntegrationView, RemoteView } from "@owlbot/shared";
+import type { IntegrationStatus, IntegrationView, RemoteView } from "@piomio/shared";
 import type { Tone } from "./format";
 
 export type IntegrationAction = "connect" | "reconnect" | "setup" | "turnOn" | "disconnect";

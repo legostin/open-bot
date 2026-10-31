@@ -4,8 +4,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
-import { startMockLlm, startPlugin, type MockLlm, type PluginHarness } from "@owlbot/testkit";
+import type { BrainEvent, BrainSessionOptions } from "@piomio/shared";
+import { startMockLlm, startPlugin, type MockLlm, type PluginHarness } from "@piomio/testkit";
 import { startFakeMcp, type FakeMcp } from "./fake-mcp.ts";
 import { SUMMARY_HEAD, SUMMARY_SYSTEM } from "../server/history.ts";
 

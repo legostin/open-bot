@@ -29,7 +29,7 @@ func TestProxySetsHostAndForwardedHeaders(t *testing.T) {
 	defer srv.Close()
 
 	req, _ := http.NewRequest("GET", "http://"+ln.Addr().String()+"/api/auth/state", nil)
-	req.Host = "owlbot.example.ts.net"
+	req.Host = "piomio.example.ts.net"
 	req.Header.Set("X-Forwarded-For", "6.6.6.6")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -41,13 +41,13 @@ func TestProxySetsHostAndForwardedHeaders(t *testing.T) {
 		t.Fatalf("body %q", body)
 	}
 	r := <-seen
-	if r.Host != "owlbot.example.ts.net" || r.URL.Path != "/api/auth/state" {
+	if r.Host != "piomio.example.ts.net" || r.URL.Path != "/api/auth/state" {
 		t.Fatalf("host %q path %q", r.Host, r.URL.Path)
 	}
 	if got := r.Header.Get("X-Forwarded-For"); got != "127.0.0.1" {
 		t.Fatalf("X-Forwarded-For %q: the client's own value must not pass", got)
 	}
-	if r.Header.Get("X-Forwarded-Proto") != "https" || r.Header.Get("X-Forwarded-Host") != "owlbot.example.ts.net" {
+	if r.Header.Get("X-Forwarded-Proto") != "https" || r.Header.Get("X-Forwarded-Host") != "piomio.example.ts.net" {
 		t.Fatalf("headers %v", r.Header)
 	}
 }
@@ -76,7 +76,7 @@ func TestProxyPassesWebSocketUpgrades(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	io.WriteString(c, "GET /api/ws HTTP/1.1\r\nHost: owlbot.example.ts.net\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+	io.WriteString(c, "GET /api/ws HTTP/1.1\r\nHost: piomio.example.ts.net\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
 	r := bufio.NewReader(c)
 	status, _ := r.ReadString('\n')
 	if !strings.Contains(status, "101") {

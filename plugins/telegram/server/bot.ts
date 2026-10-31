@@ -2,8 +2,8 @@
 // approval and feedback buttons. Everything the bot writes is in the hub language (ctx.i18n).
 
 import { randomInt } from "node:crypto";
-import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@owlbot/plugin-sdk";
-import type { OutboundMedia, OutboundMessage, Params, Task, TaskStatus } from "@owlbot/shared";
+import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@piomio/plugin-sdk";
+import type { OutboundMedia, OutboundMessage, Params, Task, TaskStatus } from "@piomio/shared";
 import { TelegramApi, TelegramError, type InlineButton, type TgCallbackQuery, type TgChat, type TgMessage, type TgUpdate, type TgUser, type UploadFile } from "./api.ts";
 import { MAX_DOWNLOAD_BYTES, messageContext, messageFile, messageWords } from "./inbound.ts";
 import { TELEGRAM_LIMIT, entitiesToHtml, escapeAttr, escapeHtml, htmlToPlain, isPublicHttpUrl, markdownToHtml, splitMarkdown } from "./format.ts";
@@ -799,7 +799,7 @@ export class TelegramBot {
     }
   }
 
-  /** The pictures Telegram would not take, as links: their own addresses, or the conversation in Owlbot for files. */
+  /** The pictures Telegram would not take, as links: their own addresses, or the conversation in Piomio for files. */
   private async mediaFallback(chatId: number, items: ImageMedia[], opts: { silent?: boolean; link?: string }): Promise<number | undefined> {
     const lines = [escapeHtml(this.t("media.failed"))];
     items.forEach((m, i) => {

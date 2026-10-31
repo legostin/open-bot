@@ -2,8 +2,8 @@
 // time_now and time_convert show clocks as a card in the chat (widget "clocks": live for now, fixed for a converted
 // time); time_units answers in text, where a card would add nothing.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
-import type { ToolResult } from "@owlbot/shared";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
+import type { ToolResult } from "@piomio/shared";
 import { convert } from "./units.ts";
 
 export interface Clock {

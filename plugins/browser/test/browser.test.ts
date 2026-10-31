@@ -7,9 +7,9 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readd
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect, type AddressInfo, type Socket } from "node:net";
-import type { ToolResult } from "@owlbot/shared";
-import { catalogLookup, localizeValue, readPluginLayout, renderTemplate } from "@owlbot/shared";
-import { startPlugin, type PluginHarness } from "@owlbot/testkit";
+import type { ToolResult } from "@piomio/shared";
+import { catalogLookup, localizeValue, readPluginLayout, renderTemplate } from "@piomio/shared";
+import { startPlugin, type PluginHarness } from "@piomio/testkit";
 import { chromium } from "playwright";
 import { pageCall } from "../server/page-script.ts";
 import { PAGE_RULES } from "../server/safety.ts";
@@ -717,7 +717,7 @@ describe("browser plugin behind the hub egress proxy", () => {
       const auth = req.headers["proxy-authorization"] as string | undefined;
       seen.push({ method: req.method ?? "", url: req.url ?? "", auth });
       if (!authorized(auth)) {
-        res.writeHead(auth ? 403 : 407, { "proxy-authenticate": 'Basic realm="owlbot"' }).end();
+        res.writeHead(auth ? 403 : 407, { "proxy-authenticate": 'Basic realm="piomio"' }).end();
         return;
       }
       const target = new URL(req.url ?? "/");
@@ -731,7 +731,7 @@ describe("browser plugin behind the hub egress proxy", () => {
       const auth = req.headers["proxy-authorization"] as string | undefined;
       seen.push({ method: "CONNECT", url: req.url ?? "", auth });
       if (!authorized(auth)) {
-        socket.end(`HTTP/1.1 ${auth ? "403 Forbidden" : "407 Proxy Authentication Required"}\r\nProxy-Authenticate: Basic realm="owlbot"\r\n\r\n`);
+        socket.end(`HTTP/1.1 ${auth ? "403 Forbidden" : "407 Proxy Authentication Required"}\r\nProxy-Authenticate: Basic realm="piomio"\r\n\r\n`);
         return;
       }
       const up = connect(originPort, "127.0.0.1", () => {

@@ -1,6 +1,6 @@
 ---
 name: make-integration
-description: Build a new Owlbot integration (a plugin that connects a service or adds an ability, listed in the Plugins catalog) and install it on this hub. Use when the user wants something no existing integration does, asks to connect a service, or asks you to make a plugin.
+description: Build a new Piomio integration (a plugin that connects a service or adds an ability, listed in the Plugins catalog) and install it on this hub. Use when the user wants something no existing integration does, asks to connect a service, or asks you to make a plugin.
 ---
 
 # Making an integration
@@ -11,12 +11,12 @@ from sunrise-sunset.org): copy it and change what it does, keep its shape.
 
 ```
 <id>/
-  .owlbot-plugin/plugin.json         manifest: id, name, the catalog card, permissions, tools, widgets, settings
-  .owlbot-plugin/locales/en.json     every text a person reads (English is the source and the fallback)
-  .owlbot-plugin/locales/ru.json     the same keys in Russian
+  .piomio-plugin/plugin.json         manifest: id, name, the catalog card, permissions, tools, widgets, settings
+  .piomio-plugin/locales/en.json     every text a person reads (English is the source and the fallback)
+  .piomio-plugin/locales/ru.json     the same keys in Russian
   server/index.ts                    the tools (TypeScript run directly by Node: no build)
   ui/src/index.tsx                   the card (widget) drawn in the chat, optional
-  test/<id>.test.ts                  tests against a fake of the service (in the Owlbot repository)
+  test/<id>.test.ts                  tests against a fake of the service (in the Piomio repository)
   package.json                       the folder's npm name; `dependencies` only if truly needed
 ```
 
@@ -32,7 +32,7 @@ from sunrise-sunset.org): copy it and change what it does, keep its shape.
 1. Pick an id: lowercase letters, digits and dashes, 2–41 characters (e.g. `air-quality`). Tools are exposed as
    `<id with _ for ->_<tool name>`.
 2. Copy this skill's folder into your workspace as `integrations/<id>/`, without this SKILL.md.
-3. `.owlbot-plugin/plugin.json`:
+3. `.piomio-plugin/plugin.json`:
    - `id`; `name` and `description` stay `"%name%"` / `"%description%"` (the texts live in the locales);
    - delete `"builtin"` and `"defaultEnabled"`: an integration installed on a hub is turned on when it is installed;
    - `integration`: `category` (everyday, travel, money, work, reading, communication, home, assistant), `icon`
@@ -52,13 +52,13 @@ from sunrise-sunset.org): copy it and change what it does, keep its shape.
      the world: sends, books, pays; the user approves each call). Set `source: true` when the result comes from
      outside (web pages, APIs).
    - Validate the input and answer mistakes with `isError` text the model can act on. Catch network errors; use
-     `AbortSignal.timeout(…)` on every request; send a User-Agent naming Owlbot.
+     `AbortSignal.timeout(…)` on every request; send a User-Agent naming Piomio.
    - To show a card: `ctx.widgets.show(call, "<kind>", data)` with plain JSON (under 64 KB), and say in the result's
      text that a card is shown so the model does not repeat it.
    - Read settings from `ctx.settings` and `ctx.onSettingsChange`. Keep an address setting (`apiUrl`) for tests.
    - Only erasable TypeScript: no enums, namespaces or parameter properties; `import type` for types. No npm
      packages unless unavoidable (then list them in package.json `dependencies`; they install without scripts).
-6. `ui/src/index.tsx`: one file that imports only `react` and `@owlbot/ui` (and `import type` from the server). It
+6. `ui/src/index.tsx`: one file that imports only `react` and `@piomio/ui` (and `import type` from the server). It
    draws each widget kind with `ui.widgets.add(kind, Component)`; texts come from `ui.i18n.t`. Style with inline
    styles and the page's CSS variables (`var(--muted)`, `var(--border)`, `var(--surface-2)`, `var(--accent)`). The hub
    compiles it when installing.
@@ -86,7 +86,7 @@ the card).
 ## A service with its own MCP server
 
 When the service runs an official MCP server (Streamable HTTP, often with a browser sign-in: Granola, for one), the
-integration needs no code: a manifest, the locales and an `.mcp.json` beside `.owlbot-plugin/` (see
+integration needs no code: a manifest, the locales and an `.mcp.json` beside `.piomio-plugin/` (see
 `integrations/granola`):
 
 ```json
@@ -98,14 +98,14 @@ for the person (OAuth discovery, client registration, PKCE; the tokens go into t
 the chat show a Sign in button. A built-in integration may list the server's tools that only read in `"readTools"`
 (they then run without asking); other tools ask the person each time.
 
-A server that runs on this computer (stdio) is a `command` instead of a `url`. `${OWLBOT_NODE}` is the hub's own Node
-(a launcher written in TypeScript runs on it, nothing to install), `${OWLBOT_PLUGIN_ROOT}` the integration's folder and
-`${OWLBOT_PLUGIN_DATA}` its data folder; the server reaches only the hosts in `permissions.network`. When it cannot
+A server that runs on this computer (stdio) is a `command` instead of a `url`. `${PIOMIO_NODE}` is the hub's own Node
+(a launcher written in TypeScript runs on it, nothing to install), `${PIOMIO_PLUGIN_ROOT}` the integration's folder and
+`${PIOMIO_PLUGIN_DATA}` its data folder; the server reaches only the hosts in `permissions.network`. When it cannot
 start, it says why on stderr and exits: its last line is what the person sees on the integration. `integrations/blender`
 is one: its launcher finds the app, prepares the official server and relays MCP to it.
 
 ```json
-{ "mcpServers": { "<id>": { "command": "${OWLBOT_NODE}", "args": ["${OWLBOT_PLUGIN_ROOT}/mcp/launch.ts"], "env": { "DATA": "${OWLBOT_PLUGIN_DATA}" } } } }
+{ "mcpServers": { "<id>": { "command": "${PIOMIO_NODE}", "args": ["${PIOMIO_PLUGIN_ROOT}/mcp/launch.ts"], "env": { "DATA": "${PIOMIO_PLUGIN_DATA}" } } } }
 ```
 
 ## Several apps through one outside service
@@ -133,7 +133,7 @@ Composio) lists each app as a catalog entry of its own, and says which outside s
   chat that asked hears it. `ctx.catalog.onSignOut(entry => …)` signs it out; `ctx.tools.unregister(name)` takes back
   its tools.
 
-## In the Owlbot repository
+## In the Piomio repository
 
 Built-in integrations live in `integrations/` (this template is `integrations/_template`). People adding one work only
 in its folder:
@@ -141,7 +141,7 @@ in its folder:
 - `npm run new:integration -- <id>` copies this template to `integrations/<id>/` with the id filled in;
 - built-in ones keep `"builtin": true` and `"defaultEnabled": false` (they wait in the catalog until turned on);
   `"popular": <n>` puts one among the catalog's popular picks;
-- test with `@owlbot/testkit`'s `startPlugin` against a fake of the service (see `test/sun.test.ts`), then
+- test with `@piomio/testkit`'s `startPlugin` against a fake of the service (see `test/sun.test.ts`), then
   `npx vitest run integrations/<id>`, `npm run typecheck` and `npm run build:ui-plugins`;
 - every text a person reads goes through the locales; `packages/core/test/i18n.test.ts` checks both languages.
 

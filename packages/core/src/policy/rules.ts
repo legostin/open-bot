@@ -1,5 +1,5 @@
-import type { Rule } from "@owlbot/shared";
-import { newId, nowIso } from "@owlbot/shared";
+import type { Rule } from "@piomio/shared";
+import { newId, nowIso } from "@piomio/shared";
 import { json, type Db } from "../db.ts";
 
 const fromRow = (r: any): Rule => ({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MapAppRoute } from "@owlbot/ui";
+import type { MapAppRoute } from "@piomio/ui";
 import { dgis, yandex } from "../ui/src/links.ts";
 
 const walk: MapAppRoute = {

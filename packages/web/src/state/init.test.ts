@@ -24,7 +24,7 @@ async function start(pathname: string, routes: Record<string, Reply>, app: boole
   const listeners = { addEventListener: () => {}, removeEventListener: () => {} };
   const postMessage = vi.fn(async () => ({ ok: true }));
   const location = { pathname, hash: "", search: "", href: `https://hub.local:8082${pathname}`, protocol: "https:", host: "hub.local:8082" };
-  vi.stubGlobal("window", { ...listeners, location, ...(app ? { webkit: { messageHandlers: { owlbot: { postMessage } } } } : {}) });
+  vi.stubGlobal("window", { ...listeners, location, ...(app ? { webkit: { messageHandlers: { piomio: { postMessage } } } } : {}) });
   vi.stubGlobal("location", location);
   vi.stubGlobal("document", { ...listeners, visibilityState: "visible", cookie: "", documentElement: { lang: "" } });
   vi.stubGlobal("history", { replaceState: () => {} });

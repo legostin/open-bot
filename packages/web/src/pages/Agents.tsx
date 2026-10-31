@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
-import type { AgentAvatar as AgentAvatarValue, AgentDef } from "@owlbot/shared";
-import { AVATAR_COLORS, AVATAR_PALETTE, AVATAR_SHAPES, defaultAvatar } from "@owlbot/shared/avatar";
+import type { AgentAvatar as AgentAvatarValue, AgentDef } from "@piomio/shared";
+import { AVATAR_COLORS, AVATAR_PALETTE, AVATAR_SHAPES, defaultAvatar } from "@piomio/shared/avatar";
 import { useStore } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import { agentForPath } from "../lib/team";

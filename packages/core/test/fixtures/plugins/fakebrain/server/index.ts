@@ -8,8 +8,8 @@
 // "SELF?" answers with the last "[You now]" block the session got (or "none").
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { PluginContext } from "@owlbot/plugin-sdk";
-import type { BrainEvent, BrainSessionOptions } from "@owlbot/shared";
+import type { PluginContext } from "@piomio/plugin-sdk";
+import type { BrainEvent, BrainSessionOptions } from "@piomio/shared";
 
 /** Sessions in a "SLOW" turn: interrupt() ends it, and so does input steered into it. */
 const selves = new Map<string, string>();

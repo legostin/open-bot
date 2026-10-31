@@ -1,6 +1,6 @@
 // Choosing a brain, model and effort per request (model-router.ts) from what each brain's models are like.
 import { describe, expect, it } from "vitest";
-import { catalogOf, markLegacy, modelVersion, profileFrom, profileOf } from "@owlbot/shared";
+import { catalogOf, markLegacy, modelVersion, profileFrom, profileOf } from "@piomio/shared";
 import { needOf, needOfMessage, route, skillOfGoal, type RouteBrain } from "../src/model-router.ts";
 
 const claude: RouteBrain = { ref: "claude-code@local", probe: { models: ["fable", "opus", "sonnet", "haiku"], efforts: ["low", "medium", "high", "xhigh", "max"] } };

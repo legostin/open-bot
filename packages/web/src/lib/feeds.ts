@@ -1,5 +1,5 @@
 // Channels in the web UI: their paths, the schedules people pick ("morning and evening") and how a schedule reads.
-import type { Feed } from "@owlbot/shared";
+import type { Feed } from "@piomio/shared";
 
 export type Cadence = "morning" | "twice" | "thrice" | "weekly";
 

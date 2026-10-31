@@ -1,8 +1,8 @@
 // A map card's "Open in…" links: the place, or the route with its stops and way of travel, in a maps app (on a phone
 // each link opens the app when it is installed). Apple Maps, Google Maps and OpenStreetMap are built in; plugins add
 // more (ui.maps.addApp: Yandex Maps and 2GIS come with the yandex-2gis plugin). And a route's length and time.
-import type { MapMarker, MessagePart, RouteMode } from "@owlbot/shared";
-import type { MapAppContribution, MapAppPlace, MapAppRoute } from "@owlbot/ui";
+import type { MapMarker, MessagePart, RouteMode } from "@piomio/shared";
+import type { MapAppContribution, MapAppPlace, MapAppRoute } from "@piomio/ui";
 import { formatNumber } from "../i18n";
 import { osmLink } from "./media";
 

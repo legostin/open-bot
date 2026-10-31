@@ -1,7 +1,7 @@
 // Triggers plugin: schedules, one-off reminders, page watches, webhooks and heartbeat reviews
 // that start background tasks for agents.
 
-import type { PluginContext, PluginModule } from "@owlbot/plugin-sdk";
+import type { PluginContext, PluginModule } from "@piomio/plugin-sdk";
 import { TriggerEngine } from "./engine.ts";
 import { handleHttp } from "./http.ts";
 import { registerTools } from "./tools.ts";
