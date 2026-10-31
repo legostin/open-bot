@@ -11,6 +11,7 @@ import type { AuditLog } from "../audit.ts";
 import type { Redactor } from "../vault/redact.ts";
 import type { Settings } from "../settings.ts";
 import { BACKGROUND_ALWAYS_ALLOWED, decide, SKILL_RUN_TOOLS } from "../policy/engine.ts";
+import { checkAsked, type AskedCheck, type PersonWords } from "../policy/asked.ts";
 import { NATIVE_PERMISSION_TOOL } from "./native-permission.ts";
 import { HUB_TOOL_PREFIX, HUB_TOOLS_FOR_EVERY_AGENT } from "./hub-tools.ts";
 
@@ -36,6 +37,9 @@ export interface GatewayDeps {
   /** The hub's skills: a background task following a taught one (Task.skill) may click and type (PolicyInput.skillRun). */
   skills?: { get(name: string): { taught: boolean } | undefined };
 }
+
+/** How far back the person's words count as asking for an action (ToolSpec.asked): this request, not last week's. */
+const ASKED_WINDOW_MS = 3 * 3600_000;
 
 /** Tools every agent has, whatever its tool list: what draws in the person's chat (buttons, maps, pictures, cards, pages) and the team's group chats. */
 const SHOW_TOOLS = ["show_choices", "show_map", "show_images", "show_news", "feed_show", "page_create", "page_update", "page_read", "page_list", "page_show", "thinking_show", "profile_show", "group_create", "group_update"];
@@ -128,12 +132,13 @@ export class ToolGateway {
     const input = hooked.payload.input;
 
     const settings = this.d.settings.get();
+    const asked = this.asked(s, tool, input);
     const policy = decide(
-      { tool, input, agentId: s.agentId, tainted: s.tainted, background: s.background, initiative: agent.initiative, profile: agent.policyProfile, skillRun },
+      { tool, input, agentId: s.agentId, tainted: s.tainted, background: s.background, initiative: agent.initiative, profile: agent.policyProfile, skillRun, asked: asked?.ok },
       this.d.rules.list(),
       (t) => this.d.rules.isKnownTarget(t),
     );
-    this.d.audit.append(`agent:${s.agentId}`, "policy.decision", name, { decision: policy.decision, reason: policy.reason, ruleId: policy.ruleId });
+    this.d.audit.append(`agent:${s.agentId}`, "policy.decision", name, { decision: policy.decision, reason: policy.reason, ruleId: policy.ruleId, ...(asked ? { asked: asked.reason } : {}) });
 
     if (policy.decision === "deny") {
       return { content: [{ type: "text", text: `Denied by policy: ${policy.reason}` }], isError: true, _meta: { status: "denied" } };
@@ -187,7 +192,67 @@ export class ToolGateway {
       return result;
     }
 
+    if (policy.asked) {
+      // The person's own words were the yes: kept like a card, shown as a quiet line, never waited for.
+      const approval = this.d.approvals.record({
+        sessionId: s.id,
+        conversationId: s.conversationId,
+        taskId: s.taskId,
+        agentId: s.agentId,
+        tool: name,
+        input: this.d.redactor.value(input),
+        summary: this.summarize(tool, input),
+        effect: tool.effect,
+        tainted: s.tainted,
+        reason: asked!.reason,
+      });
+      const result = await this.execute(s, tool, input, { ...ctx, approved: true });
+      this.d.approvals.markExecuted(approval.id, result);
+      return result;
+    }
+
     return this.execute(s, tool, input, policy.ruleId ? { ...ctx, approved: true } : ctx);
+  }
+
+  /** Did the person ask for this call in their own words? Only for a tool that says how to tell (ToolSpec.asked) and a call that quotes them. */
+  private asked(s: SessionRow, tool: ToolDescriptor, input: unknown): AskedCheck | undefined {
+    if (!tool.asked || tool.effect !== "external" || !input || typeof input !== "object" || typeof (input as { asked?: unknown }).asked !== "string") return undefined;
+    return checkAsked(tool.asked, input, this.personWords(s));
+  }
+
+  /**
+   * What the person wrote and sent lately where the session works: its dialog, or the one its task was started from.
+   * Only their own messages: a teammate's (agentId set) or a task's goal is not the person speaking.
+   */
+  private personWords(s: SessionRow): PersonWords {
+    const where = new Set<string>();
+    const conv = this.d.store.getConversation(s.conversationId);
+    if (conv && conv.kind !== "task" && !conv.taskId) where.add(conv.id);
+    let task = s.taskId ? this.d.store.getTask(s.taskId) : undefined;
+    for (let depth = 0; task && depth < 6; depth++) {
+      const parent = task.parentConversationId ? this.d.store.getConversation(task.parentConversationId) : undefined;
+      if (parent && parent.kind !== "task" && !parent.taskId) {
+        where.add(parent.id);
+        break;
+      }
+      task = task.parentTaskId ? this.d.store.getTask(task.parentTaskId) : undefined;
+    }
+    const since = Date.now() - ASKED_WINDOW_MS;
+    const texts: string[] = [];
+    const files: string[] = [];
+    for (const c of where) {
+      for (const m of this.d.store.listMessages(c, { limit: 60 })) {
+        if (m.role !== "user" || m.agentId || Date.parse(m.createdAt) < since) continue;
+        for (const p of m.parts) {
+          if (p.type === "text") texts.push(p.text);
+          else if (p.type === "attachment") {
+            files.push(p.path, p.name);
+            if (p.transcript) texts.push(p.transcript);
+          }
+        }
+      }
+    }
+    return { texts, files };
   }
 
   /** Run an approved action later (deferred approval). */

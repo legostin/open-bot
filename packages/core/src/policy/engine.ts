@@ -18,12 +18,16 @@ export interface PolicyInput {
    * agent only suggests; anything external still needs a rule (the skill's pre-approvals) or a card.
    */
   skillRun?: boolean;
+  /** The person asked for this call in their own words (policy/asked.ts, checked by the gateway): an external action needs no card. */
+  asked?: boolean;
 }
 
 export interface PolicyResult {
   decision: PolicyDecision;
   reason: string;
   ruleId?: string;
+  /** Allowed because the person asked for it in their own words: the chat shows a quiet line for it. */
+  asked?: boolean;
 }
 
 /** What a run of a taught skill may do by itself beyond reading: drive the browser the person showed it in. */
@@ -119,7 +123,7 @@ export function decide(p: PolicyInput, rules: Rule[], isKnownTarget: (t: string)
   }
 
   // external
-  return allowedByRule() ?? { decision: "ask", reason: t("policy.externalNeedsApproval") };
+  return allowedByRule() ?? (p.asked ? { decision: "allow", reason: t("policy.askedByPerson"), asked: true } : { decision: "ask", reason: t("policy.externalNeedsApproval") });
 
   /** The person's "always allow" for this kind of call; after outside content it still asks for a target it never saw. */
   function allowedByRule(): PolicyResult | undefined {

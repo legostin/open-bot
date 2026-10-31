@@ -86,6 +86,25 @@ export class ApprovalService {
     return approval;
   }
 
+  /**
+   * An action the person asked for in their own words (ToolSpec.asked): approved by those words, so it is kept like
+   * any card (the console, the audit) but never waits, and the chat shows it as a quiet line.
+   */
+  record(a: { sessionId: string; conversationId: string; taskId?: string; agentId: string; tool: string; input: unknown; summary: string; effect: ToolEffect; tainted: boolean; reason: string }): Approval {
+    const at = nowIso();
+    const id = newId("a");
+    this.db
+      .prepare(
+        "insert into approvals(id, session_id, conversation_id, task_id, agent_id, tool, input, summary, effect, tainted, status, created_at, resolved_at, resolved_via) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      )
+      .run(id, a.sessionId, a.conversationId, a.taskId ?? null, a.agentId, a.tool, JSON.stringify(a.input), a.summary, a.effect, a.tainted ? 1 : 0, "approved", at, at, "request");
+    this.rules.addKnownTargets(extractTargets(a.input));
+    this.audit.append(`agent:${a.agentId}`, "approval.asked", a.tool, { id, summary: a.summary, reason: a.reason });
+    const approval = this.get(id)!;
+    this.bus.emit("approval.asked", approval);
+    return approval;
+  }
+
   get(id: string): Approval | undefined {
     const r = this.db.prepare("select * from approvals where id = ?").get(id);
     return r ? fromRow(r) : undefined;

@@ -200,6 +200,7 @@ export const ru = {
   "approvals.via.telegram": "в Telegram",
   "approvals.via.rule": "правилом",
   "approvals.via.timeout": "по истечении срока",
+  "approvals.via.request": "по просьбе человека",
   "approvals.notFound.title": "Запрос не найден",
   "approvals.notFound.body": "Подтверждения {id} нет ни среди ожидающих, ни в последних 200 записях истории.",
   "approvals.history.empty.title": "История пуста",

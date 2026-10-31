@@ -56,6 +56,7 @@ export default {
   "policy.taintedLastingChange": "после чтения внешних материалов агент меняет свой профиль и другие долгие настройки только с вашего подтверждения",
   "policy.taintedNewTargets": "сессия читала недоверенный контент, новые адресаты: {targets}",
   "policy.externalNeedsApproval": "внешнее действие требует подтверждения",
+  "policy.askedByPerson": "человек сам попросил об этом",
 
   // chat, tasks, brains
   "conversation.agentFixed": "Диалог агента нельзя передать другому агенту",

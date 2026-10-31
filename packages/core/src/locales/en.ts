@@ -57,6 +57,7 @@ export default {
   "policy.taintedLastingChange": "after outside content, an agent changes its profile and other lasting settings only with your approval",
   "policy.taintedNewTargets": "the session has read untrusted content; new recipients: {targets}",
   "policy.externalNeedsApproval": "external actions need approval",
+  "policy.askedByPerson": "the person asked for it in their own words",
 
   // chat, tasks, brains
   "conversation.agentFixed": "An agent's dialog stays with that agent",

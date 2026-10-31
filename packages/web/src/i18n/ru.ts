@@ -352,6 +352,8 @@ export default {
   "message.approval.approve": "Разрешить",
   "message.approval.deny": "Отклонить",
   "message.approval.failed": "Ответ не отправлен: {error}",
+  "message.approval.asked": "вы просили",
+  "message.approval.askedFailed": "вы просили, но не вышло",
   "secret.title": "Секрет: {title}",
   "secret.placeholder": "Вставьте сюда",
   "secret.save": "Сохранить в хранилище",

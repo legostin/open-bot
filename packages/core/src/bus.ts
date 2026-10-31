@@ -22,6 +22,8 @@ export type BusEvents = {
   "notification.created": any;
   "notification.feedback": any;
   "approval.created": any;
+  /** An action the person asked for in their own words ran without a card (ToolSpec.asked). */
+  "approval.asked": any;
   "approval.resolved": any;
   "vault.state": { state: string };
   /** Vault items written outside the console (a secret typed into the chat): ids only. */

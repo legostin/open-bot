@@ -352,6 +352,8 @@ export default {
   "message.approval.approve": "Allow",
   "message.approval.deny": "Deny",
   "message.approval.failed": "The answer was not sent: {error}",
+  "message.approval.asked": "you asked",
+  "message.approval.askedFailed": "you asked, but it did not work",
   "secret.title": "Secret: {title}",
   "secret.placeholder": "Paste it here",
   "secret.save": "Save to vault",

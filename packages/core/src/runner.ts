@@ -212,6 +212,7 @@ export class SessionRunner {
     deps.approvals.onDeferredApproved = (a) => this.onDeferredApproved(a);
     deps.approvals.onDeferredDenied = (a) => this.onDeferredDenied(a);
     deps.bus.on("approval.created", (a: Approval) => this.attachApprovalPart(a));
+    deps.bus.on("approval.asked", (a: Approval) => this.attachApprovalPart(a));
     deps.bus.on("approval.resolved", (a: Approval) => this.updateApprovalPart(a));
     deps.secrets.onResolved = (r, how) => this.onSecretResolved(r, how);
   }
@@ -1167,7 +1168,9 @@ export class SessionRunner {
   }
 
   private attachApprovalPart(a: Approval): void {
-    const part: MessagePart = { type: "approval", approvalId: a.id, summary: a.summary, status: "pending", ...(a.ask ? { ask: a.ask } : {}) };
+    // One the person asked for in their own words is a quiet line of what was done, never a card to answer.
+    const asked = a.resolvedVia === "request";
+    const part: MessagePart = { type: "approval", approvalId: a.id, summary: a.summary, status: asked ? a.status : "pending", ...(a.ask ? { ask: a.ask } : {}), ...(asked ? { asked: true } : {}) };
     const msgId = this.streamingMessage.get(a.conversationId);
     const m = msgId ? this.d.store.getMessage(msgId) : undefined;
     if (m) this.d.store.updateMessage(m.id, { parts: [...m.parts, part] });
@@ -1177,8 +1180,8 @@ export class SessionRunner {
       this.d.store.addMessage({ conversationId: a.conversationId, role: "assistant", agentId: a.agentId, parts: [part], status: "complete" });
     }
     // A task's question for the person also shows where the person is: in the dialog that started it, under the
-    // task's line, so they answer without opening the task.
-    const dialog = this.starterDialog(a.taskId);
+    // task's line, so they answer without opening the task. A quiet line has nothing to answer: it stays in the task.
+    const dialog = asked ? undefined : this.starterDialog(a.taskId);
     if (dialog) this.d.store.addMessage({ conversationId: dialog.id, role: "assistant", agentId: dialog.agentId, parts: [{ type: "task", taskId: a.taskId! }, part], status: "complete" });
   }
 

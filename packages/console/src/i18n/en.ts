@@ -199,6 +199,7 @@ export const en = {
   "approvals.via.telegram": "in Telegram",
   "approvals.via.rule": "by a rule",
   "approvals.via.timeout": "on expiry",
+  "approvals.via.request": "by the person's own words",
   "approvals.notFound.title": "Request not found",
   "approvals.notFound.body": "Approval {id} is neither pending nor among the last 200 history entries.",
   "approvals.history.empty.title": "History is empty",

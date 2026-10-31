@@ -41,8 +41,32 @@ export interface ToolSpec {
    * approves each call that changes something (a call with no input only reads).
    */
   askWhenTainted?: boolean;
+  /** The person may ask for this action in their own words, and then it needs no card (see AskedSpec). */
+  asked?: AskedSpec;
   /** Only available to background tasks / interactive sessions. Default: both. */
   availability?: "all" | "interactive" | "background";
+}
+
+/** What an action is, for matching it to the person's words: the verb on its control, or the one thing a tool does. */
+export type AskedKind = "delete" | "send" | "publish" | "upload" | "confirm" | "unsubscribe";
+
+/**
+ * How the hub tells that the person asked for a call in so many words (core policy/asked.ts). The call carries
+ * `asked`, their words quoted from this conversation; the hub finds the quote in the person's own recent messages,
+ * the action's kind and the control's other words in the quote, and the site's name in what the person wrote. Then
+ * the action runs without a card and the chat shows a quiet line. Payments never go this way.
+ */
+export interface AskedSpec {
+  /** The input field with the page's URL. */
+  site: string;
+  /** The input field with the control's name («Remove», «Delete record»): its verb gives the kind. */
+  label?: string;
+  /** The kind of a tool that always does one thing (uploading files), instead of a label. */
+  kind?: AskedKind;
+  /** The input field with an amount of money: a call with one set always asks. */
+  amount?: string;
+  /** The input field with the files the action sends: each must be one the person sent in their messages. */
+  files?: string;
 }
 
 export interface ToolDescriptor extends ToolSpec {
@@ -125,7 +149,8 @@ export interface ApprovalAsk {
   host?: string;
 }
 
-export type ApprovalVia = "console" | "telegram" | "device" | "web" | "rule" | "timeout";
+/** "request": the person asked for the action in their own words (ToolSpec.asked), so nobody was asked again. */
+export type ApprovalVia = "console" | "telegram" | "device" | "web" | "rule" | "timeout" | "request";
 
 export interface Approval {
   id: string;
@@ -215,7 +240,8 @@ export type MessagePart =
   | { type: "text"; text: string }
   | { type: "tool_call"; id: string; name: string; input: unknown }
   | { type: "tool_result"; id: string; output: string; isError?: boolean }
-  | { type: "approval"; approvalId: string; summary: string; status: ApprovalStatus; ask?: ApprovalAsk }
+  /** `asked`: the person asked for it in their own words (ToolSpec.asked): a quiet line, not a card. */
+  | { type: "approval"; approvalId: string; summary: string; status: ApprovalStatus; ask?: ApprovalAsk; asked?: boolean }
   | { type: "notification"; level: NotifyLevel; title: string; body: string }
   | { type: "error"; message: string }
   /** A file the user sent (or a plugin attached): `path` is relative to the workspaces root, `size` in bytes. */

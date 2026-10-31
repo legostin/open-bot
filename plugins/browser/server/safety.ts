@@ -296,7 +296,8 @@ export function submitCall(ref: string | undefined, label: string, url: string):
   if (!ref) return `Call browser_snapshot, then browser_submit with the field's ref, its label, the current url and a description.`;
   return (
     `Call browser_submit with ref "${ref}", label ${JSON.stringify(label)}, url ${JSON.stringify(url)} and a description: ` +
-    'short and exact, in the user\'s language, what will happen (e.g. "Pay for the order of 2 items, $34.00, on shop.example").'
+    'short and exact, in the user\'s language, what will happen (e.g. "Pay for the order of 2 items, $34.00, on shop.example"). ' +
+    "If the user asked for exactly this in their own words, add them as `asked`."
   );
 }
 

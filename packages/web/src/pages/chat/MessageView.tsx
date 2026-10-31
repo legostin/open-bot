@@ -2,7 +2,7 @@
 // (chat.toolResult); overrides run inside an error boundary that falls back to the core rendering.
 
 import { memo, useState } from "react";
-import { Bell, CircleAlert, CornerUpLeft, FilePen, FileText, Mic, Play, ShieldAlert, SquareTerminal } from "lucide-react";
+import { Bell, Check, CircleAlert, CornerUpLeft, FilePen, FileText, Mic, Play, ShieldAlert, SquareTerminal, X } from "lucide-react";
 import type { AgentDef, ApprovalStatus, Message, MessagePart } from "@piomio/shared";
 import { groupParts } from "../../lib/parts";
 import { fileSize, formatDuration, formatTime, notifyLevel } from "../../lib/format";
@@ -109,7 +109,23 @@ function ApprovalActions({ approvalId }: { approvalId: string }) {
   );
 }
 
+/** An action the person asked for in their own words: their words were the yes, so only a quiet line of what was done. */
+function AskedLine({ part }: { part: Extract<MessagePart, { type: "approval" }> }) {
+  const [open, setOpen] = useState(false);
+  const failed = part.status === "failed";
+  return (
+    <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full max-w-md items-start gap-1.5 px-1 text-left text-xs leading-relaxed text-muted">
+      {failed ? <X className="mt-0.5 size-3.5 shrink-0 text-danger" /> : <Check className={cx("mt-0.5 size-3.5 shrink-0", part.status === "executed" && "text-success")} />}
+      <span className={cx("min-w-0 break-words", !open && "line-clamp-2")}>
+        {part.summary}
+        <span className="text-muted/70"> · {t(failed ? "message.approval.askedFailed" : "message.approval.asked")}</span>
+      </span>
+    </button>
+  );
+}
+
 function ApprovalCard({ part }: { part: Extract<MessagePart, { type: "approval" }> }) {
+  if (part.asked) return <AskedLine part={part} />;
   const known = APPROVAL[part.status];
   const st = known ? { label: t(known.label), tone: known.tone } : { label: part.status, tone: "neutral" as const };
   const pending = part.status === "pending";
