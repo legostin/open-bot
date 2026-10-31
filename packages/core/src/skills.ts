@@ -9,6 +9,22 @@ export interface Skill {
   description: string;
   dir: string;
   source: string;
+  /**
+   * The person taught it by showing the task (frontmatter `taught: true`, written by hub_skill_save on their tap): its
+   * background runs may click and type. Only the user's own skills folder counts; a plugin's skill saying so does not.
+   */
+  taught: boolean;
+  /** The sites it works on (frontmatter `sites`). */
+  sites: string[];
+}
+
+/** The source of the skills in the hub's data dir (`<dataDir>/skills`), where taught skills are saved. */
+export const USER_SKILLS = "user";
+
+/** Frontmatter `sites`: a list, or one site as a string. */
+function sitesOf(v: unknown): string[] {
+  const list = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+  return list.filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim());
 }
 
 export interface Command {
@@ -40,7 +56,8 @@ export class SkillIndex {
           try {
             const { data } = parseFrontmatter(readFileSync(file, "utf8"));
             const name = String(data.name ?? d);
-            this.skills.set(name, { name, description: String(data.description ?? ""), dir, source: r.source });
+            const taught = r.source === USER_SKILLS && data.taught === true;
+            this.skills.set(name, { name, description: String(data.description ?? ""), dir, source: r.source, taught, sites: sitesOf(data.sites) });
           } catch (e) {
             console.error(`[skills] bad SKILL.md in ${dir}:`, (e as Error).message);
           }

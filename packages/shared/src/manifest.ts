@@ -161,6 +161,8 @@ export const CORE_METHODS = [
   "notifications.feedback", // apply a signed feedback button press (useful / less / off)
   "files.deliver", // write a file (in base64 chunks) into a session workspace's downloads/ folder
   "connections.token", // an access token of the hub's connection the plugin's integration uses (e.g. Google)
+  "conversations.tell", // a note for an agent that it answers: wakes the task, else the dialog (the default agent's when none)
+  "speech.transcribe", // the words of a short audio clip (base64), with the hub's speech-to-text; { check: true } says if one is set up
 ] as const;
 export type CoreMethod = (typeof CORE_METHODS)[number];
 

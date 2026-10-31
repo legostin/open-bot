@@ -137,6 +137,8 @@ export function buildTrigger(input: TriggerInput, o: BuildOptions): Trigger {
     createdBy: o.createdBy,
     state: {},
   };
+  const skill = optStr(input.skill, "skill", 64);
+  if (skill) t.skill = skill;
   switch (kind) {
     case "schedule": {
       const e = cronError(input.cron);
@@ -172,6 +174,11 @@ export function applyUpdate(t: Trigger, patch: TriggerInput, o: { now: Date; tz:
   if (patch.prompt !== undefined) next.prompt = str(patch.prompt, "prompt", 8000);
   if (patch.agent !== undefined || patch.agentId !== undefined) next.agentId = str(patch.agent ?? patch.agentId, "agent", 64);
   if (patch.maxRunsPerDay !== undefined) next.maxRunsPerDay = checkMaxRuns(patch.maxRunsPerDay);
+  if (patch.skill !== undefined) {
+    const skill = optStr(patch.skill, "skill", 64);
+    if (skill) next.skill = skill;
+    else delete next.skill;
+  }
   if (patch.enabled !== undefined) {
     if (typeof patch.enabled !== "boolean") fail("enabledBool", "enabled must be true or false");
     next.enabled = patch.enabled;

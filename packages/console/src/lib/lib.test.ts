@@ -39,6 +39,14 @@ describe("conditionMatches", () => {
     expect(conditionMatches({ field: "url", op: "domain", value: "gitlab.com" }, input)).toBe(false);
     expect(conditionMatches({ field: "nested.chat", op: "eq", value: "42" }, input)).toBe(true);
   });
+  it("max: a number (or a numeric string) no larger than the limit", () => {
+    const c = { field: "amount", op: "max" as const, value: 3000 };
+    expect(conditionMatches(c, { amount: 2400 })).toBe(true);
+    expect(conditionMatches(c, { amount: "3000" })).toBe(true);
+    expect(conditionMatches(c, { amount: 3000.5 })).toBe(false);
+    expect(conditionMatches(c, { amount: "a lot" })).toBe(false);
+    expect(conditionMatches(c, {})).toBe(false);
+  });
   it("arrays must match in every element; missing fields never match", () => {
     expect(conditionMatches({ field: "tags", op: "glob", value: "?" }, input)).toBe(true);
     expect(conditionMatches({ field: "tags", op: "eq", value: "a" }, input)).toBe(false);

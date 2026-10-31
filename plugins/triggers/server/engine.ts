@@ -319,6 +319,7 @@ export class TriggerEngine {
             background: true,
             triggerId: t.id,
             ...(t.machine ? { machine: t.machine } : {}),
+            ...(t.skill ? { skill: t.skill } : {}),
           });
           rt.count++;
           run.taskId = task?.id;

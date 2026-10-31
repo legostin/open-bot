@@ -565,12 +565,15 @@ export class SessionRunner {
     this.tellAgent(conv.id, `[System] The user stored ${r.title} in the vault as vault://${r.vaultId}${r.pluginId ? ` and plugin ${r.pluginId} now uses it` : ""}. Carry on with what it was needed for.`);
   }
 
-  /** Something the user did outside the conversation (a card) that the agent should hear about: a note and a turn. */
-  tellAgent(conversationId: string, note: string): void {
+  /**
+   * Something the user did outside the conversation (a card) that the agent should hear about: a note and a turn.
+   * `taint`: the note carries outside content (a plugin's, e.g. what a web page showed): its session is marked first.
+   */
+  tellAgent(conversationId: string, note: string, opts: { taint?: boolean } = {}): void {
     const conv = this.d.store.getConversation(conversationId);
     if (!conv) return;
     this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "text", text: note }], status: "complete" });
-    void this.enqueue(conv.id, () => this.runTurn(conv, note, {}));
+    void this.enqueue(conv.id, () => this.runTurn(conv, note, opts.taint ? { taint: true } : {}));
   }
 
   /** The user did something in a card, outside any turn: note it for the agent and let it answer. */
@@ -638,6 +641,8 @@ export class SessionRunner {
     from?: string;
     /** A channel's gathering run (feeds.ts). */
     feedId?: string;
+    /** The skill the task follows (a trigger's run of a taught skill). */
+    skill?: string;
   }): Task {
     const task = this.d.store.createTask({ ...t, ...(t.tainted ? { tainted: true } : {}) });
     this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete", ...(t.from ? { agentId: t.from } : {}) });

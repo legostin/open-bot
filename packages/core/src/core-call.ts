@@ -1,11 +1,13 @@
 // Core API exposed to plugins (each method must be granted in the plugin's permissions.core).
 
-import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AttachmentKind, CoreMethod } from "@piomio/shared";
 import { parseBrainRef } from "@piomio/shared";
 import type { Hub } from "./app.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, safeFileName, saveAttachment, type IncomingFile } from "./attachments.ts";
+import { MAX_TRANSCRIBE_BYTES, uploadName } from "./transcribe.ts";
 
 /** Largest file a plugin may hand to a workspace. */
 const MAX_DELIVER_BYTES = 1024 * 1024 * 1024;
@@ -59,10 +61,55 @@ export function createCoreCall(hub: Hub) {
         // secrets > 0: the channel should delete the user's original message, it still holds the value.
         return { messageId: m.id, conversationId: conv.id, ...(secrets ? { secrets } : {}) };
       }
+      case "conversations.tell": {
+        // A note an agent answers (a teach recording, the person's hint, a noticed routine): the task it is for, else
+        // the dialog named, else the default agent's. Plugins pass what they saw outside: the session counts it so.
+        const text = String(p.text ?? "").trim();
+        if (!text) throw new Error("text is required");
+        const task = typeof p.taskId === "string" && p.taskId ? hub.store.getTask(p.taskId) : undefined;
+        if (task) {
+          hub.store.addMessage({ conversationId: task.conversationId, role: "system", parts: [{ type: "text", text }], status: "complete", taskId: task.id });
+          if ((await hub.runner.wakeTask(task, text, { taint: true })) !== "cancelled") return { conversationId: task.conversationId, delivered: "task" };
+        }
+        // A cancelled task's note goes to whoever started it.
+        const conv = task
+          ? (task.parentConversationId ? hub.store.getConversation(task.parentConversationId) : undefined) ?? hub.store.agentConversation(task.agentId)
+          : p.conversationId
+            ? hub.store.getConversation(String(p.conversationId))
+            : hub.store.agentConversation(hub.settings.get().defaultAgent);
+        if (!conv) throw new Error("conversation not found");
+        hub.runner.tellAgent(conv.id, text, { taint: true });
+        return { conversationId: conv.id, delivered: "dialog" };
+      }
+      case "speech.transcribe": {
+        if (p.check === true) return { available: !!hub.transcriber.engine() };
+        const b64 = String(p.data ?? "");
+        // base64 is 4/3 of the bytes: refuse a clip over the limit before decoding it.
+        if (b64.length * 0.75 > MAX_TRANSCRIBE_BYTES + 3) throw new Error("the audio is larger than 25 MB");
+        const data = Buffer.from(b64, "base64");
+        if (!data.length) throw new Error("no audio");
+        if (data.length > MAX_TRANSCRIBE_BYTES) throw new Error("the audio is larger than 25 MB");
+        const mimeType = typeof p.mimeType === "string" && p.mimeType ? p.mimeType.slice(0, 100) : undefined;
+        const dir = mkdtempSync(join(tmpdir(), "piomio-speech-"));
+        try {
+          // The services go by the extension: "audio.webm" for audio/webm;codecs=opus.
+          const file = join(dir, uploadName("clip", mimeType?.split(";")[0].trim()));
+          writeFileSync(file, data, { mode: 0o600 });
+          return { text: await hub.transcriber.transcribe(file, mimeType) };
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      }
       case "tasks.create": {
         const agentId = p.agentId ?? hub.settings.get().defaultAgent;
         if (!hub.agents.get(agentId)) throw new Error(`unknown agent ${agentId}`);
         let goal = String(p.goal ?? "");
+        // skill: the run follows one of the hub's skills (a trigger's run of a skill the person taught).
+        const skill = typeof p.skill === "string" && p.skill.trim() ? p.skill.trim() : undefined;
+        if (skill) {
+          if (!hub.skills.get(skill)) throw new Error(`No skill "${skill}" on the hub (it may have been deleted)`);
+          goal = `${goal}\n\n[System] This task follows the skill "${skill}": read its instructions (skill_load) first and do the task as they say.`;
+        }
         // machine: the computer the task runs on (id or name, see machines.list), like task_delegate's.
         let brainRef: string | undefined;
         if (typeof p.machine === "string" && p.machine.trim()) {
@@ -82,6 +129,7 @@ export function createCoreCall(hub: Hub) {
           triggerId: p.triggerId,
           parentConversationId: p.parentConversationId,
           ...(brainRef ? { brainRef } : {}),
+          ...(skill ? { skill } : {}),
         });
         return t;
       }

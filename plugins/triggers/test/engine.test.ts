@@ -173,6 +173,23 @@ describe("trigger engine", () => {
     expect(f.created()).toHaveLength(0);
     e.stop();
   });
+  it("runs a skill the person taught: its tasks carry the skill, and it can be changed or cleared", async () => {
+    const f = fakeCtx(new Map<string, unknown>([["initialized", true]]));
+    const e = new TriggerEngine(f.ctx);
+    await e.start();
+    const t = await e.create({ kind: "schedule", name: "Water", prompt: "Order water as usual", cron: "0 9 * * 5", skill: " order-water " }, { createdBy: "agent:assistant" });
+    expect(t.skill).toBe("order-water");
+    await e.runNow(t.id);
+    expect(f.created()[0].params).toMatchObject({ skill: "order-water", triggerId: t.id, background: true });
+    await expect(e.create({ kind: "schedule", name: "X", prompt: "x", cron: "0 9 * * *", skill: 5 as unknown as string }, { createdBy: "user" })).rejects.toMatchObject({ code: "notString" });
+    expect((await e.update(t.id, { skill: "order-water-v2" })).skill).toBe("order-water-v2");
+    const cleared = await e.update(t.id, { skill: "" });
+    expect(cleared.skill).toBeUndefined();
+    await e.runNow(t.id);
+    expect(f.created()[1].params.skill).toBeUndefined();
+    e.stop();
+  });
+
   it("runs on the computer the trigger names, and says so when that computer cannot take a run", async () => {
     const now = Date.now();
     const f = fakeCtx(new Map<string, unknown>([["initialized", true]]));

@@ -15,7 +15,7 @@ export interface RuleFormValue {
   note: string;
 }
 
-export const OPS: readonly RuleCondition["op"][] = ["eq", "glob", "domain"];
+export const OPS: readonly RuleCondition["op"][] = ["eq", "glob", "domain", "max"];
 export const opLabel = (op: RuleCondition["op"]): string => t(`rule.op.${op}` as MessageKey);
 export const opHint = (op: RuleCondition["op"]): string => t(`rule.opHint.${op}` as MessageKey);
 
@@ -23,7 +23,7 @@ export function formFromRule(r: RuleDraft | Rule): RuleFormValue {
   return {
     tool: r.tool,
     agentId: r.agentId ?? "",
-    conditions: r.conditions.map((c) => ({ field: c.field, op: c.op, value: c.value })),
+    conditions: r.conditions.map((c) => ({ field: c.field, op: c.op, value: String(c.value) })),
     decision: r.decision,
     note: r.note ?? "",
   };
@@ -46,7 +46,11 @@ export function ruleFromForm(v: RuleFormValue): RuleFormResult {
     if (!field && !value) continue;
     if (!field) return { ok: false, error: t("rule.err.fieldRequired") };
     if (!value) return { ok: false, error: t("rule.err.valueRequired", { field }) };
-    conditions.push({ field, op: c.op, value });
+    if (c.op === "max") {
+      const n = Number(value.replace(/\s/g, "").replace(",", "."));
+      if (!Number.isFinite(n)) return { ok: false, error: t("rule.err.valueNumber", { field }) };
+      conditions.push({ field, op: "max", value: n });
+    } else conditions.push({ field, op: c.op, value });
   }
   const rule: RuleDraft = { tool, conditions, decision: v.decision };
   if (v.agentId.trim()) rule.agentId = v.agentId.trim();
@@ -182,7 +186,7 @@ export function RuleForm({
                 <Input
                   mono
                   aria-label={t("rule.value")}
-                  placeholder={c.op === "domain" ? "example.com" : c.op === "glob" ? "*@example.com" : t("rule.valuePlaceholder")}
+                  placeholder={c.op === "domain" ? "example.com" : c.op === "glob" ? "*@example.com" : c.op === "max" ? "3000" : t("rule.valuePlaceholder")}
                   value={c.value}
                   onChange={(e) => setCond(i, { value: e.target.value })}
                   className="order-last col-span-3 sm:order-none sm:col-span-1"

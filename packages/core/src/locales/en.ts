@@ -43,6 +43,12 @@ export default {
   "policy.allowedByRule": "allowed by a rule",
   "permissions.alwaysAll": "Let every agent use {tools} without asking",
   "permissions.alwaysAgent": "Let {agent} use {tools} without asking",
+  // skills the person taught by showing (hub_skill_save / hub_skill_delete cards)
+  "skills.save": "Save the skill «{name}»: {description}",
+  "skills.update": "Update the skill «{name}»: {description}",
+  "skills.allow": "Without asking: «{label}» on {site}{amount}",
+  "skills.allowAmount": ", up to {amount}",
+  "skills.delete": "Delete the skill «{name}» and what it may do without asking",
   "policy.allowedByRuleNote": "allowed by a rule: {note}",
   "policy.backgroundReadOnly": "background tasks with initiative below 2 may only read and notify",
   "policy.read": "read-only",

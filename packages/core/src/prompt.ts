@@ -192,13 +192,18 @@ export function buildSystemPrompt(c: PromptContext): string {
       "  silent = nothing worth saying; digest = useful but not urgent; notify = worth interrupting now; ask = needs the user's decision.",
       "  Be conservative: interrupt only when it really matters. Keep title short and body concise.",
     );
-    if (c.agent.initiative < 2) lines.push("- Your initiative level only allows reading and suggesting in background runs: propose actions instead of taking them.");
+    const taught = c.task?.skill ? c.skills.find((s) => s.name === c.task!.skill && s.taught) : undefined;
+    if (taught) {
+      lines.push(
+        `- This run follows the skill \`${taught.name}\` the person taught you: do the task as it says. You may click and type; an action with consequences (browser_submit) runs only if the person pre-approved it in the skill, otherwise it waits for their yes on a card. When the site changed and you found another way, say so in your notify: they can update the skill.`,
+      );
+    } else if (c.agent.initiative < 2) lines.push("- Your initiative level only allows reading and suggesting in background runs: propose actions instead of taking them.");
   }
   if (c.dispatch && !c.task && !c.group && !c.background) lines.push("", ...howYouWork({ ...c, dispatch: c.dispatch }));
   if (c.setup?.trim()) lines.push("", c.setup.trim());
   if (c.skills.length) {
     lines.push("", "## Skills", c.nativeSkills ? "Skills are installed for you natively; their names:" : "Load a skill's full instructions with `skill_load` when it is relevant:");
-    for (const s of c.skills.slice(0, 80)) lines.push(`- ${s.name}: ${s.description}`);
+    for (const s of c.skills.slice(0, 80)) lines.push(`- ${s.name}${s.taught ? " (taught by the person)" : ""}: ${s.description}`);
   }
   for (const a of c.appended) if (a?.trim()) lines.push("", a.trim());
   return lines.filter((l) => l !== undefined).join("\n");

@@ -109,6 +109,8 @@ const MIGRATIONS: string[] = [
   `,
   // A secret card may ask for a site's login (username and password, kept for that domain): { domain, username? }.
   `alter table secret_requests add column login text;`,
+  // The skill a task follows (Task.skill): a trigger's run of a skill the person taught.
+  `alter table tasks add column skill text;`,
 ];
 
 /**

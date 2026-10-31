@@ -39,6 +39,11 @@ export function conditionMatches(c: RuleCondition, input: unknown): boolean {
   const values = Array.isArray(raw) ? raw : [raw];
   if (values.length === 0 || values.every((v) => v === undefined || v === null)) return false;
   return values.every((v) => {
+    if (c.op === "max") {
+      // A finite number, or a string that is just one ("2400"), no larger than the limit.
+      const n = typeof v === "number" ? v : typeof v === "string" && /^-?\d+(?:\.\d+)?$/.test(v.trim()) ? Number(v.trim()) : Number.NaN;
+      return Number.isFinite(n) && n <= c.value;
+    }
     const s = typeof v === "string" ? v : JSON.stringify(v);
     switch (c.op) {
       case "eq":

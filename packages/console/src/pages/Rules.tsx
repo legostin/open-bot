@@ -10,7 +10,7 @@ import { ConditionChip, emptyRuleForm, formFromRule, RuleForm, ruleFromForm, typ
 import { LoadError } from "./Approvals.tsx";
 import { t, type MessageKey } from "../i18n/index.ts";
 
-const viaLabel = (via: string): string => (["console", "telegram", "approval"].includes(via) ? t(`rules.via.${via}` as MessageKey) : via);
+const viaLabel = (via: string): string => (["console", "telegram", "approval", "chat", "skill"].includes(via) ? t(`rules.via.${via}` as MessageKey) : via);
 
 export function RulesPage() {
   const rules = useAsync(() => api.rules(), []);

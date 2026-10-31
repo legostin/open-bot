@@ -42,6 +42,12 @@ export default {
   "policy.allowedByRule": "разрешено правилом",
   "permissions.alwaysAll": "Разрешить всем агентам {tools} без вопросов",
   "permissions.alwaysAgent": "Разрешить агенту {agent} {tools} без вопросов",
+  // навыки, которым человек научил показом (карточки hub_skill_save / hub_skill_delete)
+  "skills.save": "Сохранить навык «{name}»: {description}",
+  "skills.update": "Обновить навык «{name}»: {description}",
+  "skills.allow": "Без вопросов: «{label}» на {site}{amount}",
+  "skills.allowAmount": ", до {amount}",
+  "skills.delete": "Удалить навык «{name}» и то, что ему можно без вопросов",
   "policy.allowedByRuleNote": "разрешено правилом: {note}",
   "policy.backgroundReadOnly": "фоновая задача с инициативой ниже 2 может только читать и уведомлять",
   "policy.read": "чтение",

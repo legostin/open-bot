@@ -41,6 +41,8 @@ export interface Trigger {
   /** The computer the runs happen on (a machines.list id, "local" for the hub's own) and its name; unset: the agent's usual brain. */
   machine?: string;
   machineName?: string;
+  /** A skill every run follows (one the person taught by showing): its tasks carry it (Task.skill). */
+  skill?: string;
   /** schedule: 5-field cron in the user's timezone. */
   cron?: string;
   /** once: ISO datetime. */
@@ -81,6 +83,8 @@ export interface TriggerInput {
   maxRunsPerDay?: number;
   /** A computer's id or name; null or "" clears it. */
   machine?: string | null;
+  /** A skill's name; null or "" clears it. */
+  skill?: string | null;
   cron?: string;
   at?: string;
   url?: string;

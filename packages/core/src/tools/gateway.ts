@@ -12,7 +12,7 @@ import type { Redactor } from "../vault/redact.ts";
 import type { Settings } from "../settings.ts";
 import { BACKGROUND_ALWAYS_ALLOWED, decide } from "../policy/engine.ts";
 import { NATIVE_PERMISSION_TOOL } from "./native-permission.ts";
-import { HUB_TOOL_PREFIX } from "./hub-tools.ts";
+import { HUB_TOOL_PREFIX, HUB_TOOLS_FOR_EVERY_AGENT } from "./hub-tools.ts";
 
 export interface AgentLookup {
   get(id: string): AgentDef | undefined;
@@ -33,6 +33,8 @@ export interface GatewayDeps {
   jobTools?: (s: SessionRow) => string[];
   /** Resolve "%key%" in user-facing tool texts (approval summaries) against the tool owner's messages. */
   localize?: (owner: string, text: string) => string;
+  /** The hub's skills: a background task following a taught one (Task.skill) may click and type (PolicyInput.skillRun). */
+  skills?: { get(name: string): { taught: boolean } | undefined };
 }
 
 /** Tools every agent has, whatever its tool list: what draws in the person's chat (buttons, maps, pictures, cards, pages) and the team's group chats. */
@@ -62,19 +64,29 @@ export class ToolGateway {
 
   listFor(s: SessionRow): ToolDescriptor[] {
     const agent = this.agentFor(s);
-    return this.d.registry.list().filter((t) => this.visible(t, agent, s));
+    const skillRun = this.skillRun(s);
+    return this.d.registry.list().filter((t) => this.visible(t, agent, s, skillRun));
   }
 
-  private visible(t: ToolDescriptor, agent: AgentDef, s: SessionRow): boolean {
+  /** A background run of a skill the person taught: its task names a skill that is `taught`. */
+  private skillRun(s: SessionRow): boolean {
+    if (!s.background || !s.taskId || !this.d.skills) return false;
+    const skill = this.d.store.getTask(s.taskId)?.skill;
+    return !!skill && !!this.d.skills.get(skill)?.taught;
+  }
+
+  private visible(t: ToolDescriptor, agent: AgentDef, s: SessionRow, skillRun = false): boolean {
     // The CLIs' permission prompt (native-permission.ts): theirs only, never on the model's list of an API brain.
     if (t.name === NATIVE_PERMISSION_TOOL) return /^(claude-code|codex)\b/.test(s.brainRef ?? "");
     const job = this.d.jobTools?.(s) ?? [];
-    if (!matchesAny(t.name, agent.tools.length ? agent.tools : ["*"]) && !SHOW_TOOLS.includes(t.name) && !job.includes(t.name)) return false;
+    // Saving what the person taught is for whichever agent they showed it to (it always asks on its own card).
+    const everyAgent = t.owner === "core" && HUB_TOOLS_FOR_EVERY_AGENT.includes(t.name);
+    if (!matchesAny(t.name, agent.tools.length ? agent.tools : ["*"]) && !SHOW_TOOLS.includes(t.name) && !job.includes(t.name) && !everyAgent) return false;
     // Hub administration belongs to the default agent alone (see tools/hub-tools.ts).
-    if (t.owner === "core" && t.name.startsWith(HUB_TOOL_PREFIX) && agent.id !== this.d.settings.get().defaultAgent) return false;
+    if (t.owner === "core" && t.name.startsWith(HUB_TOOL_PREFIX) && !everyAgent && agent.id !== this.d.settings.get().defaultAgent) return false;
     if (t.availability === "background" && !s.background) return false;
     if (t.availability === "interactive" && s.background) return false;
-    if (s.background && agent.initiative < 2 && t.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(t.name)) return false;
+    if (s.background && agent.initiative < 2 && !skillRun && t.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(t.name)) return false;
     return true;
   }
 
@@ -97,7 +109,8 @@ export class ToolGateway {
     if (!s) return { content: [{ type: "text", text: "Session not found" }], isError: true };
     const agent = this.agentFor(s);
     const entry = this.d.registry.get(name);
-    if (!entry || !this.visible(entry.descriptor, agent, s)) {
+    const skillRun = this.skillRun(s);
+    if (!entry || !this.visible(entry.descriptor, agent, s, skillRun)) {
       this.d.audit.append(`agent:${s.agentId}`, "tool.denied", name, { reason: "not available" });
       return { content: [{ type: "text", text: `Tool ${name} is not available to this agent` }], isError: true };
     }
@@ -116,7 +129,7 @@ export class ToolGateway {
 
     const settings = this.d.settings.get();
     const policy = decide(
-      { tool, input, agentId: s.agentId, tainted: s.tainted, background: s.background, initiative: agent.initiative, profile: agent.policyProfile },
+      { tool, input, agentId: s.agentId, tainted: s.tainted, background: s.background, initiative: agent.initiative, profile: agent.policyProfile, skillRun },
       this.d.rules.list(),
       (t) => this.d.rules.isKnownTarget(t),
     );

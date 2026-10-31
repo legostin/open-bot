@@ -12,7 +12,7 @@
 //
 // The one exception is profile_update at the end: every agent may change its own profile when the user asks.
 
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type { AgentDef, AgentDraft, IntegrationView, JsonSchema, Locale, MachineSettings, ToolCallContext, ToolDescriptor, ToolResult } from "@piomio/shared";
 import { AVATAR_COLORS, AVATAR_SHAPES, defaultAvatar, formatBrainRef, KEY_PROVIDERS, keyProvider, parseAvatar, parseBrainRef, parseThinking } from "@piomio/shared";
 import { normalizeSettings, SetupError } from "../machine-setup.ts";
@@ -27,6 +27,7 @@ import { ruleMatches } from "../policy/engine.ts";
 import { inviteUrl, machineHubUrl } from "../pairing.ts";
 import { isSetupStep, SETUP_STEPS } from "../setup.ts";
 import { sanitizeToolName } from "./registry.ts";
+import { checkSkillSave, deleteTaughtSkill, parseSkillSave, saveTaughtSkill, skillSaveSummary } from "../taught-skills.ts";
 import { NATIVE_PERMISSION_TOOL } from "./native-permission.ts";
 
 export const HUB_TOOL_PREFIX = "hub_";
@@ -39,7 +40,9 @@ const SECRET_KEY = /key|token|secret|password/i;
 /** Tools that only put a card in front of the user, who then decides: fine even after outside content was read. */
 const CARDS = new Set(["secret_request", "plugin_setup", "agent_draft", "brain_login", "connect_device", "integration_connect"]);
 /** Tools that ask the person on a card of their own (what it installs, what it allows): no second card in front of it. */
-const OWN_CARD = new Set(["plugin_install", "permission_always"]);
+const OWN_CARD = new Set(["plugin_install", "permission_always", "skill_save"]);
+/** Hub tools every agent sees (ToolGateway.visible): saving what the person taught is for whoever they showed it to. */
+export const HUB_TOOLS_FOR_EVERY_AGENT = ["hub_skill_save", "hub_skill_delete"];
 
 /** The person said "always" (or "don't ask") in their own words. */
 const ALWAYS_WORDS = /\balways\b|\bwithout asking\b|\bdon'?t ask\b|\u0432\u0441\u0435\u0433\u0434\u0430|\u043d\u0435 \u0441\u043f\u0440\u0430\u0448\u0438\u0432|\u0431\u0435\u0437 (?:\u0441\u043f\u0440\u043e\u0441\u0430|\u0432\u043e\u043f\u0440\u043e\u0441|\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434)/iu;
@@ -854,6 +857,128 @@ export function registerHubTools(hub: Hub): void {
       }
       return text("The person declined: nothing was allowed.", true);
     },
+  );
+
+  // ---------- skills the person taught by showing (browser_teach) ----------
+
+  const skillsDir = join(hub.config.dataDir, "skills");
+  reg(
+    {
+      name: "skill_save",
+      effect: "local-write",
+      description:
+        "Save a skill the person taught you by showing it in the browser: after they showed a task with browser_teach and the recording arrived " +
+        "(a note, and files in your workspace), once you retold the steps in a few lines and asked what was unclear; or to update a taught skill " +
+        "after the person corrected it or showed a step again (pass replaces with its name: the old version and its pre-approvals are replaced). " +
+        "The person sees an approval card with the skill and every pre-approval, and nothing is saved without their tap. " +
+        "`instructions` (markdown) is what you or a teammate will follow later, so write it complete: the goal; the inputs that change each time " +
+        "(and where to get them or whom to ask); the steps, with the exact element names as browser_snapshot shows them; the checks (what to read " +
+        "and compare, from the person's highlights); the consequential steps (browser_submit) and when each may run. " +
+        "`allow` lists only what the person agreed to in their own words in this chat (\"yes, order without asking up to 3000\"); never add one they " +
+        "did not say: each is a browser_submit on that site, on the control named `label` exactly as the snapshot names it (numbers in it may change), " +
+        "up to `maxAmount` in `currency` when money is involved; it then runs without a card. " +
+        "`files` are paths in your workspace to keep with the skill, like downloads/teach-<id>.md. `sites`: the sites it works on.",
+      inputSchema: obj(
+        {
+          name: { type: "string", description: "Lowercase Latin letters, digits and dashes, up to 40 characters, e.g. order-water" },
+          description: { type: "string", description: "One line on what it does and when to use it, in the person's language (up to 300 characters)" },
+          instructions: { type: "string", description: "The skill's text (markdown, up to 20 000 characters)" },
+          files: { type: "array", items: { type: "string" }, description: "Workspace paths of files to keep with the skill (up to 20, 5 MB each)" },
+          sites: { type: "array", items: { type: "string" }, description: "Sites it works on, e.g. 5vodi.kz" },
+          allow: {
+            type: "array",
+            description: "Clicks the person agreed may run without asking (browser_submit)",
+            items: {
+              type: "object",
+              properties: {
+                site: { type: "string", description: "The site, e.g. 5vodi.kz" },
+                label: { type: "string", description: "The control's name as browser_snapshot shows it, e.g. Оформить заказ" },
+                maxAmount: { type: "number", description: "The largest amount it may cost, when money is involved" },
+                currency: { type: "string", description: "Currency code of maxAmount, e.g. KZT" },
+              },
+              required: ["site", "label"],
+            },
+          },
+          replaces: { type: "string", description: "The name of the taught skill this one updates" },
+        },
+        ["name", "description", "instructions"],
+      ),
+    },
+    async (i, ctx) => {
+      const skill = parseSkillSave(i);
+      const s = hub.store.getSession(ctx.sessionId);
+      if (!s) return text("Session not found.", true);
+      const local = parseBrainRef(s.brainRef).machineId === "local";
+      const check = () => checkSkillSave(skill, { skills: hub.skills, skillsDir, ...(local ? { workspace: hub.runner.workspacePath(s) } : {}) });
+      check();
+      const save = (via: string): ToolResult => {
+        const saved = saveTaughtSkill(skill, check(), { skills: hub.skills, rules: hub.rules, skillsDir, agentId: ctx.agentId });
+        hub.audit.append(`agent:${ctx.agentId}`, skill.replaces ? "skill.update" : "skill.save", skill.name, {
+          via,
+          ...(skill.replaces ? { replaces: skill.replaces } : {}),
+          files: saved.files,
+          sites: skill.sites,
+          rules: saved.rules.map((r) => r.id),
+        });
+        const allowed = saved.rules.length ? ` ${saved.rules.length} pre-approved click(s) now run without a card.` : "";
+        return text(
+          `Saved the skill "${skill.name}" (${saved.dir}${saved.files.length ? `, with ${saved.files.join(", ")}` : ""}).${allowed} ` +
+            `Every agent of the team can use it (skill_load ${skill.name}); a trigger can run it on a schedule (trigger_create with skill "${skill.name}"). ` +
+            "Tell the person in a sentence.",
+        );
+      };
+      if (ctx.approved) return save("approved on its card");
+      const summary = skillSaveSummary(skill, hubLocale());
+      const approval = hub.approvals.create({
+        sessionId: ctx.sessionId,
+        conversationId: ctx.conversationId,
+        taskId: ctx.taskId,
+        agentId: ctx.agentId,
+        tool: HUB_TOOL_PREFIX + "skill_save",
+        input: i,
+        summary,
+        effect: "external",
+        tainted: ctx.tainted,
+      });
+      const outcome = await hub.approvals.wait(approval.id, hub.settings.get().approvalInlineWaitSec * 1000);
+      if (outcome === "approved") {
+        let r: ToolResult;
+        try {
+          r = save("approved on its card");
+        } catch (e: any) {
+          r = text(e?.message ?? String(e), true);
+        }
+        hub.approvals.markExecuted(approval.id, r);
+        return r;
+      }
+      if (outcome === "timeout") {
+        // The card stays: a tap later saves it then (deferred approval) and you hear about it.
+        return text(
+          `The card waits for the person's tap (approvalId=${approval.id}): nothing is saved until they tap. Do not call again; end your turn ` +
+            "with a sentence that the card is there. When they tap, the hub saves the skill and tells you.",
+        );
+      }
+      return text("The person declined: nothing was saved. Ask what to change, if anything.", true);
+    },
+    (i) => skillSaveSummary(parseSkillSave(i), hubLocale()),
+  );
+
+  reg(
+    {
+      name: "skill_delete",
+      effect: "local-write",
+      description:
+        "Delete a skill the person taught by showing (and the clicks it was allowed without asking) when they ask you to forget it. " +
+        "Only taught skills (marked so in your skills list) can be deleted.",
+      inputSchema: obj({ name: { type: "string", description: "The taught skill's name" } }, ["name"]),
+    },
+    (i, ctx) => {
+      const name = String(i.name ?? "").trim();
+      const r = deleteTaughtSkill(name, { skills: hub.skills, rules: hub.rules });
+      hub.audit.append(`agent:${ctx.agentId}`, "skill.delete", name, { rules: r.rules });
+      return text(`Deleted the skill "${name}"${r.rules ? ` and its ${r.rules} pre-approved click(s)` : ""}. Tell the person in a sentence.`);
+    },
+    (i) => t("skills.delete", { name: String(i?.name ?? "") }),
   );
 
   reg(

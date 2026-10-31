@@ -94,7 +94,9 @@ export type PolicyDecision = "allow" | "ask" | "deny";
 export type RuleCondition =
   | { field: string; op: "eq"; value: string }
   | { field: string; op: "glob"; value: string }
-  | { field: string; op: "domain"; value: string };
+  | { field: string; op: "domain"; value: string }
+  /** A number (or a numeric string like "2400") no larger than `value`: a pre-approved amount's limit. */
+  | { field: string; op: "max"; value: number };
 
 export interface Rule {
   id: string;
@@ -104,7 +106,8 @@ export interface Rule {
   decision: "allow" | "deny";
   note?: string;
   createdAt: ISODate;
-  createdVia: "console" | "telegram" | "approval" | "chat";
+  /** "skill": a taught skill's pre-approval, noted `skill:<name>` (hub_skill_save, on the person's tap). */
+  createdVia: "console" | "telegram" | "approval" | "chat" | "skill";
 }
 
 export type ApprovalStatus = "pending" | "approved" | "denied" | "expired" | "executed" | "failed";
@@ -467,6 +470,8 @@ export interface Task {
   feedId?: string;
   /** The brain and depth whoever started it chose for this job (task_delegate), over the agent's choice for tasks. */
   thinking?: ThinkingChoice;
+  /** The skill the task follows (a trigger's run of a taught skill): a taught one may click and type in the background. */
+  skill?: string;
   createdAt: ISODate;
   updatedAt: ISODate;
 }

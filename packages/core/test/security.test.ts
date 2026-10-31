@@ -82,6 +82,50 @@ describe("policy engine", () => {
     expect(decide(base({ background: true, initiative: 2 }), [rule({})], unknownTargets).decision).toBe("allow");
   });
 
+  it("a background run of a taught skill clicks and types; actions with consequences need a pre-approval or a card", () => {
+    const click = tool("browser_click", "local-write");
+    const submit = tool("browser_submit", "external");
+    const run = (over: Partial<PolicyInput>) => base({ background: true, initiative: 1, input: { ref: "e5" }, ...over });
+    // Without a taught skill, a background run below initiative 2 only reads.
+    expect(decide(run({ tool: click }), [], unknownTargets).decision).toBe("deny");
+    expect(decide(run({ tool: click, skillRun: true }), [], unknownTargets).decision).toBe("allow");
+    const input = { ref: "e9", label: "Оформить заказ", url: "https://www.5vodi.kz/cart", amount: 2400, currency: "KZT", description: "Order water" };
+    expect(decide(run({ tool: submit, input, skillRun: true }), [], unknownTargets).decision).toBe("ask");
+    const pre = rule({
+      tool: "browser_submit",
+      createdVia: "skill",
+      note: "skill:order-water",
+      conditions: [
+        { field: "url", op: "domain", value: "5vodi.kz" },
+        { field: "label", op: "eq", value: "Оформить заказ" },
+        { field: "amount", op: "max", value: 3000 },
+        { field: "currency", op: "eq", value: "KZT" },
+      ],
+    });
+    expect(decide(run({ tool: submit, input, skillRun: true }), [pre], unknownTargets)).toMatchObject({ decision: "allow", ruleId: pre.id });
+    // More than agreed, or no amount said: the card again.
+    expect(decide(run({ tool: submit, input: { ...input, amount: 3500 }, skillRun: true }), [pre], unknownTargets).decision).toBe("ask");
+    expect(decide(run({ tool: submit, input: { ...input, amount: undefined }, skillRun: true }), [pre], unknownTargets).decision).toBe("ask");
+    // Not a skill run: the background rule still holds.
+    expect(decide(run({ tool: submit, input }), [pre], unknownTargets).decision).toBe("deny");
+  });
+
+  it("op max: a finite number no larger than the limit; numeric strings count; anything else does not match", () => {
+    const max = rule({ tool: "x", conditions: [{ field: "amount", op: "max", value: 3000 }] });
+    const ext = tool("x", "external");
+    const at = (amount: unknown) => decide(base({ tool: ext, input: { amount } }), [max], unknownTargets).decision;
+    expect(at(3000)).toBe("allow");
+    expect(at(2400.5)).toBe("allow");
+    expect(at("2400")).toBe("allow");
+    expect(at(-5)).toBe("allow");
+    expect(at(3000.01)).toBe("ask");
+    expect(at("3 000")).toBe("ask");
+    expect(at("lots")).toBe("ask");
+    expect(at(Number.NaN)).toBe("ask");
+    expect(at(undefined)).toBe("ask");
+    expect(at(true)).toBe("ask");
+  });
+
   it("extracts recipients and hosts", () => {
     expect(extractTargets({ to: "A@B.com", body: "see https://x.example.org/p and c@d.io" }).sort()).toEqual(["a@b.com", "c@d.io", "x.example.org"]);
   });

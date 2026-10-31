@@ -185,6 +185,7 @@ export class Hub {
       agents: this.agents,
       workspaceFor: (s) => this.runner.workspacePath(s),
       jobTools: (s) => (s.taskId && this.store.getTask(s.taskId)?.feedId ? FEED_RUN_TOOLS : []),
+      skills: this.skills,
       // "%key%" approval summaries resolve against the owner's messages in the hub language.
       localize: (owner, text) =>
         owner === "core" ? localizeValue(text, catalogLookup(coreCatalog, hubLocale())) : localizePluginValue(this.plugins.get(owner)?.layout, text, hubLocale()),

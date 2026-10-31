@@ -13,6 +13,11 @@ export interface PolicyInput {
   background: boolean;
   initiative: 0 | 1 | 2;
   profile: string;
+  /**
+   * A background run of a skill the person taught (Task.skill names a taught one): it may click and type though its
+   * agent only suggests; anything external still needs a rule (the skill's pre-approvals) or a card.
+   */
+  skillRun?: boolean;
 }
 
 export interface PolicyResult {
@@ -32,11 +37,22 @@ function getField(input: unknown, path: string): unknown {
   return v;
 }
 
+/** A finite number, or a string that is just one ("2400", "34.5"); anything else is not an amount. */
+function amountOf(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  if (typeof v === "string" && /^-?\d+(?:\.\d+)?$/.test(v.trim())) return Number(v.trim());
+  return undefined;
+}
+
 export function conditionMatches(c: RuleCondition, input: unknown): boolean {
   const raw = getField(input, c.field);
   const values = Array.isArray(raw) ? raw : [raw];
   if (values.length === 0 || values.every((v) => v === undefined || v === null)) return false;
   return values.every((v) => {
+    if (c.op === "max") {
+      const n = amountOf(v);
+      return n !== undefined && Number.isFinite(c.value) && n <= c.value;
+    }
     const s = typeof v === "string" ? v : JSON.stringify(v);
     switch (c.op) {
       case "eq":
@@ -86,7 +102,7 @@ export function decide(p: PolicyInput, rules: Rule[], isKnownTarget: (t: string)
     }
   }
 
-  if (p.background && p.initiative < 2 && tool.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(tool.name)) {
+  if (p.background && p.initiative < 2 && !p.skillRun && tool.effect !== "read" && !BACKGROUND_ALWAYS_ALLOWED.includes(tool.name)) {
     return { decision: "deny", reason: t("policy.backgroundReadOnly") };
   }
 
