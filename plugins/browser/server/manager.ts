@@ -161,6 +161,7 @@ export class BrowserManager {
         activePage: () => this.activePage(),
         ensurePage: () => this.ensurePage(),
         titleOf: (p) => this.titleOf(p),
+        titleNow: (p) => this.titles.get(p) ?? "",
         note: (text) => this.notes.push(text),
         watching: () => this.watching(),
         changed: () => this.scheduleState(),

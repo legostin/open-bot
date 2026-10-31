@@ -58,6 +58,8 @@ export interface LearningHost {
   activePage(): Page | null;
   ensurePage(): Promise<Page>;
   titleOf(p: Page): Promise<string>;
+  /** The title the tab had last (no wait). */
+  titleNow(p: Page): string;
   /** A line for the next agent tool result. */
   note(text: string): void;
   watching(): boolean;
@@ -190,7 +192,7 @@ export class Learning {
       if (!this.rec) {
         const page = this.h.activePage();
         this.rec = new Recorder({ id: this.journal.newId(), kind: "takeover", ...(this.agent ? { agentId: this.agent.id } : {}), now: Date.now() });
-        if (page) this.rec.page(page.url(), "", Date.now());
+        if (page) this.rec.page(page.url(), this.h.titleNow(page), Date.now());
         this.images = 0;
         this.field = null;
       }

@@ -37,6 +37,7 @@ function setup(o: { remember?: boolean } = {}) {
     activePage: () => page,
     ensurePage: async () => page,
     titleOf: async () => "Каталог",
+    titleNow: () => "Каталог",
     note: (t) => notes.push(t),
     watching: () => true,
     changed() {},
@@ -64,6 +65,8 @@ describe("learning from takeovers", () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toContain("While you waited, the person did this in the browser");
     expect(notes[0]).toContain("Clicked button «Мои адреса»");
+    // The page the takeover began on, with its title.
+    expect(notes[0]).toContain("Landed on «Каталог» — https://water.example/catalog/7");
     expect(learning.journal.list()).toHaveLength(1);
     expect(calls.filter((c) => c.method === "conversations.tell")).toHaveLength(0);
   });
