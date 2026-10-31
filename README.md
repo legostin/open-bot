@@ -22,7 +22,7 @@
   <a href="https://github.com/legostin/piomio/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/legostin/piomio?style=flat-square&color=f4a11a&label=release"></a>
   <img alt="macOS, Windows, Docker" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Docker-1c1814?style=flat-square">
   <img alt="English and Russian" src="https://img.shields.io/badge/EN%20%C2%B7%20RU-1c1814?style=flat-square">
-  <a href="#license"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-1c1814?style=flat-square"></a>
+  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-1c1814?style=flat-square"></a>
 </p>
 
 <p align="center">
@@ -421,4 +421,4 @@ To run the app from source without touching an installed Piomio: stage once (`no
 
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE)
