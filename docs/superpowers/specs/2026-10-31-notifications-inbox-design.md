@@ -72,15 +72,15 @@ A "notify" that quiet hours or the rate limit turn into "digest" becomes an `ite
 - **A newer item from the same trigger replaces** an earlier one that has not gone into a digest yet: the old row
   gets `superseded_by` and never goes out. This also covers duplicate runs until their cause is fixed.
 - **The hub's own texts are human.**
-  - A failed task: "Не получилось: «{title}»" with one plain sentence for known causes (no brain signed in, the
-    agent's budget, a machine offline) and the first sentence of the error otherwise. The full error stays on the
-    task page.
+  - A failed task: "Не получилось: «{title}»" with one plain sentence for a known cause (no brain signed in) and the
+    first sentence of the error otherwise; the agent's budget and an offline machine already have their own plain
+    notes. The full error stays on the task page.
   - A failed **report run** now produces this alert too (today a failed trigger run says nothing).
   - "Task done" for a task the person started stays an `alert`.
 
 ## Reports
 
-- The trigger plugin passes `report: true` to `tasks.create`; the task stores it (`tasks.report`).
+- The trigger plugin passes `report: true` to `tasks.create`; the task stores it (`tasks.deliver = "report"`; the digest task has `"digest"`).
 - A report run's prompt ends: "Your final reply is delivered to the user as your message at its scheduled time
   (their chat and Telegram). Write it for them, complete. Do not call notify." `notify` in a report run records
   nothing and says so.
@@ -110,7 +110,7 @@ At each digest time (and on "Collect now", and on the new agent tool `digest_now
    - the main thing first, grouped by theme, duplicates merged;
    - housekeeping dropped; numbers, dates and places kept;
    - short Markdown (a few bold headings or bullets), about 1200 characters at most;
-   - links only from those given in the material.
+   - no links: the hub lists the sources under the message.
    The task is told not to call `notify`; `notify` in a digest run records nothing.
 4. **Deliver.** The final reply goes to the default agent's dialog as a `notification` part:
    - `kind: "digest"` and a title from the hub by local time ("Утренняя сводка" before 12:00, "Дневная" until
@@ -184,7 +184,7 @@ times and quiet hours (`settings_update`, already there), and turn a schedule in
   Existing rows get `kind` from their level: silent and digest become `item`, notify becomes `alert`, ask becomes
   `question`. Rows with an unknown level become `item` with level silent. `digested` stays and means "will not go
   into a digest any more".
-- **`tasks.report`** (migration), set from `tasks.create`'s `report`.
+- **`tasks.deliver`** (migration): `"report"`, set from `tasks.create`'s `report`, or `"digest"` for the digest task.
 - **`packages/shared/src/types.ts`**:
   - `Notification` gets `kind`, `reason`, `messageId`, `readAt`, `digestId`, `supersededBy`;
   - the `notification` message part gets optional `kind`, `notificationId` and `sources: {label, href, count?}[]`;
