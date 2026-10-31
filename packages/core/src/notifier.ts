@@ -440,9 +440,10 @@ export class Notifier {
   /** Behind the scenes: items and approval pushes, with why each did not reach the person. */
   behind(opts: { before?: string; limit?: number } = {}): BehindEntry[] {
     const limit = pageSize(opts.limit);
-    // The digest an item went into is named once it is out: before that it is still being written and is nowhere to open.
+    // The digest an item went into is named once it is out: before that it is still being written and is nowhere to open,
+    // and the item still waits for it.
     const { rows } = this.page(
-      "n.*, d.title as digest_title, d.created_at as digest_at",
+      "n.*, d.title as digest_title, d.created_at as digest_at, (select 1 from notifications o where o.id = n.digest_id and o.delivered_at is null) as digest_open",
       "from notifications n left join notifications d on d.id = n.digest_id and d.delivered_at is not null",
       "n.kind in ('item', 'approval')",
       opts.before || "9999",
@@ -460,7 +461,7 @@ export class Notifier {
         ...(n.agentId ? { agentId: n.agentId } : {}),
         ...(n.taskId ? { taskId: n.taskId } : {}),
         ...(n.reason ? { reason: n.reason } : {}),
-        waiting: n.level === "digest" && !r.digested && !n.supersededBy,
+        waiting: n.level === "digest" && !n.supersededBy && (!r.digested || !!r.digest_open),
         ...(n.digestId && r.digest_title ? { digest: { id: n.digestId, title: r.digest_title, createdAt: r.digest_at } } : {}),
         ...(n.supersededBy ? { supersededBy: n.supersededBy } : {}),
       };

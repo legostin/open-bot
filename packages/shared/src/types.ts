@@ -862,7 +862,7 @@ export interface BehindEntry {
   taskId?: string;
   createdAt: ISODate;
   reason?: string;
-  /** Held for the next digest and not gone into one yet (level digest, not digested, not replaced). */
+  /** Held for the digest and not out in one yet (level digest, not replaced, and not digested or its digest still being written). */
   waiting: boolean;
   /** The digest it went into. */
   digest?: { id: string; title: string; createdAt: ISODate };

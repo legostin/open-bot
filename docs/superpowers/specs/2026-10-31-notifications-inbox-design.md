@@ -202,7 +202,8 @@ report or a check (`trigger_update`).
   there was nothing.
 - **Agent tool** `inbox_view` (core, read-only): unread questions, the next digest, the 20 newest entries and the 20
   newest behind-the-scenes rows with why each stayed there.
-- `BehindEntry.waiting`: the row is held for the next digest (level digest, not digested, not replaced). Items that
+- `BehindEntry.waiting`: the row is held for the digest and not out in one yet (level digest, not replaced, and not
+  digested or its digest still being written). Items that
   went into digests sent before `digest_id` existed are digested with no digest to link: "went into an earlier digest".
 - i18n: every new string in `packages/core/src/locales/{en,ru}.ts`, the web catalogs and the iOS strings.
 

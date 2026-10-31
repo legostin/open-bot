@@ -1080,6 +1080,22 @@ describe("the Inbox", () => {
     expect(after.get(waits.id)!.digest).toBeTruthy();
   });
 
+  it("says an item in a digest still being written waits for it, and links the digest once it is out", async () => {
+    const n = setup();
+    const item = await n.notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+    await n.notifier.flushDigest();
+    const open = n.db.prepare("select * from notifications where kind = 'digest'").get() as any;
+    expect(open.delivered_at).toBeNull();
+    expect(n.row(item.id)).toMatchObject({ digested: 1, digest_id: open.id });
+    const writing = n.notifier.behind().find((b) => b.id === item.id)!;
+    expect(writing.waiting).toBe(true);
+    expect(writing.digest).toBeUndefined();
+    await n.notifier.digestWritten("t_digest_1", "Сводка");
+    const out = n.notifier.behind().find((b) => b.id === item.id)!;
+    expect(out.waiting).toBe(false);
+    expect(out.digest).toMatchObject({ id: open.id });
+  });
+
   it("names the agent whose dialog an entry landed in when nobody in particular raised it", async () => {
     const n = setup();
     const a = await n.notifier.notify({ level: "notify", title: "From the hub", body: "x" });
