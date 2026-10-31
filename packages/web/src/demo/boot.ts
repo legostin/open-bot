@@ -5,7 +5,17 @@ import { readParams, type FromDemo } from "./protocol";
 
 const params = readParams(location.search);
 
+/** What the checks read when the demo runs on its own page: the last report, and every one in order. */
+declare global {
+  interface Window {
+    __demo?: { last?: FromDemo; log: FromDemo[] };
+  }
+}
+window.__demo = { log: [] };
+
 function report(m: FromDemo): void {
+  window.__demo!.last = m;
+  window.__demo!.log.push(m);
   if (window.parent !== window) window.parent.postMessage(m, location.origin);
 }
 
