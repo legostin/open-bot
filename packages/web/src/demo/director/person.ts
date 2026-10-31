@@ -1,4 +1,4 @@
-// The person's side of a chapter: what Alex or Саша does in the app. The script types into the real composer, presses
+// The person's side of a chapter: what the person in the story does in the app. The script types into the real composer, presses
 // the real buttons and waits for the hub, so what the visitor sees is the app's own behaviour.
 
 import type { Message } from "@piomio/shared";

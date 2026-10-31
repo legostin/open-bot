@@ -44,7 +44,8 @@ describe("web UI catalogs", () => {
   it("no hard-coded Cyrillic strings outside i18n/ru.ts", () => {
     const root = join(import.meta.dirname, "..");
     const offenders = sourceFiles(root)
-      .filter((f) => !f.endsWith(`${sep}i18n${sep}ru.ts`))
+      // The demo's stories are per-locale catalogs too (demo/content/<locale>.ts; content.test.ts checks their shape).
+      .filter((f) => !f.endsWith(`${sep}i18n${sep}ru.ts`) && !f.includes(`${sep}demo${sep}content${sep}`))
       .flatMap((f) =>
         readFileSync(f, "utf8")
           .split("\n")
