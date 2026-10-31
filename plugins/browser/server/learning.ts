@@ -369,7 +369,7 @@ function demonstrationNote(t: TeachSession, r: Recording, files: string[]): stri
   const next =
     t.scope === "step"
       ? "Carry on with your task using what the person showed; if you follow a taught skill, offer to update it at the end (hub_skill_save with replaces)."
-      : "Follow the teach-by-demo skill: retell the steps in a few lines, ask only what is unclear (what changes each time), ask about every step with consequences with quick replies, then save the skill with hub_skill_save and these files.";
+      : `${t.agentId ? "" : "Unless it is clear, first ask in one short question what this was for. "}Follow the teach-by-demo skill: retell the steps in a few lines, ask only what is unclear (what changes each time), ask about every step with consequences with quick replies, then save the skill with hub_skill_save and ${files.length ? "these files" : "the recording's files (browser_journal export)"}.`;
   return [head, where, "", toMarkdown(r), "", next].join("\n");
 }
 
