@@ -25,7 +25,8 @@ import { detailOfTool, stepOfTool, type MachineActivityFeed } from "./activity.t
 import { needOf, route, skillOfGoal, type Route } from "./model-router.ts";
 import type { EgressProxy } from "./egress.ts";
 import { DEFAULT_BRAIN_EGRESS } from "./settings.ts";
-import { buildSystemPrompt } from "./prompt.ts";
+import { buildSystemPrompt, taskEnding } from "./prompt.ts";
+import { humanFailure } from "./notifier.ts";
 import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
@@ -142,6 +143,8 @@ export interface TurnResult {
   /** Just the final answer, without the narration around tool calls: what the channels get. */
   answer?: string;
   error?: string;
+  /** Why it could not start, when the hub knows: "no-brain", none of the agent's brains is set up. */
+  errorCode?: "no-brain";
   limited?: { resetAt?: string };
   awaitingApproval: boolean;
   /** The assistant message the turn wrote (its last one, when messages joined the turn). */
@@ -231,7 +234,7 @@ export class SessionRunner {
       const s = this.d.settings.get();
       const { remind } = this.d.approvals.sweep(s.approvalExpireHours);
       for (const a of remind) {
-        void this.d.notifier.notify({ level: "notify", title: t("notify.awaitingApproval"), body: a.summary, agentId: a.agentId, taskId: a.taskId });
+        void this.d.notifier.notify({ level: "notify", kind: "approval", title: t("notify.awaitingApproval"), body: a.summary, agentId: a.agentId, taskId: a.taskId });
       }
     }, 15_000);
     this.timer.unref();
@@ -644,6 +647,10 @@ export class SessionRunner {
     feedId?: string;
     /** The skill the task follows (a trigger's run of a taught skill). */
     skill?: string;
+    /** How the result reaches the person (a schedule's report, the digest). */
+    deliver?: Task["deliver"];
+    /** The brain and depth for this job (the digest: fast, writing). */
+    thinking?: Task["thinking"];
   }): Task {
     const task = this.d.store.createTask({ ...t, ...(t.tainted ? { tainted: true } : {}) });
     this.d.store.addMessage({ conversationId: task.conversationId, role: "user", parts: [{ type: "text", text: t.goal }], status: "complete", ...(t.from ? { agentId: t.from } : {}) });
@@ -718,10 +725,17 @@ export class SessionRunner {
     const conv = this.d.store.getConversation(fresh.conversationId);
     if (!agent || !conv) {
       this.d.store.updateTask(fresh.id, { status: "failed", error: t("task.missingAgent") });
+      // The digest's writer cannot run: the hub sends the card now, not after the writer's time is up.
+      if (fresh.deliver === "digest") await this.d.notifier.digestWritten(fresh.id, undefined);
       return;
     }
     if (fresh.background && !this.budgetOk(agent)) {
       this.d.store.updateTask(fresh.id, { status: "failed", error: t("task.budgetExhausted") });
+      // The card is the answer for the digest: no notice about the budget for the next digest to carry.
+      if (fresh.deliver === "digest") {
+        await this.d.notifier.digestWritten(fresh.id, undefined);
+        return;
+      }
       await this.d.notifier.notify({
         level: "digest",
         title: t("notify.budgetTitle", { agent: agentName(agent, hubLocale()) }),
@@ -753,9 +767,7 @@ export class SessionRunner {
             fresh.goal,
             ...(notes.length ? ["", "Messages that came after the task was created:", ...notes] : []),
             "",
-            fresh.background
-              ? "When you are done, call notify (once) with a short summary of the outcome."
-              : "When you are done, briefly describe the result — it will be passed to whoever created the task.",
+            taskEnding(fresh),
           ].join("\n");
 
     const r = await this.runTurn(conv, prompt, { task: fresh });
@@ -781,8 +793,17 @@ export class SessionRunner {
         await this.tellStarter(cur, `[System] ${this.agentLabel(cur.agentId)} could not answer your message (thread ${cur.id}): ${r.error}`);
         return;
       }
-      if (!cur.background || cur.createdBy !== "trigger") {
-        await this.d.notifier.notify({ level: "notify", title: t("notify.taskFailed", { title: cur.title }), body: r.error, agentId: cur.agentId, taskId: cur.id });
+      // The digest's writer failed: the hub sends the card instead.
+      if (cur.deliver === "digest") {
+        await this.d.notifier.digestWritten(cur.id, undefined);
+        return;
+      }
+      // A report that did not come is news too; other trigger runs keep quiet about failing.
+      if (!cur.background || cur.createdBy !== "trigger" || cur.deliver === "report") {
+        const who = this.d.agents.get(cur.agentId);
+        const body = humanFailure(r.error, r.errorCode, who ? agentName(who, hubLocale()) : cur.agentId);
+        // From a schedule it carries the schedule: the person's feedback on that schedule (muted, less) covers its failures too.
+        await this.d.notifier.notify({ level: "notify", title: t("notify.failedTitle", { title: cur.title }), body, agentId: cur.agentId, taskId: cur.id, triggerId: cur.triggerId });
       }
       return;
     }
@@ -794,8 +815,8 @@ export class SessionRunner {
       this.d.store.updateTask(cur.id, { status: "waiting_input", result: r.text || cur.result, error: undefined });
       return;
     }
-    // A thread's result is the reply itself, without the narration around tool calls.
-    this.d.store.updateTask(cur.id, { status: "done", result: cur.kind === "message" ? r.answer || r.text : r.text, error: undefined });
+    // A thread's reply, a report and the digest are what the person reads: the final answer, without the narration.
+    this.d.store.updateTask(cur.id, { status: "done", result: cur.kind === "message" || cur.deliver ? r.answer || r.text : r.text, error: undefined });
     await this.reportTaskDone(this.d.store.getTask(cur.id)!);
   }
 
@@ -1121,6 +1142,14 @@ export class SessionRunner {
 
   private async reportTaskDone(task: Task): Promise<void> {
     const result = taskResult(task);
+    if (task.deliver === "report") {
+      await this.d.notifier.deliverReport(task);
+      return;
+    }
+    if (task.deliver === "digest") {
+      await this.d.notifier.digestWritten(task.id, task.result);
+      return;
+    }
     // A teammate's reply: under the sender's message line, and to the sender, who carries on with it.
     if (task.kind === "message") {
       this.fillReply(task, truncate(task.result ?? "", 4000));
@@ -1736,7 +1765,7 @@ export class SessionRunner {
           ? t("chat.allLimited", { time: this.formatTime(earliestReset!) })
           : t("chat.cannotStart", { agent: agentName(agent, hubLocale()), reason: why });
         this.d.store.addMessage({ conversationId: conv.id, role: "system", parts: [{ type: "error", message }], status: "complete", taskId: task?.id });
-        return { text: "", error: message, limited: allLimited ? { resetAt: earliestReset } : undefined, awaitingApproval: false };
+        return { text: "", error: message, ...(setupOnly && !allLimited ? { errorCode: "no-brain" as const } : {}), limited: allLimited ? { resetAt: earliestReset } : undefined, awaitingApproval: false };
       }
       const key = formatBrainRef(parseBrainRef(ref));
       tried.add(key);

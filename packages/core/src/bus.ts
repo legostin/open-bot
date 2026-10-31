@@ -21,6 +21,8 @@ export type BusEvents = {
   "task.updated": any;
   "notification.created": any;
   "notification.feedback": any;
+  /** The Inbox's unread count changed (something came in, or the person read it). */
+  "inbox.changed": { unread: number };
   "approval.created": any;
   /** An action the person asked for in their own words ran without a card (ToolSpec.asked). */
   "approval.asked": any;
@@ -112,6 +114,7 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "page.deleted":
     case "task.updated":
     case "notification.created":
+    case "inbox.changed":
     case "plugins.updated":
     case "brains.updated":
     case "agents.updated":
