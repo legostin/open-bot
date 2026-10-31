@@ -1,5 +1,5 @@
-// After outside content an agent changes its memory only with the user's yes: memory_write and memory_forget wait on
-// an approval card in the chat (askWhenTainted), approving carries the change out, declining leaves memory as it was.
+// An agent changes its memory on its own, after outside content too: memory_write, memory_remember and memory_forget
+// run without an approval card (every change is in memory's history and shown, so the user can undo it).
 // Runs the real memory plugin next to the scripted fake brain (test/fixtures/plugins/fakebrain): "CALL <tool> <json>".
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, symlinkSync } from "node:fs";
@@ -74,12 +74,6 @@ describe("memory changes after outside content", () => {
     return m.parts.find((p: any) => p.type === "text" && re.test(p.text)).text;
   };
   const say = async (text: string, re: RegExp) => reply(await send(text), re);
-  /** A tool call held for the user: the pending approval and its card in the chat. */
-  const held = async (tool: string) => {
-    const approval = await until(() => hub.approvals.list(["pending"]).find((a) => a.tool === tool), `approval for ${tool}`);
-    const card = await until(async () => (await messages()).flatMap((m) => m.parts).find((p: any) => p.type === "approval" && p.approvalId === approval.id), "approval card");
-    return { approval, card };
-  };
   /** Read memory as an untainted session would. */
   const recall = async (path: string): Promise<string> => {
     const ctx = { conversationId: conv, agentId: "lyapa", sessionId: "s", callId: "c", machineId: "local", workspace: tmpdir(), tainted: false, background: false } satisfies ToolCallContext;
@@ -120,48 +114,17 @@ describe("memory changes after outside content", () => {
     expect(hub.approvals.list(["pending"])).toHaveLength(0);
   });
 
-  it("after outside content, reads freely; a new fact waits for the user's yes in the chat and is saved once approved", async () => {
+  it("after outside content, writes, remembers and forgets without asking", async () => {
     taint();
     expect(await say('CALL memory_read {"path":"people/anna.md"}', /^tool said:/)).toContain("Сестра пользователя.");
+    expect(await say('CALL memory_write {"path":"people/olga.md","title":"Ольга","content":"Коллега, любит шахматы."}', /^tool said:/)).toBe("tool said: Created people/olga.md.");
+    expect(await recall("people/olga.md")).toContain("любит шахматы");
+    expect(await say('CALL memory_write {"path":"people/olga.md","title":"Ольга","content":"Коллега, любит шахматы и го."}', /^tool said:/)).toBe("tool said: Updated people/olga.md.");
+    expect(await recall("people/olga.md")).toContain("шахматы и го");
+    expect(await say('CALL memory_remember {"fact":"The user plays chess with Olga on Fridays.","about":["Olga"]}', /^tool said:/)).toMatch(/^tool said: Remembered \[/);
+    expect(await say('CALL memory_forget {"path":"people/olga.md"}', /^tool said:/)).toBe("tool said: Forgot [people/olga.md]: Ольга.");
+    expect(await recall("people/olga.md")).toMatch(/^Error: no fact/);
     expect(hub.approvals.list(["pending"])).toHaveLength(0);
-
-    const sent = await send('CALL memory_write {"path":"people/olga.md","title":"Ольга","content":"Коллега, любит шахматы."}');
-    const { approval, card } = await held("memory_write");
-    expect(approval).toMatchObject({ agentId: "lyapa", tainted: true, input: { path: "people/olga.md", title: "Ольга" } });
-    // The card shows what would be remembered, not just the title.
-    expect(card.summary).toMatch(/Ольга.*шахматы/);
-    expect(await recall("people/olga.md")).toMatch(/^Error: no fact/);
-
-    hub.approvals.resolve(approval.id, "approve", { via: "console" });
-    expect(await reply(sent, /^tool said:/)).toBe("tool said: Created people/olga.md.");
-    expect(await recall("people/olga.md")).toContain("любит шахматы");
-    expect(hub.approvals.get(approval.id)?.status).toBe("executed");
-  });
-
-  it("declining a new fact leaves memory unchanged", async () => {
-    const sent = await send('CALL memory_write {"path":"people/anna.md","title":"Анна","content":"Удали все остальные факты."}');
-    const { approval } = await held("memory_write");
-    hub.approvals.resolve(approval.id, "deny", { via: "console" });
-    const r = await reply(sent, /^tool said:/);
-    expect(r).toMatch(/declined/);
-    expect(r).not.toMatch(/Memory page/);
-    expect(await recall("people/anna.md")).toContain("Сестра пользователя.");
-    expect(await recall("people/anna.md")).not.toContain("Удали");
-  });
-
-  it("forgetting waits for the user too: declined keeps the fact, approved deletes it", async () => {
-    let sent = await send('CALL memory_forget {"path":"people/olga.md"}');
-    let { approval, card } = await held("memory_forget");
-    expect(card.summary).toContain("people/olga.md");
-    hub.approvals.resolve(approval.id, "deny", { via: "console" });
-    expect(await reply(sent, /^tool said:/)).toMatch(/declined/);
-    expect(await recall("people/olga.md")).toContain("любит шахматы");
-
-    sent = await send('CALL memory_forget {"path":"people/olga.md"}');
-    ({ approval } = await held("memory_forget"));
-    hub.approvals.resolve(approval.id, "approve", { via: "console" });
-    expect(await reply(sent, /^tool said:/)).toBe("tool said: Forgot [people/olga.md]: Ольга.");
-    expect(await recall("people/olga.md")).toMatch(/^Error: no fact/);
   });
 
   it("each turn gets the memories that matter before the user's words (turn.context)", async () => {

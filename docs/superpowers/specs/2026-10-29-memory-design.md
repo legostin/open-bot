@@ -63,12 +63,13 @@ recall never makes a git commit.
    - finds a **duplicate** (token overlap ≥ 0.8): adds the new source, raises confidence, "Already known";
    - **supersedes** facts named in `replaces`, or with the same subject + slot: they are archived with
      `valid_until` and `superseded_by`, the new fact lists them in `supersedes`;
-   - sends **sensitive** facts (health, money, beliefs, intimate life, documents; or `sensitive: true`) to the review
-     queue: they wait in `.pending/`, outside git, and are not recalled until the person says yes, right in the chat
-     line or in the manager; a declined one never reaches the history;
+   - marks **sensitive** facts (health, money, beliefs, intimate life, documents; or `sensitive: true`) with
+     `sensitive: true` and saves them like any other (since 2026-10-31, at the person's request: no yes needed). Facts
+     an earlier version left waiting in `.pending/` or `.review/` still wait for "Remember / Don't" in the manager;
    - never archives a longer note (the profile, a v1 page about a person) through `replaces`: those are updated with
      `memory_write`; a negated claim ("does not", "без") is never a duplicate of the positive one;
-   - after untrusted content the existing approval card applies (`askWhenTainted`).
+   - after untrusted content too, without an approval card (since 2026-10-31): every change is in git, shown in the
+     chat with Undo and in the manager;
    - returns related facts so the agent can correct itself (`replaces`) in the next call.
 2. **After the day, by reflection.** The plugin keeps a short journal of the person's own messages (from the
    `turn.context` hook, secrets already replaced by vault references). Once a day, when there are new messages, it
@@ -102,7 +103,7 @@ Every change is one git commit, so a pass can be rolled back.
   restores what it had superseded, unless it was itself replaced meanwhile). The nightly pass empties trash older than
   30 days only while git keeps the history. Git keeps every version: the detail shows the history and can restore one.
 - **Export**: one JSON file with every fact and its raw markdown.
-- Secrets never enter memory; sensitive facts wait for a yes.
+- Secrets never enter memory; sensitive facts are marked as such.
 
 ## Contract changes
 
@@ -160,7 +161,7 @@ Events: `ctx.ui.emit("changed", {path, action})` after every change.
   Preferences, Projects, Timeline, How-to, Notes; search on top; the review queue first when it has items; a fact
   opens inline with its source ("from your message in the chat with Ada, 29 Oct"), entities, dates, what it replaced
   and its history; edit in place; Forget leaves an "Forgotten · Undo" row. No dialogs.
-- **Chat**: under an agent's message, "Remembered: <fact> · Undo"; sensitive ones "Remember this? · Yes · No".
+- **Chat**: under an agent's message, "Remembered: <fact> · Undo" (a sensitive one too).
 - **Phone**: a Memory screen from the Hub tab with the same groups, search, review (approve / reject), swipe to forget
   with undo, and the fact's detail.
 

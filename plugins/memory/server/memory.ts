@@ -2,7 +2,7 @@
 // Mutations are serialized; each one updates the search index, regenerates MEMORY.md and commits to git.
 //
 // Capture (remember): secrets refused, duplicates confirmed, facts with the same subject + slot (or named in
-// `replaces`) superseded with history, sensitive facts sent to the user's review. Recall: a core block at session start
+// `replaces`) superseded with history, sensitive ones marked. Recall: a core block at session start
 // and the facts relevant to each turn. Consolidation (tidy): expire, merge near-duplicates, archive stale facts.
 
 import { join } from "node:path";
@@ -80,7 +80,7 @@ export interface RememberInput {
 }
 
 export interface RememberResult {
-  status: "created" | "known" | "review";
+  status: "created" | "known";
   path: string;
   title: string;
   replaced: string[];
@@ -249,8 +249,8 @@ export class Memory {
 
   // ---------- capture ----------
 
-  /** Save one fact from a conversation: dedupe, supersede, review sensitive ones. */
-  remember(input: RememberInput, actor: Actor, opts: { approved?: boolean } = {}): Promise<RememberResult> {
+  /** Save one fact from a conversation: dedupe and supersede. Sensitive ones are saved too, marked as such. */
+  remember(input: RememberInput, actor: Actor): Promise<RememberResult> {
     return this.lock(async () => {
       const text = stripFrontmatter(String(input.fact ?? "")).replace(/[ \t]+/g, " ").trim();
       if (!text) throw new PathError("factRequired", "The fact text (fact) is required");
@@ -315,7 +315,6 @@ export class Memory {
       }
 
       const sensitive = input.sensitive === true || looksSensitive(`${title}\n${text}`);
-      const review = sensitive && !opts.approved;
       const path = this.uniquePath(KIND_FOLDER[kind], title, false);
       const fact = newFact({
         path,
@@ -338,12 +337,6 @@ export class Memory {
         body: text,
       });
       const related = this.relatedTo(fact, mine, pool, replaced);
-      if (review) {
-        // Waits for the user's yes; what it would replace stays as it is meanwhile.
-        this.store.putReview(fact);
-        this.o.changed(path, "review");
-        return { status: "review", path, title, replaced: [], related, kept };
-      }
       this.store.put(fact);
       this.sync(fact, path);
       this.supersede([...replaced], fact);
@@ -763,7 +756,7 @@ export class Memory {
             "You and your teammates share a long-term memory about the user. Facts relevant to a message appear before it as a `[Memory]` block; `memory_search` finds more — search before asking the user something they may have told you already.",
             "- Save a durable fact the moment you learn it with `memory_remember`, without announcing it (the chat shows a small \"Remembered\" line the user can undo): who the user is, the people, places and projects in their life, their preferences, plans and dates, how they like things done. One self-contained fact per call, in the third person (\"The user's sister Anna lives in Perm\"); name the people and places in `about`; give a `slot` for a changeable attribute (home city, job, coffee order) so a newer value replaces the old one. Skip small talk and one-off requests.",
             "- When the user corrects something you remember, save the new fact with `replaces` (the old fact's path). When they ask you to forget something, use `memory_forget`.",
-            "- Never store passwords, tokens, card numbers or other secrets: they live in the vault (`vault://<id>`). Health, money, beliefs and other sensitive facts wait for the user's yes.",
+            "- Never store passwords, tokens, card numbers or other secrets: they live in the vault (`vault://<id>`). Health, money, beliefs and other sensitive facts are saved like any other, marked `sensitive`.",
           ]
         : [
             "Shared long-term memory about the user: relevant facts come before a message as a `[Memory]` block; `memory_search` finds more. Save durable facts as you learn them with `memory_remember` (one per call, third person; `slot` for changeable attributes, `replaces` for corrections). Never store secrets (vault://).",

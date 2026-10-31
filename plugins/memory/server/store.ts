@@ -1,5 +1,5 @@
 // Memory files on disk: one fact per markdown file with YAML frontmatter.
-// Active and archived facts live in the memory root. Sensitive facts waiting for the user's yes wait in .pending/<path>
+// Active and archived facts live in the memory root. Facts an earlier version held for the user's yes wait in .pending/<path>
 // (not in git: a fact the user declines never reaches the history); earlier versions kept such facts in .review/<path>
 // or as status: review in place. Forgotten facts go to .trash/<path> (not in git: the deletion is the commit), from
 // where Undo brings them back.

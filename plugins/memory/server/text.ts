@@ -1,5 +1,5 @@
 // Text helpers for capture and recall: word stems (English and Russian, crude but language-free), overlap, headlines,
-// and the two guards — secrets never enter memory, sensitive facts wait for the user's yes.
+// and the two guards — secrets never enter memory, sensitive facts are marked.
 
 const STOP = new Set(
   (

@@ -1,7 +1,8 @@
 // Builtin plugin "memory": the team's long-term memory about the user. Structured markdown facts (one per file) in
 // <dataDir>/memory, versioned with git when available. Agents save facts as they learn them (memory_remember), the
 // facts relevant to each turn are recalled into its input (turn.context), a nightly pass tidies memory and reflects on
-// the day. After untrusted content the user approves every change on an approval card in the chat (askWhenTainted).
+// the day. Agents save, change and forget facts on their own, also after untrusted content: memory keeps every change
+// in its history, and the user sees each one in the chat and on the Memory page, where it can be undone.
 // Design: docs/superpowers/specs/2026-10-29-memory-design.md
 
 import type { PluginContext, PluginHttpRequest, PluginHttpResponse, PluginModule } from "@owlbot/plugin-sdk";
@@ -65,20 +66,10 @@ const sourceView = (f: Fact) => f.sources.map((s) => ({ agentId: s.agent, conver
 
 const NOT_FOUND: PluginHttpResponse = { status: 404, body: { error: "Not found", code: "notFound", params: {} } };
 
-/**
- * Untrusted content could plant or wipe memories, so the hub asks the user before a tainted session changes memory
- * and runs the call once they approve. A tainted call that arrives without that approval changes nothing.
- */
-function unapproved(call: ToolCallContext, outcome: string): ToolResult | undefined {
-  if (!call.tainted || call.approved) return undefined;
-  return text(`${outcome}: this session has read untrusted content (web pages, emails or external tools), so memory changes here need the user's approval.`, true);
-}
-
 /** First line of memory_remember's result: the chat line in the web UI reads the outcome and the path from it. */
 function rememberText(r: RememberResult, mem: Memory): string {
   const lines: string[] = [];
   if (r.status === "known") lines.push(`Already known [${r.path}]: ${r.title}. Its confidence went up; nothing else to do.`);
-  else if (r.status === "review") lines.push(`Waiting for the user's OK [${r.path}]: ${r.title}. Sensitive facts are remembered only after the user approves them under your message; do not ask again.`);
   else lines.push(`Remembered [${r.path}]: ${r.title}.`);
   if (r.replaced.length) {
     lines.push("Replaced (kept in history as no longer true):");
@@ -199,9 +190,8 @@ const plugin: PluginModule = {
         "Save one durable fact about the user or their life to the team's long-term memory, the moment you learn it. " +
         "Write it as one self-contained statement in the third person (\"The user's sister Anna lives in Perm\"). " +
         "Memory checks it against what is known: a duplicate only raises confidence; a fact with the same subject and `slot`, or the paths in `replaces`, is superseded (kept in history as no longer true). " +
-        "Sensitive facts (health, money, beliefs, documents) wait for the user's OK. Never pass secrets (passwords, tokens, card numbers): those live in the vault.",
+        "Mark sensitive facts (health, money, beliefs, documents) with `sensitive`. Never pass secrets (passwords, tokens, card numbers): those live in the vault.",
       effect: "local-write",
-      askWhenTainted: true,
       approvalSummary: "%approval.remember%",
       inputSchema: {
         type: "object",
@@ -215,17 +205,15 @@ const plugin: PluginModule = {
           until: { type: "string", description: "When it stops being true (YYYY-MM-DD), e.g. the end of a trip." },
           scope: { type: "string", enum: ["team", "me"], description: "team (default): every agent knows it; me: only you." },
           replaces: { type: "array", items: { type: "string" }, description: "Paths of facts this one corrects or replaces." },
-          sensitive: { type: "boolean", description: "True for health, money, beliefs, intimate or legal matters: the user approves it first." },
+          sensitive: { type: "boolean", description: "True for health, money, beliefs, intimate or legal matters." },
           title: { type: "string", description: "Optional short title (default: the fact's first words)." },
         },
         required: ["fact"],
         additionalProperties: false,
       },
       handler: async (input: any, call: ToolCallContext) => {
-        const refused = unapproved(call, "Not saved");
-        if (refused) return refused;
         try {
-          const r = await mem.remember(input ?? {}, actor(call), { approved: call.approved === true });
+          const r = await mem.remember(input ?? {}, actor(call));
           return text(rememberText(r, mem));
         } catch (e: any) {
           return text(e?.message ?? String(e), true);
@@ -332,7 +320,6 @@ const plugin: PluginModule = {
         "For single facts use memory_remember instead. Without `path` a new note is created in notes/. Pass an existing path to update it: `content` replaces the old text, " +
         "so include everything that should stay (read it first). Never store passwords, tokens or other secrets.",
       effect: "local-write",
-      askWhenTainted: true,
       approvalSummary: "%approval.write%",
       inputSchema: {
         type: "object",
@@ -346,8 +333,6 @@ const plugin: PluginModule = {
         additionalProperties: false,
       },
       handler: async (input: { path?: string; title?: string; content?: string; tags?: string[] }, call: ToolCallContext) => {
-        const refused = unapproved(call, "Not saved");
-        if (refused) return refused;
         const r = await mem.write(
           { path: input.path, title: String(input.title ?? ""), content: String(input.content ?? ""), tags: input.tags },
           { source: `${call.agentId}/${call.sessionId}`, actor: actor(call) },
@@ -360,7 +345,6 @@ const plugin: PluginModule = {
       name: "forget",
       description: "Forget a fact by path when the user asks (it leaves memory now; the user can undo it, and the history keeps it).",
       effect: "local-write",
-      askWhenTainted: true,
       approvalSummary: "%approval.forget%",
       inputSchema: {
         type: "object",
@@ -368,9 +352,7 @@ const plugin: PluginModule = {
         required: ["path"],
         additionalProperties: false,
       },
-      handler: async (input: { path?: string }, call: ToolCallContext) => {
-        const refused = unapproved(call, "Not deleted");
-        if (refused) return refused;
+      handler: async (input: { path?: string }) => {
         const r = await mem.forget(String(input.path ?? ""));
         return text(`Forgot [${r.path}]: ${r.title}.`);
       },

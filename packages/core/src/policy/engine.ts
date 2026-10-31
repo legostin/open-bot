@@ -22,8 +22,9 @@ export interface PolicyResult {
 }
 
 /** Tools background tasks may always use regardless of effect. */
-// memory_remember: the nightly reflection is a background task; a remembered fact is local, shown and undoable.
-export const BACKGROUND_ALWAYS_ALLOWED = ["notify", "task_status", "skill_load", "vault_list", "memory_search", "memory_read", "memory_list", "memory_remember", "feed_post", "feed_sources", "feed_update", "page_create", "page_update"];
+// memory_remember, memory_write: the nightly reflection is a background task; a remembered or updated fact is local,
+// shown and undoable.
+export const BACKGROUND_ALWAYS_ALLOWED = ["notify", "task_status", "skill_load", "vault_list", "memory_search", "memory_read", "memory_list", "memory_remember", "memory_write", "feed_post", "feed_sources", "feed_update", "page_create", "page_update"];
 
 function getField(input: unknown, path: string): unknown {
   let v: any = input;

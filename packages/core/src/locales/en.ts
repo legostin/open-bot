@@ -48,7 +48,7 @@ export default {
   "policy.read": "read-only",
   "policy.strictLocalWrite": "strict profile: local changes need approval",
   "policy.localWrite": "local change",
-  "policy.taintedLastingChange": "after outside content, an agent changes its profile or memory only with your approval",
+  "policy.taintedLastingChange": "after outside content, an agent changes its profile and other lasting settings only with your approval",
   "policy.taintedNewTargets": "the session has read untrusted content; new recipients: {targets}",
   "policy.externalNeedsApproval": "external actions need approval",
 

@@ -45,8 +45,8 @@ describe("memory plugin (v1 compatibility)", () => {
     expect([...h.tools.keys()].sort()).toEqual(["forget", "list", "read", "remember", "search", "write"]);
     for (const name of ["write", "forget", "remember"]) {
       expect(h.tools.get(name)!.effect).toBe("local-write");
-      // After untrusted content the hub asks the user before every change.
-      expect(h.tools.get(name)!.askWhenTainted).toBe(true);
+      // Agents change memory on their own, after outside content too: every change is in the history and undoable.
+      expect(h.tools.get(name)!.askWhenTainted).toBeUndefined();
     }
     expect(h.tools.get("search")!.effect).toBe("read");
     // Approval summaries are catalog references, resolved by the hub in its language.
@@ -134,30 +134,17 @@ describe("memory plugin (v1 compatibility)", () => {
     expect(existsSync(join(h.dataDir, "escape.md"))).toBe(false);
   });
 
-  it("after untrusted content, changes memory only on a call the user approved", async () => {
+  it("after untrusted content, remembers, changes and forgets without asking", async () => {
     const garden = join(h.dataDir, "memory", "projects", "garden.md");
     const fact = { path: "projects/garden.md", title: "Огород", content: "Пользователь сажает томаты черри." };
-    // The hub asks the user first (askWhenTainted); a tainted call that arrives without their yes changes nothing.
-    const refused = await h.invoke("write", fact, { tainted: true });
-    expect(refused.isError).toBe(true);
-    const said = refused.content.map((c) => (c.type === "text" ? c.text : "")).join("");
-    expect(said).toMatch(/^Not saved: .*need the user's approval/);
-    expect(existsSync(garden)).toBe(false);
-    expect((await h.invoke("remember", { fact: "The user grows cherry tomatoes." }, { tainted: true })).isError).toBe(true);
-    expect(await h.invokeText("search", { query: "томаты" })).toBe('No facts match "томаты".');
-
-    // Approved on the card in the chat, the call runs with approved: true and the fact is active at once.
-    expect(await h.invokeText("write", fact, { tainted: true, approved: true })).toBe("Created projects/garden.md.");
-    expect(await h.invokeText("search", { query: "томаты" })).toContain("projects/garden.md");
+    expect(await h.invokeText("write", fact, { tainted: true })).toBe("Created projects/garden.md.");
     expect(readFileSync(garden, "utf8")).toContain("status: active");
-
-    const kept = await h.invoke("forget", { path: "projects/garden.md" }, { tainted: true });
-    expect(kept.isError).toBe(true);
-    expect(kept.content.map((c) => (c.type === "text" ? c.text : "")).join("")).toMatch(/^Not deleted: .*need the user's approval/);
-    expect(existsSync(garden)).toBe(true);
-
+    expect(await h.invokeText("write", { ...fact, content: "Пользователь сажает томаты черри и базилик." }, { tainted: true })).toBe("Updated projects/garden.md.");
+    expect(await h.invokeText("search", { query: "базилик" })).toContain("projects/garden.md");
+    const note = pathOf(await h.invokeText("remember", { fact: "Cherry tomatoes ripen in August.", kind: "note" }, { tainted: true }));
+    expect(at(h, note)).toBe(true);
     await h.invoke("write", { path: "notes/old-plan.md", title: "Старый план", content: "Переехать в Пермь." });
-    expect(await h.invokeText("forget", { path: "notes/old-plan.md" }, { tainted: true, approved: true })).toBe("Forgot [notes/old-plan.md]: Старый план.");
+    expect(await h.invokeText("forget", { path: "notes/old-plan.md" }, { tainted: true })).toBe("Forgot [notes/old-plan.md]: Старый план.");
     expect(at(h, "notes/old-plan.md")).toBe(false);
   });
 
@@ -385,37 +372,18 @@ describe("capture: remember", () => {
     expect((await h.invoke("write", { title: "token", content: "ghp_abcdefghijklmnopqrstuvwxyz0123456789" })).isError).toBe(true);
   });
 
-  it("sends sensitive facts to the user's review, and supersedes only on their yes", async () => {
-    const said = await h.invokeText("remember", { fact: "The user has type 2 diabetes.", kind: "self", slot: "health" });
-    expect(said).toMatch(/^Waiting for the user's OK \[you\/[\w-]+\.md\]: The user has type 2 diabetes\. Sensitive facts are remembered only after the user approves/);
-    const path = pathOf(said);
-    // It waits outside the memory folder's history: a fact the user declines never reaches git.
-    expect(at(h, path)).toBe(false);
-    expect(file(h, `.pending/${path}`)).toContain("sensitive: true");
-    expect(file(h, `.pending/${path}`)).toContain("status: review");
-    if (hasGit()) expect(gitLog(join(h.dataDir, "memory")).join("\n")).not.toContain(path);
-    expect(await h.invokeText("search", { query: "diabetes" })).toBe('No facts match "diabetes".');
-    const r = (await h.http({ method: "GET", path: "/facts" })).body as any;
-    expect(r.review).toBe(1);
-    expect(((await h.http({ method: "GET", path: "/review" })).body as any).items[0]).toMatchObject({ path, sensitive: true, status: "review" });
-    expect((await post(h, "/review/approve", { path })).status).toBe(200);
-    expect(await h.invokeText("search", { query: "diabetes" })).toContain(path);
-    expect(file(h, path)).toContain("status: active");
-    expect(at(h, `.pending/${path}`)).toBe(false);
-    // Declined: gone, and never in git.
-    const no = pathOf(await h.invokeText("remember", { fact: "The user's salary is 5000 a month.", kind: "self", slot: "salary" }));
-    expect((await post(h, "/review/reject", { path: no })).status).toBe(200);
-    expect(at(h, `.pending/${no}`)).toBe(false);
-    if (hasGit()) expect(gitLog(join(h.dataDir, "memory")).join("\n")).not.toContain(no);
-    // Edited while waiting is a yes too, and it replaces what it was meant to replace.
-    const a = pathOf(await h.invokeText("remember", { fact: "The user has a mortgage until 2040.", kind: "self", slot: "mortgage" }));
-    await post(h, "/review/approve", { path: a });
-    const b = pathOf(await h.invokeText("remember", { fact: "The user paid the mortgage off early.", kind: "self", slot: "mortgage" }));
+  it("saves sensitive facts at once, marked sensitive, and supersedes them like any other", async () => {
+    const said = await h.invokeText("remember", { fact: "The user has a mortgage until 2040.", kind: "self", slot: "mortgage" });
+    expect(said).toMatch(/^Remembered \[you\/[\w-]+\.md\]: The user has a mortgage until 2040\.$/);
+    const a = pathOf(said);
+    expect(file(h, a)).toContain("sensitive: true");
     expect(file(h, a)).toContain("status: active");
-    expect((await h.http({ method: "PATCH", path: "/fact", body: { path: b, text: "The user paid the mortgage off in October 2026." } })).status).toBe(200);
+    expect(at(h, `.pending/${a}`)).toBe(false);
+    expect(await h.invokeText("search", { query: "mortgage" })).toContain(a);
+    expect(((await h.http({ method: "GET", path: "/facts" })).body as any).review).toBe(0);
+    const b = pathOf(await h.invokeText("remember", { fact: "The user paid the mortgage off early.", kind: "self", slot: "mortgage" }));
     expect(file(h, a)).toContain(`superseded_by: ${b}`);
-    // Approved on the chat's approval card (a tainted session), it is the user's yes already.
-    expect(await h.invokeText("remember", { fact: "The user takes metformin every morning.", kind: "self" }, { tainted: true, approved: true })).toMatch(/^Remembered/);
+    expect(await h.invokeText("remember", { fact: "The user takes metformin every morning.", kind: "self" }, { tainted: true })).toMatch(/^Remembered/);
   });
 
   it("never archives a longer note through replaces, and keeps yes and no apart", async () => {

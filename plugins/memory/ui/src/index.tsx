@@ -5,7 +5,8 @@
 // No dialogs: everything happens in place.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { definePluginUI, native, Spinner, type OwlbotUI, type ToolResultProps } from "@owlbot/ui";
+import { definePluginUI, Markdown, native, Spinner, type OwlbotUI, type ToolResultProps } from "@owlbot/ui";
+import { plainText, withBreaks } from "./plain.ts";
 
 type Kind = "self" | "preference" | "person" | "place" | "project" | "event" | "howto" | "note";
 const KINDS: Kind[] = ["self", "preference", "person", "place", "project", "event", "howto", "note"];
@@ -99,6 +100,8 @@ async function loadAgents(): Promise<void> {
 const agentName = (id: string) => (id === "user" ? t("ui.you") : (agentNames[id] ?? id));
 
 const factText = (f: FactView) => f.text?.trim() || f.title;
+/** One- or two-line previews: the words without Markdown's marks. */
+const factPreview = (f: FactView) => plainText(factText(f));
 
 // ---------- styles (theme tokens of the host) ----------
 
@@ -142,6 +145,9 @@ const CSS = `
 .owm-row.open{background:var(--surface-2);cursor:default}
 .owm-text{white-space:pre-wrap;word-break:break-word}
 .owm-row:not(.open) .owm-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.owm-md{word-break:break-word}
+.owm-md .md{font-size:15px;line-height:1.55}
+.owm-md .md h1,.owm-md .md h2,.owm-md .md h3,.owm-md .md h4{font-size:15px}
 .owm-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px;font-size:12.5px;color:var(--muted)}
 .owm-tag{background:var(--surface-3);color:var(--fg);border-radius:6px;padding:0 6px;font-size:12px}
 .owm-own{color:var(--info)}
@@ -321,7 +327,7 @@ function FactDetail({ path, onChanged, onForget }: { path: string; onChanged(): 
           <div className="owm-lbl">{t("ui.before")}</div>
           {d.before.map((b) => (
             <div key={b.path} className="owm-from">
-              <span className="owm-old">{factText(b)}</span> {b.validUntil && <>· {t("ui.until", { date: when(b.validUntil) })}</>}
+              <span className="owm-old">{factPreview(b)}</span> {b.validUntil && <>· {t("ui.until", { date: when(b.validUntil) })}</>}
             </div>
           ))}
         </div>
@@ -359,7 +365,13 @@ function FactRow(props: { f: FactView; open: boolean; onToggle(): void; onChange
   const { f } = props;
   return (
     <div className={`owm-row${props.open ? " open" : ""}`} id={`owm-${f.path}`} onClick={props.onToggle}>
-      <div className="owm-text">{factText(f)}</div>
+      {props.open ? (
+        <div className="owm-md">
+          <Markdown text={withBreaks(factText(f))} />
+        </div>
+      ) : (
+        <div className="owm-text">{factPreview(f)}</div>
+      )}
       <Meta f={f} />
       <div className="owm-acts">
         <button className="owm-link" title={t("ui.edit")} onClick={(e) => (e.stopPropagation(), props.onEdit(f))}>{Icon.edit}</button>
@@ -393,10 +405,12 @@ function Review({ items, reload }: { items: ReviewItem[]; reload(): void }) {
       {items.map((it) => (
         <div key={it.path} className="owm-ritem">
           <div className="txt">
-            <div className="owm-text">{factText(it)}</div>
+            <div className="owm-md">
+              <Markdown text={withBreaks(factText(it))} />
+            </div>
             <div className="owm-meta">
               {it.source && <span>{t("ui.review.from", { name: agentName(it.source.agentId), date: when(it.source.at) })}</span>}
-              {it.current && <span>· {t("ui.review.replaces", { text: factText(it.current) })}</span>}
+              {it.current && <span>· {t("ui.review.replaces", { text: factPreview(it.current) })}</span>}
             </div>
           </div>
           <button className="owm-btn primary" disabled={busy === it.path} onClick={() => void act(it, "approve")}>{t("ui.review.approve")}</button>
@@ -529,7 +543,7 @@ function MemoryPage() {
   );
   const gone = (f: FactView) => (
     <div key={`gone-${f.path}`} className="owm-gone">
-      <span style={{ flex: 1, minWidth: 0 }} className="owm-old">{factText(f)}</span>
+      <span style={{ flex: 1, minWidth: 0 }} className="owm-old">{factPreview(f)}</span>
       <button className="owm-link strong" onClick={() => void restore(f)}>{t("ui.undo")}</button>
     </div>
   );
@@ -631,7 +645,7 @@ function MemoryPage() {
                     : extraFacts.map((f) => (
                         <div key={f.path} className="owm-gone">
                           <span style={{ flex: 1, minWidth: 0 }}>
-                            <span className="owm-old">{factText(f)}</span>
+                            <span className="owm-old">{factPreview(f)}</span>
                             {f.validUntil && <span> · {t("ui.until", { date: when(f.validUntil) })}</span>}
                           </span>
                         </div>
