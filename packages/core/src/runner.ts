@@ -25,7 +25,7 @@ import { detailOfTool, stepOfTool, type MachineActivityFeed } from "./activity.t
 import { needOf, route, skillOfGoal, type Route } from "./model-router.ts";
 import type { EgressProxy } from "./egress.ts";
 import { DEFAULT_BRAIN_EGRESS } from "./settings.ts";
-import { buildSystemPrompt } from "./prompt.ts";
+import { buildSystemPrompt, taskEnding } from "./prompt.ts";
 import { agentName } from "./agents.ts";
 import { hubLocale, LocalizedError, t } from "./i18n.ts";
 import { captureNote, type CaptureResult, type SecretIntake } from "./secrets.ts";
@@ -752,9 +752,7 @@ export class SessionRunner {
             fresh.goal,
             ...(notes.length ? ["", "Messages that came after the task was created:", ...notes] : []),
             "",
-            fresh.background
-              ? "When you are done, call notify (once) with a short summary of the outcome."
-              : "When you are done, briefly describe the result — it will be passed to whoever created the task.",
+            taskEnding(fresh),
           ].join("\n");
 
     const r = await this.runTurn(conv, prompt, { task: fresh });

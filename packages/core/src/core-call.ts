@@ -8,6 +8,7 @@ import { parseBrainRef } from "@piomio/shared";
 import type { Hub } from "./app.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, safeFileName, saveAttachment, type IncomingFile } from "./attachments.ts";
 import { MAX_TRANSCRIBE_BYTES, uploadName } from "./transcribe.ts";
+import { notifyInputError } from "./notifier.ts";
 
 /** Largest file a plugin may hand to a workspace. */
 const MAX_DELIVER_BYTES = 1024 * 1024 * 1024;
@@ -138,7 +139,10 @@ export function createCoreCall(hub: Hub) {
       case "tasks.list":
         return hub.store.listTasks({ status: p.status, limit: p.limit ?? 50 });
       case "notify": {
-        const n = await hub.notifier.notify({ level: p.level ?? "notify", title: String(p.title ?? ""), body: String(p.body ?? ""), triggerId: p.triggerId, agentId: p.agentId, taskId: p.taskId });
+        const level = p.level ?? "notify";
+        const invalid = notifyInputError(level, p.title);
+        if (invalid) throw new Error(invalid);
+        const n = await hub.notifier.notify({ level, title: String(p.title), body: String(p.body ?? ""), triggerId: p.triggerId, agentId: p.agentId, taskId: p.taskId });
         return { id: n.id, level: n.effectiveLevel };
       }
       case "approvals.resolve": {

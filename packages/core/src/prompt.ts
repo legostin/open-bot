@@ -184,20 +184,29 @@ export function buildSystemPrompt(c: PromptContext): string {
       "- Your own shell and file tools work freely inside your folder; outside it, the user says yes to each step on a card in the chat, which shows your command's description. Write that description in the user's language, in plain words: what it does and why (\"See what loads the processor\"), never jargon. Commands that only report how the computer is doing (ps, top, vm_stat, df, sysctl) need no yes.",
     );
   }
+  // A trigger's run of a skill the person taught: it follows the skill, whichever way its result reaches them.
+  const taught = c.background && c.task?.skill ? c.skills.find((s) => s.name === c.task!.skill && s.taught) : undefined;
   if (c.background && c.task?.feedId) {
     lines.push("- This is a BACKGROUND run of one of the user's channels: the posts you publish with `feed_post` are what they see. Do not call `notify`.");
+  } else if (c.background && c.task?.deliver === "report") {
+    lines.push(
+      "- This is a scheduled REPORT the user asked for: your final reply is delivered to them as your message at its time (their chat and Telegram). Write it for them, complete, in their language. Do not call `notify`.",
+    );
+  } else if (c.background && c.task?.deliver === "digest") {
+    lines.push("- You are writing the user's digest: your final reply is the digest message itself. Do not call `notify`.");
   } else if (c.background) {
     lines.push(
       "- This is a BACKGROUND run: the user is not watching. When done, call `notify` exactly once with a level:",
       "  silent = nothing worth saying; digest = useful but not urgent; notify = worth interrupting now; ask = needs the user's decision.",
-      "  Be conservative: interrupt only when it really matters. Keep title short and body concise.",
+      "  Be conservative: interrupt only when it really matters. Write for the person, in their language: the title is the news itself, the body what happened, why it matters and what you suggest; leave out how you worked.",
     );
-    const taught = c.task?.skill ? c.skills.find((s) => s.name === c.task!.skill && s.taught) : undefined;
-    if (taught) {
-      lines.push(
-        `- This run follows the skill \`${taught.name}\` the person taught you: do the task as it says. You may click and type; an action with consequences (browser_submit) runs only if the person pre-approved it in the skill, otherwise it waits for their yes on a card. When the site changed and you found another way, say so in your notify: they can update the skill.`,
-      );
-    } else if (c.agent.initiative < 2) lines.push("- Your initiative level only allows reading and suggesting in background runs: propose actions instead of taking them.");
+    if (!taught && c.agent.initiative < 2) lines.push("- Your initiative level only allows reading and suggesting in background runs: propose actions instead of taking them.");
+  }
+  if (taught) {
+    const where = c.task?.deliver ? "your reply" : "your notify";
+    lines.push(
+      `- This run follows the skill \`${taught.name}\` the person taught you: do the task as it says. You may click and type; an action with consequences (browser_submit) runs only if the person pre-approved it in the skill, otherwise it waits for their yes on a card. When the site changed and you found another way, say so in ${where}: they can update the skill.`,
+    );
   }
   if (c.dispatch && !c.task && !c.group && !c.background) lines.push("", ...howYouWork({ ...c, dispatch: c.dispatch }));
   if (c.setup?.trim()) lines.push("", c.setup.trim());
@@ -207,4 +216,13 @@ export function buildSystemPrompt(c: PromptContext): string {
   }
   for (const a of c.appended) if (a?.trim()) lines.push("", a.trim());
   return lines.filter((l) => l !== undefined).join("\n");
+}
+
+/** The last line of a task's first prompt: how its result reaches the person. */
+export function taskEnding(task: Pick<Task, "background" | "feedId" | "deliver">): string {
+  if (!task.background) return "When you are done, briefly describe the result — it will be passed to whoever created the task.";
+  if (task.feedId) return "When you are done, briefly say what you posted.";
+  if (task.deliver === "report") return "Your final reply is the report the user receives: write it for them, complete.";
+  if (task.deliver === "digest") return "Your final reply is the digest the user receives.";
+  return "When you are done, call notify (once) with a short summary of the outcome.";
 }

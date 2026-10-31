@@ -12,7 +12,10 @@ import type { MessagePart, OutboundMessage } from "@piomio/shared";
 import { Settings, type CoreSettings } from "../src/settings.ts";
 import { HookRegistry } from "../src/hooks.ts";
 import type { ChannelRegistry } from "../src/channels.ts";
-import { Notifier, notifyInputError } from "../src/notifier.ts";
+import { Notifier, notifyInputError, notifyRefusal } from "../src/notifier.ts";
+import { buildSystemPrompt, taskEnding } from "../src/prompt.ts";
+import { ToolRegistry } from "../src/tools/registry.ts";
+import { registerCoreTools, type CoreToolDeps } from "../src/tools/core-tools.ts";
 
 describe("notification storage", () => {
   it("gives old notifications a kind, turns unknown levels silent and counts them read", () => {
@@ -156,12 +159,106 @@ describe("notification intake", () => {
     expect(row(n.id).delivered_at).toBeTruthy();
   });
 
-  it("files a notification under item when a hook turns it into a level the hub does not know", async () => {
+  it("files a notification under item and keeps it silent when a hook turns it into a level the hub does not know", async () => {
     const { notifier, hooks, row, notes } = setup();
     hooks.register("notify.before", "test", async () => ({ level: "urgent" }));
     const n = await notifier.notify({ level: "digest", title: "Odd", body: "level from a hook" });
     expect(n.kind).toBe("item");
+    expect(n.effectiveLevel).toBe("silent");
     expect(row(n.id).kind).toBe("item");
+    expect(row(n.id).level).toBe("silent");
     expect(notes()).toHaveLength(0);
+  });
+
+  it("finds a duplicate even when the title comes with spaces around it", async () => {
+    const { notifier, row } = setup();
+    await notifier.notify({ level: "digest", title: "Курс доллара", body: "480", agentId: "assistant" });
+    const again = await notifier.notify({ level: "notify", title: "  Курс доллара ", body: "480", agentId: "assistant" });
+    expect(again.effectiveLevel).toBe("silent");
+    expect(row(again.id).reason).toMatch(/duplicate/);
+  });
+});
+
+describe("who may notify, and how a background run ends", () => {
+  it("lets checks notify; channel runs, reports and the digest put their words elsewhere", () => {
+    expect(notifyRefusal(undefined)).toBeUndefined();
+    expect(notifyRefusal({})).toBeUndefined();
+    expect(notifyRefusal({ feedId: "f_1" })).toMatch(/posts you publish/);
+    expect(notifyRefusal({ deliver: "report" })).toMatch(/final reply is delivered to the user as this report/);
+    expect(notifyRefusal({ deliver: "digest" })).toMatch(/final reply is the digest/);
+  });
+
+  it("ends each kind of task with how its result reaches the person", () => {
+    expect(taskEnding({ background: false })).toMatch(/passed to whoever created the task/);
+    expect(taskEnding({ background: true })).toMatch(/call notify \(once\)/);
+    expect(taskEnding({ background: true, feedId: "f_1" })).not.toMatch(/notify/);
+    expect(taskEnding({ background: true, deliver: "report" })).toMatch(/report the user receives/);
+    expect(taskEnding({ background: true, deliver: "digest" })).toMatch(/digest the user receives/);
+  });
+});
+
+describe("the notify tool and the background rules", () => {
+  /** The hub's `notify` tool over a notifier of its own, as an agent in `taskId` would call it. */
+  function toolSetup() {
+    const h = setup();
+    const registry = new ToolRegistry();
+    registerCoreTools({ registry, store: h.store, notifier: h.notifier } as unknown as CoreToolDeps);
+    const call = (input: object, taskId?: string) =>
+      registry.get("notify")!.invoke(input, { agentId: "assistant", taskId, conversationId: "c_1" } as never);
+    return { ...h, call };
+  }
+  const textOf = (r: { content: Array<{ type: string; text?: string }> }) => r.content.map((c) => c.text ?? "").join("");
+
+  it("tells the model what is wrong instead of throwing, and records nothing", async () => {
+    const { call, db } = toolSetup();
+    const badLevel = await call({ level: "normal", title: "x" });
+    expect(badLevel.isError).toBe(true);
+    expect(textOf(badLevel)).toMatch(/Nothing was sent: level must be one of/);
+    const noTitle = await call({ level: "notify", title: " " });
+    expect(noTitle.isError).toBe(true);
+    expect(textOf(noTitle)).toMatch(/title is required/);
+    expect((db.prepare("select count(*) as n from notifications").get() as { n: number }).n).toBe(0);
+  });
+
+  it("refuses a report run, a digest run and a channel run, and records nothing", async () => {
+    const { call, store, db } = toolSetup();
+    const make = (extra: object) => store.createTask({ agentId: "assistant", title: "t", goal: "g", background: true, createdBy: "trigger", ...extra }).id;
+    const report = await call({ level: "notify", title: "Brief" }, make({ deliver: "report" }));
+    expect(textOf(report)).toMatch(/final reply is delivered to the user as this report/);
+    expect(report.isError).toBeUndefined();
+    expect(textOf(await call({ level: "notify", title: "Brief" }, make({ deliver: "digest" })))).toMatch(/final reply is the digest/);
+    expect(textOf(await call({ level: "notify", title: "Brief" }, make({ feedId: "f_1" })))).toMatch(/posts you publish/);
+    expect((db.prepare("select count(*) as n from notifications").get() as { n: number }).n).toBe(0);
+  });
+
+  it("lets a check notify, with the trigger it ran for", async () => {
+    const { call, store, db, row } = toolSetup();
+    const task = store.createTask({ agentId: "assistant", title: "t", goal: "g", background: true, createdBy: "trigger", triggerId: "t_check" });
+    const r = await call({ level: "digest", title: "Курс доллара вырос", body: "480" }, task.id);
+    expect(textOf(r)).toBe("Notification recorded (level: digest).");
+    const stored = db.prepare("select id from notifications").get() as { id: string };
+    expect(row(stored.id)).toMatchObject({ trigger_id: "t_check", task_id: task.id });
+  });
+
+  describe("the system prompt", () => {
+    const agent = { id: "owl", name: "Owl", description: "", brains: [], initiative: 1 as const, tools: ["*"], skills: [], policyProfile: "default", budget: { backgroundRunsPerDay: 1 }, prompt: "", source: "builtin" };
+    const base = { agent, timezone: "UTC", language: "en", consoleUrl: "http://x", background: true, skills: [], nativeSkills: false, appended: [] };
+    const task = (extra: object) => ({ id: "t1", title: "t", goal: "g", background: true, ...extra }) as never;
+
+    it("tells a report run and a digest run that their final reply is the message, and a check to call notify", () => {
+      expect(buildSystemPrompt({ ...base, task: task({ deliver: "report" }) })).toMatch(/scheduled REPORT[^\n]*final reply is delivered to them[^\n]*Do not call `notify`/);
+      expect(buildSystemPrompt({ ...base, task: task({ deliver: "digest" }) })).toMatch(/writing the user's digest[^\n]*Do not call `notify`/);
+      expect(buildSystemPrompt({ ...base, task: task({}) })).toMatch(/call `notify` exactly once[\s\S]*the title is the news itself/);
+    });
+
+    it("keeps the note for a taught skill on a report run, pointing at the reply", () => {
+      const skills = [{ name: "rate", description: "d", dir: "/x", source: "user", taught: true, sites: [] }];
+      const p = buildSystemPrompt({ ...base, skills, task: task({ deliver: "report", skill: "rate" }) });
+      expect(p).toContain("follows the skill `rate`");
+      expect(p).toContain("say so in your reply");
+      const check = buildSystemPrompt({ ...base, skills, task: task({ skill: "rate" }) });
+      expect(check).toContain("say so in your notify");
+      expect(check).not.toContain("initiative level only allows");
+    });
   });
 });

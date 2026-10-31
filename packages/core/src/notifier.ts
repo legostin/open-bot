@@ -1,6 +1,6 @@
 // "Is it worth interrupting you?" — levels, quiet hours, rate limits, dedup, digests, feedback.
 
-import type { Notification, NotificationKind, NotifyLevel } from "@piomio/shared";
+import type { Notification, NotificationKind, NotifyLevel, Task } from "@piomio/shared";
 import { newId, nowIso, truncate } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
@@ -19,6 +19,14 @@ export const NOTIFY_LEVELS: NotifyLevel[] = ["silent", "digest", "notify", "ask"
 export function notifyInputError(level: unknown, title: unknown): string | undefined {
   if (!NOTIFY_LEVELS.includes(level as NotifyLevel)) return `level must be one of ${NOTIFY_LEVELS.join(", ")} (got ${JSON.stringify(level)}).`;
   if (typeof title !== "string" || !title.trim()) return "title is required: the news itself, in the user's language.";
+  return undefined;
+}
+
+/** Why `notify` records nothing in this run (English, for the model), or undefined when the run may notify. */
+export function notifyRefusal(task: Pick<Task, "feedId" | "deliver"> | undefined): string | undefined {
+  if (task?.feedId) return "Not needed: the posts you publish with feed_post are what the user sees. Nothing was sent.";
+  if (task?.deliver === "report") return "Not needed: your final reply is delivered to the user as this report. Put everything they should read there. Nothing was sent.";
+  if (task?.deliver === "digest") return "Not needed: your final reply is the digest itself. Nothing was sent.";
   return undefined;
 }
 
@@ -143,6 +151,8 @@ export class Notifier {
       level = "silent";
       reason = hooked.blocked;
     } else level = hooked.payload.level;
+    // A hook may return a level the hub does not know: it counts as silent, like the migration's unknown levels.
+    if (!NOTIFY_LEVELS.includes(level)) level = "silent";
 
     // Feedback "off" on this trigger silences it.
     if (input.triggerId && level !== "ask") {
@@ -156,7 +166,7 @@ export class Notifier {
     // Dedup: same title+body in the last 6 hours.
     const dup = this.db
       .prepare("select 1 from notifications where title = ? and body = ? and created_at > ? limit 1")
-      .get(input.title, input.body, new Date(Date.now() - 6 * 3600_000).toISOString());
+      .get(input.title.trim(), input.body, new Date(Date.now() - 6 * 3600_000).toISOString());
     if (dup && level !== "ask") {
       level = "silent";
       reason = t("notify.reason.duplicate");
@@ -184,8 +194,7 @@ export class Notifier {
       }
     }
 
-    // A hook may return a level the hub does not know: it still files under "item" instead of nothing.
-    const kind: NotificationKind = input.kind === "approval" && level === "notify" ? "approval" : (KIND_OF_LEVEL[level] ?? "item");
+    const kind: NotificationKind = input.kind === "approval" && level === "notify" ? "approval" : KIND_OF_LEVEL[level];
     const n: Notification = {
       id: newId("n_"),
       level,

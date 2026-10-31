@@ -8,7 +8,7 @@ import type { ToolRegistry } from "./registry.ts";
 import type { SkillIndex } from "../skills.ts";
 import type { VaultService } from "../vault/service.ts";
 import type { Store } from "../store.ts";
-import type { Notifier } from "../notifier.ts";
+import { notifyInputError, notifyRefusal, type Notifier } from "../notifier.ts";
 import type { AgentRegistry } from "../agents.ts";
 import { imageTypeOf, MAX_IMAGE_BYTES, parseImageUrl } from "../media.ts";
 import { mimeOf } from "../attachments.ts";
@@ -138,7 +138,7 @@ export function registerCoreTools(d: CoreToolDeps): void {
     {
       name: "notify",
       description:
-        "Tell the user something proactively. level: silent (log only), digest (goes into the next summary), notify (deliver now — interrupts the user), ask (needs the user's decision). Use sparingly.",
+        "Tell the user something proactively. level: silent (log only), digest (goes into the next digest the assistant writes), notify (deliver now: interrupts the user), ask (needs the user's decision). Use sparingly. Write for the person, in their language: the title is the news itself (\"The botanical garden is closed on 2 November\"), not your process (\"Check finished\"); the body says what happened, why it matters and what you suggest. Leave out how you worked (failed sources, HTTP errors, feeds, tool names) unless it changes what they should do.",
       effect: "local-write",
       inputSchema: {
         type: "object",
@@ -152,9 +152,13 @@ export function registerCoreTools(d: CoreToolDeps): void {
     },
     async (i, ctx) => {
       const task = ctx.taskId ? d.store.getTask(ctx.taskId) : undefined;
+      const refused = notifyRefusal(task);
+      if (refused) return text(refused);
+      const invalid = notifyInputError(i.level, i.title);
+      if (invalid) return text(`Nothing was sent: ${invalid}`, true);
       const n = await d.notifier.notify({
         level: i.level,
-        title: String(i.title ?? "").slice(0, 200),
+        title: String(i.title).slice(0, 200),
         body: String(i.body ?? ""),
         agentId: ctx.agentId,
         taskId: ctx.taskId,
