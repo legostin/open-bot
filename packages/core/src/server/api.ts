@@ -106,9 +106,10 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
     const id = (req.params as any).id as string;
     if (!hub.store.getConversation(id)) throw new HttpError(404, "conversation.notFound");
     const at = (req.body as { at?: unknown } | undefined)?.at;
+    const unread = hub.notifier.unreadCount();
     hub.team.markRead(id, typeof at === "string" ? at : undefined);
-    // Reading the chat reads what the Inbox holds from it: the badges follow.
-    hub.notifier.inboxChanged();
+    // Reading the chat reads what the Inbox holds from it: the badges follow when the count moved.
+    hub.notifier.inboxChanged(unread);
     return { ok: true };
   });
   api.get("/api/conversations/:id/messages", async (req) => {

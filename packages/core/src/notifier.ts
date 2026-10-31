@@ -54,8 +54,13 @@ const INBOX_FROM = "from notifications n left join messages m on m.id = n.messag
 /** Not opened in the Inbox, and its message (if any) after its conversation's read marker. */
 const UNREAD = "n.read_at is null and (m.id is null or c.read_at is null or m.created_at > c.read_at)";
 const INBOX_KINDS = "('report', 'alert', 'question', 'digest')";
+/** Questions that reached the person and are not read: they stand in "Waiting for you". */
+const WAITING = `n.kind = 'question' and n.delivered_at is not null and ${UNREAD}`;
+/** How many of them stand there, the newest; any beyond that are listed by their time with everything else, so none is lost. */
+const WAITING_SHOWN = 20;
+const WAITING_TOP = `select n.id ${INBOX_FROM} where ${WAITING} order by n.created_at desc, n.id desc limit ${WAITING_SHOWN}`;
 /** A page of the Inbox: 50 by default, 1 to 200 (what is not a number counts as the default). */
-const pageSize = (limit: number | undefined): number => Math.min(Math.max(Number.isFinite(limit) ? Math.trunc(limit!) : 50, 1), 200);
+const pageSize = (limit: number | undefined): number => Math.min(Math.max(typeof limit === "number" && Number.isFinite(limit) ? Math.trunc(limit) : 50, 1), 200);
 /** How long the default agent may write the digest before the card goes out. */
 export const DIGEST_WRITE_MS = 3 * 60_000;
 /** A schedule that fires twice delivers one report: the same text from the same trigger within this window is the same report. */
@@ -351,9 +356,10 @@ export class Notifier {
     return (this.db.prepare(`select count(*) as n ${INBOX_FROM} where n.kind in ${INBOX_KINDS} and n.delivered_at is not null and ${UNREAD}`).get() as { n: number }).n;
   }
 
-  /** Tell the apps the Inbox's unread count (their badges). */
-  inboxChanged(): void {
-    this.bus.emit("inbox.changed", { unread: this.unreadCount() });
+  /** Tell the apps the Inbox's unread count (their badges). Given `was`, the count before what just happened, nothing goes out when it did not move. */
+  inboxChanged(was?: number): void {
+    const unread = this.unreadCount();
+    if (unread !== was) this.bus.emit("inbox.changed", { unread });
   }
 
   /** The next digest, when items wait for it: its local time (none without digest times) and how many. */
@@ -389,38 +395,47 @@ export class Notifier {
     };
   }
 
+  /**
+   * One page of rows, newest first. The next page starts strictly before the last row's time, so a page never ends inside one
+   * moment: rows that share the last row's time come with it (the page may run past `limit`), else they would never be listed.
+   */
+  private page(cols: string, from: string, where: string, before: string, limit: number): { rows: any[]; hasMore: boolean } {
+    const select = `select ${cols} ${from} where ${where}`;
+    const rows = this.db.prepare(`${select} and n.created_at < ? order by n.created_at desc, n.id desc limit ?`).all(before, limit + 1) as any[];
+    if (rows.length <= limit) return { rows, hasMore: false };
+    const edge = rows[limit - 1].created_at as string;
+    if (rows[limit].created_at !== edge) return { rows: rows.slice(0, limit), hasMore: true };
+    const moment = this.db.prepare(`${select} and n.created_at = ? order by n.id desc`).all(edge) as any[];
+    const older = this.db.prepare(`select 1 ${from} where ${where} and n.created_at < ? limit 1`).get(edge);
+    return { rows: [...rows.slice(0, limit).filter((r) => r.created_at !== edge), ...moment], hasMore: !!older };
+  }
+
   /** The Inbox: unread questions ("Waiting for you"), then everything that reached the person, newest first. A digest still being written is not in it. */
   inbox(opts: { before?: string; limit?: number } = {}): InboxView {
     const limit = pageSize(opts.limit);
     const cols = `n.*, m.conversation_id as msg_conv, m.parts as msg_parts, (${UNREAD}) as unread`;
     const questions = opts.before
       ? []
-      : (this.db.prepare(`select ${cols} ${INBOX_FROM} where n.kind = 'question' and n.delivered_at is not null and ${UNREAD} order by n.created_at desc limit 20`).all() as any[]).map((r) =>
-          this.entry(r),
-        );
-    // An unread question stands in "Waiting for you": the list leaves it out in the query, so a page is full whenever there is more.
-    const asked = questions.map((q) => q.id);
-    const rows = this.db
-      .prepare(
-        `select ${cols} ${INBOX_FROM} where n.kind in ${INBOX_KINDS} and n.delivered_at is not null and n.created_at < ? and n.id not in (${asked.map(() => "?").join(", ") || "''"}) order by n.created_at desc limit ?`,
-      )
-      .all(opts.before ?? "9999", ...asked, limit + 1) as any[];
-    const entries = rows.slice(0, limit).map((r) => this.entry(r));
+      : (this.db.prepare(`select ${cols} ${INBOX_FROM} where ${WAITING} order by n.created_at desc, n.id desc limit ${WAITING_SHOWN}`).all() as any[]).map((r) => this.entry(r));
+    // A question that stands in "Waiting for you" is never listed again by its time, on any page; the list leaves it out in the query,
+    // so a page is full whenever there is more.
+    const { rows, hasMore } = this.page(cols, INBOX_FROM, `n.kind in ${INBOX_KINDS} and n.delivered_at is not null and n.id not in (${WAITING_TOP})`, opts.before || "9999", limit);
     const behindCount = (this.db.prepare("select count(*) as n from notifications where kind in ('item', 'approval')").get() as { n: number }).n;
     const next = opts.before ? undefined : this.nextDigest();
-    return { ...(next ? { next } : {}), questions, entries, hasMore: rows.length > limit, behindCount, unread: this.unreadCount() };
+    return { ...(next ? { next } : {}), questions, entries: rows.map((r) => this.entry(r)), hasMore, behindCount, unread: this.unreadCount() };
   }
 
   /** Behind the scenes: items and approval pushes, with why each did not reach the person. */
   behind(opts: { before?: string; limit?: number } = {}): BehindEntry[] {
     const limit = pageSize(opts.limit);
     // The digest an item went into is named once it is out: before that it is still being written and is nowhere to open.
-    const rows = this.db
-      .prepare(
-        "select n.*, d.title as digest_title, d.created_at as digest_at from notifications n left join notifications d on d.id = n.digest_id and d.delivered_at is not null " +
-          "where n.kind in ('item', 'approval') and n.created_at < ? order by n.created_at desc limit ?",
-      )
-      .all(opts.before ?? "9999", limit) as any[];
+    const { rows } = this.page(
+      "n.*, d.title as digest_title, d.created_at as digest_at",
+      "from notifications n left join notifications d on d.id = n.digest_id and d.delivered_at is not null",
+      "n.kind in ('item', 'approval')",
+      opts.before || "9999",
+      limit,
+    );
     return rows.map((r) => {
       const n = fromRow(r);
       return {
@@ -441,10 +456,11 @@ export class Notifier {
 
   /** The person saw these in the Inbox. */
   markInboxRead(ids: string[]): void {
+    const was = this.unreadCount();
     const st = this.db.prepare("update notifications set read_at = ? where id = ? and read_at is null");
     const at = nowIso();
     for (const id of ids.slice(0, 500)) st.run(at, id);
-    this.inboxChanged();
+    this.inboxChanged(was);
   }
 
   list(limit = 100): Notification[] {

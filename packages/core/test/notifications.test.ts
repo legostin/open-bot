@@ -749,6 +749,27 @@ describe("the digest_now tool", () => {
 
 describe("the Inbox", () => {
   const digestOf = (n: ReturnType<typeof setup>) => n.db.prepare("select * from notifications where kind = 'digest'").get() as any;
+  /** The Inbox the way an app reads it: a page, then the next one before its last entry, until nothing more. */
+  const walkInbox = (n: ReturnType<typeof setup>, limit: number) => {
+    const pages: ReturnType<Notifier["inbox"]>[] = [];
+    for (let before: string | undefined; pages.length < 30; ) {
+      const page = n.notifier.inbox({ before, limit });
+      pages.push(page);
+      if (!page.hasMore) return pages;
+      before = page.entries.at(-1)!.createdAt;
+    }
+    throw new Error("the Inbox never ended");
+  };
+  const walkBehind = (n: ReturnType<typeof setup>, limit: number) => {
+    const rows: ReturnType<Notifier["behind"]> = [];
+    for (let before: string | undefined, pages = 0; pages < 30; pages++) {
+      const page = n.notifier.behind({ before, limit });
+      rows.push(...page);
+      if (!page.length) return rows;
+      before = page.at(-1)!.createdAt;
+    }
+    throw new Error("behind the scenes never ended");
+  };
 
   it("lists what came in, unread questions first, and the rest behind the scenes", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -846,10 +867,112 @@ describe("the Inbox", () => {
       // The limit stays between 1 and 200.
       expect(n.notifier.inbox({ limit: 0 })).toMatchObject({ entries: [{ id: ids[2] }], hasMore: true });
       expect(n.notifier.inbox({ limit: 1000 }).entries).toHaveLength(3);
-      expect(n.notifier.behind({ limit: 0 })).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("lists an unread question once, in Waiting for you, whichever page is read", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      // The question is the oldest thing in the Inbox; three alerts came after it.
+      const q = await n.notifier.notify({ level: "ask", title: "Old question", body: "", agentId: "assistant" });
+      const alerts: string[] = [];
+      for (const title of ["A1", "A2", "A3"]) {
+        vi.setSystemTime(new Date(Date.now() + 60_000));
+        alerts.push((await n.notifier.notify({ level: "notify", title, body: title, agentId: "assistant" })).id);
+      }
+      const pages = walkInbox(n, 2);
+      expect(pages).toHaveLength(2);
+      // On the first page only, and never again in the list by day.
+      expect(pages.map((p) => p.questions.map((e) => e.id))).toEqual([[q.id], []]);
+      expect(pages.map((p) => p.entries.map((e) => e.id))).toEqual([[alerts[2], alerts[1]], [alerts[0]]]);
+      expect(pages.flatMap((p) => p.entries).some((e) => e.id === q.id)).toBe(false);
+      // Once it is read it is an entry like the others, at its own time.
+      n.notifier.markInboxRead([q.id]);
+      const read = walkInbox(n, 2);
+      expect(read.flatMap((p) => p.questions)).toEqual([]);
+      expect(read.flatMap((p) => p.entries.map((e) => e.id))).toEqual([alerts[2], alerts[1], alerts[0], q.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an unread question that does not fit in Waiting for you in the list by day, not lost", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const asked: string[] = [];
+      for (let i = 0; i < 22; i++) {
+        vi.setSystemTime(new Date(Date.now() + 60_000));
+        asked.push((await n.notifier.notify({ level: "ask", title: `Question ${i}`, body: "", agentId: "assistant" })).id);
+      }
+      const pages = walkInbox(n, 5);
+      // The twenty newest wait on the first page; the two oldest are listed by their time, once each.
+      expect(pages[0].questions.map((e) => e.id)).toEqual(asked.slice(2).reverse());
+      expect(pages.slice(1).flatMap((p) => p.questions)).toEqual([]);
+      const listed = pages.flatMap((p) => p.entries.map((e) => e.id));
+      expect(listed).toEqual([asked[1], asked[0]]);
+      expect(n.notifier.unreadCount()).toBe(22);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never skips entries from one moment between pages, and hands each over once", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const old = await n.notifier.notify({ level: "notify", title: "Older", body: "o", agentId: "assistant" });
+      // Three at the very same millisecond, as a burst of notifications from one run lands.
+      vi.setSystemTime(new Date("2026-10-31T03:05:00Z"));
+      const burst: string[] = [];
+      for (const title of ["B1", "B2", "B3"]) burst.push((await n.notifier.notify({ level: "notify", title, body: title, agentId: "assistant" })).id);
+      expect(new Set(burst.map((id) => n.row(id).created_at)).size).toBe(1);
+
+      const pages = walkInbox(n, 1);
+      const listed = pages.flatMap((p) => p.entries.map((e) => e.id));
+      expect(listed).toHaveLength(4);
+      expect(new Set(listed)).toEqual(new Set([...burst, old.id]));
+      // A page ends between moments, never inside one: the burst comes whole, then the older one, and the last page says it is the last.
+      expect(pages.map((p) => p.entries.length)).toEqual([3, 1]);
+      expect(pages.map((p) => p.hasMore)).toEqual([true, false]);
+      expect(pages[1].entries[0].id).toBe(old.id);
+      // A page that takes the burst as its last stop still says whether more lies behind it.
+      const whole = n.notifier.inbox({ limit: 3 });
+      expect(whole.entries.map((e) => e.id).sort()).toEqual([...burst].sort());
+      expect(whole.hasMore).toBe(true);
+      expect(n.notifier.inbox({ limit: 4 })).toMatchObject({ hasMore: false });
+      // The same walk with a wider page, and the burst alone.
+      expect(walkInbox(n, 2).flatMap((p) => p.entries.map((e) => e.id)).sort()).toEqual([...burst, old.id].sort());
+      n.db.prepare("delete from notifications where id = ?").run(old.id);
+      const alone = walkInbox(n, 1);
+      expect(alone).toHaveLength(1);
+      expect(alone[0]).toMatchObject({ hasMore: false });
+      expect(alone[0].entries.map((e) => e.id).sort()).toEqual([...burst].sort());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clamps a page to 1..200, however many are asked for", () => {
+    const n = setup();
+    const put = n.db.prepare("insert into notifications(id, level, kind, title, body, created_at, delivered_at) values (?,?,?,?,?,?,?)");
+    for (let i = 0; i < 250; i++) {
+      const at = new Date(Date.UTC(2026, 9, 31, 3, 0, i)).toISOString();
+      put.run(`n_a${i}`, "notify", "alert", `Alert ${i}`, "", at, at);
+      put.run(`n_i${i}`, "silent", "item", `Item ${i}`, "", at, null);
+    }
+    expect(n.notifier.inbox({ limit: 1000 })).toMatchObject({ entries: { length: 200 }, hasMore: true });
+    expect(n.notifier.inbox({ limit: -5 }).entries).toHaveLength(1);
+    expect(n.notifier.inbox({ limit: Number.NaN }).entries).toHaveLength(50);
+    expect(n.notifier.behind({ limit: 1000 })).toHaveLength(200);
+    expect(n.notifier.behind({ limit: 0 })).toHaveLength(1);
+    expect(n.notifier.behind({ limit: Number.NaN })).toHaveLength(50);
   });
 
   it("pages behind the scenes the same way and says what held an item back", async () => {
@@ -864,6 +987,8 @@ describe("the Inbox", () => {
       await n.notifier.notify({ level: "notify", title: "Ping", body: "p", agentId: "assistant", kind: "approval" });
       expect(n.notifier.behind().map((e) => e.title)).toEqual(["Ping", "B", "A"]);
       expect(n.notifier.behind({ limit: 1 }).map((e) => e.title)).toEqual(["Ping"]);
+      // A limit below 1 is one item, not none.
+      expect(n.notifier.behind({ limit: 0 }).map((e) => e.title)).toEqual(["Ping"]);
       const older = n.notifier.behind({ before: n.notifier.get(b.id)!.createdAt });
       expect(older).toMatchObject([{ id: a.id, level: "silent", kind: "item", agentId: "assistant", taskId: "t_1" }]);
       expect(n.notifier.behind().find((e) => e.id === b.id)).toMatchObject({ level: "digest", kind: "item", agentId: "scout" });
@@ -871,6 +996,29 @@ describe("the Inbox", () => {
       await n.notifier.notify({ level: "notify", title: "Alert", body: "x", agentId: "assistant" });
       expect(n.notifier.behind().map((e) => e.title)).toEqual(["Ping", "B", "A"]);
       expect(n.notifier.inbox().behindCount).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never skips items from one moment between pages behind the scenes either", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const n = setup();
+      const old = await n.notifier.notify({ level: "silent", title: "Older", body: "o", agentId: "assistant" });
+      vi.setSystemTime(new Date("2026-10-31T03:05:00Z"));
+      const burst: string[] = [];
+      for (const title of ["B1", "B2", "B3"]) burst.push((await n.notifier.notify({ level: "silent", title, body: title, agentId: "assistant" })).id);
+      expect(new Set(burst.map((id) => n.row(id).created_at)).size).toBe(1);
+      const rows = walkBehind(n, 1);
+      expect(rows.map((r) => r.id).sort()).toEqual([...burst, old.id].sort());
+      expect(rows.at(-1)!.id).toBe(old.id);
+      // The burst comes whole in one page, then the older item.
+      expect(n.notifier.behind({ limit: 1 })).toHaveLength(3);
+      expect(n.notifier.behind({ limit: 3 })).toHaveLength(3);
+      expect(n.notifier.behind({ limit: 4 })).toHaveLength(4);
+      expect(n.notifier.behind({ before: n.row(burst[0]).created_at, limit: 1 }).map((r) => r.id)).toEqual([old.id]);
     } finally {
       vi.useRealTimers();
     }
@@ -999,10 +1147,14 @@ describe("what counts as unread in the Inbox", () => {
       expect(readMarker(n, dialog)).toBeNull();
       expect(unreadIds(n)).toEqual(["B"]);
       expect(n.events.at(-1)).toEqual({ unread: 1 });
-      // Opening it again does not move the time.
+      // Opening it again does not move the time, and tells the apps nothing: the count did not move.
       vi.setSystemTime(new Date("2026-10-31T04:00:00Z"));
+      const told = n.events.length;
       n.notifier.markInboxRead([a!.id]);
+      n.notifier.markInboxRead(["n_unknown"]);
+      n.notifier.markInboxRead([]);
       expect(n.row(a!.id).read_at).toBe("2026-10-31T03:05:00.000Z");
+      expect(n.events).toHaveLength(told);
     } finally {
       vi.useRealTimers();
     }

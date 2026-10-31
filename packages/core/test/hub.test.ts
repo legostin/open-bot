@@ -574,6 +574,18 @@ describe("hub (integration)", () => {
       }
       expect(seen).toEqual([unread - inDialog]);
       expect((await web.req("GET", "/api/bootstrap")).inboxUnread).toBe(unread - inDialog);
+      // Reading it again changes nothing, so the apps are not told again; nor when an Inbox entry is opened a second time.
+      const again: number[] = [];
+      const offAgain = hub.bus.on("inbox.changed", (e) => again.push(e.unread));
+      try {
+        await web.req("POST", `/api/conversations/${dialog}/read`, {});
+        const opened = hub.notifier.inbox({ limit: 200 }).entries.find((e) => e.conversationId === dialog);
+        await web.req("POST", "/api/inbox/read", { ids: [opened!.id] });
+        await web.req("POST", "/api/inbox/read", { ids: [opened!.id] });
+      } finally {
+        offAgain();
+      }
+      expect(again).toEqual([]);
     }));
 
   it("tells the person plainly when a schedule's report did not come", async () => {
