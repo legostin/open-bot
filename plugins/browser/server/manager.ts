@@ -11,6 +11,7 @@ import type { ToolResult } from "@piomio/shared";
 import type { PluginContext } from "@piomio/plugin-sdk";
 import { HistoryStore } from "./history.ts";
 import { createChromiumInstaller, INSTALL_WAIT_MS, isMissingExecutableError, type ChromiumInstaller } from "./install.ts";
+import { Learning } from "./learning.ts";
 import { pageCall } from "./page-script.ts";
 import { CHECK_PASSING_RE, PAGE_RULES, type FocusInfo } from "./safety.ts";
 import {
@@ -104,6 +105,7 @@ export class BrowserManager {
   private cast: Cast | null = null;
   private castChain: Promise<void> = Promise.resolve();
   private inputCdp: { page: Page; cdp: CDPSession } | null = null;
+  private inputChain: Promise<void> = Promise.resolve();
   private stateTimer: NodeJS.Timeout | null = null;
   private titles = new WeakMap<Page, string>();
   userControl = false;
@@ -113,6 +115,8 @@ export class BrowserManager {
   private agentId: string | null = null;
   /** Every page the tabs land on (history.json in the data folder). */
   readonly history: HistoryStore;
+  /** What the person does in the browser: demonstrations, hints for agents, the journal (learning.ts). */
+  readonly learning: Learning;
   private tabIds = new WeakMap<Page, string>();
   private tabSeq = 0;
   /** Pages still loading, with the number of the navigation that loads them (a newer one takes over). */
@@ -133,6 +137,7 @@ export class BrowserManager {
   private lastActivity = "";
 
   constructor(ctx: PluginContext) {
+    const mgr = this;
     this.ctx = ctx;
     this.settings = readSettings(ctx.settings);
     this.chrome = findChrome(process.platform, process.env);
@@ -143,6 +148,25 @@ export class BrowserManager {
       onChange: () => this.scheduleState(),
     });
     this.history = new HistoryStore({ file: join(ctx.dataDir, "history.json") });
+    this.learning = new Learning(
+      {
+        ctx,
+        settings: () => this.settings,
+        get userControl() {
+          return mgr.userControl;
+        },
+        setControl: (on) => this.setControl(on),
+        inspect: (expression) => this.isolatedEval(expression),
+        viewport: () => this.viewport(),
+        activePage: () => this.activePage(),
+        ensurePage: () => this.ensurePage(),
+        titleOf: (p) => this.titleOf(p),
+        note: (text) => this.notes.push(text),
+        watching: () => this.watching(),
+        changed: () => this.scheduleState(),
+      },
+      ctx.dataDir,
+    );
     this.downloadsDir = join(ctx.dataDir, "downloads");
     this.profileDir = join(ctx.dataDir, "profile");
     this.timers.push(setInterval(() => void this.tick(), 5_000));
@@ -172,12 +196,14 @@ export class BrowserManager {
 
   /** The last viewer left: stop streaming and give control back to the agent. */
   private onWatchersGone(): void {
-    if (this.userControl) this.setControl(false);
+    // A demonstration waits for its viewer to come back (learning.tick ends it after a while).
+    if (this.userControl && !this.learning.teaching) this.setControl(false);
     this.syncCast();
   }
 
   private async tick(): Promise<void> {
     if (this.watchers.size && !this.watching()) this.onWatchersGone();
+    this.learning.tick();
     const idleMs = this.settings.idleMinutes * 60_000;
     if (this.context && !this.busy && !this.userControl && !this.watching() && Date.now() - this.lastUse > idleMs) {
       this.ctx.log.info(`closing the browser after ${this.settings.idleMinutes} min without use`);
@@ -384,6 +410,7 @@ export class BrowserManager {
     const sameDocument = !!d && d.sent === d.seen;
     if (d) d.seen = d.sent;
     this.history.record({ url, by: this.actor(p), tab: this.tabId(p), icon: this.icons.get(p)?.icon, sameDocument });
+    if (p === this.activePage()) this.learning.page(url, this.titles.get(p) ?? "");
     const n = this.beginLoad(p);
     // Resolves at once for a page that changed only its address (history.pushState).
     void p
@@ -412,7 +439,8 @@ export class BrowserManager {
     // A page that puts the cursor into a field by itself (a search page) opens the phone's keyboard too.
     if (this.userControl && p === this.activePage()) this.checkFocus();
     const url = p.url();
-    await this.titleOf(p);
+    const title = await this.titleOf(p);
+    if (p === this.activePage()) this.learning.page(p.url(), title);
     if (!/^https?:/i.test(url)) return;
     const origin = originOf(url);
     const known = this.icons.get(p);
@@ -595,6 +623,7 @@ export class BrowserManager {
     }
     this.touch();
     if (agentId) this.agentId = agentId;
+    this.learning.agentUsed(this.agentId ?? undefined);
     this.userAsked = null;
     this.lastActor = this.agentId ?? "agent";
     this.busy = name;
@@ -813,6 +842,7 @@ export class BrowserManager {
         return run(async () => {
           const pages = this.pages();
           const idx = Number(m.index) - 1;
+          if (m.action === "new" || m.action === "switch" || m.action === "close") this.learning.tab(m.action);
           if (m.action === "new") this.setActive(await (await this.ensureContext()).newPage());
           else if (m.action === "switch" && pages[idx]) this.setActive(pages[idx]);
           else if (m.action === "close" && (pages[idx] ?? this.activePage())) await (pages[idx] ?? this.activePage())!.close();
@@ -820,14 +850,20 @@ export class BrowserManager {
       case "control":
         this.setControl(!!m.on);
         return;
-      case "input":
+      case "input": {
         if (!this.userControl) return;
         this.touch();
-        return run(async () => {
+        // One at a time and in order: the recorder looks at what is under the pointer before a press reaches the page,
+        // and a release must not overtake its press meanwhile.
+        const job = this.inputChain.then(async () => {
+          await this.learning.beforeInput(m);
           await this.dispatchInput(m);
           // A click or Tab may have moved the focus into (or out of) a text field: the phone's keyboard follows it.
           if ((m.event === "mouse" && m.action === "up") || (m.event === "key" && m.action === "up" && (m.key === "Tab" || m.key === "Enter"))) this.checkFocus();
         });
+        this.inputChain = job.catch(() => {});
+        return run(() => job);
+      }
       case "probe":
         // A finger is down on the picture: is it on a text field? The answer has to come before it lifts, because
         // iOS shows the keyboard only inside the touch.
@@ -837,6 +873,13 @@ export class BrowserManager {
           const editable = await this.isolatedEval<boolean | null>(probeScript(clamp01(m.x) * w, clamp01(m.y) * h));
           this.ctx.ui.emit("probe", { id: m.id, seq: m.seq, editable: editable ?? null });
         });
+      case "teach":
+        // The live view's Teach (for the default agent), Done and Cancel.
+        if (m.action === "start") return run(async () => void (await this.learning.start({ goal: "" })));
+        if (m.action === "done" || m.action === "cancel") return run(() => this.learning.finish(m.action));
+        return;
+      case "highlight":
+        return run(() => this.learning.highlight(m));
       case "state":
         void this.emitState();
         return;
@@ -872,6 +915,7 @@ export class BrowserManager {
     // The user is on it: the request to take over is answered.
     if (on) this.captcha = false;
     this.ctx.log.info(on ? "user took control of the browser" : "user returned control to the agent");
+    this.learning.onControl(on);
     this.ctx.ui.emit("control", { user: on });
     this.emitActivity();
     void this.emitState();
@@ -1062,7 +1106,9 @@ export class BrowserManager {
       agentId: this.agentId,
       url: this.activePage()?.url() ?? "",
       control: this.userControl ? "user" : "agent",
-      attention: this.captcha && !!this.context,
+      // A demonstration needs the person: the live view pops up for it.
+      attention: (this.captcha && !!this.context) || this.learning.teaching,
+      teach: this.learning.teaching,
     };
     const key = JSON.stringify(activity);
     if (!force && key === this.lastActivity) return;
@@ -1110,6 +1156,7 @@ export class BrowserManager {
       ...(active ? await this.navState() : { canGoBack: false, canGoForward: false }),
       searchEngine: this.settings.searchEngine,
       install: this.installer.status(),
+      teach: this.learning.state(),
     });
   }
 

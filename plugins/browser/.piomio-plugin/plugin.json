@@ -59,6 +59,12 @@
           "default": "duckduckgo",
           "title": "%settings.searchEngine.title%",
           "description": "%settings.searchEngine.description%"
+        },
+        "rememberActions": {
+          "type": "boolean",
+          "default": true,
+          "title": "%settings.rememberActions.title%",
+          "description": "%settings.rememberActions.description%"
         }
       }
     }
@@ -73,7 +79,9 @@
     ],
     "core": [
       "ui.emit",
-      "files.deliver"
+      "files.deliver",
+      "conversations.tell",
+      "speech.transcribe"
     ],
     "ui": [
       "live.view",

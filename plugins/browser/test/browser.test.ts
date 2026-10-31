@@ -141,6 +141,8 @@ describe("browser plugin (headless Chromium)", () => {
   const workspace = mkdtempSync(join(tmpdir(), "browser-ws-"));
   /** Same contract as the hub's files.deliver (packages/core/src/core-call.ts), minus the session lookup. */
   const fakeCore = (method: string, p: any) => {
+    // Speech-to-text is set up and hears the same words every time.
+    if (method === "speech.transcribe") return p.check ? { available: true } : { text: "здесь главное — счётчик" };
     if (method !== "files.deliver") return {};
     const dir = join(workspace, "downloads");
     mkdirSync(dir, { recursive: true });
@@ -232,6 +234,8 @@ describe("browser plugin (headless Chromium)", () => {
       submit: "external",
       history: "read",
       history_clear: "external",
+      teach: "local-write",
+      journal: "local-write",
     });
     expect([...h.tools.values()].every((t) => t.source === true)).toBe(true);
     // The approval summary is a catalog reference: the hub resolves it in the hub language, then fills {field}s.
@@ -611,6 +615,83 @@ describe("browser plugin (headless Chromium)", () => {
     h.uiMessage({ type: "control", on: false });
     await until(() => emits().find((e) => e.channel === "control" && e.payload.user === false));
     h.uiMessage({ type: "watch", on: false, id: "phone" });
+  });
+
+  it("learns from the person: a demonstration with clicks, typing, a highlight and speech reaches the agent's chat", async () => {
+    await ok("open", { url: base + "/counter" });
+    const all = () => h.coreCalls.filter((c) => c.method === "ui.emit").map((c) => c.params as { channel: string; payload: any });
+    const from = all().length;
+    const emits = () => all().slice(from);
+    h.uiMessage({ type: "watch", on: true, id: "teach" });
+    const frame = await until(() => emits().find((e) => e.channel === "frame" && e.payload.url === base + "/counter"));
+    const height: number = frame.payload.height;
+    const started = await h.invokeText("teach", { goal: "нажать кнопку" }, { sessionId: "s-teach", conversationId: "c-teach", agentId: "assistant" });
+    expect(started).toContain("The live view is open on the person's screen");
+    expect(started).toContain("Their speech is transcribed");
+    // The live view pops up for it, control in the person's hands, with the bar.
+    const st = await until(() => emits().find((e) => e.channel === "state" && e.payload.teach && e.payload.control === "user"));
+    expect(st.payload.teach).toMatchObject({ goal: "нажать кнопку", scope: "task", speech: true, steps: 0 });
+    expect(await until(() => emits().find((e) => e.channel === "activity" && e.payload.teach))).toMatchObject({ payload: { attention: true, control: "user" } });
+    expect(text(await call("teach", { goal: "ещё раз" }))).toContain("already showing");
+
+    for (const action of ["down", "up"]) h.uiMessage({ type: "input", event: "mouse", action, x: 0.1, y: 0.1, button: "left", clickCount: 1 });
+    await until(() => emits().find((e) => e.channel === "state" && e.payload.teach?.steps >= 1));
+    const speech = await h.http({ method: "POST", path: "/teach/speech", body: { data: Buffer.from("audio").toString("base64"), mimeType: "audio/webm", durationMs: 0 } });
+    expect(speech.body).toEqual({ text: "здесь главное — счётчик" });
+    for (const action of ["down", "up"]) h.uiMessage({ type: "input", event: "mouse", action, x: 0.1, y: 520 / height, button: "left", clickCount: 1 });
+    for (const key of ["4", "2"]) h.uiMessage({ type: "input", event: "key", action: "down", key, code: `Digit${key}` });
+    h.uiMessage({ type: "input", event: "key", action: "down", key: "Enter", code: "Enter" });
+    h.uiMessage({ type: "highlight", x0: 0, y0: 0, x1: 0.6, y1: 380 / height });
+    const lit = await until(() => emits().find((e) => e.channel === "highlight"));
+    expect(lit.payload).toMatchObject({ ok: true });
+    expect(lit.payload.text).toContain("нажато 1");
+    await until(() => emits().find((e) => e.channel === "state" && e.payload.teach?.steps >= 4));
+    h.uiMessage({ type: "teach", action: "done" });
+
+    const told = await until(() => h.coreCalls.find((c) => c.method === "conversations.tell" && c.params.conversationId === "c-teach"));
+    const note: string = told.params.text;
+    expect(note).toContain("[Browser] The person finished showing you how to: нажать кнопку");
+    // The names are the ones browser_snapshot gives, as they were when the person acted.
+    expect(note).toContain("Clicked button «нажато 0»");
+    expect(note).toContain('The person said: "здесь главное — счётчик"');
+    expect(note).toContain("Typed «42» into textbox «Поле»");
+    expect(note).toContain("Pressed Enter in textbox «Поле»");
+    expect(note).toMatch(/Pointed at this place \(look here\): «нажато 1»\. .*Picture: rec-[a-z0-9]+-1\.jpg\./);
+    expect(note.indexOf("Clicked button")).toBeLessThan(note.indexOf("The person said"));
+    expect(note.indexOf("The person said")).toBeLessThan(note.indexOf("Typed «42»"));
+    // The recording, its JSON and the picture are in the agent's workspace.
+    const id = /Recording (rec-[a-z0-9]+)/.exec(note)![1];
+    expect(note).toContain(`downloads/${id}.md`);
+    for (const f of [`${id}.md`, `${id}.json`, `${id}-1.jpg`]) expect(existsSync(join(workspace, "downloads", f)), f).toBe(true);
+    expect(readFileSync(join(workspace, "downloads", `${id}-1.jpg`))[0]).toBe(0xff);
+    await until(() => emits().find((e) => e.channel === "control" && e.payload.user === false));
+    expect(await ok("journal", { action: "list" })).toContain(`${id} · `);
+    expect(await ok("journal", { action: "read", id })).toContain("Typed «42» into textbox «Поле»");
+
+    // A takeover while the agent works: what the person did comes with the agent's next browser result.
+    await ok("open", { url: base + "/counter" });
+    h.uiMessage({ type: "control", on: true });
+    await until(() => emits().find((e) => e.channel === "control" && e.payload.user === true) && emits().filter((e) => e.channel === "control").length >= 3);
+    for (const action of ["down", "up"]) h.uiMessage({ type: "input", event: "mouse", action, x: 0.1, y: 0.1, button: "left", clickCount: 1 });
+    await new Promise((r) => setTimeout(r, 300));
+    h.uiMessage({ type: "control", on: false });
+    await until(() => emits().filter((e) => e.channel === "control" && e.payload.user === false).length >= 2);
+    const next = await ok("snapshot");
+    expect(next).toContain("While you waited, the person did this in the browser");
+    expect(next).toContain("Clicked button «нажато 0»");
+    expect(await ok("snapshot")).not.toContain("While you waited");
+
+    expect(await ok("journal", { action: "forget", day: "all" })).toMatch(/Forgotten: [1-9]/);
+    expect(await ok("journal", { action: "list" })).toBe(await ok("journal", { action: "list" }));
+    h.uiMessage({ type: "watch", on: false, id: "teach" });
+  });
+
+  it("refuses an approved action when the amount it spends is not on the page", async () => {
+    await ok("open", { url: base + "/" });
+    const snap = await ok("snapshot");
+    const r = await call("submit", { ref: refOf(snap, /Купить/), label: "Купить", url: base + "/", description: "Купить", amount: 2400, currency: "KZT" });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("the amount 2400 is not on the page");
   });
 
   it("keeps a history of the pages the person and the agents open, and shows each tab's state", async () => {

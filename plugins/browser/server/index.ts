@@ -17,7 +17,11 @@ const plugin: PluginModule = {
     mgr.installer.check();
     registerTools(ctx, mgr);
     ctx.ui.onMessage((m) => mgr.onUiMessage(m));
-    ctx.http.handle((req) => historyHttp(mgr.history, req));
+    ctx.http.handle((req) => {
+      // The person's speech while showing a task (the live view records it in pieces).
+      if (!req.public && req.method === "POST" && req.path === "/teach/speech") return mgr.learning.speech(req);
+      return historyHttp(mgr.history, req);
+    });
     ctx.onSettingsChange((s) => mgr.updateSettings(s));
   },
   async deactivate() {

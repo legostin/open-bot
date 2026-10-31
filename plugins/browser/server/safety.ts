@@ -299,3 +299,18 @@ export function submitCall(ref: string | undefined, label: string, url: string):
     'short and exact, in the user\'s language, what will happen (e.g. "Pay for the order of 2 items, $34.00, on shop.example").'
   );
 }
+
+/**
+ * Is `amount` written on the page (browser_submit's amount, which a pre-approved limit is checked against)? Any common
+ * way of writing it counts: 2400, 2 400, 2 400, 2,400, 2.400, 2400.00, 2 400,50 — a longer number does not.
+ */
+export function amountOnPage(text: string, amount: number): boolean {
+  if (!Number.isFinite(amount) || amount < 0) return false;
+  const [int, frac] = amount.toFixed(2).split(".");
+  const sep = "[\\s,.'’]?";
+  const groups = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",").split(",");
+  const cents = frac.replace(/0+$/, "");
+  const tail = cents ? `[.,]${cents}0?` : "(?:[.,]00?)?";
+  const re = new RegExp(`(?<![\\d.,])${groups.join(sep)}${tail}(?![\\d]|[.,]\\d)`);
+  return re.test(String(text ?? "").replace(/[   ]/g, " "));
+}

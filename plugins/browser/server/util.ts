@@ -32,6 +32,8 @@ export interface BrowserSettings {
   maxDownloadMb: number;
   /** Where the address bar sends words that are not an address. */
   searchEngine: SearchEngine;
+  /** Keep what the person does in the browser by themselves (the journal), for agents to learn routines from. */
+  rememberActions: boolean;
 }
 
 const clampNum = (v: unknown, def: number, min: number, max: number): number => {
@@ -51,6 +53,7 @@ export function readSettings(raw: Record<string, any> | undefined): BrowserSetti
     takeoverWaitSec: clampNum(s.takeoverWaitSec, 10, 0, 600),
     maxDownloadMb: clampNum(s.maxDownloadMb, 200, 1, 10_000),
     searchEngine: isSearchEngine(s.searchEngine) ? s.searchEngine : "duckduckgo",
+    rememberActions: s.rememberActions !== false,
   };
 }
 

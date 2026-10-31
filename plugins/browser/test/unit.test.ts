@@ -23,6 +23,7 @@ import {
   PAGE_RULES,
   PROCEED_LABEL_RE,
   activationKey,
+  amountOnPage,
   keyNeedsSubmit,
   sameLabel,
   splitTrailingNewline,
@@ -32,7 +33,7 @@ import { keyEventParams } from "../server/manager.ts";
 
 describe("settings", () => {
   it("applies defaults and accepts booleans for headless", () => {
-    expect(readSettings({})).toEqual({ headless: "auto", idleMinutes: 30, allowLocalNetwork: false, takeoverWaitSec: 10, maxDownloadMb: 200, searchEngine: "duckduckgo" });
+    expect(readSettings({})).toEqual({ headless: "auto", idleMinutes: 30, allowLocalNetwork: false, takeoverWaitSec: 10, maxDownloadMb: 200, searchEngine: "duckduckgo", rememberActions: true });
     expect(readSettings({ searchEngine: "yandex" }).searchEngine).toBe("yandex");
     expect(readSettings({ searchEngine: "altavista" }).searchEngine).toBe("duckduckgo");
     expect(readSettings({ headless: false }).headless).toBe("never");
@@ -240,5 +241,19 @@ describe("takeover keys", () => {
     expect(keyEventParams({ key: "a", code: "KeyA", action: "down" }, 2)).toMatchObject({ type: "rawKeyDown", text: undefined });
     expect(keyEventParams({ key: "ArrowLeft", action: "up" }, 0)).toMatchObject({ type: "keyUp", windowsVirtualKeyCode: 37 });
     expect(keyEventParams({ key: "" }, 0)).toBeNull();
+  });
+});
+
+describe("amounts on the page", () => {
+  it("finds an amount however the site writes it, and not inside a longer number", () => {
+    for (const text of ["Итого: 2400 ₸", "Итого: 2 400 ₸", "Итого: 2\u00a0400 ₸", "Total $2,400.00", "2.400,00 €", "к оплате 2400.00"]) {
+      expect(amountOnPage(text, 2400), text).toBe(true);
+    }
+    expect(amountOnPage("Итого: 12 400 ₸", 2400)).toBe(false);
+    expect(amountOnPage("Итого: 2 4000 ₸", 2400)).toBe(false);
+    expect(amountOnPage("Total $34.50", 34.5)).toBe(true);
+    expect(amountOnPage("Total $34.50", 34)).toBe(false);
+    expect(amountOnPage("Total $34", 34.5)).toBe(false);
+    expect(amountOnPage("anything", Number.NaN)).toBe(false);
   });
 });

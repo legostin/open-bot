@@ -509,6 +509,121 @@ export function pageScript(op: string, a: any): any {
     return true;
   }
 
+  // ---------- what the person acts on in the live view (the recorder; run in our isolated world, no refs set) ----------
+  /** What is typed here must never be recorded: passwords, one-time codes, card numbers and their codes. */
+  function neverRecord(el: any) {
+    if (isSecret(el)) return true;
+    const ac = String(el.getAttribute("autocomplete") || "").toLowerCase();
+    if (/\b(one-time-code|current-password|new-password|cc-number|cc-csc|cc-exp|cc-exp-month|cc-exp-year)\b/.test(ac)) return true;
+    const hint = [el.getAttribute("name"), el.id, el.getAttribute("aria-label"), el.getAttribute("placeholder"), nameOf(el)].map(words).join(" ");
+    // Russian: "код из СМС", "код подтверждения", "номер карты".
+    return /\b(otp|one ?time|cvv|cvc|csc|card ?number|pin ?code|sms ?code)\b|код из|код подтвержд|номер карты/i.test(hint);
+  }
+  function describe(el: any) {
+    const target = el.tagName === "LABEL" && el.control ? el.control : el;
+    const ctrl = (target.closest && target.closest(INTERACTIVE)) || target;
+    const c = classify(ctrl);
+    const interactive = !!(ctrl.matches && ctrl.matches(INTERACTIVE));
+    const editable = isEditable(ctrl);
+    return {
+      role: interactive || editable ? c.role : "text",
+      name: interactive || editable ? c.name : cut(norm(ctrl.innerText || ctrl.textContent), 80),
+      ...(c.href ? { href: shortHref(c.href) } : {}),
+      ...(editable ? { editable: true } : {}),
+      ...(editable && neverRecord(ctrl) ? { secret: true } : {}),
+      ...(c.submit ? { submit: true } : {}),
+    };
+  }
+  /** The element at a point (CSS px), through open shadow roots and frames of this site; a frame of another site by name. */
+  function deepAt(x: number, y: number) {
+    let doc = document;
+    for (let depth = 0; depth < 8; depth++) {
+      let el = doc.elementFromPoint(x, y);
+      while (el && el.shadowRoot) {
+        const inner = el.shadowRoot.elementFromPoint(x, y);
+        if (!inner || inner === el) break;
+        el = inner;
+      }
+      if (!el) return null;
+      if (el.tagName === "IFRAME" || el.tagName === "FRAME") {
+        let inner = null;
+        try {
+          inner = el.contentDocument;
+        } catch {
+          /* another site */
+        }
+        if (!inner) {
+          let host = "";
+          try {
+            host = new URL(el.src, location.href).host;
+          } catch {
+            /* no address */
+          }
+          return { frame: host || "another site" };
+        }
+        const r = el.getBoundingClientRect();
+        x -= r.left + el.clientLeft;
+        y -= r.top + el.clientTop;
+        doc = inner;
+        continue;
+      }
+      return { el };
+    }
+    return null;
+  }
+
+  if (op === "at") {
+    const hit = deepAt(a.x, a.y);
+    if (!hit) return null;
+    if ("frame" in hit) return { role: "frame", name: "", frame: hit.frame };
+    return describe(hit.el);
+  }
+
+  if (op === "field") {
+    const el = deepActive();
+    if (!el || el === document.body || el === document.documentElement) return null;
+    if (el.tagName === "IFRAME" || el.tagName === "FRAME") return { role: "frame", name: "", frame: "embedded" };
+    const d = describe(el);
+    if (!d.editable) return d;
+    const value = el.isContentEditable ? norm(el.innerText) : String(el.value ?? "");
+    return d.secret ? d : { ...d, value: cut(value, 500) };
+  }
+
+  if (op === "area") {
+    // What is inside a frame the person drew: its text, and the controls there.
+    const x0 = Math.min(a.x0, a.x1);
+    const x1 = Math.max(a.x0, a.x1);
+    const y0 = Math.min(a.y0, a.y1);
+    const y1 = Math.max(a.y0, a.y1);
+    const slack = 4;
+    const inside = (r: any) => r.width >= 1 && r.height >= 1 && r.left >= x0 - slack && r.right <= x1 + slack && r.top >= y0 - slack && r.bottom <= y1 + slack;
+    const all = allElements(document, []).filter((el: any) => el.getBoundingClientRect && visible(el));
+    const within = all.filter((el: any) => inside(el.getBoundingClientRect()));
+    const set = new Set(within);
+    // The outermost elements inside the frame carry its text once.
+    const tops = within.filter((el: any) => !(el.parentElement && set.has(el.parentElement)));
+    let text = tops
+      .map((el: any) => norm(el.innerText || el.textContent))
+      .filter(Boolean)
+      .join(" · ");
+    if (!text) {
+      // The frame sits inside one element (a part of a long paragraph): that element's text.
+      const hit = deepAt((x0 + x1) / 2, (y0 + y1) / 2);
+      if (hit && "el" in hit) text = norm(hit.el.innerText || hit.el.textContent);
+    }
+    const controls: any[] = [];
+    for (const el of all) {
+      if (controls.length >= 15 || !el.matches(INTERACTIVE)) continue;
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      if (cx < x0 || cx > x1 || cy < y0 || cy > y1) continue;
+      const d = describe(el);
+      if (d.name) controls.push({ role: d.role, name: d.name });
+    }
+    return { text: cut(text, 1500), controls };
+  }
+
   throw new Error("unknown page op " + op);
 }
 
