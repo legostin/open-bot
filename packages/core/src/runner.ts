@@ -230,7 +230,7 @@ export class SessionRunner {
       const s = this.d.settings.get();
       const { remind } = this.d.approvals.sweep(s.approvalExpireHours);
       for (const a of remind) {
-        void this.d.notifier.notify({ level: "notify", title: t("notify.awaitingApproval"), body: a.summary, agentId: a.agentId, taskId: a.taskId });
+        void this.d.notifier.notify({ level: "notify", kind: "approval", title: t("notify.awaitingApproval"), body: a.summary, agentId: a.agentId, taskId: a.taskId });
       }
     }, 15_000);
     this.timer.unref();

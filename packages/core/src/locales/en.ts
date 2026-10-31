@@ -35,6 +35,7 @@ export default {
   "notify.reason.duplicate": "duplicate",
   "notify.reason.rateLimited": "rate limit — moved to the digest",
   "notify.reason.quietHours": "quiet hours — moved to the digest",
+  "notify.reason.superseded": "replaced by a newer one",
   "notification.notFound": "Notification not found",
 
   // policy (shown on approval cards and in the audit log)

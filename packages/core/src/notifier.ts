@@ -13,6 +13,23 @@ import { LocalizedError, t } from "./i18n.ts";
 /** What a routing level is for the person, when nothing more specific was said. */
 export const KIND_OF_LEVEL: Record<NotifyLevel, NotificationKind> = { silent: "item", digest: "item", notify: "alert", ask: "question" };
 
+export const NOTIFY_LEVELS: NotifyLevel[] = ["silent", "digest", "notify", "ask"];
+
+/** What is wrong with a notify call (English, for the model), or undefined. */
+export function notifyInputError(level: unknown, title: unknown): string | undefined {
+  if (!NOTIFY_LEVELS.includes(level as NotifyLevel)) return `level must be one of ${NOTIFY_LEVELS.join(", ")} (got ${JSON.stringify(level)}).`;
+  if (typeof title !== "string" || !title.trim()) return "title is required: the news itself, in the user's language.";
+  return undefined;
+}
+
+/** An Inbox row with its chat message and that message's conversation. */
+const INBOX_FROM = "from notifications n left join messages m on m.id = n.message_id left join conversations c on c.id = m.conversation_id";
+/** Not opened in the Inbox, and its message (if any) after its conversation's read marker. */
+const UNREAD = "n.read_at is null and (m.id is null or c.read_at is null or m.created_at > c.read_at)";
+const INBOX_KINDS = "('report', 'alert', 'question', 'digest')";
+/** How long the default agent may write the digest before the card goes out. */
+export const DIGEST_WRITE_MS = 3 * 60_000;
+
 const fromRow = (r: any): Notification => ({
   id: r.id,
   level: r.level,
@@ -54,6 +71,8 @@ export interface NotifyInput {
   taskId?: string;
   triggerId?: string;
   conversationId?: string;
+  /** "approval": the hub's push for an approval whose card is already in the chat (channels only). */
+  kind?: "approval";
 }
 
 export class Notifier {
@@ -66,6 +85,9 @@ export class Notifier {
   sign: (payload: string) => string;
   publicUrl: string;
   hasAgent: (id: string) => boolean;
+  startTask?: (t: { agentId: string; title: string; goal: string; deliver: "digest" }) => { id: string };
+  agentName: (id: string) => string;
+  digestWriteMs: number;
   private digestTimer?: NodeJS.Timeout;
   private lastDigestKey = "";
 
@@ -79,6 +101,12 @@ export class Notifier {
     sign: (p: string) => string;
     publicUrl: string;
     hasAgent: (id: string) => boolean;
+    /** Starts the default agent's digest task (the runner's createTask); without it the card goes out at once. */
+    startTask?: (t: { agentId: string; title: string; goal: string; deliver: "digest" }) => { id: string };
+    /** An agent's name in the hub language, for the digest's material. */
+    agentName?: (id: string) => string;
+    /** How long the digest task may write before the card goes out (DIGEST_WRITE_MS). */
+    digestWriteMs?: number;
   }) {
     this.db = d.db;
     this.bus = d.bus;
@@ -89,6 +117,9 @@ export class Notifier {
     this.sign = d.sign;
     this.publicUrl = d.publicUrl;
     this.hasAgent = d.hasAgent;
+    this.startTask = d.startTask;
+    this.agentName = d.agentName ?? ((id) => id);
+    this.digestWriteMs = d.digestWriteMs ?? DIGEST_WRITE_MS;
   }
 
   /** Whose dialog a notification goes to: the agent that raised it, or the default agent. */
@@ -101,6 +132,8 @@ export class Notifier {
   }
 
   async notify(input: NotifyInput): Promise<Notification & { effectiveLevel: NotifyLevel; reason?: string }> {
+    const invalid = notifyInputError(input.level, input.title);
+    if (invalid) throw new Error(invalid);
     const s = this.settings.get();
     let level = input.level;
     let reason: string | undefined;
@@ -151,10 +184,30 @@ export class Notifier {
       }
     }
 
-    const n: Notification = { id: newId("n_"), level, kind: KIND_OF_LEVEL[level], title: input.title, body: input.body, agentId: input.agentId, taskId: input.taskId, triggerId: input.triggerId, conversationId: input.conversationId, createdAt: nowIso() };
+    // A hook may return a level the hub does not know: it still files under "item" instead of nothing.
+    const kind: NotificationKind = input.kind === "approval" && level === "notify" ? "approval" : (KIND_OF_LEVEL[level] ?? "item");
+    const n: Notification = {
+      id: newId("n_"),
+      level,
+      kind,
+      title: input.title.trim(),
+      body: input.body,
+      agentId: input.agentId,
+      taskId: input.taskId,
+      triggerId: input.triggerId,
+      conversationId: input.conversationId,
+      createdAt: nowIso(),
+      ...(reason ? { reason } : {}),
+    };
     this.db
-      .prepare("insert into notifications(id, level, kind, title, body, agent_id, task_id, trigger_id, conversation_id, created_at) values (?,?,?,?,?,?,?,?,?,?)")
-      .run(n.id, level, n.kind, n.title, n.body, n.agentId ?? null, n.taskId ?? null, n.triggerId ?? null, n.conversationId ?? null, n.createdAt);
+      .prepare("insert into notifications(id, level, kind, title, body, agent_id, task_id, trigger_id, conversation_id, created_at, reason) values (?,?,?,?,?,?,?,?,?,?,?)")
+      .run(n.id, level, kind, n.title, n.body, n.agentId ?? null, n.taskId ?? null, n.triggerId ?? null, n.conversationId ?? null, n.createdAt, reason ?? null);
+    // A newer item from the same schedule replaces the one still waiting for the digest (a rerun, a duplicate run).
+    if (level === "digest" && n.triggerId) {
+      this.db
+        .prepare("update notifications set superseded_by = ?, digested = 1, reason = ? where trigger_id = ? and kind = 'item' and level = 'digest' and digested = 0 and id != ?")
+        .run(n.id, t("notify.reason.superseded"), n.triggerId, n.id);
+    }
     this.bus.emit("notification.created", n);
 
     if (level === "notify" || level === "ask") await this.deliver(n);
@@ -165,15 +218,20 @@ export class Notifier {
     const s = this.settings.get();
     // A proactive message lands in the dialog of the agent that raised it.
     const agentId = this.recipient(n.agentId);
-    const dialog = this.store.agentConversation(agentId);
-    this.store.addMessage({
-      conversationId: dialog.id,
-      role: "assistant",
-      parts: [{ type: "notification", level: n.level, title: n.title, body: n.body }],
-      status: "complete",
-      agentId: n.agentId,
-      taskId: n.taskId,
-    });
+    let messageId: string | undefined;
+    // An approval's own card is already in the chat: its push only goes to the channels.
+    if (n.kind !== "approval") {
+      const dialog = this.store.agentConversation(agentId);
+      const m = this.store.addMessage({
+        conversationId: dialog.id,
+        role: "assistant",
+        parts: [{ type: "notification", level: n.level, kind: n.kind, title: n.title, body: n.body, notificationId: n.id, ...(n.triggerId ? { feedbackable: true } : {}) }],
+        status: "complete",
+        agentId: n.agentId,
+        taskId: n.taskId,
+      });
+      messageId = m.id;
+    }
     const quiet = inQuietHours(s.quietHours, localHHMM(s.timezone));
     await this.channels.broadcast({
       kind: "notification",
@@ -188,7 +246,18 @@ export class Notifier {
           }
         : undefined,
     });
-    this.db.prepare("update notifications set delivered_at = ? where id = ?").run(nowIso(), n.id);
+    this.db.prepare("update notifications set delivered_at = ?, message_id = ? where id = ?").run(nowIso(), messageId ?? null, n.id);
+    this.inboxChanged();
+  }
+
+  /** Reports, digests, alerts and questions that reached the person and are not read yet. */
+  unreadCount(): number {
+    return (this.db.prepare(`select count(*) as n ${INBOX_FROM} where n.kind in ${INBOX_KINDS} and n.delivered_at is not null and ${UNREAD}`).get() as { n: number }).n;
+  }
+
+  /** Tell the apps the Inbox's unread count (their badges). */
+  inboxChanged(): void {
+    this.bus.emit("inbox.changed", { unread: this.unreadCount() });
   }
 
   list(limit = 100): Notification[] {

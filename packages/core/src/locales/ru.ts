@@ -34,6 +34,7 @@ export default {
   "notify.reason.duplicate": "повтор",
   "notify.reason.rateLimited": "лимит частоты — в сводку",
   "notify.reason.quietHours": "тихие часы — в сводку",
+  "notify.reason.superseded": "заменено более новым",
   "notification.notFound": "Уведомление не найдено",
 
   // policy
