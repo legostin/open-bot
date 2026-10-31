@@ -4,7 +4,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { PluginContext, PluginHttpRequest, PluginHttpResponse } from "@piomio/plugin-sdk";
 import { errorFields, TriggerError, type ErrorParams } from "./errors.ts";
 import { DEFAULT_HEARTBEAT_PROMPT, renderPrompt, type FireContext } from "./prompt.ts";
-import { computeNextRun, localDate, validTimezone, zonedParts } from "./schedule.ts";
+import { computeNextRun, defaultReport, localDate, validTimezone, zonedParts } from "./schedule.ts";
 import type { RunReason, Trigger, TriggerInput, TriggerRun, TriggerState } from "./types.ts";
 import { applyUpdate, buildTrigger, DEFAULT_HEARTBEAT_TIMES, DEFAULT_WEEKDAYS, ValidationError } from "./validate.ts";
 import { extractValue, fetchPage, hashValue, lineDiff } from "./watch.ts";
@@ -84,6 +84,12 @@ export class TriggerEngine {
     for (const { value } of await this.ctx.storage.list("trigger:")) {
       const t = value as Trigger | null;
       if (t?.id && t.kind) this.triggers.set(t.id, { ...t, state: t.state ?? {} });
+    }
+    // Triggers saved before reports existed get the default once (a daily brief reports, an hourly check does not).
+    for (const t of this.triggers.values()) {
+      if (t.report !== undefined) continue;
+      t.report = defaultReport(t, this.tz, new Date(this.now()));
+      await this.save(t);
     }
     if (!(await this.ctx.storage.get("initialized"))) {
       if (![...this.triggers.values()].some((t) => t.kind === "heartbeat")) await this.createDefaultHeartbeat();
@@ -318,6 +324,7 @@ export class TriggerEngine {
             title: t.name,
             background: true,
             triggerId: t.id,
+            ...(t.report ? { report: true } : {}),
             ...(t.machine ? { machine: t.machine } : {}),
             ...(t.skill ? { skill: t.skill } : {}),
           });

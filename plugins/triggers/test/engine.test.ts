@@ -79,6 +79,19 @@ describe("trigger engine", () => {
     e3.stop();
   });
 
+  it("gives triggers saved before reports existed their default once, and keeps it", async () => {
+    const kv = new Map<string, unknown>([["initialized", true]]);
+    kv.set("trigger:t_daily", base({ id: "t_daily", cron: "0 8 * * *" }));
+    kv.set("trigger:t_hourly", base({ id: "t_hourly", cron: "0 * * * *" }));
+    kv.set("trigger:t_choice", base({ id: "t_choice", cron: "0 * * * *", report: true }));
+    const f = fakeCtx(kv);
+    const e = new TriggerEngine(f.ctx);
+    await e.start();
+    expect([e.get("t_daily")!.report, e.get("t_hourly")!.report, e.get("t_choice")!.report]).toEqual([true, false, true]);
+    expect([(kv.get("trigger:t_daily") as Trigger).report, (kv.get("trigger:t_hourly") as Trigger).report]).toEqual([true, false]);
+    e.stop();
+  });
+
   it("runs at most one catch-up for missed runs after a restart", async () => {
     const now = Date.now();
     const kv = new Map<string, unknown>([["initialized", true]]);

@@ -40,6 +40,8 @@
   "error.noChanges": "Nothing to change",
   "error.kindFixed": "The trigger kind cannot be changed: create a new trigger instead",
   "error.enabledBool": "enabled must be true or false",
+  "error.reportBool": "report must be true or false",
+  "error.reportKind": "Only schedules and one-time triggers can be reports: other kinds speak up only when something needs attention",
   "error.onceFired": "This one-time trigger has already fired: set a new time (at)",
   "error.cronMissing": "Specify a 5-field cron (minute hour day month weekday), e.g. \"0 9 * * 1-5\"",
   "error.cronFields": "Invalid cron expression \"{expr}\": exactly 5 fields are required (minute hour day month weekday), e.g. \"0 9 * * 1-5\"",
