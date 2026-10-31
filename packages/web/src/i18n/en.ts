@@ -547,6 +547,7 @@ export default {
   "agents.empty": "No agents",
   "agents.noDescription": "No description",
   "agents.initiativeBadge": "initiative {level}",
+  "agents.ownSkills": "Its own skills",
   "agents.source.builtin": "built-in",
   "agents.source.user": "yours",
   "agents.deleteTitle": "Delete the agent?",
@@ -800,7 +801,7 @@ export default {
   "mcp.error.secret": "{field}: keep secrets in the vault and use a vault://<id> reference",
 
   // skills
-  "skills.subtitle": "Skills are instructions an agent loads when it needs them. Commands are “/name” templates for the chat.",
+  "skills.subtitle": "Skills are instructions an agent loads when it needs them: the whole team's, or only the agents they were given to. Commands are “/name” templates for the chat.",
   "skills.tab.skills": "Skills",
   "skills.tab.commands": "Commands",
   "skills.tab.tools": "Tools",
@@ -812,6 +813,9 @@ export default {
   "skills.effect.localWrite": "local write",
   "skills.effect.external": "external action",
   "skills.externalContent": "external content",
+  "skills.wholeTeam": "Whole team",
+  "skills.holdersHint": "Who has it: change it in the chat",
+  "skills.askHolders": "I want to decide who has the skill “{name}”",
 
   // settings
   "settings.general": "General",

@@ -127,6 +127,8 @@ const MIGRATIONS: string[] = [
   create index notifications_kind on notifications(kind, created_at);
   alter table tasks add column deliver text;
   `,
+  // Who has a skill (skills.ts SkillHolders): JSON list of agent ids; no row = the whole team.
+  `create table skill_agents(skill text primary key, agents text not null);`,
 ];
 
 /**

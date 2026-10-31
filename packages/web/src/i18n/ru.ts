@@ -547,6 +547,7 @@ export default {
   "agents.empty": "Агентов нет",
   "agents.noDescription": "Без описания",
   "agents.initiativeBadge": "инициатива {level}",
+  "agents.ownSkills": "Свои скиллы",
   "agents.source.builtin": "встроенный",
   "agents.source.user": "ваш",
   "agents.deleteTitle": "Удалить агента?",
@@ -800,7 +801,7 @@ export default {
   "mcp.error.secret": "{field}: храните секреты в vault и указывайте ссылку vault://<id>",
 
   // skills
-  "skills.subtitle": "Скиллы — инструкции, которые агент подгружает по необходимости. Команды — шаблоны «/имя» для чата.",
+  "skills.subtitle": "Скиллы — инструкции, которые агент подгружает по необходимости: у всей команды или только у тех, кому их дали. Команды — шаблоны «/имя» для чата.",
   "skills.tab.skills": "Скиллы",
   "skills.tab.commands": "Команды",
   "skills.tab.tools": "Инструменты",
@@ -812,6 +813,9 @@ export default {
   "skills.effect.localWrite": "локальная запись",
   "skills.effect.external": "внешнее действие",
   "skills.externalContent": "внешний контент",
+  "skills.wholeTeam": "Вся команда",
+  "skills.holdersHint": "У кого есть: поменять в чате",
+  "skills.askHolders": "Хочу решить, у кого будет скилл «{name}»",
 
   // settings
   "settings.general": "Общие",

@@ -36,6 +36,8 @@ export type BusEvents = {
   "plugins.updated": Record<string, never>;
   "brains.updated": Record<string, never>;
   "agents.updated": Record<string, never>;
+  /** Skills came or went, or who has one changed (skills.ts SkillHolders). */
+  "skills.updated": Record<string, never>;
   /** A new agent's draft in the chat changed (or became the agent). */
   "agent_draft.updated": AgentDraft;
   "settings.updated": Record<string, unknown>;
@@ -118,6 +120,7 @@ export function toUiEvent(name: string, payload: any): UiEvent | null {
     case "plugins.updated":
     case "brains.updated":
     case "agents.updated":
+    case "skills.updated":
     case "settings.updated":
     case "connections.updated":
     case "machine.updated":

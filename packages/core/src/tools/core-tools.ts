@@ -429,9 +429,21 @@ export function registerCoreTools(d: CoreToolDeps): void {
       effect: "read",
       inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
     },
-    (i) => {
-      const s = d.skills.load(String(i.name));
-      return s ? text(s) : text(`Skill ${i.name} not found`, true);
+    (i, ctx) => {
+      const name = String(i.name);
+      // A skill given to teammates is theirs: the work goes to them. A task following a skill (a trigger's run) has it.
+      const agent = d.agents.get(ctx.agentId);
+      const follows = ctx.taskId ? d.store.getTask(ctx.taskId)?.skill : undefined;
+      if (agent && d.skills.get(name) && !d.skills.has(agent, name, follows)) {
+        const who = (d.skills.holders?.get(name) ?? []).map((id) => `${id} (${d.agents.get(id)?.name ?? id})`);
+        return text(
+          `${name} is not one of your skills${who.length ? `: ${who.join(", ")} ${who.length === 1 ? "has" : "have"} it` : ""}. ` +
+            "Ask them with team_message or hand them the work with task_delegate.",
+          true,
+        );
+      }
+      const s = d.skills.load(name);
+      return s ? text(s) : text(`Skill ${name} not found`, true);
     },
   );
 

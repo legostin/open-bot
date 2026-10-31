@@ -17,7 +17,7 @@ import { ToolRegistry } from "./tools/registry.ts";
 import { HookRegistry } from "./hooks.ts";
 import { ToolGateway } from "./tools/gateway.ts";
 import { AgentRegistry, agentFromMarkdown, agentName } from "./agents.ts";
-import { SkillIndex } from "./skills.ts";
+import { SkillHolders, SkillIndex } from "./skills.ts";
 import { PluginHost } from "./plugins/host.ts";
 import { EgressProxy } from "./egress.ts";
 import { BrainRegistry } from "./brains.ts";
@@ -143,6 +143,7 @@ export class Hub {
     this.config = config;
     mkdirSync(config.dataDir, { recursive: true });
     this.db = openDb(hubDbFile(config.dataDir));
+    this.skills.holders = new SkillHolders(this.db);
     this.store = new Store(this.db, this.bus);
     this.settings = new Settings(this.db, config.timezone);
     configureHubLocale(() => normalizeLocale(this.settings.get().language) ?? DEFAULT_LOCALE);
@@ -605,7 +606,10 @@ export class Hub {
     this.audit.append(actor, "agent.remove", id);
     // Channels and "/" need a default agent that exists; the built-in assistant always does.
     if (this.settings.get().defaultAgent === id && !this.agents.get(id)) this.updateSettings({ defaultAgent: "assistant" }, "core");
+    // Gone from the team (a built-in one only returns to its defaults): a skill only it had goes back to everyone.
+    if (!this.agents.get(id)) this.skills.holders?.dropAgent(id);
     this.bus.emit("agents.updated", {});
+    this.bus.emit("skills.updated", {});
   }
 
   /** Skills, commands, agents and MCP servers come from enabled plugin layouts + data dir. */

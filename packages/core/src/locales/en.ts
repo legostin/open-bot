@@ -64,6 +64,8 @@ export default {
   "skills.allow": "Without asking: «{label}» on {site}{amount}",
   "skills.allowAmount": ", up to {amount}",
   "skills.delete": "Delete the skill «{name}» and what it may do without asking",
+  "skills.assign": "Give the skill «{name}» only to {agents}",
+  "skills.assignTeam": "Give the skill «{name}» to the whole team",
   "policy.allowedByRuleNote": "allowed by a rule: {note}",
   "policy.backgroundReadOnly": "background tasks with initiative below 2 may only read and notify",
   "policy.read": "read-only",

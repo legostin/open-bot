@@ -443,7 +443,11 @@ export async function registerApi(api: FastifyInstance, hub: Hub, opts: ApiOptio
 
   // ----- tools, skills, commands, channels -----
   api.get("/api/tools", async () => hub.tools.list().map((t) => ({ name: t.name, description: t.description, effect: t.effect, owner: t.owner, source: !!t.source })));
-  api.get("/api/skills", async () => hub.skills.list());
+  // `agents`: who has it; empty: the whole team.
+  api.get("/api/skills", async () => {
+    const held = hub.skills.holders?.all() ?? new Map<string, string[]>();
+    return hub.skills.list().map((s) => ({ ...s, agents: held.get(s.name) ?? [] }));
+  });
   api.get("/api/commands", async () => hub.skills.listCommands().map((c) => ({ name: c.name, description: c.description, source: c.source })));
   api.get("/api/channels", async () => Promise.all(hub.channels.list().map(async (c) => ({ ...c, ...(await hub.channels.status(c.id)) }))));
 

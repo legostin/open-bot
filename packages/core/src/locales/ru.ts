@@ -63,6 +63,8 @@ export default {
   "skills.allow": "Без вопросов: «{label}» на {site}{amount}",
   "skills.allowAmount": ", до {amount}",
   "skills.delete": "Удалить навык «{name}» и то, что ему можно без вопросов",
+  "skills.assign": "Оставить навык «{name}» только у: {agents}",
+  "skills.assignTeam": "Дать навык «{name}» всей команде",
   "policy.allowedByRuleNote": "разрешено правилом: {note}",
   "policy.backgroundReadOnly": "фоновая задача с инициативой ниже 2 может только читать и уведомлять",
   "policy.read": "чтение",
