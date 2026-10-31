@@ -1085,6 +1085,7 @@ export class SessionRunner {
       description: a.description,
       where: [...new Set(a.brains.map((b) => name(parseBrainRef(b).machineId)))],
       brains: brainIds(a.brains),
+      skills: this.d.skills.ownOf(a.id),
     }));
     // Each kind of brain once: ready when one of them (on any computer) is signed in and answers.
     const listed = this.d.brains.list();
@@ -1359,7 +1360,7 @@ export class SessionRunner {
     const local = ref.machineId === "local";
     const workspace = local ? this.workspacePath(row) : `${agent.id}/${this.workspaceKey(row)}`;
     if (local) mkdirSync(workspace, { recursive: true });
-    const skills = this.d.skills.forAgent(agent.skills);
+    const skills = this.d.skills.forAgent(agent, task?.skill);
     let skillsDir: string | undefined;
     if (local && ref.brainId === "claude-code") skillsDir = join(workspace, ".claude", "skills");
     if (local && ref.brainId === "codex") skillsDir = join(workspace, ".agents", "skills");

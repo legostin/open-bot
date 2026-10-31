@@ -25,7 +25,8 @@ export interface PromptContext {
   group?: { title: string; members: Array<{ id: string; name: string }> };
   /** The agent's own dialog: who can take tasks (and where their brains run) and the computers tasks can run on. */
   dispatch?: {
-    team: Array<{ id: string; name: string; description: string; where: string[]; brains?: string[] }>;
+    /** `skills`: the ones given to that teammate itself (the whole team's are everyone's). */
+    team: Array<{ id: string; name: string; description: string; where: string[]; brains?: string[]; skills?: string[] }>;
     computers: Array<{ id: string; name: string; online: boolean }>;
     /** The brains the team can think with (by id), for `brain` in task_delegate. */
     brains?: Array<{ id: string; label: string; models: string[]; ready: boolean }>;
@@ -76,15 +77,16 @@ function howYouWork(c: PromptContext & { dispatch: NonNullable<PromptContext["di
     "- In this dialog your own tools only look (read files, search the web): running commands and changing files is a task's work.",
     "- Anything with steps or deep thought (coding, analysis, checking, research, browsing, running commands, writing or changing code or files, long reading, careful writing) goes to a task with `task_delegate` (`goal`: complete instructions; `title`; `depth`; `about`) at once, one task per independent request: two requests in one message are two tasks. Then say in one short line what you started and end your turn; do not wait for tasks.",
     "- Say how hard each task is and what it is about (`depth`, `about` in task_delegate): `deep` for hard problems, `balanced` for everyday work, `fast` for simple errands; the hub then picks the brain and model that fit (a coding model for code, the most capable one for deep thought, a cheap quick one for errands) and moves on by itself when one is busy or over its limit. Name a `brain` only when it must be that one.",
-    "- Choose who does it: yourself, or the teammate whose role fits better. Choose where: the computer whose files, apps or hardware the work needs (`machine`). If the right agent or computer is unclear and the choice matters, ask the user one short question first; otherwise choose, and name your choice in a few words.",
+    "- Choose who does it: yourself, or the teammate whose role or skills fit better (the skills in the team list are that teammate's own: work that needs one goes to them). Choose where: the computer whose files, apps or hardware the work needs (`machine`). If the right agent or computer is unclear and the choice matters, ask the user one short question first; otherwise choose, and name your choice in a few words.",
     "- The user may write again while tasks run. A new request is a new task; a detail or a correction for work in progress goes to that task with `task_message`; \"stop that\" is `task_cancel`. The `[Open tasks you started]` lines before a message show what is still going.",
     "- A task may ask you something (a `[System]` note). Answer with `task_message` when you know (this dialog, memory); otherwise ask the user in one short message, then pass their answer on.",
     "- When a task finishes, its result comes to you: tell the user the outcome in a few lines, in your own words.",
   ];
   const team = c.dispatch.team.map((a) => {
+    const skills = a.skills?.length ? `skills: ${a.skills.join(", ")}` : "";
     const brains = a.brains?.length ? `brains: ${a.brains.join(", ")}` : "";
     const where = a.where.length ? `on: ${a.where.join(", ")}` : "";
-    const about = [brains, where].filter(Boolean).join("; ");
+    const about = [skills, brains, where].filter(Boolean).join("; ");
     return `- ${a.id}: ${a.name}${a.id === c.agent.id ? " (you)" : ""} — ${a.description || "no description"}${about ? ` (${about})` : ""}`;
   });
   if (team.length) lines.push("", "Your team (`to` in team_message, `agent` in task_delegate):", ...team);

@@ -111,6 +111,8 @@ const MIGRATIONS: string[] = [
   `alter table secret_requests add column login text;`,
   // The skill a task follows (Task.skill): a trigger's run of a skill the person taught.
   `alter table tasks add column skill text;`,
+  // Who has a skill (skills.ts SkillHolders): JSON list of agent ids; no row = the whole team.
+  `create table skill_agents(skill text primary key, agents text not null);`,
 ];
 
 /**
