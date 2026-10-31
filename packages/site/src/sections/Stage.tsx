@@ -146,13 +146,13 @@ function Chapter({ id, active, live, onWatch }: { id: ChapterId; active: boolean
       {/* The phone's own window for this chapter: it plays while the card is in the middle of the screen. */}
       <div className="relative mt-5 h-[min(68svh,560px)] lg:hidden">
         <DemoWindow chapter={id} idle={!live} passive className="h-full rounded-[20px]" />
-        <button type="button" onClick={onWatch} aria-label={t("demo.tapToWatch")} className="absolute inset-0 flex items-end justify-center rounded-[20px] pb-4">
-          <span className="inline-flex items-center gap-2 rounded-full bg-fg/85 px-4 py-2 text-[13.5px] font-semibold text-bg shadow-[var(--shadow)] backdrop-blur">
-            <Play size={14} />
-            {t("demo.tapToWatch")}
-          </span>
-        </button>
+        {/* The whole window opens the story too; nothing is drawn over the app. */}
+        <button type="button" onClick={onWatch} aria-label={t("demo.tapToWatch")} className="absolute inset-0 rounded-[20px]" />
       </div>
+      <button type="button" onClick={onWatch} className="mt-3 inline-flex items-center justify-center gap-2 self-start rounded-full bg-fg px-4.5 py-2.5 text-[14px] font-semibold text-bg shadow-[var(--shadow)] lg:hidden">
+        <Play size={14} />
+        {t("demo.fullScreen")}
+      </button>
       <p className="mt-4 flex max-w-[33rem] items-start gap-2 text-[14px] leading-snug text-muted">
         <Lock size={15} className="mt-0.5 shrink-0 text-accent" />
         {t(`chapter.${id}.under`)}

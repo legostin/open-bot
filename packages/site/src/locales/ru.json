@@ -32,6 +32,7 @@
   "demo.chapters": "Главы",
   "demo.watch": "Смотреть день",
   "demo.tapToWatch": "Нажми, чтобы смотреть на весь экран",
+  "demo.fullScreen": "Смотреть на весь экран",
   "demo.story": "День с командой, глава {n} из {total}",
   "demo.close": "Закрыть",
   "demo.prev": "Предыдущая глава",

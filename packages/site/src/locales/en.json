@@ -32,6 +32,7 @@
   "demo.chapters": "Chapters",
   "demo.watch": "Watch the day",
   "demo.tapToWatch": "Tap to watch full screen",
+  "demo.fullScreen": "Watch full screen",
   "demo.story": "A day with the team, chapter {n} of {total}",
   "demo.close": "Close",
   "demo.prev": "Previous chapter",
