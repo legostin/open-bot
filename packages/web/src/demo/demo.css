@@ -69,3 +69,40 @@
   opacity: 1;
   transform: none;
 }
+
+/* The person's voice while showing a task: what they said, by the pointer. */
+.demo-caption {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483001;
+  max-width: 280px;
+  padding: 0.45rem 0.75rem 0.45rem 2rem;
+  border-radius: 1rem 1rem 1rem 0.3rem;
+  background: #1c1814;
+  color: #f7f4ef;
+  font: 500 13px/1.35 "Onest Variable", system-ui, sans-serif;
+  box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 240ms,
+    margin 240ms;
+  margin-top: 6px;
+}
+.demo-caption::before {
+  content: "";
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: -0.35rem;
+  border-radius: 50%;
+  background: #f4a11a;
+  box-shadow: 0 0 0 4px rgb(244 161 26 / 0.3);
+}
+.demo-caption.is-in {
+  opacity: 1;
+  margin-top: 0;
+}

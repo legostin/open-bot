@@ -102,6 +102,23 @@ export interface MachinesText {
   prDone: string;
 }
 
+export interface BrowserText {
+  ask: string;
+  watching: string;
+  goal: string;
+  /** What the person says while showing: after the catalogue, at the quantity, at the total. */
+  voice: [string, string, string];
+  retell: string;
+  choices: [string, string];
+  skillSummary: string;
+  saved: string;
+  orderAsk: string;
+  ordering: string;
+  ordered: string;
+  scheduleAsk: string;
+  scheduled: string;
+}
+
 export interface ChannelsText {
   ask: string;
   question: string;
@@ -137,6 +154,7 @@ export interface Content {
     services: ServicesText;
     team: TeamText;
     machines: MachinesText;
+    browser: BrowserText;
     channels: ChannelsText;
   };
 }

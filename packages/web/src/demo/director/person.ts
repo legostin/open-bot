@@ -8,7 +8,7 @@ import type { DemoHub } from "../hub/hub";
 import { dialogOf, type AgentId } from "../world";
 import type { Clock } from "./clock";
 import type { Cursor } from "./cursor";
-import { buttonByText, composer, setFieldValue, waitFor, type Finder } from "./dom";
+import { buttonByText, composer, setFieldValue, StepError, waitFor, type Finder } from "./dom";
 
 export interface Navigator {
   path(): string;
@@ -111,6 +111,50 @@ export class Person {
   /** Presses the newest button that says `label`. */
   pressText(label: string): Promise<void> {
     return this.press(() => buttonByText(label), `the button “${label}”`);
+  }
+
+  /** Points at a spot on screen and presses there (on the live view's picture: the page underneath reacts). */
+  async pointAt(at: { x: number; y: number } | undefined, what: string): Promise<void> {
+    if (!at) throw new StepError(`nowhere to point: ${what}`);
+    await this.cursor.moveTo(this.clock, at);
+    await this.clock.wait(180);
+    await this.cursor.press(this.clock);
+  }
+
+  /** The person's words while they show something, as the voice is written down. */
+  async speak(text: string, ms = 2600): Promise<void> {
+    this.cursor.caption(text, ms, this.clock);
+    // The teach bar's mic ring follows the voice while the words are said.
+    const mic = document.querySelector<HTMLElement>(".obb-mic");
+    const end = Date.now() + (ms * 0.8) / this.clock.speed;
+    const pulse = () => {
+      if (!mic?.isConnected) return;
+      if (Date.now() > end) return void mic.style.setProperty("--lvl", "0");
+      mic.style.setProperty("--lvl", (0.25 + Math.random() * 0.65).toFixed(2));
+      setTimeout(pulse, 90);
+    };
+    pulse();
+    await this.clock.wait(ms * 0.6);
+  }
+
+  /** Highlight: the toggle in the live view, then a frame dragged over `box` on the picture. */
+  async highlight(box: DOMRect): Promise<void> {
+    await this.press(() => document.querySelector(".obb-hl-btn"), "the Highlight button");
+    const layer = await waitFor(this.clock, () => document.querySelector(".obb-hl.is-on"), "the highlight layer");
+    const pad = 6;
+    const a = { x: box.left - pad, y: box.top - pad };
+    const b = { x: box.right + pad, y: box.bottom + pad };
+    const fire = (type: string, p: { x: number; y: number }) =>
+      layer.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, pointerId: 7, pointerType: "mouse", isPrimary: true, button: 0, buttons: type === "pointerup" ? 0 : 1 }));
+    await this.cursor.moveTo(this.clock, a);
+    fire("pointerdown", a);
+    for (let i = 1; i <= 12; i++) {
+      const p = { x: a.x + ((b.x - a.x) * i) / 12, y: a.y + ((b.y - a.y) * i) / 12 };
+      await this.cursor.moveTo(this.clock, p);
+      fire("pointermove", p);
+    }
+    fire("pointerup", b);
+    this.cursor.rest();
   }
 
   /** Goes to a page of the app (a channel, Tasks). */

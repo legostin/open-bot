@@ -75,9 +75,9 @@ function demoFiles(): Plugin {
         else if (/^\/logos\/[a-z-]+\.png$/.test(path) && DEMO_LOGOS[path.slice(7, -4)]) {
           body = readFileSync(resolve(ROOT, DEMO_LOGOS[path.slice(7, -4)]));
           type = "image/png";
-        } else if (/^\/(media|files|tiles|pages)\//.test(path) && existsSync(join(DEMO_STATIC, path))) {
+        } else if (/^\/(media|files|tiles|pages|frames)\//.test(path) && existsSync(join(DEMO_STATIC, path))) {
           body = readFileSync(join(DEMO_STATIC, path));
-          type = /\.svg$/.test(path) ? "image/svg+xml" : /\.png$/.test(path) ? "image/png" : /\.jpe?g$/.test(path) ? "image/jpeg" : /\.html$/.test(path) ? "text/html" : "application/octet-stream";
+          type = /\.svg$/.test(path) ? "image/svg+xml" : /\.png$/.test(path) ? "image/png" : /\.jpe?g$/.test(path) ? "image/jpeg" : /\.html$/.test(path) ? "text/html" : /\.json$/.test(path) ? "application/json" : "application/octet-stream";
         }
         if (body === undefined) return next();
         res.setHeader("content-type", type);

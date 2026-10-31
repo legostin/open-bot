@@ -44,6 +44,14 @@ export function installShims(api: ApiPeer, sockets: SocketPeer): void {
     return realOpen(url, target, features);
   };
 
+  // The demo's "microphone": a silent stream, so teach mode shows the mic on without asking the visitor for theirs.
+  // What the person says appears as captions (director/person.ts speak()).
+  if (navigator.mediaDevices)
+    navigator.mediaDevices.getUserMedia = async () => {
+      const ctx = new AudioContext();
+      return ctx.createMediaStreamDestination().stream;
+    };
+
   const RealWebSocket = window.WebSocket;
   const Shim = function (this: unknown, url: string | URL, protocols?: string | string[]) {
     const u = new URL(String(url), location.href);

@@ -37,6 +37,10 @@ async function serviceWorker(): Promise<boolean> {
 }
 
 try {
+  // Every chapter starts as the app would on a first visit: the views a previous chapter left (the sidebar's tab, the
+  // live view's corner, drafts) go. The app's keys are "ob.*"; the page around the demo keeps its own.
+  for (const store of [localStorage, sessionStorage])
+    for (const key of Object.keys(store)) if (key.startsWith("ob.")) store.removeItem(key);
   // The app reads this before anything else: the demo speaks the page's language, whatever the browser's.
   localStorage.setItem("piomio.locale", params.lang);
 } catch {

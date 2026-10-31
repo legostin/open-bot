@@ -156,6 +156,11 @@ export function registerRoutes(hub: DemoHub, notInDemo: string): void {
     return x ?? refuse();
   });
 
+  // ----- plugins' own HTTP (the browser's teach voice, history) -----
+  r.route("POST", "/api/plugins/:id/http/teach/speech", () => ({ text: "" }));
+  r.route("GET", "/api/plugins/:id/http/history", () => []);
+  r.route("GET", "/api/plugins/:id/http/sites", () => []);
+
   // ----- approvals -----
   r.route("POST", "/api/approvals/:id", ({ params, body }) => {
     const a = w().approvals.find((x) => x.id === params.id);

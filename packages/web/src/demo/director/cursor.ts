@@ -52,6 +52,25 @@ export class Cursor {
     this.rest();
   }
 
+  /** The person's words while showing something (their voice, written down): a bubble by the pointer. */
+  caption(text: string, ms: number, clock: Clock): void {
+    const b = document.createElement("div");
+    b.className = "demo-caption";
+    b.textContent = text;
+    b.style.transform = `translate(${Math.min(this.x + 18, window.innerWidth - 300)}px, ${this.y + 22}px)`;
+    document.body.appendChild(b);
+    requestAnimationFrame(() => b.classList.add("is-in"));
+    setTimeout(() => {
+      b.classList.remove("is-in");
+      setTimeout(() => b.remove(), 300);
+    }, ms / clock.speed);
+  }
+
+  /** Where the pointer is now. */
+  get at(): { x: number; y: number } {
+    return { x: this.x, y: this.y };
+  }
+
   /** Fades out a moment after the last move. */
   rest(): void {
     clearTimeout(this.hideTimer);
