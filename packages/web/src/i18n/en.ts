@@ -448,6 +448,8 @@ export default {
   "brainSetup.checkAgainHint": "Installed something just now? The hub looks again.",
   "brainSetup.connected": "Connected: {name}",
   "brainSetup.ready": "A brain is connected.",
+  "firstRun.title": "Hi! I'm your assistant",
+  "firstRun.intro": "First, give me a brain: sign in to Claude Code or Codex with your subscription, or give an API key. Then we'll get to know each other.",
 
   // tasks
   "tasks.subtitle": "Everything agents are working on: your requests, delegated work and trigger runs.",
@@ -955,6 +957,9 @@ export default {
   "agentDraft.open": "Open dialog",
   "agentDraft.superseded": "Earlier version, the current one is below",
   "agentDraft.missing": "This draft is no longer available",
+  "agentProfile.title": "How I look",
+  "agentProfile.hint": "Name and character: just tell me in the chat.",
+  "agentProfile.missing": "This agent is no longer on the team",
   "team.you": "You: {text}",
   "team.working": "Working…",
   "team.noMessages": "No messages yet",

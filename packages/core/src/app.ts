@@ -246,6 +246,7 @@ export class Hub {
       machines: this.machines,
       cliTools: this.cliTools,
       bus: this.bus,
+      isRunning: (id) => this.runner.isRunning(id),
       resume: (id, prompt, opts) => this.runner.resume(id, prompt, opts),
       tellAgent: (id, note) => this.runner.tellAgent(id, note),
     });

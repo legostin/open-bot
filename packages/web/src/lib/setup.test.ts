@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Message, SetupBrain, SetupState } from "@owlbot/shared";
-import { cliRows, primaryRef, showGate } from "./setup";
+import { cliRows, introDue, primaryRef, showGate } from "./setup";
 
 const brain = (ref: string, o: Partial<SetupBrain> = {}): SetupBrain => ({ ref, label: ref, kind: "cli", installed: false, signedIn: false, canInstall: false, ...o });
-const state = (brains: SetupBrain[], usable = false): SetupState => ({
+const state = (brains: SetupBrain[], usable = false, firstRun = false): SetupState => ({
   agentId: "assistant",
   brains,
   usable,
+  firstRun,
   vault: "absent",
   telegram: false,
   machines: 0,
@@ -46,5 +47,21 @@ describe("showGate", () => {
     expect(showGate([msg("user", [{ type: "text", text: "hi" }]), card], s)).toBe(false);
     expect(showGate([card, msg("user", [{ type: "text", text: "again" }])], s)).toBe(false);
     expect(showGate([card, msg("assistant", [{ type: "text", text: "hello" }])], s)).toBe(true);
+  });
+});
+
+describe("introDue", () => {
+  const hi = [msg("user", [{ type: "text", text: "hi" }])];
+
+  it("opens the intro in the default agent's empty dialog on a new hub with a brain", () => {
+    expect(introDue([], state([], true, true), true)).toBe(true);
+  });
+
+  it("waits for a brain, the default agent's dialog and an empty one; never on a hub already in use", () => {
+    expect(introDue([], state([], false, true), true)).toBe(false);
+    expect(introDue([], state([], true, true), false)).toBe(false);
+    expect(introDue(hi, state([], true, true), true)).toBe(false);
+    expect(introDue([], state([], true, false), true)).toBe(false);
+    expect(introDue([], null, true)).toBe(false);
   });
 });

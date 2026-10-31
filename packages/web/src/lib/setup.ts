@@ -21,3 +21,8 @@ export function showGate(messages: Message[], s: SetupState | null): boolean {
   const card = messages.findLastIndex((m) => m.parts.some((p) => p.type === "brain_setup"));
   return card < 0 || card < messages.findLastIndex((m) => m.role === "assistant");
 }
+
+/** The moment to open a new hub's intro: a brain works, and the default agent's dialog (`main`) has nothing in it yet. */
+export function introDue(messages: Message[], s: SetupState | null, main: boolean): boolean {
+  return !!s && s.firstRun && s.usable && main && messages.length === 0;
+}
