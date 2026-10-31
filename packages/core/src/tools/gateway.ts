@@ -140,6 +140,14 @@ export class ToolGateway {
     }
 
     if (policy.decision === "ask") {
+      // A call without what the tool requires would only fail after the person's yes on its card: say so at once.
+      const missing = missingRequired(tool.inputSchema, input);
+      if (missing.length) {
+        return {
+          content: [{ type: "text", text: `Parameter${missing.length > 1 ? "s" : ""} ${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} required. Nothing was done and nobody was asked; call ${name} again with ${missing.length > 1 ? "them" : "it"}.` }],
+          isError: true,
+        };
+      }
       const summary = this.summarize(tool, input);
       const approval = this.d.approvals.create({
         sessionId: s.id,
@@ -252,4 +260,12 @@ function truncateDeep(v: unknown, depth = 0): unknown {
     return o;
   }
   return v;
+}
+
+/** The tool's required parameters the call left out (absent or null; an empty string is a value). */
+export function missingRequired(schema: unknown, input: unknown): string[] {
+  const required = (schema as { required?: unknown } | undefined)?.required;
+  if (!Array.isArray(required)) return [];
+  const given = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  return required.filter((k): k is string => typeof k === "string" && (given[k] === undefined || given[k] === null));
 }

@@ -436,6 +436,13 @@ describe("hub (integration)", () => {
     expect(notes.some((n) => n.title === "from-mcp")).toBe(true);
   });
 
+  it("refuses a call without the tool's required parameters before any approval card", async () => {
+    const before = hub.approvals.list(["pending"]).length;
+    await web.req("POST", `/api/conversations/${conv}/messages`, { text: "CALL fake_send {}" });
+    expect(await lastReply(conv, /Parameter text is required\. Nothing was done and nobody was asked; call fake_send again with it\./)).toBeTruthy();
+    expect(hub.approvals.list(["pending"]).length).toBe(before);
+  });
+
   it("holds external actions for approval and runs them after the user approves", async () => {
     await web.req("POST", `/api/conversations/${conv}/messages`, { text: 'CALL fake_send {"text":"to bob"}' });
     await lastReply(conv, /awaiting_approval|waiting for the user.s approval/);
