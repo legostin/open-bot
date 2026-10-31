@@ -174,7 +174,11 @@ export function registerCoreTools(d: CoreToolDeps): void {
       inputSchema: {
         type: "object",
         properties: {
-          goal: { type: "string", description: "Complete, self-contained instructions: what to do, what done looks like, what to report" },
+          goal: {
+            type: "string",
+            description:
+              "Complete, self-contained instructions: what to do, what done looks like, what to report. Name no folder for the results unless the user did: the task works in its own folder, and the pictures it shows reach this dialog.",
+          },
           title: { type: "string", description: "Short title the user sees (≤ 60 chars), in the user's language" },
           agent: { type: "string", description: "Agent id (default: you). See task_agents." },
           machine: { type: "string", description: "Computer id or name to run on, when the work needs that computer's files, apps or hardware (default: the agent's usual brain). See task_agents." },

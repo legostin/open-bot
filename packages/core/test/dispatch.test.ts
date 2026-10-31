@@ -242,4 +242,13 @@ describe("agents as entry points (integration)", () => {
     expect(inTask).not.toContain("## How you work");
     expect(inTask).toContain("`task_ask`");
   });
+
+  it("keeps what an agent with its own files makes in its folder, not on the person's Desktop", () => {
+    const agent = { id: "assistant", name: "Owl", description: "", brains: [], initiative: 1, tools: ["*"], skills: [], policyProfile: "default", budget: { backgroundRunsPerDay: 5 }, prompt: "", source: "builtin" } as AgentDef;
+    const base = { agent, timezone: "UTC", language: "en", consoleUrl: "http://x", background: false, skills: [], appended: [] };
+    const task = { id: "t1", title: "x", createdBy: "agent" } as Task;
+    expect(buildSystemPrompt({ ...base, nativeSkills: true, task })).toMatch(/in a task, in the task's own folder\. Never put it on the Desktop/);
+    // A brain without files of its own (the API) has nothing to place.
+    expect(buildSystemPrompt({ ...base, nativeSkills: false, task })).not.toContain("on the Desktop");
+  });
 });
