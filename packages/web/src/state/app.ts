@@ -9,6 +9,7 @@ import { HubSocket, type ConnectionState } from "../lib/socket";
 import { applyDelta, mergeFetched, prependOlder, upsertMessage } from "../lib/messages";
 import { desktopTicketFrom } from "../lib/desktop";
 import { mobileMode } from "../lib/mobile";
+import { toastWorthy } from "../lib/notifications";
 import { native } from "../lib/native";
 import { adoptHubLocale, t } from "../i18n";
 import { toast } from "./toast";
@@ -356,7 +357,7 @@ function handleEvent(e: UiEvent): void {
       session.set((s) => (s ? { ...s, vaultState: e.data.state } : s));
       break;
     case "notification.created":
-      if (e.data.level === "notify" || e.data.level === "ask") toast(e.data.title, "info");
+      if (toastWorthy(e.data)) toast(e.data.title, "info");
       break;
     case "plugins.updated":
       void refreshBootstrap();

@@ -1,6 +1,6 @@
 // How notifications read: a part's kind (parts saved before kinds read by level), source labels, the Inbox's days and paging.
 
-import type { BehindEntry, InboxEntry, InboxView, NotificationKind, NotificationSource, NotifyLevel } from "@piomio/shared";
+import type { BehindEntry, InboxEntry, InboxView, Notification, NotificationKind, NotificationSource, NotifyLevel } from "@piomio/shared";
 
 export function partKind(p: { kind?: NotificationKind; level: NotifyLevel }): NotificationKind {
   if (p.kind) return p.kind;
@@ -93,15 +93,24 @@ export function idsToMarkRead(view: Pick<InboxView, "questions" | "entries">, fr
   return [...view.questions, ...view.entries].filter((e) => e.unread && !fresh.has(e.id)).map((e) => e.id);
 }
 
-export type BehindReason = "superseded" | "inDigest" | "approval" | "waiting" | "silent";
+export type BehindReason = "superseded" | "inDigest" | "inEarlierDigest" | "approval" | "waiting" | "silent";
 
 /**
  * Why a row stayed behind the scenes: what became of it, and the hub's own reason (quiet hours, the rate limit, a muted
- * schedule…) when it has one. A replaced row and an approval push need no reason beyond their line.
+ * schedule…) when it has one. A replaced row and an approval push need no reason beyond their line. A row held for the
+ * digest waits only while the hub says so; one that went into a digest with nothing to link (sent before digests were linked
+ * to their items) went into an earlier one.
  */
-export function behindWhy(b: Pick<BehindEntry, "supersededBy" | "digest" | "kind" | "level" | "reason">): { key: BehindReason; reason?: string } {
+export function behindWhy(b: Pick<BehindEntry, "supersededBy" | "digest" | "kind" | "level" | "reason" | "waiting">): { key: BehindReason; reason?: string } {
   if (b.supersededBy) return { key: "superseded" };
-  if (b.digest) return { key: "inDigest", ...(b.reason ? { reason: b.reason } : {}) };
+  const reason = b.reason ? { reason: b.reason } : {};
+  if (b.digest) return { key: "inDigest", ...reason };
   if (b.kind === "approval") return { key: "approval" };
-  return { key: b.level === "digest" ? "waiting" : "silent", ...(b.reason ? { reason: b.reason } : {}) };
+  if (b.waiting) return { key: "waiting", ...reason };
+  return { key: b.level === "digest" ? "inEarlierDigest" : "silent", ...reason };
+}
+
+/** A notification that pops up as it arrives: an alert or a question that reached the person; nothing the hub held back (it says why). */
+export function toastWorthy(n: Pick<Notification, "kind" | "reason">): boolean {
+  return (n.kind === "alert" || n.kind === "question") && !n.reason;
 }

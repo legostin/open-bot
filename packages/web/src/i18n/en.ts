@@ -534,6 +534,7 @@ export default {
   "inbox.behind": "Behind the scenes · {n}",
   "inbox.why.superseded": "Replaced by a newer one",
   "inbox.why.inDigest": "Went into “{title}”",
+  "inbox.why.inEarlierDigest": "Went into an earlier digest",
   "inbox.why.approval": "The approval itself is in the chat",
   "inbox.why.waiting": "Waits for the next digest",
   "inbox.why.silent": "Silent: just for the record",

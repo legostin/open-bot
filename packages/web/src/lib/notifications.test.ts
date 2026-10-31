@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { BehindEntry, InboxEntry, InboxView } from "@piomio/shared";
-import { appendPage, behindMayHaveMore, behindWhy, dayLabel, groupByDay, idsToMarkRead, INBOX_PAGE, INBOX_PAGE_MAX, mergeBehind, partKind, pinWaiting, reloadLimit, sourceLabel, splitWaiting } from "./notifications";
+import { appendPage, behindMayHaveMore, behindWhy, dayLabel, groupByDay, idsToMarkRead, INBOX_PAGE, INBOX_PAGE_MAX, mergeBehind, partKind, pinWaiting, reloadLimit, sourceLabel, splitWaiting, toastWorthy } from "./notifications";
 
 const entry = (id: string, over: Partial<InboxEntry> = {}): InboxEntry => ({ id, kind: "alert", title: id, body: "", createdAt: "2026-10-31T10:00:00Z", unread: false, feedbackable: false, ...over });
 const view = (entries: InboxEntry[], over: Partial<InboxView> = {}): InboxView => ({ questions: [], entries, hasMore: true, behindCount: 0, unread: 0, ...over });
-const behindRow = (id: string, over: Partial<BehindEntry> = {}): BehindEntry => ({ id, level: "silent", kind: "item", title: id, body: "", createdAt: "2026-10-31T10:00:00Z", ...over });
+const behindRow = (id: string, over: Partial<BehindEntry> = {}): BehindEntry => ({ id, level: "silent", kind: "item", title: id, body: "", createdAt: "2026-10-31T10:00:00Z", waiting: false, ...over });
 
 describe("notification views", () => {
   it("reads parts saved before kinds by their level", () => {
@@ -161,16 +161,34 @@ describe("why a row stayed behind the scenes", () => {
   });
 
   it("keeps the hub's reason on a row that waits for the digest or went into one", () => {
-    expect(behindWhy(behindRow("a", { level: "digest", reason: "Quiet hours" }))).toEqual({ key: "waiting", reason: "Quiet hours" });
-    expect(behindWhy(behindRow("b", { level: "digest" }))).toEqual({ key: "waiting" });
+    expect(behindWhy(behindRow("a", { level: "digest", waiting: true, reason: "Quiet hours" }))).toEqual({ key: "waiting", reason: "Quiet hours" });
+    expect(behindWhy(behindRow("b", { level: "digest", waiting: true }))).toEqual({ key: "waiting" });
     const digest = { id: "n_9", title: "Evening digest", createdAt: "2026-10-31T19:00:00Z" };
     expect(behindWhy(behindRow("c", { level: "digest", digest, reason: "Rate limit" }))).toEqual({ key: "inDigest", reason: "Rate limit" });
     expect(behindWhy(behindRow("d", { level: "digest", digest }))).toEqual({ key: "inDigest" });
+  });
+
+  it("says a row waits for the next digest only while the hub says so, and that an old one went into an earlier digest", () => {
+    // Went into a digest sent before digests were linked to their items: digested, nothing to point at.
+    expect(behindWhy(behindRow("a", { level: "digest" }))).toEqual({ key: "inEarlierDigest" });
+    expect(behindWhy(behindRow("b", { level: "digest", reason: "Rate limit" }))).toEqual({ key: "inEarlierDigest", reason: "Rate limit" });
+    expect(behindWhy(behindRow("c", { level: "digest", waiting: true }))).toEqual({ key: "waiting" });
   });
 
   it("gives a silent row its own reason, and an approval push its line", () => {
     expect(behindWhy(behindRow("a", { reason: "Muted by you" }))).toEqual({ key: "silent", reason: "Muted by you" });
     expect(behindWhy(behindRow("b"))).toEqual({ key: "silent" });
     expect(behindWhy(behindRow("c", { kind: "approval", level: "notify" }))).toEqual({ key: "approval" });
+  });
+});
+
+describe("which notifications pop up", () => {
+  it("pops up an alert or a question that reached the person, nothing else", () => {
+    expect(toastWorthy({ kind: "alert" })).toBe(true);
+    expect(toastWorthy({ kind: "question" })).toBe(true);
+    // Reports and digests are in the chat already; approval pushes have their own card; items stay behind the scenes.
+    for (const kind of ["report", "digest", "approval", "item"] as const) expect(toastWorthy({ kind })).toBe(false);
+    // A row the hub held back (a muted schedule, quiet hours) carries why: it does not pop up.
+    expect(toastWorthy({ kind: "alert", reason: "the trigger is muted by the user" })).toBe(false);
   });
 });

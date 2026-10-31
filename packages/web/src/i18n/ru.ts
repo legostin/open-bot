@@ -524,7 +524,7 @@ export default {
   "inbox.collect": "Собрать сейчас",
   "inbox.collecting": "Ассистент пишет сводку",
   "inbox.waiting": "Ждут вас",
-  "inbox.approvals": "{n, plural, one {# согласование ждёт} few {# согласования ждут} many {# согласований ждут} other {# согласования ждут}}",
+  "inbox.approvals": "{n, plural, one {# подтверждение ждёт} few {# подтверждения ждут} many {# подтверждений ждут} other {# подтверждения ждут}}",
   "inbox.today": "Сегодня",
   "inbox.yesterday": "Вчера",
   "inbox.openChat": "Открыть в чате",
@@ -534,7 +534,8 @@ export default {
   "inbox.behind": "За кадром · {n}",
   "inbox.why.superseded": "Заменено более новым",
   "inbox.why.inDigest": "Вошло в «{title}»",
-  "inbox.why.approval": "Само согласование — в чате",
+  "inbox.why.inEarlierDigest": "Вошло в одну из прошлых сводок",
+  "inbox.why.approval": "Само подтверждение — в чате",
   "inbox.why.waiting": "Ждёт следующей сводки",
   "inbox.why.silent": "Тихо: просто для журнала",
 
