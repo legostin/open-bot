@@ -1,6 +1,6 @@
 // "Is it worth interrupting you?" — levels, quiet hours, rate limits, dedup, digests, feedback.
 
-import type { Notification, NotifyLevel } from "@piomio/shared";
+import type { Notification, NotificationKind, NotifyLevel } from "@piomio/shared";
 import { newId, nowIso, truncate } from "@piomio/shared";
 import type { Db } from "./db.ts";
 import type { EventBus } from "./bus.ts";
@@ -10,9 +10,13 @@ import type { HookRegistry } from "./hooks.ts";
 import type { Store } from "./store.ts";
 import { LocalizedError, t } from "./i18n.ts";
 
+/** What a routing level is for the person, when nothing more specific was said. */
+export const KIND_OF_LEVEL: Record<NotifyLevel, NotificationKind> = { silent: "item", digest: "item", notify: "alert", ask: "question" };
+
 const fromRow = (r: any): Notification => ({
   id: r.id,
   level: r.level,
+  kind: r.kind ?? KIND_OF_LEVEL[r.level as NotifyLevel] ?? "item",
   title: r.title,
   body: r.body,
   agentId: r.agent_id ?? undefined,
@@ -22,6 +26,11 @@ const fromRow = (r: any): Notification => ({
   createdAt: r.created_at,
   deliveredAt: r.delivered_at ?? undefined,
   feedback: r.feedback ?? undefined,
+  ...(r.reason ? { reason: r.reason } : {}),
+  ...(r.message_id ? { messageId: r.message_id } : {}),
+  ...(r.read_at ? { readAt: r.read_at } : {}),
+  ...(r.digest_id ? { digestId: r.digest_id } : {}),
+  ...(r.superseded_by ? { supersededBy: r.superseded_by } : {}),
 });
 
 export function localHHMM(timezone: string, d = new Date()): string {
@@ -142,10 +151,10 @@ export class Notifier {
       }
     }
 
-    const n: Notification = { id: newId("n_"), level, title: input.title, body: input.body, agentId: input.agentId, taskId: input.taskId, triggerId: input.triggerId, conversationId: input.conversationId, createdAt: nowIso() };
+    const n: Notification = { id: newId("n_"), level, kind: KIND_OF_LEVEL[level], title: input.title, body: input.body, agentId: input.agentId, taskId: input.taskId, triggerId: input.triggerId, conversationId: input.conversationId, createdAt: nowIso() };
     this.db
-      .prepare("insert into notifications(id, level, title, body, agent_id, task_id, trigger_id, conversation_id, created_at) values (?,?,?,?,?,?,?,?,?)")
-      .run(n.id, level, n.title, n.body, n.agentId ?? null, n.taskId ?? null, n.triggerId ?? null, n.conversationId ?? null, n.createdAt);
+      .prepare("insert into notifications(id, level, kind, title, body, agent_id, task_id, trigger_id, conversation_id, created_at) values (?,?,?,?,?,?,?,?,?,?)")
+      .run(n.id, level, n.kind, n.title, n.body, n.agentId ?? null, n.taskId ?? null, n.triggerId ?? null, n.conversationId ?? null, n.createdAt);
     this.bus.emit("notification.created", n);
 
     if (level === "notify" || level === "ask") await this.deliver(n);
