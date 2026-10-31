@@ -12,11 +12,13 @@ import { agentForPath, chatForPath } from "../lib/team";
 import { feedForPath } from "../lib/feeds";
 import { connection, ensureTasks, session, tasks } from "../state/app";
 import { openPanel, panel, togglePanel } from "../state/panel";
-import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, useSlot } from "../plugins/slots";
+import { PluginSidebarItems, PluginStatusItems, RightPane, SidebarPanels, usePluginRegistry, useSlot } from "../plugins/slots";
+import { liveWindow, liveWindowActions } from "../plugins/liveview";
 import { cx, IconButton } from "./ui";
 import { dragRegion } from "../lib/desktop";
 import { ApprovalsBadge, ConnectionBadge, VaultBadge } from "./StatusBadges";
 import { CommandPalette } from "./CommandPalette";
+import { Icon } from "./icon";
 import { LiveViewWindow } from "./LiveViewWindow";
 import { SettingsPanel } from "./SettingsPanel";
 import { MachinesBlock } from "./MachinesBlock";
@@ -54,6 +56,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   useEffect(() => ensureTasks(), []);
   const activeTasks = (taskList ?? []).filter((x) => ACTIVE_STATUSES.includes(x.status)).length;
   const tasksOpen = p.open && p.section === "tasks";
+  // The plugins' live views (the agents' browser): opened from here at any time, not only when an agent works there.
+  const { liveViews } = usePluginRegistry();
+  const live = useStore(liveWindow);
   const item = (on: boolean) =>
     cx(
       "press flex w-full items-center gap-2.5 rounded-xl px-3 py-[7px] text-left text-[13.5px] font-medium",
@@ -70,6 +75,22 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <SidebarPanels />
       </div>
       <div className="flex flex-col gap-0.5 px-2 pt-1 pb-3">
+        {liveViews.map((v) => (
+          <button
+            key={v.key}
+            type="button"
+            onClick={() => {
+              if (live.expanded === v.key) liveWindowActions.collapse();
+              else liveWindowActions.expand(v.key);
+              onNavigate?.();
+            }}
+            aria-pressed={live.expanded === v.key}
+            className={item(live.expanded === v.key)}
+          >
+            <Icon name={v.icon} className="size-[17px]" />
+            <span className="min-w-0 flex-1 truncate">{v.title}</span>
+          </button>
+        ))}
         <button
           type="button"
           onClick={() => {
