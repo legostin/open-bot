@@ -123,13 +123,31 @@ export function Integrations() {
   );
 }
 
+/** Real screenshots of the iOS app (assets/iphone/<lang>-<n>-<what>.jpg): the first in front, the second behind it. */
+function PhoneShots({ shots }: { shots: string[] }) {
+  const { t } = useI18n();
+  const phone = (src: string, alt: string, className: string) => (
+    <div className={`rounded-[44px] bg-[#1c1814] p-[9px] shadow-[0_40px_80px_-30px_rgb(70_45_10/0.45),0_0_0_1px_rgb(255_255_255/0.08)_inset] ${className}`}>
+      <img src={src} alt={alt} loading="lazy" className="block aspect-[1206/2622] w-full rounded-[36px] bg-bg" />
+    </div>
+  );
+  return (
+    <div className="relative mx-auto w-[min(440px,80vw)] pt-6">
+      <div className="absolute inset-[-10%] -z-10 rounded-full bg-[radial-gradient(closest-side,var(--candy-glow),transparent)] opacity-70 blur-2xl" />
+      {shots[1] && phone(shots[1], t("iphone.shotTeam"), "absolute top-0 left-0 w-[58%] -rotate-6")}
+      {phone(shots[0], t("iphone.shotChat"), "relative ml-auto w-[64%] rotate-[3deg]")}
+    </div>
+  );
+}
+
 function PhoneMock() {
   const { t, lang } = useI18n();
-  const shots = (import.meta.glob("../assets/iphone/*.png", { eager: true, import: "default" }) as Record<string, string>);
+  const shots = import.meta.glob("../assets/iphone/*.{png,jpg}", { eager: true, import: "default" }) as Record<string, string>;
   const own = Object.entries(shots)
     .filter(([p]) => p.includes(`/${lang}-`))
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, src]) => src);
+  if (own.length) return <PhoneShots shots={own} />;
   return (
     <div className="relative mx-auto w-[min(300px,78vw)]">
       <div className="absolute inset-[-14%] -z-10 rounded-full bg-[radial-gradient(closest-side,var(--candy-glow),transparent)] opacity-70 blur-2xl" />

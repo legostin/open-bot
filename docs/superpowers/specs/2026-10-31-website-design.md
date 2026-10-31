@@ -152,9 +152,9 @@ Motion: chapters fade and slide in, the marker draws in; `prefers-reduced-motion
 - News pictures and other art: drawn for the site (SVG in the Amber palette), no stock photos.
 - The walk page's pictures and the made-up water shop are drawn for the demo too; the shop's frames are rendered once
   by `packages/web/scripts/render-shop.mjs` and kept in git.
-- iOS screenshots: until real ones are taken (in the simulator, against a throwaway hub with the demo team, deleted
-  afterwards), the iPhone section shows a phone drawn in CSS; it picks up `packages/site/src/assets/iphone/<lang>-*.png`
-  by itself once they exist.
+- iOS screenshots (`packages/site/src/assets/iphone/<lang>-<n>-<what>.jpg`): taken in the simulator from a throwaway
+  copy of the iOS app that pairs and opens a chat by itself, against throwaway hubs seeded with the demo's team and
+  stories (deleted afterwards). Without them the section draws a phone in CSS.
 
 ## Order of work
 
