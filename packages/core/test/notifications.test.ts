@@ -8,11 +8,11 @@ import { join } from "node:path";
 import { openDb } from "../src/db.ts";
 import { EventBus } from "../src/bus.ts";
 import { Store } from "../src/store.ts";
-import type { MessagePart, OutboundMessage } from "@piomio/shared";
+import type { MessagePart, OutboundMessage, Task } from "@piomio/shared";
 import { Settings, type CoreSettings } from "../src/settings.ts";
 import { HookRegistry } from "../src/hooks.ts";
 import type { ChannelRegistry } from "../src/channels.ts";
-import { Notifier, notifyInputError, notifyRefusal } from "../src/notifier.ts";
+import { humanFailure, Notifier, notifyInputError, notifyRefusal } from "../src/notifier.ts";
 import { buildSystemPrompt, taskEnding } from "../src/prompt.ts";
 import { ToolRegistry } from "../src/tools/registry.ts";
 import { registerCoreTools, type CoreToolDeps } from "../src/tools/core-tools.ts";
@@ -260,5 +260,54 @@ describe("the notify tool and the background rules", () => {
       expect(check).toContain("say so in your notify");
       expect(check).not.toContain("initiative level only allows");
     });
+  });
+});
+
+describe("scheduled reports", () => {
+  const task = (over: Partial<Task> = {}): Task => ({
+    id: "t_r1",
+    conversationId: "c_t",
+    agentId: "assistant",
+    title: "Утренняя сводка по Алматы",
+    goal: "g",
+    status: "done",
+    createdBy: "trigger",
+    triggerId: "t_brief",
+    background: true,
+    deliver: "report",
+    result: "Сейчас +6°, туман.\n\n**Перекрытия**\n- Центральная",
+    createdAt: "2026-10-31T03:00:00.000Z",
+    updatedAt: "2026-10-31T03:01:00.000Z",
+    ...over,
+  });
+
+  it("delivers the final reply whole, as the agent's message, silently in quiet hours and past the rate limit", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T03:00:00Z"));
+    try {
+      const { notifier, notes, sent, row } = setup({ settings: { quietHours: { enabled: true, start: "23:00", end: "08:00" }, notifyRatePerHour: 0 } });
+      const n = await notifier.deliverReport(task());
+      expect(notes()[0]).toMatchObject({ kind: "report", title: "Утренняя сводка по Алматы", body: task().result, caption: "scheduled, 03:00", notificationId: n!.id });
+      expect(row(n!.id)).toMatchObject({ kind: "report", level: "notify", trigger_id: "t_brief" });
+      expect(row(n!.id).message_id).toBeTruthy();
+      expect(sent[0]).toMatchObject({ kind: "notification", silent: true });
+      expect(sent[0].text).toContain("Утренняя сводка по Алматы · scheduled, 03:00\n\nСейчас +6°, туман.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says so when a report came back empty", async () => {
+    const { notifier, notes } = setup();
+    expect(await notifier.deliverReport(task({ result: "  " }))).toBeUndefined();
+    expect(notes()[0]).toMatchObject({ kind: "alert", title: "“Утренняя сводка по Алматы” came back empty" });
+  });
+
+  it("puts a failure in one plain sentence", () => {
+    expect(humanFailure("Can't start the agent “Assistant”: claude-code@local: not signed in", "no-brain", "Assistant")).toBe(
+      "Assistant isn't signed in to any brain yet. Sign in from its chat.",
+    );
+    expect(humanFailure("The page did not load. Then it timed out.", undefined, "Assistant")).toBe("The page did not load.");
+    expect(humanFailure("x".repeat(300), undefined, "Assistant")).toHaveLength(200);
   });
 });

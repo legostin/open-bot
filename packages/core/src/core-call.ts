@@ -128,6 +128,8 @@ export function createCoreCall(hub: Hub) {
           // through the agent's notify(), not with a "Task done" notification.
           createdBy: p.triggerId || p.quiet === true ? "trigger" : "user",
           triggerId: p.triggerId,
+          // report: the run's final reply is delivered to the person as a report (a trigger set to report).
+          ...(p.report === true ? { deliver: "report" as const } : {}),
           parentConversationId: p.parentConversationId,
           ...(brainRef ? { brainRef } : {}),
           ...(skill ? { skill } : {}),

@@ -428,6 +428,14 @@ describe("hub (integration)", () => {
     expect(((await web.req("GET", `/api/conversations/${scout.conversationId}/messages`)) as any[]).length).toBeGreaterThan(0);
   });
 
+  it("delivers a schedule's report as the agent's own message", async () => {
+    const task = hub.runner.createTask({ agentId: "assistant", goal: "Brief me", title: "Morning brief", background: true, createdBy: "trigger", triggerId: "t_brief", deliver: "report" });
+    const n = await until(() => hub.notifier.list(50).find((x) => x.taskId === task.id && x.kind === "report"), "the report");
+    expect(n.body).toMatch(/fake heard/);
+    const msgs: any[] = await web.req("GET", `/api/conversations/${conv}/messages`);
+    expect(msgs.some((m) => m.parts.some((p: any) => p.type === "notification" && p.kind === "report" && p.notificationId === n.id))).toBe(true);
+  });
+
   it("serves tools to brains over MCP with per-session tokens", async () => {
     expect((await web.raw("POST", "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }, { authorization: "Bearer nope" })).status).toBe(401);
     await web.req("POST", `/api/conversations/${conv}/messages`, { text: 'CALL notify {"level":"silent","title":"from-mcp"}' });

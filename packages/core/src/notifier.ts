@@ -30,6 +30,13 @@ export function notifyRefusal(task: Pick<Task, "feedId" | "deliver"> | undefined
   return undefined;
 }
 
+/** One plain sentence for why a task failed: known causes in the person's words, otherwise the error's first sentence. */
+export function humanFailure(error: string, code: "no-brain" | undefined, agent: string): string {
+  if (code === "no-brain") return t("notify.failed.noBrain", { agent });
+  const first = error.trim().split(/(?<=[.!?])\s+|\n/)[0]?.trim() || error.trim();
+  return first.length > 200 ? first.slice(0, 200) : first;
+}
+
 /** An Inbox row with its chat message and that message's conversation. */
 const INBOX_FROM = "from notifications n left join messages m on m.id = n.message_id left join conversations c on c.id = m.conversation_id";
 /** Not opened in the Inbox, and its message (if any) after its conversation's read marker. */
@@ -257,6 +264,43 @@ export class Notifier {
     });
     this.db.prepare("update notifications set delivered_at = ?, message_id = ? where id = ?").run(nowIso(), messageId ?? null, n.id);
     this.inboxChanged();
+  }
+
+  /** A scheduled report's final reply: the agent's own message in its dialog and the channels, at its time (silent in quiet hours, never held back). */
+  async deliverReport(task: Task): Promise<Notification | undefined> {
+    const text = (task.result ?? "").trim();
+    if (!text) {
+      await this.notify({ level: "notify", title: t("notify.report.emptyTitle", { title: task.title }), body: t("notify.report.emptyBody"), agentId: task.agentId, taskId: task.id });
+      return undefined;
+    }
+    const s = this.settings.get();
+    const agentId = this.recipient(task.agentId);
+    const caption = t("notify.report.caption", { time: localHHMM(s.timezone) });
+    const n: Notification = { id: newId("n_"), level: "notify", kind: "report", title: task.title, body: text, agentId: task.agentId, taskId: task.id, triggerId: task.triggerId, createdAt: nowIso() };
+    const dialog = this.store.agentConversation(agentId);
+    const m = this.store.addMessage({
+      conversationId: dialog.id,
+      role: "assistant",
+      parts: [{ type: "notification", level: "notify", kind: "report", title: n.title, body: text, caption, notificationId: n.id }],
+      status: "complete",
+      agentId: task.agentId,
+      taskId: task.id,
+    });
+    const deliveredAt = nowIso();
+    this.db
+      .prepare("insert into notifications(id, level, kind, title, body, agent_id, task_id, trigger_id, created_at, delivered_at, message_id) values (?,?,?,?,?,?,?,?,?,?,?)")
+      .run(n.id, n.level, n.kind, n.title, n.body, n.agentId ?? null, n.taskId ?? null, n.triggerId ?? null, n.createdAt, deliveredAt, m.id);
+    const out: Notification = { ...n, deliveredAt, messageId: m.id };
+    this.bus.emit("notification.created", out);
+    await this.channels.broadcast({
+      kind: "notification",
+      text: `${n.title} · ${caption}\n\n${truncate(text, 3500)}`,
+      link: `${this.publicUrl}/agent/${encodeURIComponent(agentId)}`,
+      notificationId: n.id,
+      silent: inQuietHours(s.quietHours, localHHMM(s.timezone)),
+    });
+    this.inboxChanged();
+    return out;
   }
 
   /** Reports, digests, alerts and questions that reached the person and are not read yet. */
