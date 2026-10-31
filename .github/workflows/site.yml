@@ -1,0 +1,67 @@
+# The website (packages/site) on GitHub Pages: builds the live demo of the web UI and the page in every language,
+# checks that every chapter of the demo plays to its end, then publishes. The repository's Pages source must be
+# "GitHub Actions" (configure-pages turns Pages on when it is off).
+#
+# Repository variables (Settings → Secrets and variables → Actions → Variables):
+#   SITE_BASE    "/piomio/" while the site lives on legostin.github.io; "/" once a domain is connected
+#   SITE_ORIGIN  the site's address for canonical links, e.g. https://piomio.app (default https://legostin.github.io)
+#   SITE_CNAME   the domain itself, written to CNAME, e.g. piomio.app
+name: site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/site/**"
+      - "packages/web/**"
+      - "plugins/*/ui/**"
+      - "packages/pages-kit/**"
+      - "packages/shared/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SITE_BASE: ${{ vars.SITE_BASE || '/piomio/' }}
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://legostin.github.io' }}
+      SITE_CNAME: ${{ vars.SITE_CNAME }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The Open Graph pictures (build) and the checks both drive Chromium.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:ui-plugins
+      - run: npm run build:site
+      - run: npm run check:site
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

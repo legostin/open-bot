@@ -1,7 +1,7 @@
 // The demo's service worker: what the app loads without fetch (pictures in messages and posts, map tiles) comes from
 // the demo's own files instead of a hub. It holds no state and reaches nothing outside the site:
 //   /api/files?path=P                      → <demo>/files/P
-//   /api/media?url=https://media.demo.invalid/P → <demo>/media/P
+//   /api/media?url=https://media.demo.invalid/P → <demo>/P
 //   /api/map/tiles/z/x/y.png               → <demo>/tiles/z/x/y.png
 //   /api/integrations/<id>/logo            → <demo>/logos/<id>.png
 // Built on its own (no imports) into demo-sw.js next to demo.html.
@@ -32,7 +32,7 @@ function target(url: URL): string | undefined {
   if (url.pathname === "/api/media") {
     const src = url.searchParams.get("url") ?? "";
     const m = /^https:\/\/media\.demo\.invalid\/(.+)$/.exec(src);
-    return m ? new URL(`media/${m[1]}`, base).href : undefined;
+    return m ? new URL(m[1], base).href : undefined;
   }
   const logo = /^\/api\/integrations\/([a-z0-9-]+)\/logo$/.exec(url.pathname);
   if (logo) return new URL(`logos/${logo[1]}.png`, base).href;

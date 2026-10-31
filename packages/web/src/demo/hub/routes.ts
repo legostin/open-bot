@@ -74,6 +74,30 @@ export function registerRoutes(hub: DemoHub, notInDemo: string): void {
   r.route("GET", "/api/groups", () => hub.groups());
   r.route("GET", "/api/agents", () => w().agents);
   r.route("GET", "/api/agents/:id", ({ params }) => w().agents.find((a) => a.id === params.id) ?? refuse());
+  // How an agent thinks (the header's picker): its brains first, every kind of work on "auto".
+  r.route("GET", "/api/agents/:id/thinking", ({ params }) => {
+    const a = w().agents.find((x) => x.id === params.id) ?? refuse();
+    const order = [...a.brains, ...w().brains.map((b) => b.ref).filter((ref) => !a.brains.includes(ref))];
+    const brains = order
+      .map((ref) => w().brains.find((b) => b.ref === ref))
+      .filter((b) => !!b)
+      .map((b) => ({
+        ref: b.ref,
+        label: b.label,
+        ready: !b.limitedUntil,
+        models: (b.probe?.models ?? []).map((id) => ({ id, name: b.probe?.modelNames?.[id] ?? id })),
+        model: b.probe?.model,
+        efforts: b.probe?.efforts ?? [],
+        presets: {},
+      }));
+    const first = brains.find((b) => b.ready);
+    return {
+      agentId: a.id,
+      brains,
+      kinds: (["chat", "task", "feed", "schedule"] as const).map((kind) => ({ kind, choice: { preset: "auto" }, brain: first?.ref, model: first?.model, effort: "medium", preset: "auto" })),
+    };
+  });
+  r.route("PUT", "/api/agents/:id/thinking/:kind", refuse);
   r.route("GET", "/api/conversations", () => w().conversations.slice().sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)));
   r.route("GET", "/api/conversations/:id", ({ params }) => hub.conversation(params.id) ?? refuse());
   r.route("PATCH", "/api/conversations/:id", refuse);

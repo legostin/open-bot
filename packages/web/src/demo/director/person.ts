@@ -108,6 +108,18 @@ export class Person {
     await this.clock.wait(300);
   }
 
+  /** Presses an element if it shows up soon; a window that has already gone needs no press. */
+  async pressIfThere(find: Finder, what: string, timeoutMs = 1500): Promise<boolean> {
+    try {
+      await waitFor(this.clock, find, what, timeoutMs);
+    } catch (e) {
+      if (e instanceof StepError) return false;
+      throw e;
+    }
+    await this.press(find, what);
+    return true;
+  }
+
   /** Presses the newest button that says `label`. */
   pressText(label: string): Promise<void> {
     return this.press(() => buttonByText(label), `the button “${label}”`);

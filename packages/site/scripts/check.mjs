@@ -1,0 +1,110 @@
+// The website's checks, on the built site (npm run build:site first): both pages open without errors, and every chapter
+// of the demo plays to its end in both languages, fast, without the demo hub meeting a request it does not know.
+//
+//   node packages/site/scripts/check.mjs [--speed 8] [--only mail,send] [--lang ru]
+//
+// Exits 1 with a summary when something failed.
+
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { chromium } from "playwright";
+import { builtBase, DIST, serve } from "./serve.mjs";
+
+const arg = (name, fallback) => {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > 0 ? process.argv[i + 1] : fallback;
+};
+const speed = Number(arg("speed", "8"));
+const langs = arg("lang", "en,ru").split(",");
+const chaptersSrc = readFileSync(resolve(import.meta.dirname, "../src/demo/protocol.ts"), "utf8");
+const all = [...(/CHAPTERS\s*=\s*\[([^\]]*)\]/.exec(chaptersSrc)?.[1] ?? "").matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+const chapters = arg("only", all.join(",")).split(",");
+const TIMEOUT = 90_000;
+
+if (!existsSync(join(DIST, "demo/demo.html"))) {
+  console.error("packages/site/dist is not built: npm run build:site");
+  process.exit(1);
+}
+
+const base = builtBase();
+const server = await serve({ port: 0, base });
+const origin = `http://127.0.0.1:${server.address().port}`;
+const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+const failures = [];
+
+/** Console errors, page errors and the demo hub's unknown routes, per page. */
+function watch(page, label) {
+  const problems = [];
+  page.on("console", (m) => {
+    const text = m.text();
+    if (m.type() === "error" || text.includes("[demo] unknown route") || text.includes("[demo] chapter failed")) problems.push(`${m.type()}: ${text}`);
+  });
+  page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
+  page.on("requestfailed", (r) => {
+    // Leaving a page cancels what it was loading; that is not a failure.
+    if (!/ERR_ABORTED/.test(r.failure()?.errorText ?? "")) problems.push(`request failed: ${r.url()} ${r.failure()?.errorText}`);
+  });
+  return () => problems.map((p) => `${label}: ${p}`);
+}
+
+// 1. The pages themselves.
+for (const lang of langs) {
+  const page = await context.newPage();
+  const problems = watch(page, `/${lang}/`);
+  const res = await page.goto(`${origin}${base}${lang}/`, { waitUntil: "load" });
+  if (!res?.ok()) failures.push(`/${lang}/: HTTP ${res?.status()}`);
+  try {
+    await page.waitForFunction(() => {
+      const w = document.querySelector("iframe")?.contentWindow;
+      const t = w?.__demo?.last?.type;
+      return t === "ready" || t === "playing" || t === "ended";
+    }, null, { timeout: 30_000 });
+  } catch {
+    failures.push(`/${lang}/: the window's demo never said it was ready`);
+  }
+  const title = await page.title();
+  if (!title.includes("Piomio")) failures.push(`/${lang}/: title "${title}"`);
+  failures.push(...problems());
+  await page.close();
+  console.log(`page /${lang}/ checked`);
+}
+
+// 2. Every chapter, in every language, to its end.
+for (const lang of langs)
+  for (const chapter of chapters) {
+    const page = await context.newPage();
+    const problems = watch(page, `${lang}/${chapter}`);
+    const started = Date.now();
+    await page.goto(`${origin}${base}demo/demo.html?lang=${lang}&chapter=${chapter}&autoplay=1&speed=${speed}`, { waitUntil: "load" });
+    let outcome = "timeout";
+    try {
+      const handle = await page.waitForFunction(
+        () => {
+          const last = window.__demo?.last;
+          return last && (last.type === "ended" || (last.type === "failed" && last.message !== "no service worker")) ? last : null;
+        },
+        null,
+        { timeout: TIMEOUT, polling: 250 },
+      );
+      const last = await handle.jsonValue();
+      outcome = last.type === "ended" ? "ended" : `failed: ${last.message}`;
+      if (last.chapter !== chapter) outcome += ` (played "${last.chapter}": no such chapter yet)`;
+    } catch {
+      /* timeout */
+    }
+    const secs = ((Date.now() - started) / 1000).toFixed(1);
+    if (!outcome.startsWith("ended")) failures.push(`${lang}/${chapter}: ${outcome}`);
+    failures.push(...problems());
+    console.log(`${lang}/${chapter}: ${outcome} in ${secs}s`);
+    await page.close();
+  }
+
+await browser.close();
+server.close();
+
+if (failures.length) {
+  console.error(`\n${failures.length} problem(s):\n${failures.map((f) => `  - ${f}`).join("\n")}`);
+  process.exit(1);
+}
+console.log("\nsite checks passed");

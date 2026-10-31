@@ -20,3 +20,5 @@ packages/desktop/src-tauri/gen/
 
 packages/web/dist-demo/
 packages/site/dist/
+
+packages/web/src/demo/static/pages/

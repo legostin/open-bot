@@ -18,6 +18,8 @@
     "start": "node --disable-warning=ExperimentalWarning packages/core/src/cli.ts start",
     "build": "npm run build:ui-plugins && npm run build:node && npm run build -w @piomio/pages-kit && npm run build -w @piomio/web && npm run build -w @piomio/console",
     "build:ui-plugins": "node scripts/build-ui-plugins.mjs",
+    "build:site": "node packages/site/scripts/build.mjs",
+    "check:site": "node packages/site/scripts/check.mjs",
     "new:integration": "node scripts/new-integration.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/pages-kit/tsconfig.json",
     "test": "vitest run",

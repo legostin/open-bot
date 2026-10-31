@@ -43,6 +43,16 @@ const DEMO_LOGOS: Record<string, string> = {
   slack: "integrations/composio/logos/slack.png",
   github: "integrations/composio/logos/github.png",
 };
+const MIME: Record<string, string> = {
+  svg: "image/svg+xml",
+  png: "image/png",
+  jpg: "image/jpeg",
+  html: "text/html; charset=utf-8",
+  json: "application/json",
+  js: "text/javascript",
+  css: "text/css",
+  woff2: "font/woff2",
+};
 /** Files served next to demo.html: pictures, tiles, pages (src/demo/static/). */
 const DEMO_STATIC = resolve(import.meta.dirname, "src/demo/static");
 
@@ -75,12 +85,17 @@ function demoFiles(): Plugin {
         else if (/^\/logos\/[a-z-]+\.png$/.test(path) && DEMO_LOGOS[path.slice(7, -4)]) {
           body = readFileSync(resolve(ROOT, DEMO_LOGOS[path.slice(7, -4)]));
           type = "image/png";
-        } else if (/^\/(media|files|tiles|pages|frames)\//.test(path) && existsSync(join(DEMO_STATIC, path))) {
-          body = readFileSync(join(DEMO_STATIC, path));
-          type = /\.svg$/.test(path) ? "image/svg+xml" : /\.png$/.test(path) ? "image/png" : /\.jpe?g$/.test(path) ? "image/jpeg" : /\.html$/.test(path) ? "text/html" : /\.json$/.test(path) ? "application/json" : "application/octet-stream";
+        } else if (/^\/(media|files|tiles|pages|frames)\//.test(path)) {
+          const file = join(DEMO_STATIC, path.endsWith("/") ? `${path}index.html` : path);
+          if (existsSync(file) && statSync(file).isFile()) {
+            body = readFileSync(file);
+            type = MIME[file.slice(file.lastIndexOf(".") + 1)] ?? "application/octet-stream";
+          }
         }
         if (body === undefined) return next();
         res.setHeader("content-type", type);
+        // As GitHub Pages does: the demo's page runs in a sandboxed frame and loads its kit's fonts with CORS.
+        res.setHeader("access-control-allow-origin", "*");
         res.end(body);
       });
     },

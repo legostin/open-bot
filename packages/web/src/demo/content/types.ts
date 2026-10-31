@@ -119,6 +119,14 @@ export interface BrowserText {
   scheduled: string;
 }
 
+export interface PagesText {
+  ask: string;
+  searching: string[];
+  title: string;
+  summary: string;
+  intro: string;
+}
+
 export interface ChannelsText {
   ask: string;
   question: string;
@@ -155,6 +163,7 @@ export interface Content {
     team: TeamText;
     machines: MachinesText;
     browser: BrowserText;
+    pages: PagesText;
     channels: ChannelsText;
   };
 }

@@ -8,7 +8,7 @@ import type { Chapter } from "./types";
 
 /** Pictures drawn for the demo (static/media/news/), shown through the hub's image proxy like any web picture. */
 export function newsImage(name: string): string {
-  return `https://media.demo.invalid/news/${name}`;
+  return `https://media.demo.invalid/media/news/${name}`;
 }
 
 export const channels: Chapter = {

@@ -60,9 +60,9 @@ export const browser: Chapter = {
       await done;
       sim.endTeach();
       await d.wait(500);
-      await d.press(() => document.querySelector(`button[aria-label="${ui("liveView.collapse")}"]`), "the live view's collapse button");
+      await d.pressIfThere(() => document.querySelector(`button[aria-label="${ui("liveView.collapse")}"]`), "the live view's collapse button");
       await d.wait(500);
-      await d.press(() => document.querySelector(`button[aria-label="${ui("liveView.minimize")}"]`), "the live view's minimize button");
+      await d.pressIfThere(() => document.querySelector(`button[aria-label="${ui("liveView.minimize")}"]`), "the live view's minimize button");
       await d.wait(500);
 
       const learn = h.reply("leo");
@@ -105,7 +105,7 @@ export const browser: Chapter = {
       }
       sim.drive(null, null);
       await d.wait(900);
-      await d.press(() => document.querySelector(`button[aria-label="${ui("liveView.minimize")}"]`), "the live view's minimize button");
+      await d.pressIfThere(() => document.querySelector(`button[aria-label="${ui("liveView.minimize")}"]`), "the live view's minimize button");
       await run.write(`\n\n${t.ordered}`);
       run.done();
       await d.wait(1300);

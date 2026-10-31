@@ -96,8 +96,9 @@ navigate). The site embeds it in an `<iframe>`, which keeps the app's CSS, globa
 - **Browser chapter**: the made-up water shop is HTML in `src/demo/assets/shop/`, rendered into JPEG frames per locale
   at build time (Playwright). The hub sends them as the browser plugin's `frame` events; the person's cursor is drawn
   by the director over the live view.
-- **Pages chapter**: the walk page is TSX on the pages kit, compiled at build time with the hub's own page compiler
-  into static files next to the demo, with its pictures and map tiles beside it.
+- **Pages chapter**: the walk page is TSX on the pages kit (`packages/web/demo-pages/walk/`), compiled at build time
+  with the hub's own page compiler and HTML template (`scripts/build-demo-pages.mjs`) into static files next to the
+  demo, with its pictures beside it. The route is drawn stop by stop, so no map tiles are needed.
 - **Control from the site**: `postMessage` between the page and the frame: `{play: chapter}`, `{pause}`, `{resume}`,
   `{lang}`; the frame answers `{ready}`, `{chapter, step, of}`, `{ended}`. Changing chapter reloads the frame with
   `?chapter=…&lang=…` under a short fade, so every chapter starts from a clean world.
@@ -149,10 +150,11 @@ Motion: chapters fade and slide in, the marker draws in; `prefers-reduced-motion
 ### Assets
 
 - News pictures and other art: drawn for the site (SVG in the Amber palette), no stock photos.
-- Map tiles for the walk page: a small set of OpenStreetMap tiles around the route, fetched once and kept with the
-  attribution (the person is asked before the download).
-- iOS screenshots: taken in the simulator from the iOS app against a throwaway hub set up with the demo team; the hub and
-  its data are deleted afterwards.
+- The walk page's pictures and the made-up water shop are drawn for the demo too; the shop's frames are rendered once
+  by `packages/web/scripts/render-shop.mjs` and kept in git.
+- iOS screenshots: until real ones are taken (in the simulator, against a throwaway hub with the demo team, deleted
+  afterwards), the iPhone section shows a phone drawn in CSS; it picks up `packages/site/src/assets/iphone/<lang>-*.png`
+  by itself once they exist.
 
 ## Order of work
 

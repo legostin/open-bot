@@ -204,6 +204,13 @@ export const en: Content = {
       scheduleAsk: "Do it every Friday morning",
       scheduled: "Done: every Friday at 9:00 I order water with your skill. If the total ever goes over €15, I’ll ask you first.",
     },
+    pages: {
+      ask: "Make me a page for a Saturday walk: route, places, weather",
+      searching: ["viewpoints in Alfama", "the Saturday forecast", "tascas on Rua dos Remédios"],
+      title: "Saturday in Alfama: custard tarts, trams and two viewpoints",
+      summary: "Five stops, 4.2 km, back by 16:00 · 21°, sunny",
+      intro: "Here’s your Saturday: five stops, 4.2 km on foot, home by 16:00. Open it and tap a stop to see the place.",
+    },
     channels: {
       ask: "Every morning, collect news about AI and electric cars for me",
       question: "Happy to. When do you want it?",

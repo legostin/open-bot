@@ -1,0 +1,26 @@
+{
+  "eyebrow": "Saturday · Lisbon · 4.2 km",
+  "title": "Saturday in Alfama: custard tarts, trams and two viewpoints",
+  "subtitle": "An easy walk with long stops, ending where the sunset is best. Leave at 9:30, home by 16:00.",
+  "hero": "art/hero-en.svg",
+  "stats": { "distance": "4.2 km", "time": "~6 h with stops", "budget": "€30–35", "weather": "21°, sunny" },
+  "labels": { "distance": "Walking", "time": "Time", "budget": "Budget", "weather": "Saturday", "route": "The route", "places": "Places", "forecast": "Weather", "photos": "On the way", "wind": "Wind" },
+  "forecast": [
+    { "day": "Fri", "high": "19°", "low": "13°", "sky": "⛅" },
+    { "day": "Sat", "high": "21°", "low": "14°", "sky": "☀️" },
+    { "day": "Sun", "high": "18°", "low": "13°", "sky": "🌦️" }
+  ],
+  "wind": "A light breeze from the ocean after 14:00: take a jumper for the viewpoints.",
+  "stops": [
+    { "time": "9:30 · breakfast", "name": "Manteigaria, Chiado", "walk": "tram 28 to Graça, 15 min", "image": "art/tarts.svg", "description": "Custard tarts straight from the oven, eaten standing at the counter.", "why": "The first batch comes out at 8:00: by 9:30 there’s no queue yet.", "address": "Rua do Loreto 2", "hours": "8:00–24:00", "price": "€1.30 a tart", "tags": ["breakfast", "standing"] },
+    { "time": "10:30 · view", "name": "Miradouro da Senhora do Monte", "walk": "downhill through Graça, 20 min", "image": "art/view.svg", "description": "The highest viewpoint in the old town, with the castle and the river in one look.", "why": "Quieter than the famous ones, and the morning light is behind you.", "address": "Largo Monte", "hours": "always open", "price": "free", "tags": ["view", "photos"] },
+    { "time": "11:30 · the old lanes", "name": "Alfama and the Sé", "walk": "Rua dos Remédios, 10 min", "image": "art/lanes.svg", "description": "Stairs, laundry lines and tiled walls down to the 12th-century cathedral.", "why": "Saturday mornings smell of grilled sardines from the open doors.", "address": "Largo da Sé", "hours": "cathedral 10:00–18:00", "price": "€5 cloister", "tags": ["walk", "history"] },
+    { "time": "13:30 · lunch", "name": "A small tasca on Rua dos Remédios", "walk": "up the steps to the viewpoint, 12 min", "image": "art/lunch.svg", "description": "Grilled fish of the day, a salad and house wine, at a table on the street.", "why": "Locals eat here: the menu is on a board and changes daily.", "address": "Rua dos Remédios", "hours": "12:00–15:30", "price": "~€15", "tags": ["lunch", "fish"] },
+    { "time": "15:00 · until sunset", "name": "Miradouro de Santa Luzia", "image": "art/sunset.svg", "description": "Tiles, bougainvillea and the river under a pergola.", "why": "Take the bench on the left: the best light hits the rooftops at 15:30.", "address": "Largo Santa Luzia", "hours": "always open", "price": "free", "tags": ["view", "sunset"] }
+  ],
+  "photos": [
+    { "src": "art/view.svg", "caption": "Senhora do Monte in the morning" },
+    { "src": "art/lanes.svg", "caption": "The lanes below the Sé" },
+    { "src": "art/sunset.svg", "caption": "Santa Luzia" }
+  ]
+}
