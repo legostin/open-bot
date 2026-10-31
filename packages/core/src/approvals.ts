@@ -11,6 +11,12 @@ import type { RuleStore } from "./policy/rules.ts";
 import { extractTargets, suggestRule } from "./policy/engine.ts";
 import { LocalizedError } from "./i18n.ts";
 
+/**
+ * Cards whose yes grants something lasting (a taught skill with its pre-approvals, an always-allow rule): "always"
+ * there would let the next one through without the person, so it counts as a single yes.
+ */
+const NO_STANDING_YES = new Set(["hub_skill_save", "hub_permission_always"]);
+
 const fromRow = (r: any): Approval => ({
   id: r.id,
   sessionId: r.session_id,
@@ -130,7 +136,7 @@ export class ApprovalService {
     this.db.prepare("update approvals set status = ?, resolved_at = ?, resolved_via = ? where id = ?").run(status, nowIso(), opts.via, id);
     if (decision === "approve") {
       this.rules.addKnownTargets(extractTargets(a.input));
-      if (opts.remember) {
+      if (opts.remember && !NO_STANDING_YES.has(a.tool)) {
         const base = opts.rule ?? suggestRule(a.tool, a.input, a.agentId);
         const rule = this.rules.create({ ...base, createdVia: opts.via === "telegram" ? "telegram" : "approval" });
         this.audit.append("user", "rule.create", rule.tool, rule);

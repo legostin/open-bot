@@ -159,9 +159,11 @@ describe("taught skills on the hub", () => {
 
   it("on yes: the folder with SKILL.md and the files, a rule per pre-approved click, its sites known", async () => {
     const asked = save(WATER);
-    hub.approvals.resolve((await card()).id, "approve", { via: "web" });
+    // "Always allow this" on the card is a single yes here: the next skill would otherwise be saved without the person.
+    hub.approvals.resolve((await card()).id, "approve", { via: "web", remember: true });
     const r = await asked;
     expect(textOf(r)).toMatch(/^Saved the skill "order-water"/);
+    expect(hub.rules.list().some((x) => x.tool === "hub_skill_save")).toBe(false);
     expect(readdirSync(skillDir("order-water")).sort()).toEqual(["SKILL.md", "crop-1.jpg", "teach-1-2.md", "teach-1.json", "teach-1.md"]);
     expect(readFileSync(join(skillDir("order-water"), "teach-1-2.md"), "utf8")).toBe("# Another");
     const { data, body } = parseFrontmatter(readFileSync(join(skillDir("order-water"), "SKILL.md"), "utf8"));
